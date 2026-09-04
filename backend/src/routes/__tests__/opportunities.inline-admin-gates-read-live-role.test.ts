@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, jest } from '@jest/globals';
+import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import request from 'supertest';
 import { listening } from '../../__tests__/helpers/listening';
 import express from 'express';
@@ -77,12 +77,12 @@ const mockGetStudyById = getStudyById as unknown as jest.Mock;
  */
 type Role = 'employee' | 'researcher_admin' | 'superadmin';
 
-const appAs = (sessionRole: Role | null, id = 'u1') => {
+const appAs = (sessionRole: Role | null, id = 'u1', email = 'a@example.com') => {
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
     (req as unknown as { session: unknown }).session = sessionRole
-      ? { user: { id, name: 'A', email: 'a@example.com', role: sessionRole } }
+      ? { user: { id, name: 'A', email, role: sessionRole } }
       : {};
     next();
   });
@@ -450,6 +450,89 @@ describe('the opportunities catalogue reads the live role', () => {
       await request(listening(appAs('researcher_admin', 'admin-1'))).get(LIST).expect(200);
 
       expect(roleReads()).toBe(1);
+    });
+  });
+
+  /**
+   * THE REGRESSION THIS FILE DID NOT ORIGINALLY COVER: CORTEX_BETA_ALL_ADMIN
+   * (!353) can make the EFFECTIVE role of a session outrank the role stamped
+   * into it at login. The narrowing above was written when the only way to
+   * gain admin was to log in with an admin DB role, so "stored role is not
+   * already admin" and "has nothing to gain from the query" were the same
+   * test. The beta lift broke that: an allow-listed `employee` session is
+   * live-admin the moment the switch is on, but the narrowing was reading the
+   * pre-lift `employee` off the session and handing the request straight on -
+   * so a beta-lifted researcher could save a draft opportunity via
+   * `requireAdmin` (which always re-reads) and then get it 404 back, and
+   * filtered out of the catalogue entirely, from these four routes.
+   */
+  describe('a beta-lifted employee (CORTEX_BETA_ALL_ADMIN)', () => {
+    const ORIGINAL_ENV = process.env.CORTEX_BETA_ALL_ADMIN;
+    const LIFTED_EMAIL = 'researcher@adaptavist.com';
+
+    afterEach(() => {
+      if (ORIGINAL_ENV === undefined) {
+        delete process.env.CORTEX_BETA_ALL_ADMIN;
+      } else {
+        process.env.CORTEX_BETA_ALL_ADMIN = ORIGINAL_ENV;
+      }
+    });
+
+    // THE CONTROL. Same session, switch off: an allow-listed email alone must
+    // not lift anybody. Without this arm, the presence test below could pass
+    // because the email domain check was ignored rather than because the
+    // switch worked.
+    it('stays a participant, and the draft stays hidden, with the switch off', async () => {
+      delete process.env.CORTEX_BETA_ALL_ADMIN;
+      database('employee');
+
+      const detail = await request(listening(appAs('employee', 'u1', LIFTED_EMAIL))).get(
+        DRAFT_DETAIL
+      );
+      expect(detail.status).toBe(404);
+
+      const list = await request(listening(appAs('employee', 'u1', LIFTED_EMAIL)))
+        .get(LIST)
+        .expect(200);
+      expect(titles(list.body)).toEqual([`Study ${PUBLISHED_ID}`]);
+    });
+
+    it('reads the draft detail, sessions and brief instead of 404ing them', async () => {
+      process.env.CORTEX_BETA_ALL_ADMIN = 'true';
+
+      for (const url of [DRAFT_DETAIL, DRAFT_SESSIONS, DRAFT_BRIEF]) {
+        jest.clearAllMocks();
+        mockIsDatabaseAvailable.mockResolvedValue(true as never);
+        mockCountStudyTasks.mockResolvedValue(4 as never);
+        database('employee');
+
+        const res = await request(listening(appAs('employee', 'u1', LIFTED_EMAIL))).get(url);
+
+        expect({ url, status: res.status }).toEqual({ url, status: 200 });
+      }
+    });
+
+    it('sees the draft in the catalogue, not just the published study', async () => {
+      process.env.CORTEX_BETA_ALL_ADMIN = 'true';
+      database('employee');
+
+      const res = await request(listening(appAs('employee', 'u1', LIFTED_EMAIL)))
+        .get(LIST)
+        .expect(200);
+
+      expect(titles(res.body)).toEqual([`Study ${DRAFT_ID}`, `Study ${PUBLISHED_ID}`]);
+    });
+
+    // The narrowing still has to narrow: a non-allow-listed employee gains
+    // nothing from the switch being on, so the query-count guarantee above
+    // must hold for them exactly as it does with the switch off.
+    it('still issues no role query for an employee outside the allow-listed domain', async () => {
+      process.env.CORTEX_BETA_ALL_ADMIN = 'true';
+      database('employee');
+
+      await request(listening(appAs('employee', 'u1', 'a@example.com'))).get(LIST).expect(200);
+
+      expect(roleReads()).toBe(0);
     });
   });
 
