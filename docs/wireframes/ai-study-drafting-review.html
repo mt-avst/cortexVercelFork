@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cortex · Describe it - Wireframe</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#f4f2ec;--paper-2:#ebe8df;--card:#fbfaf6;
+    --ink:#21201c;--ink-2:#5a584f;--ink-3:#8b897f;
+    --line:#cecabd;--line-2:#b3afa3;--line-strong:#94917f;
+    --fill:#e6e2d7;
+    --accent:#a86f16;--accent-2:#8c5c10;--accent-soft:#f4e7cb;
+    --ok:#3c6b48;--ok-soft:#dfe9df;
+    --sans:'IBM Plex Sans',system-ui,sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased;padding-bottom:60px}
+
+  .docbar{border-bottom:1.5px solid var(--ink);background:var(--paper);padding:13px 26px;display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;position:sticky;top:0;z-index:50}
+  .docbar h1{font-size:14px;letter-spacing:.6px;text-transform:uppercase;margin:0;font-weight:700}
+  .docbar .meta{font-family:var(--mono);font-size:11px;color:var(--ink-2)}
+  .docbar .spacer{flex:1}
+  .docbar .reset{font-family:var(--mono);font-size:11px;border:1.5px solid var(--line-strong);background:var(--card);padding:6px 12px;border-radius:3px;cursor:pointer;color:var(--ink-2)}
+
+  .canvaswrap{max-width:1300px;margin:16px auto 0;padding:0 26px}
+
+  .app{border:1.5px solid var(--ink);background:var(--paper);display:grid;grid-template-columns:184px 1fr;box-shadow:7px 7px 0 rgba(33,32,28,.07)}
+  .nav{border-right:1.5px solid var(--line-strong);padding:16px 12px;background:var(--paper-2)}
+  .nav .brand{display:flex;align-items:center;gap:9px;margin-bottom:16px}
+  .nav .brand .logo{width:24px;height:24px;border:1.5px solid var(--ink);border-radius:50%}
+  .nav .brand b{font-size:13px}
+  .nav .brand small{display:block;font-family:var(--mono);font-size:9px;color:var(--ink-3)}
+  .nav .grouplbl{font-family:var(--mono);font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-3);margin:12px 4px 6px}
+  .nav a{display:block;padding:7px 8px;font-size:12.5px;color:var(--ink-2);border:1px solid transparent;border-radius:3px;text-decoration:none;cursor:pointer}
+  .nav a.active{background:var(--card);border-color:var(--line-strong);color:var(--ink);font-weight:600}
+
+  .work{display:grid;grid-template-columns:1fr 320px;min-width:0}
+  .main{padding:22px 22px 34px;border-right:1.5px solid var(--line-strong);min-width:0}
+  .rail{padding:18px 18px 30px;background:var(--paper-2)}
+
+  .block{border:1.5px solid var(--line-2);background:var(--card);border-radius:4px;margin-bottom:15px}
+  .block.hero{border-color:var(--ink);border-width:2px}
+  .bhead{display:flex;align-items:center;gap:11px;padding:12px 15px;border-bottom:1.5px solid var(--line)}
+  .bhead.nb{border-bottom:0}
+  .bhead h3{margin:0;font-size:13.5px;font-weight:600;letter-spacing:.2px}
+  .bhead .sub{font-family:var(--mono);font-size:10px;color:var(--ink-3)}
+  .bhead .spacer{flex:1}
+  .bbody{padding:15px}
+
+  .step{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;border:1.5px solid var(--line-strong);font-family:var(--mono);font-size:11px;font-weight:600;color:var(--ink-2);flex:none;background:var(--paper)}
+  .step.done{background:var(--ok);border-color:var(--ok);color:#fff}
+  .step.key{background:var(--ink);border-color:var(--ink);color:var(--paper)}
+
+  .tag{font-family:var(--mono);font-size:9px;letter-spacing:.5px;text-transform:uppercase;border:1px solid var(--line-strong);border-radius:2px;padding:2px 6px;color:var(--ink-2);white-space:nowrap}
+  .tag.loud{border-color:var(--ink);color:var(--ink);font-weight:600}
+  .tag.opt{color:var(--ink-3)}
+  .tag.ok{border-color:var(--ok);color:var(--ok);background:var(--ok-soft)}
+  .tag.gap{border-style:dashed;color:var(--ink-3);background:repeating-linear-gradient(45deg,var(--fill),var(--fill) 3px,transparent 3px,transparent 6px)}
+  .tag.assumed{border-color:var(--accent);color:var(--accent-2)}
+
+  .field{margin-bottom:13px}.field:last-child{margin-bottom:0}
+  .lbl{font-size:11px;color:var(--ink-2);margin-bottom:5px;display:block;font-weight:500}
+  .lbl .req{color:var(--accent-2);font-weight:600}
+  .lbl .opt{color:var(--ink-3);font-weight:400}
+  input[type=text],select,textarea{width:100%;font-family:var(--mono);font-size:12px;color:var(--ink);background:var(--paper);border:1.5px solid var(--line-strong);border-radius:3px;padding:8px 10px;height:36px}
+  textarea{height:auto;resize:vertical;line-height:1.5;font-family:var(--sans);font-size:13px}
+  select{cursor:pointer;appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--ink-3) 50%),linear-gradient(135deg,var(--ink-3) 50%,transparent 50%);background-position:calc(100% - 16px) 15px,calc(100% - 11px) 15px;background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:30px}
+  input:focus,select:focus,textarea:focus{outline:0;border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:13px}
+  @media(max-width:560px){.row2{grid-template-columns:1fr}}
+
+  .gate{padding:18px 20px 20px;border:1.5px dashed var(--line-strong);border-radius:4px;background:repeating-linear-gradient(45deg,var(--fill),var(--fill) 7px,transparent 7px,transparent 14px);margin:15px}
+  .gate .big{font-size:15px;font-weight:600;margin-bottom:4px}
+  .gate .small{font-family:var(--mono);font-size:11px;color:var(--ink-2);margin:0 0 12px;line-height:1.55}
+  .gate textarea{background:var(--card)}
+  .gate .actions{display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap}
+  .gate .hint{font-family:var(--mono);font-size:10px;color:var(--ink-3)}
+  .emptyzone{margin:15px;border:1.5px dashed var(--line-strong);border-radius:4px;background:repeating-linear-gradient(45deg,var(--fill),var(--fill) 7px,transparent 7px,transparent 14px);padding:22px;text-align:center;color:var(--ink-2);font-family:var(--mono);font-size:11px;line-height:1.6}
+
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1.5px solid var(--ink);background:var(--card);padding:9px 17px;font-family:var(--mono);font-size:11.5px;font-weight:600;color:var(--ink);cursor:pointer;border-radius:3px}
+  .btn:hover{background:var(--paper-2)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.primary:hover{background:var(--accent-2)}
+  .btn.primary[disabled],.btn[disabled]{background:var(--fill);border-color:var(--line-strong);color:var(--ink-3);cursor:not-allowed}
+  .btn.ghost{background:transparent}
+  .btn.sm{padding:6px 12px;font-size:10.5px}
+  .btn.sample{border-color:var(--line-strong);color:var(--ink-2);background:var(--card);font-weight:500}
+
+  .litablewrap{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:11px}
+  th{font-family:var(--mono);font-size:9px;letter-spacing:.4px;text-transform:uppercase;text-align:left;color:var(--ink-3);padding:9px 11px;border-bottom:1.5px solid var(--line);font-weight:500;white-space:nowrap;background:var(--paper-2)}
+  td{padding:9px 11px;border-bottom:1px solid var(--line);color:var(--ink-2);font-family:var(--mono);font-size:11px;vertical-align:top}
+  td.fname{color:var(--ink);font-family:var(--sans);font-size:12px;font-weight:500;white-space:nowrap}
+  td.val{font-family:var(--sans);font-size:12px;color:var(--ink);max-width:460px}
+  td.val .why{display:block;font-family:var(--mono);font-size:10px;color:var(--ink-3);margin-top:3px}
+  td.val.isgap{color:var(--ink-3);font-style:italic}
+  tr:last-child td{border-bottom:0}
+  .tablefoot{display:flex;align-items:center;gap:12px;padding:10px 15px;border-top:1.5px solid var(--line);font-family:var(--mono);font-size:10px;color:var(--ink-3);flex-wrap:wrap}
+  .tablefoot .spacer{flex:1}
+
+  .stepsline{display:flex;gap:0;flex-wrap:wrap}
+  .stepsline .fs{flex:1;min-width:150px;padding:12px 14px;border-right:1.5px solid var(--line);display:flex;flex-direction:column;gap:6px}
+  .stepsline .fs:last-child{border-right:0}
+  .stepsline .fs b{font-size:12px}
+  .stepsline .fs .n{font-family:var(--mono);font-size:9px;color:var(--ink-3)}
+
+  .railstick{position:sticky;top:72px}
+  .railsec{margin-bottom:18px}
+  .railsec h4{font-family:var(--mono);font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-3);margin:0 0 10px;padding-bottom:6px;border-bottom:1.5px solid var(--line)}
+  .qmeta div{display:flex;justify-content:space-between;font-size:11px;padding:3px 0;color:var(--ink-2);gap:8px}
+  .qmeta .muted{font-family:var(--mono);color:var(--ink-3);text-align:right}
+  .totals .tline{display:flex;justify-content:space-between;align-items:baseline;padding:5px 0;font-size:11px;color:var(--ink-2)}
+  .totals .tline b{font-family:var(--mono);font-size:12px;color:var(--ink)}
+  .totals .tline.big{border-top:1.5px solid var(--line-2);margin-top:6px;padding-top:9px}
+  .totals .tline.key b{color:var(--accent-2);font-weight:600}
+  .totals-empty{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);border:1.5px dashed var(--line-strong);border-radius:4px;padding:14px;text-align:center;line-height:1.55}
+  .vlist .vitem{display:flex;align-items:flex-start;gap:9px;font-size:11px;padding:5px 0;color:var(--ink-2)}
+  .vlist .vbx{width:16px;height:16px;border:1.5px solid var(--line-strong);border-radius:3px;flex:none;margin-top:1px;font-family:var(--mono);font-size:10px;text-align:center;line-height:14px;color:transparent}
+  .vlist .vitem.done .vbx{background:var(--ok);border-color:var(--ok);color:#fff}
+  .vlist .vitem.done{color:var(--ink-3)}
+  .railactions .btn{width:100%;margin-bottom:8px}
+  .railhint{font-family:var(--mono);font-size:9.5px;color:var(--ink-3);text-align:center;line-height:1.5;margin:2px 0 0}
+
+  .chip{display:flex;align-items:flex-start;gap:13px;padding:13px 15px}
+  .chip .ic{width:38px;height:38px;border:1.5px solid var(--line-strong);border-radius:4px;background:var(--fill);flex:none;font-family:var(--mono);font-size:9px;display:flex;align-items:center;justify-content:center;color:var(--ink-3)}
+  .chip .txt{flex:1;min-width:0}
+  .chip .txt b{display:block;font-size:12px;margin-bottom:3px}
+  .chip .txt .q{font-size:12px;color:var(--ink-2);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+
+  .rationale{max-width:1300px;margin:34px auto 0;padding:0 26px}
+  .rationale h2{font-size:12px;text-transform:uppercase;letter-spacing:1px;font-family:var(--mono);color:var(--ink-2);border-bottom:1.5px solid var(--ink);padding-bottom:8px;margin:0 0 16px}
+  .rgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
+  .rcard{border:1.5px solid var(--line-2);border-radius:4px;background:var(--card);padding:14px}
+  .rcard .fix{font-size:12.5px;font-weight:600;margin:0 0 6px;line-height:1.4}
+  .rcard .was{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);line-height:1.55;margin:0}
+  .rcard .was b{color:var(--ink-2);font-weight:600}
+</style>
+</head>
+<body>
+
+<div class="docbar">
+  <h1>Cortex · New opportunity · Describe it</h1>
+  <span class="meta">wireframe · lo-fi · v1 · the drafter here is a keyword stub, not a model</span>
+  <span class="spacer"></span>
+  <button class="reset" onclick="resetAll()">Reset prototype</button>
+</div>
+
+<div class="canvaswrap">
+  <div class="app">
+    <nav class="nav">
+      <div class="brand"><div class="logo"></div><div><b>Cortex</b><small>admin</small></div></div>
+      <div class="grouplbl">Admin</div>
+      <a class="active">Opportunities</a><a>Studies</a><a>Settings</a>
+    </nav>
+
+    <div class="work">
+      <div class="main">
+
+        <!-- 1. GATE: the brief -->
+        <div class="block hero">
+          <div class="bhead nb"><span class="step key" id="step1">1</span><h3>Describe the study</h3><span class="tag loud">gate</span><span class="spacer"></span><span class="sub">sits above Research Study Type on Basic Information</span></div>
+          <div id="gate">
+            <div class="gate">
+              <div class="big">What do you want to find out, from whom, and how</div>
+              <div class="small">Type it or dictate it. Cortex drafts the form from this and shows you what it filled, what it assumed and what it could not know. Nothing is saved until you save.</div>
+              <textarea id="brief" rows="5" placeholder="e.g. Run a 30 minute moderated usability test of the new billing dashboard with five internal admins next week. I want to watch them find an invoice and change a payment method." oninput="onBriefInput()"></textarea>
+              <div class="actions">
+                <button class="btn primary" id="draftBtn" disabled onclick="draft()">Draft the form</button>
+                <span class="hint" id="briefHint">At least 20 characters</span>
+                <span style="flex:1"></span>
+                <span class="hint">Try a sample:</span>
+                <button class="btn sm sample" onclick="sample('test')">Live session</button>
+                <button class="btn sm sample" onclick="sample('survey')">Survey</button>
+                <button class="btn sm sample" onclick="sample('unmoderated')">Recorded</button>
+              </div>
+            </div>
+          </div>
+          <div id="resolved" style="display:none">
+            <div class="chip">
+              <div class="ic">BRIEF</div>
+              <div class="txt"><b>Your brief</b><div class="q" id="briefEcho"></div></div>
+              <button class="btn ghost sm" onclick="changeBrief()">Change</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="gated" style="display:none">
+
+          <!-- 2. HERO: the draft, field by field -->
+          <div class="block hero">
+            <div class="bhead"><span class="step key" id="step2">2</span><h3>What Cortex drafted</h3><span class="tag loud">review this</span><span class="spacer"></span><span class="sub">every row is editable in the form after Apply</span></div>
+            <div class="litablewrap"><table>
+              <thead><tr><th>Form field</th><th>Draft value</th><th>Source</th></tr></thead>
+              <tbody id="draftRows"></tbody>
+            </table></div>
+            <div class="tablefoot"><span id="draftCounts"></span><span class="spacer"></span><span>from brief = read from your words · assumed = a guess you should check · gap = left empty</span></div>
+          </div>
+
+          <!-- 2b. questions or tasks, when the type carries them -->
+          <div class="block" id="stepsBlock" style="display:none">
+            <div class="bhead"><h3 id="stepsTitle">Questions</h3><span class="tag" id="stepsTag">drafted</span><span class="spacer"></span><span class="sub" id="stepsSub"></span></div>
+            <div class="litablewrap"><table>
+              <thead><tr><th>#</th><th>Type</th><th>Prompt</th><th>Options / scale</th></tr></thead>
+              <tbody id="stepRows"></tbody>
+            </table></div>
+          </div>
+
+          <!-- 3. which form steps this fills -->
+          <div class="block">
+            <div class="bhead"><span class="step" id="step3">3</span><h3>Form steps this fills</h3><span class="sub">the same steps you walk today</span></div>
+            <div class="stepsline" id="formSteps"></div>
+          </div>
+
+          <!-- quiet: consent -->
+          <div class="block">
+            <div class="bhead nb"><h3>Consent</h3><span class="tag opt">not AI-written</span><span class="spacer"></span><span class="sub" id="consentSub"></span></div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- RAIL -->
+      <aside class="rail">
+        <div class="railstick">
+          <div class="railsec qmeta">
+            <h4>Status</h4>
+            <div><span>Opportunity</span><span class="muted">unsaved</span></div>
+            <div><span>Status</span><span class="muted">Draft - always</span></div>
+            <div><span>Research Study Type</span><span class="muted" id="mType">none</span></div>
+            <div><span>Where participants answer</span><span class="muted" id="mDelivery">-</span></div>
+          </div>
+          <div class="railsec totals">
+            <h4>Draft <span style="text-transform:none;letter-spacing:0;color:var(--ink-3)">· live</span></h4>
+            <div id="totalsEmpty"><div class="totals-empty">Nothing drafted yet. Describe the study and the counts populate here.</div></div>
+            <div id="totalsFull" style="display:none">
+              <div class="tline"><span>Fields from your brief</span><b id="tBrief">0</b></div>
+              <div class="tline"><span>Assumed</span><b id="tAssumed">0</b></div>
+              <div class="tline"><span>Questions or tasks</span><b id="tSteps">0</b></div>
+              <div class="tline big key"><span>Gaps to fill</span><b id="tGaps">0</b></div>
+            </div>
+          </div>
+          <div class="railsec vlist">
+            <h4>To apply</h4>
+            <div class="vitem" id="vBrief"><span class="vbx">✓</span>Brief entered</div>
+            <div class="vitem" id="vDraft"><span class="vbx">✓</span>Draft produced</div>
+            <div class="vitem" id="vApplied"><span class="vbx">✓</span>Applied to the form</div>
+          </div>
+          <div class="railsec railactions">
+            <button class="btn primary" id="cta" disabled onclick="applyDraft()">Apply to form</button>
+            <button class="btn ghost" id="discard" disabled onclick="resetAll()">Discard draft</button>
+            <p class="railhint" id="ctaHint">Describe the study to enable.</p>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <div class="rationale"><h2>What this adds, and what it refuses to do</h2><div class="rgrid">
+    <div class="rcard"><p class="fix">One brief replaces the first three steps of typing</p><p class="was"><b>Was:</b> type, delivery, title, purpose, description, participant type, duration and every question keyed by hand before Review can say anything.</p></div>
+    <div class="rcard"><p class="fix">Every value carries its provenance</p><p class="was"><b>Why:</b> a drafted form that looks finished gets published unread. From brief, assumed and gap are three different levels of trust, shown as three different marks.</p></div>
+    <div class="rcard"><p class="fix">Consent comes from the template, never the model</p><p class="was"><b>Why:</b> the server already resolves wording against approved templates and downgrades anything else to custom. The drafter is not allowed to write it at all.</p></div>
+    <div class="rcard"><p class="fix">Status is Draft and publish stays in the form</p><p class="was"><b>Why:</b> Apply only fills fields. Save and Publish are the same clicks as today, through the same publish gate.</p></div>
+    <div class="rcard"><p class="fix">Links are copied, never composed</p><p class="was"><b>Why:</b> an invented URL is the one hallucination that reaches a participant. A link the brief does not contain is a gap, not a guess.</p></div>
+    <div class="rcard"><p class="fix">Dates and session slots are gaps in v1</p><p class="was"><b>Why:</b> "next week" is relative to a clock the model does not have. Slots stay on Session Management, exactly where they are today.</p></div>
+  </div></div>
+</div>
+
+<script>
+  const $=id=>document.getElementById(id);
+  const escapeHtml=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+  /* Labels copied from the real form and shared constants. */
+  const TYPE_LABEL={interview:'Interview',poll:'Quick poll',question:'One question',survey:'Survey',test:'Live session',unmoderated:'Recorded session'};
+  const PT_LABEL={any:'Anyone',internal:'Internal employees only',external:'External users only',specific:'Specific criteria'};
+  const CONSENT_KIND={unmoderated:'recorded',poll:'survey',survey:'survey',question:'survey',test:'moderated',interview:'moderated'};
+  const QUESTION_CARRYING=new Set(['poll','survey','question']);
+
+  const SAMPLES={
+    test:'Run a 30 minute moderated usability test of the new billing dashboard with five internal admins next week. I want to watch them find an invoice and change a payment method.',
+    survey:'Survey our external customers about the onboarding email sequence. Ten minutes at most. I want a satisfaction rating, whether they would recommend it and an open question about what confused them.',
+    unmoderated:'Unmoderated recorded session on https://app.example.com/settings with anyone who uses the settings area. Ask them to change their notification preferences and say aloud what they expected.'
+  };
+
+  const state={brief:'',draft:null,applied:false};
+
+  function onBriefInput(){
+    const n=$('brief').value.trim().length;
+    $('draftBtn').disabled=n<20;
+    $('briefHint').textContent=n<20?'At least 20 characters':(n+' / 8000');
+    $('vBrief').classList.toggle('done',n>=20);
+    if(!state.draft){$('ctaHint').textContent=n<20?'Describe the study to enable.':'Draft the form to continue.';}
+  }
+  function sample(k){$('brief').value=SAMPLES[k];onBriefInput();$('brief').focus();}
+
+  /* ---- keyword STUB standing in for the model. Deliberately dumb. ---- */
+  function stubDraft(brief){
+    const b=brief.toLowerCase();
+    const src={};const gaps=[];const d={};
+    const mark=(f,s)=>{src[f]=s;};
+
+    let type='survey';
+    if(/\binterview/.test(b))type='interview';
+    else if(/moderated usability|live session|watch them|book(ed|able)?\b/.test(b)&&!/unmoderated/.test(b))type='test';
+    else if(/unmoderated|recorded session|record(ing)?\b|screen/.test(b))type='unmoderated';
+    else if(/\bpoll\b/.test(b))type='poll';
+    else if(/one question|single question/.test(b))type='question';
+    d.type=type;mark('type','brief');
+
+    if(QUESTION_CARRYING.has(type)){
+      const ext=/typeform|google form|qualtrics|surveymonkey|external tool/.test(b);
+      d.delivery_mode=ext?'external':'native';mark('delivery_mode',ext?'brief':'assumed');
+    }
+
+    const url=(brief.match(/https?:\/\/[^\s)]+/)||[])[0];
+    if(type==='unmoderated'){if(url){d.target_url=url;mark('target_url','brief');}else{gaps.push('target_url');}}
+    if(d.delivery_mode==='external'){if(url){d.external_link_optional=url;mark('external_link_optional','brief');}else{gaps.push('external_link_optional');}}
+
+    const subj=(b.match(/(billing dashboard|dashboard|onboarding email sequence|onboarding|settings area|settings|checkout|mobile app|api)/)||[])[0];
+    if(subj){d.product_optional=subj.replace(/\b\w/g,c=>c.toUpperCase());mark('product_optional','brief');}
+
+    const mins=(b.match(/(\d{1,3})\s*(?:min|minute)/)||[])[1];
+    const dflt={survey:15,poll:5,question:5,interview:30,test:45,unmoderated:20}[type];
+    d.default_duration_minutes=mins?+mins:dflt;mark('default_duration_minutes',mins?'brief':'assumed');
+
+    let pt='any',ptd='';
+    if(/internal|employee|colleague/.test(b))pt='internal';
+    else if(/external customer|external user|customers?\b/.test(b))pt='external';
+    const who=(brief.match(/with ([^.]*?(admins?|users?|customers?|people)[^.]*)/i)||[])[1];
+    if(who&&/admin|who use/.test(who.toLowerCase())){pt='specific';ptd=who.trim();}
+    d.participant_type_required=pt;mark('participant_type_required',pt==='any'?'assumed':'brief');
+    if(pt==='specific'){d.participant_type_specific_details=ptd;mark('participant_type_specific_details','brief');}
+
+    const firstSentence=brief.split(/[.!?]/)[0].trim();
+    d.title=(subj?TYPE_LABEL[type]+': '+d.product_optional:firstSentence.slice(0,60));mark('title','assumed');
+    d.purpose_one_liner={
+      survey:'Help us improve '+(subj||'the product')+' by telling us about your experience',
+      poll:'A one minute poll about '+(subj||'the product'),
+      question:'One quick question about '+(subj||'the product'),
+      interview:'A conversation about how you use '+(subj||'the product'),
+      test:'Help us test '+(subj||'the product')+' by trying a few tasks while we watch',
+      unmoderated:'Try a few tasks in '+(subj||'the product')+' and think aloud while your screen records'
+    }[type];mark('purpose_one_liner','assumed');
+    d.description_optional=firstSentence+'.';mark('description_optional','brief');
+
+    gaps.push('start_date','end_date');
+    if(type==='test'||type==='interview')gaps.push('sessions');
+
+    let steps=[];
+    if(type==='unmoderated'){
+      steps=[
+        {type:'instruction',prompt:'Open the page and share your screen. Say what you are thinking as you go.'},
+        {type:'open_text',prompt:'Change your notification preferences. Say aloud what you expected to happen.'},
+        {type:'single_choice',prompt:'How easy was that?',options:['Easy','Neither','Hard']}
+      ];
+    }else if(type==='survey'){
+      steps=[{type:'rating',prompt:'How satisfied were you with '+(subj||'this')+'?',config:'5 point scale'}];
+      if(/recommend|nps/.test(b))steps.push({type:'nps',prompt:'How likely are you to recommend it to a colleague?',config:'0 to 10, fixed'});
+      steps.push({type:'open_text',prompt:'What, if anything, confused you?'});
+    }else if(type==='poll'){
+      steps=[{type:'single_choice',prompt:'Which matters most to you?',options:['Speed','Clarity','Control']}];
+    }else if(type==='question'){
+      steps=[{type:'open_text',prompt:'What is the one thing you would change about '+(subj||'this')+'?'}];
+    }
+    if(steps.length)mark('steps','assumed');
+
+    const consentKind=CONSENT_KIND[type];
+    return {draft:d,src,gaps,steps,consentKind};
+  }
+
+  function draft(){
+    state.brief=$('brief').value.trim();
+    state.draft=stubDraft(state.brief);
+    state.applied=false;
+    $('gate').style.display='none';$('resolved').style.display='';$('gated').style.display='';
+    $('briefEcho').textContent=state.brief;
+    $('step1').classList.replace('key','done');
+    renderDraft();compute();
+    $('gated').scrollIntoView({behavior:'smooth',block:'start'});
+  }
+  function changeBrief(){
+    state.draft=null;state.applied=false;
+    $('gate').style.display='';$('resolved').style.display='none';$('gated').style.display='none';
+    $('step1').classList.replace('done','key');
+    compute();$('brief').focus();
+  }
+
+  function fieldRow(label,f,value,why){
+    const s=state.draft.src[f];const isGap=state.draft.gaps.includes(f);
+    const tag=isGap?'<span class="tag gap">gap</span>':s==='brief'?'<span class="tag ok">from brief</span>':'<span class="tag assumed">assumed</span>';
+    const v=isGap?'<td class="val isgap">left empty - fill it in the form'+(why?'<span class="why">'+escapeHtml(why)+'</span>':'')+'</td>':'<td class="val">'+escapeHtml(value)+(why?'<span class="why">'+escapeHtml(why)+'</span>':'')+'</td>';
+    return '<tr><td class="fname">'+escapeHtml(label)+'</td>'+v+'<td>'+tag+'</td></tr>';
+  }
+
+  function renderDraft(){
+    const {draft:d,gaps,steps,consentKind}=state.draft;
+    const rows=[];
+    rows.push(fieldRow('Research Study Type','type',TYPE_LABEL[d.type]));
+    if(QUESTION_CARRYING.has(d.type))rows.push(fieldRow('Where participants answer','delivery_mode',d.delivery_mode==='native'?'In Cortex':'In an external tool',d.delivery_mode==='native'?'Native unless the brief names an external tool':''));
+    rows.push(fieldRow('Title','title',d.title,'4 to 140 characters, participant-facing'));
+    rows.push(fieldRow('Purpose','purpose_one_liner',d.purpose_one_liner,'10 to 180 characters'));
+    rows.push(fieldRow('Description (Optional)','description_optional',d.description_optional));
+    if(d.product_optional!==undefined)rows.push(fieldRow('Product/Feature (Optional)','product_optional',d.product_optional));
+    rows.push(fieldRow('Participant Type','participant_type_required',PT_LABEL[d.participant_type_required]));
+    if(d.participant_type_specific_details)rows.push(fieldRow('Specific Criteria','participant_type_specific_details',d.participant_type_specific_details,'copied from your words, not embellished'));
+    rows.push(fieldRow('Default Duration (minutes)','default_duration_minutes',String(d.default_duration_minutes),state.draft.src.default_duration_minutes==='assumed'?'the usual figure for this type':''));
+    if(d.type==='unmoderated')rows.push(fieldRow('Task page (target URL)','target_url',d.target_url||'','a link is only ever copied from the brief'));
+    if(d.delivery_mode==='external')rows.push(fieldRow('External Link','external_link_optional',d.external_link_optional||'','a link is only ever copied from the brief'));
+    rows.push(fieldRow('Start Date','start_date','','relative dates are not resolved in v1'));
+    rows.push(fieldRow('End Date','end_date','','relative dates are not resolved in v1'));
+    if(gaps.includes('sessions'))rows.push(fieldRow('Session Management','sessions','','time slots stay yours to create'));
+    $('draftRows').innerHTML=rows.join('');
+
+    const nBrief=Object.values(state.draft.src).filter(s=>s==='brief').length;
+    const nAss=Object.values(state.draft.src).filter(s=>s==='assumed').length;
+    $('draftCounts').textContent=nBrief+' from brief · '+nAss+' assumed · '+gaps.length+' gap'+(gaps.length===1?'':'s');
+
+    if(steps.length){
+      $('stepsBlock').style.display='';
+      $('stepsTitle').textContent=d.type==='unmoderated'?'Task List':(d.type==='question'?'Question':'Questions');
+      $('stepsSub').textContent=d.type==='unmoderated'?'vocabulary: instruction, open_text, single_choice':'vocabulary: instruction, open_text, single_choice, multi_choice, rating, nps';
+      $('stepRows').innerHTML=steps.map((s,i)=>'<tr><td>'+(i+1)+'</td><td>'+escapeHtml(s.type)+'</td><td class="val">'+escapeHtml(s.prompt)+'</td><td>'+escapeHtml(s.options?s.options.join(' / '):(s.config||''))+'</td></tr>').join('');
+    }else{$('stepsBlock').style.display='none';}
+
+    const fs=[{k:'basics',t:'Basic Information',st:'populated'},{k:'content',t:'Content & Details',st:'populated'}];
+    if(QUESTION_CARRYING.has(d.type))fs.push(d.delivery_mode==='native'?{k:'questions',t:d.type==='question'?'Question':'Questions',st:'populated'}:{k:'externalLink',t:'External Link',st:d.external_link_optional?'populated':'needs you'});
+    if(d.type==='unmoderated')fs.push({k:'taskList',t:'Task List',st:'populated'});
+    if(d.type==='test'||d.type==='interview')fs.push({k:'sessions',t:'Session Management',st:'needs you'});
+    const authoring=fs.some(x=>x.k==='questions'||x.k==='taskList');
+    const moderated=fs.some(x=>x.k==='sessions');
+    if(authoring||moderated)fs.push({k:'consent',t:'Consent',st:'template'});
+    fs.push({k:'review',t:'Review',st:'unchanged'});
+    $('formSteps').innerHTML=fs.map((x,i)=>'<div class="fs"><span class="n">step '+(i+1)+'</span><b>'+escapeHtml(x.t)+'</b>'+(x.st==='populated'?'<span class="tag ok">populated</span>':x.st==='needs you'?'<span class="tag gap">needs you</span>':x.st==='template'?'<span class="tag">from template</span>':'<span class="tag opt">unchanged</span>')+'</div>').join('');
+
+    $('consentSub').textContent='filled from the current '+consentKind+' template, exactly as a hand-built form would be';
+  }
+
+  function compute(){
+    const has=!!state.draft;
+    $('totalsEmpty').style.display=has?'none':'';$('totalsFull').style.display=has?'':'none';
+    if(has){
+      const src=Object.values(state.draft.src);
+      $('tBrief').textContent=src.filter(s=>s==='brief').length;
+      $('tAssumed').textContent=src.filter(s=>s==='assumed').length;
+      $('tSteps').textContent=state.draft.steps.length;
+      $('tGaps').textContent=state.draft.gaps.length;
+      $('mType').textContent=TYPE_LABEL[state.draft.draft.type];
+      $('mDelivery').textContent=QUESTION_CARRYING.has(state.draft.draft.type)?(state.draft.draft.delivery_mode==='native'?'In Cortex':'In an external tool'):'n/a for this type';
+    }else{$('mType').textContent='none';$('mDelivery').textContent='-';}
+    validate();
+  }
+
+  function validate(){
+    const c={brief:state.brief.length>=20||$('brief').value.trim().length>=20,draft:!!state.draft,applied:state.applied};
+    $('vBrief').classList.toggle('done',c.brief);
+    $('vDraft').classList.toggle('done',c.draft);
+    $('vApplied').classList.toggle('done',c.applied);
+    $('step2').classList.toggle('done',c.applied);$('step2').classList.toggle('key',c.draft&&!c.applied);
+    $('step3').classList.toggle('done',c.applied);
+    $('cta').disabled=!c.draft||c.applied;
+    $('discard').disabled=!c.draft;
+    $('cta').textContent=c.applied?'Applied - continue in the form':'Apply to form';
+    $('ctaHint').textContent=c.applied?'Save and Publish are the same clicks as today, on the form.':c.draft?'Fills the form. Saves nothing. Publishes nothing.':c.brief?'Draft the form to continue.':'Describe the study to enable.';
+  }
+
+  function applyDraft(){
+    state.applied=true;
+    validate();
+    alert('Prototype: the form is now populated and you continue at Basic Information. Every value stays editable. Nothing has been saved.');
+  }
+
+  function resetAll(){
+    state.brief='';state.draft=null;state.applied=false;
+    $('brief').value='';
+    $('gate').style.display='';$('resolved').style.display='none';$('gated').style.display='none';
+    $('step1').classList.remove('done');$('step1').classList.add('key');
+    $('step2').classList.remove('done','key');$('step3').classList.remove('done');
+    onBriefInput();compute();
+  }
+
+  onBriefInput();compute();
+</script>
+</body>
+</html>
