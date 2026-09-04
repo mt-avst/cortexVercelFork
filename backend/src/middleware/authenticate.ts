@@ -208,9 +208,26 @@ export const withLiveRole = async (req: Request, res: Response, next: NextFuncti
  * Before that point it fails OPEN by design - no session, or a non-admin
  * session, is handed straight on, because that is the participant catalogue
  * working as intended.
+ *
+ * AMENDED (2026-09-04, the day !353 shipped): "stored role is not already an
+ * admin role" stopped being the same test as "has nothing to gain from the
+ * query" the moment CORTEX_BETA_ALL_ADMIN existed. An allow-listed `employee`
+ * can be EFFECTIVELY `researcher_admin` while their session still says
+ * `employee` - `requireAdmin` sees that on every write via `currentDbRole`,
+ * but this gate's narrowing was reading the pre-lift role, so a beta-lifted
+ * researcher could save a draft opportunity and then get `404 Opportunity not
+ * found` reading it straight back, on `GET /:id` and filtered out of
+ * `GET /api/opportunities` entirely. The narrowing now tests the EFFECTIVE
+ * stored role - `resolveEffectiveRole` applied to what the session holds -
+ * so a beta-lifted employee is treated as the admin session they actually are,
+ * while a non-lifted participant still triggers no query, unchanged.
  */
 export const withLiveRoleIfPresent = async (req: Request, res: Response, next: NextFunction) => {
-  const storedRole = req.session?.user?.role;
+  const rawStoredRole = req.session?.user?.role;
+  const storedRole =
+    rawStoredRole === undefined
+      ? undefined
+      : resolveEffectiveRole(rawStoredRole, req.session?.user?.email);
   if (!isAdminRole(storedRole)) {
     return next();
   }
