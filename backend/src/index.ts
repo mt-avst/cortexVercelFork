@@ -6,6 +6,7 @@ import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
 import cron from 'node-cron';
 import { config, pool } from './config';
+import { betaAllAdminEnabled, betaAllAdminDomains } from './config/betaAllAdmin';
 import { logger } from './utils/logger';
 import { applyServerTimeouts } from './server-timeouts';
 import { createDatabaseHealthProbe } from './utils/deepHealth';
@@ -312,6 +313,15 @@ if (process.env.NODE_ENV !== 'test') {
   // socket that goes quiet mid-request - which is how one admin reading
   // nothing could hold the single results-read permit indefinitely. See
   // server-timeouts.ts for why each number is what it is.
+  if (betaAllAdminEnabled()) {
+    logger.warn(
+      'CORTEX_BETA_ALL_ADMIN is ON: signed-in employees on these email domains ' +
+        'are elevated to admin (superadmin is unaffected). Temporary beta switch, ' +
+        'MUST be off at go-live.',
+      { domains: betaAllAdminDomains() }
+    );
+  }
+
   applyServerTimeouts(app.listen(config.PORT, () => {
     logger.info('Server started', {
       port: config.PORT,
