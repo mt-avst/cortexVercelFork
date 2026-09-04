@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import { Card, CardBody } from './ui/Card';
 import { DoorCard, CLOSING_DOORS } from './DoorCard';
 
@@ -298,62 +298,92 @@ const AudiencesSection: React.FC = () => (
   </section>
 );
 
-const MethodsSection: React.FC = () => (
-  <section className="sales-section" data-section="methods">
-    <div className="sales-section-inner">
-      <h2 className="sales-heading-l">What kind of question is it?</h2>
-      <p className="sales-micro-copy sales-methods-intro">
-        Pick by the question you have, not the method you know. The form carries the rest.
-      </p>
+const MethodsSection: React.FC = () => {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
-      <div className="sales-recorded">
-        <div className="sales-video" aria-hidden="true">
-          <span className="sales-video-play" />
-          <span className="sales-video-caption">
-            Sample capture from a recorded session
-            <br />
-            screen + voice, with the transcript running alongside
-          </span>
-        </div>
-        <div className="sales-recorded-copy">
-          <h3 className="sales-card-title">What a recorded study looks like</h3>
-          <p className="sales-card-text">
-            A participant opens the study, reads the task, and talks through what they&rsquo;re doing while
-            their screen is captured. No moderator, no scheduling.
-          </p>
-          <p className="sales-card-text">
-            You get the playback, the transcript and the moment they got stuck, timestamped.
-          </p>
-        </div>
-      </div>
+  const handlePlay = () => {
+    setIsPlaying(true);
+    videoRef.current?.play();
+  };
 
-      <div className="sales-methods-scroll">
-        <table className="sales-methods-table">
-          <thead>
-            <tr>
-              <th>Method</th>
-              <th>What it is</th>
-              <th>Use it when</th>
-              <th>You get</th>
-              <th>Participant gives</th>
-            </tr>
-          </thead>
-          <tbody>
-            {METHODS.map((row) => (
-              <tr key={row.method} className={row.highlight ? 'is-recommended' : undefined}>
-                <td className="sales-methods-name">{row.method}</td>
-                <td>{row.what}</td>
-                <td>{row.when}</td>
-                <td>{row.get}</td>
-                <td className="sales-methods-time">{row.gives}</td>
+  return (
+    <section className="sales-section" data-section="methods">
+      <div className="sales-section-inner">
+        <h2 className="sales-heading-l">What kind of question is it?</h2>
+        <p className="sales-micro-copy sales-methods-intro">
+          Pick by the question you have, not the method you know. The form carries the rest.
+        </p>
+
+        <div className="sales-recorded">
+          <div className="sales-video">
+            <video
+              ref={videoRef}
+              className="sales-video-media"
+              poster="/video/sample-session-poster.jpg"
+              controls={isPlaying}
+              preload="metadata"
+              playsInline
+            >
+              <source src="/video/sample-session.webm" type="video/webm" />
+              <source src="/video/sample-session.mp4" type="video/mp4" />
+            </video>
+            {!isPlaying && (
+              <button
+                type="button"
+                className="sales-video-overlay"
+                onClick={handlePlay}
+                aria-label="Play sample capture from a recorded session"
+              >
+                <span className="sales-video-play" aria-hidden="true" />
+                <span className="sales-video-caption">
+                  Sample capture from a recorded session
+                  <br />
+                  screen + voice, with the transcript running alongside
+                </span>
+              </button>
+            )}
+          </div>
+          <div className="sales-recorded-copy">
+            <h3 className="sales-card-title">What a recorded study looks like</h3>
+            <p className="sales-card-text">
+              A participant opens the study, reads the task, and talks through what they&rsquo;re doing while
+              their screen is captured. No moderator, no scheduling.
+            </p>
+            <p className="sales-card-text">
+              You get the playback, the transcript and the moment they got stuck, timestamped.
+            </p>
+          </div>
+        </div>
+
+        <div className="sales-methods-scroll">
+          <table className="sales-methods-table">
+            <thead>
+              <tr>
+                <th>Method</th>
+                <th>What it is</th>
+                <th>Use it when</th>
+                <th>You get</th>
+                <th>Participant gives</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {METHODS.map((row) => (
+                <tr key={row.method} className={row.highlight ? 'is-recommended' : undefined}>
+                  <td className="sales-methods-name">{row.method}</td>
+                  <td>{row.what}</td>
+                  <td>{row.when}</td>
+                  <td>{row.get}</td>
+                  <td className="sales-methods-time">{row.gives}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
-  </section>
-);
+    </section>
+  );
+};
 
 const PromisesSection: React.FC = () => (
   <section className="sales-section sales-section--dim" data-section="promises">
