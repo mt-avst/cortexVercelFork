@@ -17,7 +17,7 @@ const FeedbackFooter: React.FC = () => {
     setError(null);
     try {
       await submitFeedback({
-        category: 'footer',
+        category: 'other',
         feedback: trimmed,
         userAgent: navigator.userAgent,
         url: window.location.href,
