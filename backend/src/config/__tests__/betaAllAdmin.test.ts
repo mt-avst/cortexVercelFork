@@ -95,6 +95,15 @@ describe('CORTEX_BETA_ALL_ADMIN switch', () => {
       expect(resolveEffectiveRole('employee', 'trailing@')).toBe('employee');
     });
 
+    it('does NOT lift a crafted local-part that embeds an allow-listed domain', () => {
+      process.env[KEY] = 'true';
+      delete process.env[DOMAINS];
+      // A naive `lastIndexOf('@')` split would read the domain as
+      // `adaptavist.com` here; there must be exactly one '@'.
+      expect(resolveEffectiveRole('employee', 'x@evil.com@adaptavist.com')).toBe('employee');
+      expect(resolveEffectiveRole('employee', '@adaptavist.com')).toBe('employee');
+    });
+
     it('honours a custom domain list (and drops the default)', () => {
       process.env[KEY] = 'true';
       process.env[DOMAINS] = 'example.org';
@@ -131,6 +140,12 @@ describe('CORTEX_BETA_ALL_ADMIN switch', () => {
       expect(betaLiftApplies('beta@adaptavist.com')).toBe(true);
       expect(betaLiftApplies('stranger@gmail.com')).toBe(false);
       expect(betaLiftApplies(undefined)).toBe(false);
+    });
+
+    it('is false for a crafted local-part that embeds an allow-listed domain', () => {
+      process.env[KEY] = 'true';
+      delete process.env[DOMAINS];
+      expect(betaLiftApplies('x@evil.com@adaptavist.com')).toBe(false);
     });
   });
 });

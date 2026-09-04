@@ -62,11 +62,13 @@ function emailDomain(email: string | undefined | null): string | null {
   if (!email) {
     return null;
   }
-  const at = email.lastIndexOf('@');
-  if (at < 0 || at === email.length - 1) {
+  // Exactly one '@', both sides non-empty - `lastIndexOf` would let a local-part
+  // containing '@' (e.g. `x@evil.com@adaptavist.com`) spoof an allow-listed domain.
+  const parts = email.split('@');
+  if (parts.length !== 2 || !parts[0] || !parts[1]) {
     return null;
   }
-  return email.slice(at + 1).toLowerCase();
+  return parts[1].toLowerCase();
 }
 
 /**
