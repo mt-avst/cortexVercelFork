@@ -648,6 +648,26 @@ const OpportunityDetail: React.FC = () => {
   // missing opportunity.
   const eligibilityNote = getEligibilityNote(opportunity);
 
+  /**
+   * Whether any session is still bookable-in-principle - not yet ended.
+   *
+   * #113: a published live-session study whose sessions are all in the past
+   * used to hand its whole calendar to the participant, who then landed on
+   * past, unbookable columns. That is the #112 fallback (CalendarGrid anchors
+   * on the true earliest day when nothing is upcoming) doing the wrong thing
+   * for the all-past case: correct mid-run, stranding once nothing is left.
+   * When this is false the participant view shows a plain "No upcoming
+   * sessions" state instead of the grid; the researcher's Session Management
+   * grid is a different surface and is unchanged.
+   *
+   * `end_time >= now` is the same boundary the table view and CalendarGrid
+   * already use for "past" (`isSessionPast`), so a session still running counts
+   * as upcoming and the live calendar still mounts.
+   */
+  const hasUpcomingSessions = Boolean(
+    opportunity.sessions?.some(s => new Date(s.end_time) >= new Date())
+  );
+
   return (
     <div className="container-fluid py-4 opportunity-detail-page mission-control">
       {/* Living Neural Background - Dark Mode Only */}
@@ -917,21 +937,27 @@ const OpportunityDetail: React.FC = () => {
                       {/* Header with inline hint */}
                       <div className="d-flex align-items-center gap-2">
                         <h2 className="mb-0 h5">Available Sessions</h2>
-                        {/* Inline Legend */}
-                        <span className="calendar-hint-divider ms-2" aria-hidden="true">|</span>
-                        <div className="d-flex align-items-center gap-3" role="list" aria-label="Calendar legend">
-                          {CALENDAR_LEGEND_ITEMS.map((item) => (
-                            <div key={item.label} className="d-flex align-items-center gap-1" role="listitem">
-                              <div
-                                className={`legend-swatch ${item.className}`}
-                                style={{ width: '12px', height: '12px', borderRadius: '3px' }}
-                              />
-                              <small className={`legend-label ${item.labelClass}`} style={{ fontSize: '0.7rem' }}>
-                                {item.label}
-                              </small>
+                        {/* Inline Legend - the colour key and the view toggle
+                            below only make sense when there is a grid to read;
+                            #113 suppresses both when every session has ended. */}
+                        {hasUpcomingSessions && (
+                          <>
+                            <span className="calendar-hint-divider ms-2" aria-hidden="true">|</span>
+                            <div className="d-flex align-items-center gap-3" role="list" aria-label="Calendar legend">
+                              {CALENDAR_LEGEND_ITEMS.map((item) => (
+                                <div key={item.label} className="d-flex align-items-center gap-1" role="listitem">
+                                  <div
+                                    className={`legend-swatch ${item.className}`}
+                                    style={{ width: '12px', height: '12px', borderRadius: '3px' }}
+                                  />
+                                  <small className={`legend-label ${item.labelClass}`} style={{ fontSize: '0.7rem' }}>
+                                    {item.label}
+                                  </small>
+                                </div>
+                              ))}
                             </div>
-                          ))}
-                        </div>
+                          </>
+                        )}
                       </div>
                       <div className="d-flex align-items-center gap-2">
                         {/* Ghost Refresh Button */}
@@ -971,7 +997,9 @@ const OpportunityDetail: React.FC = () => {
                           Refresh
                         </button>
 
-                        {/* Segmented Control for View Mode */}
+                        {/* Segmented Control for View Mode - hidden when there
+                            is nothing to view (#113, all sessions past). */}
+                        {hasUpcomingSessions && (
                         <div
                           role="group"
                           aria-label="View mode selection"
@@ -1035,10 +1063,20 @@ const OpportunityDetail: React.FC = () => {
                             Table
                           </button>
                         </div>
+                        )}
                       </div>
                     </div>
 
                   {opportunity.sessions && opportunity.sessions.length > 0 ? (
+                    !hasUpcomingSessions ? (
+                      /* #113: sessions exist but every one has ended. Showing a
+                         plain empty state beats handing the participant a grid
+                         of past, unbookable columns with no way forward. */
+                      <div className="alert alert-info d-flex align-items-center" role="status">
+                        <Info size={18} className="me-2" aria-hidden="true" />
+                        No upcoming sessions. Every scheduled session for this study has already taken place.
+                      </div>
+                    ) : (
                     <>
                       {viewMode === 'calendar' ? (
                         <CalendarGrid
@@ -1141,9 +1179,10 @@ const OpportunityDetail: React.FC = () => {
                         </>
                       )}
                     </>
+                    )
                   ) : (
-                    <div className="alert alert-info d-flex align-items-center">
-                      <Info size={18} className="me-2" />
+                    <div className="alert alert-info d-flex align-items-center" role="status">
+                      <Info size={18} className="me-2" aria-hidden="true" />
                       Sessions will appear here when they are added by the researcher.
                     </div>
                   )}
