@@ -33,6 +33,38 @@ type ResponsePayload = SurveyAnswer;
 export type DirectRecordingUploadMode = "s3" | null;
 
 /**
+ * A runtime request that came back not-ok, carrying the HTTP status so a caller
+ * can tell the participant WHICH failure they hit rather than one generic line.
+ *
+ * The runtime client uses raw fetch (see the H2 note above), so a failed save
+ * has no axios error shape to read a status from - without this the status was
+ * simply discarded and every failure looked identical. `status` is 0 only when
+ * the request never reached a response at all (a dropped connection), which
+ * reads to the participant as "check your connection" rather than a code.
+ */
+export class RuntimeRequestError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "RuntimeRequestError";
+    this.status = status;
+  }
+}
+
+/**
+ * The HTTP status to show a participant when a runtime call failed, or null
+ * when there is no useful code to show - a non-runtime error, or a request that
+ * never reached the server (status 0). One copy of this test so the survey and
+ * recorded runners cannot drift on what counts as a showable status.
+ */
+export function runtimeFailureStatus(error: unknown): number | null {
+  return error instanceof RuntimeRequestError && error.status > 0
+    ? error.status
+    : null;
+}
+
+/**
  * Whether a 403 response is a CSRF-token rejection (as opposed to an
  * authorization failure). Clones the response so the body stays readable for
  * the caller. Only inspected on a 403, so the success path never reads a body.
@@ -101,7 +133,10 @@ export async function sendRuntimeEvent(
   );
 
   if (!response.ok) {
-    throw new Error("Failed to persist runtime event.");
+    throw new RuntimeRequestError(
+      "Failed to persist runtime event.",
+      response.status
+    );
   }
 }
 
@@ -127,7 +162,10 @@ export async function saveParticipantResponse(
   );
 
   if (!response.ok) {
-    throw new Error("Failed to save participant response.");
+    throw new RuntimeRequestError(
+      "Failed to save participant response.",
+      response.status
+    );
   }
 }
 

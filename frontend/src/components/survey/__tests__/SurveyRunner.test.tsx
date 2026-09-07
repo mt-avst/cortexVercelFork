@@ -3,16 +3,25 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SessionPayload, StudyStep } from "@shared/firsthand/contract";
+import { RuntimeRequestError } from "../../../lib/recording/runtime-client";
 import { SurveyRunner } from "../SurveyRunner";
 
 const saveParticipantResponse = vi.fn();
 const sendRuntimeEvent = vi.fn();
 
-vi.mock("../../../lib/recording/runtime-client", () => ({
-  saveParticipantResponse: (...args: unknown[]) =>
-    saveParticipantResponse(...args),
-  sendRuntimeEvent: (...args: unknown[]) => sendRuntimeEvent(...args)
-}));
+vi.mock("../../../lib/recording/runtime-client", async (importActual) => {
+  // Keep the real module's other exports - RuntimeRequestError in particular,
+  // which the runner does `instanceof` against, so a stubbed module that
+  // omitted it would throw the moment a save failed.
+  const actual =
+    await importActual<typeof import("../../../lib/recording/runtime-client")>();
+  return {
+    ...actual,
+    saveParticipantResponse: (...args: unknown[]) =>
+      saveParticipantResponse(...args),
+    sendRuntimeEvent: (...args: unknown[]) => sendRuntimeEvent(...args)
+  };
+});
 
 const payloadWith = (steps: Partial<StudyStep>[]): SessionPayload =>
   ({
@@ -218,6 +227,47 @@ describe("answering and advancing", () => {
     expect(
       screen.getByRole("textbox", { name: "First question" })
     ).toHaveValue("It was fine");
+  });
+
+  it("shows the HTTP status in the banner when a save is rejected with one", async () => {
+    const user = userEvent.setup();
+    saveParticipantResponse.mockRejectedValue(
+      new RuntimeRequestError("Failed to save participant response.", 403)
+    );
+    await renderRunner(twoQuestions);
+
+    await user.type(
+      screen.getByRole("textbox", { name: "First question" }),
+      "It was fine"
+    );
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/could not save your answer/i)).toBeInTheDocument();
+    });
+    // The status is the whole point of this change: a 403 (recoverable by
+    // reloading) must read differently from a 500 (server-side).
+    expect(screen.getByText(/error 403/i)).toBeInTheDocument();
+  });
+
+  it("falls back to the connection message when a save fails with no status", async () => {
+    const user = userEvent.setup();
+    saveParticipantResponse.mockRejectedValue(new Error("offline"));
+    await renderRunner(twoQuestions);
+
+    await user.type(
+      screen.getByRole("textbox", { name: "First question" }),
+      "It was fine"
+    );
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/check your connection and try again/i)
+      ).toBeInTheDocument();
+    });
+    // No parenthesised code when there is no status to show.
+    expect(screen.queryByText(/error \d/i)).not.toBeInTheDocument();
   });
 
   it("finishes on the last question and thanks the participant", async () => {

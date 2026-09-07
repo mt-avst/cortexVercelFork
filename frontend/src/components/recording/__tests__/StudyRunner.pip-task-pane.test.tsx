@@ -11,10 +11,18 @@ import type { SessionPayload } from "@shared/firsthand/contract";
 // window it is handed, taking the pane down when the session ends, and
 // offering the way back once the participant closes it.
 
-vi.mock("../../../lib/recording/runtime-client", () => ({
-  saveParticipantResponse: vi.fn().mockResolvedValue(undefined),
-  sendRuntimeEvent: vi.fn().mockResolvedValue(undefined)
-}));
+vi.mock("../../../lib/recording/runtime-client", async (importActual) => {
+  // Keep the real module's other exports - runtimeFailureStatus in particular,
+  // which the runner calls on a failed save; a stubbed module that omitted it
+  // would throw the moment the completion-failure path ran.
+  const actual =
+    await importActual<typeof import("../../../lib/recording/runtime-client")>();
+  return {
+    ...actual,
+    saveParticipantResponse: vi.fn().mockResolvedValue(undefined),
+    sendRuntimeEvent: vi.fn().mockResolvedValue(undefined)
+  };
+});
 
 function createFakePipWindow(): Window {
   // Role queries need a document with a defaultView, which a detached

@@ -8,6 +8,7 @@ import {
   type SurveyAnswer
 } from "../../lib/survey/answers";
 import {
+  runtimeFailureStatus,
   saveParticipantResponse,
   sendRuntimeEvent
 } from "../../lib/recording/runtime-client";
@@ -31,6 +32,26 @@ const RUNTIME_TRANSPORT: SurveyTransport = {
   saveAnswer: saveParticipantResponse,
   recordEvent: sendRuntimeEvent
 };
+
+/**
+ * The one line the participant sees when a save fails.
+ *
+ * Every branch keeps the substring "could not save your answer" so the answer
+ * on screen is never mistaken for saved, but a runtime failure now names its
+ * HTTP status: without it a 403 (a stale CSRF token, recoverable by reloading)
+ * and a 500 (server-side, not the participant's to fix) read identically, and
+ * the status is the single fact that tells the research team which one it is. A
+ * status of 0 is a request that never reached the server, so that stays the
+ * "check your connection" case rather than showing a meaningless code.
+ */
+function saveFailureMessage(error: unknown): string {
+  const status = runtimeFailureStatus(error);
+  if (status !== null) {
+    return `We could not save your answer (error ${status}). Please try again, and tell your research team this code if it keeps happening.`;
+  }
+
+  return "We could not save your answer. Check your connection and try again.";
+}
 
 /**
  * The participant-facing runner for a native poll or survey.
@@ -272,13 +293,11 @@ export function SurveyRunner({
       }
 
       setIndex(safeIndex + 1);
-    } catch {
+    } catch (error: unknown) {
       // Deliberately not advancing: the answer is not saved, so moving on
       // would lose it silently. The participant keeps their answer on screen
-      // and can retry.
-      setSubmissionError(
-        "We could not save your answer. Check your connection and try again."
-      );
+      // and can retry. The status, when there is one, goes in the message.
+      setSubmissionError(saveFailureMessage(error));
     } finally {
       setIsSubmitting(false);
     }
