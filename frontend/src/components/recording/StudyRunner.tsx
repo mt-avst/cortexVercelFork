@@ -8,12 +8,24 @@ import {
   getRunnerStorageKey
 } from "../../lib/recording/session-local-state";
 import {
+  runtimeFailureStatus,
   saveParticipantResponse,
   sendRuntimeEvent
 } from "../../lib/recording/runtime-client";
 import type { RuntimeEventType } from "../../lib/recording/runtime-events";
 import { Modal } from "./Modal";
 import { PipTrustHeader } from "./PipTrustHeader";
+
+/**
+ * Appends the HTTP status to a failure message when the runtime call carried
+ * one, so a 403 (recoverable by reloading) reads differently from a 500
+ * (server-side). Same reasoning and same helper source as the survey runner;
+ * no code is shown for a non-runtime error or a request that never landed.
+ */
+function withRuntimeStatus(base: string, error: unknown): string {
+  const status = runtimeFailureStatus(error);
+  return status !== null ? `${base} (error ${status})` : base;
+}
 
 type StudyRunnerProps = {
   attemptNumber: number;
@@ -180,11 +192,16 @@ export function StudyRunner({
 
     setStartedAt(now);
 
-    void bootstrapRuntime(payload, attemptNumber, currentStep, now).catch(() => {
-      setSubmissionError(
-        "We could not initialise the study runtime. Refresh the page and retry."
-      );
-    });
+    void bootstrapRuntime(payload, attemptNumber, currentStep, now).catch(
+      (error: unknown) => {
+        setSubmissionError(
+          withRuntimeStatus(
+            "We could not initialise the study runtime. Refresh the page and retry.",
+            error
+          )
+        );
+      }
+    );
   }, [attemptNumber, currentStep, isHydrated, payload, startedAt]);
 
   useEffect(() => {
@@ -229,9 +246,12 @@ export function StudyRunner({
     }
 
     hasAutoCompletedRef.current = true;
-    void finishSession().catch(() => {
+    void finishSession().catch((error: unknown) => {
       setSubmissionError(
-        "We could not finish the session yet. Please try again."
+        withRuntimeStatus(
+          "We could not finish the session yet. Please try again.",
+          error
+        )
       );
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -328,11 +348,14 @@ export function StudyRunner({
       } else {
         await finishSession();
       }
-    } catch {
+    } catch (error: unknown) {
       setSubmissionError(
-        isLastTask
-          ? "We could not finish the session yet. Please try again."
-          : "We could not save your answer. Please try again."
+        withRuntimeStatus(
+          isLastTask
+            ? "We could not finish the session yet. Please try again."
+            : "We could not save your answer. Please try again.",
+          error
+        )
       );
     } finally {
       setIsSubmitting(false);
