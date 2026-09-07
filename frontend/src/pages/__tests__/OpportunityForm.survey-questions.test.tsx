@@ -119,6 +119,21 @@ const walkToReview = async (user: ReturnType<typeof userEvent.setup>) => {
 };
 
 /**
+ * Choose Status from Review (#111 moved the control off Basic Information).
+ *
+ * Review has no `<label htmlFor="status">` any more - only an
+ * `<h3>Status</h3>` heading - so it is the one `<select>` Review renders,
+ * found by role rather than by name. Callers must reach Review first (e.g.
+ * via `walkToReview`).
+ */
+const setStatus = async (user: ReturnType<typeof userEvent.setup>, status: string) => {
+  await user.selectOptions(
+    within(screen.getByTestId('review-step')).getByRole('combobox'),
+    status
+  );
+};
+
+/**
  * Click the create/save control, walking every remaining step to Review first.
  *
  * Review is where every save happens now (C3), so this always walks whatever
@@ -1565,9 +1580,15 @@ describe('starting a survey from an existing set of questions', () => {
     await user.click(
       screen.getByRole('radio', { name: /Start from an existing set of questions/i })
     );
-    await user.click(screen.getByRole('button', { name: /Basic Information/i }));
-    await user.selectOptions(screen.getByLabelText(/Status/i), 'published');
-    await user.click(screen.getByRole('button', { name: /Questions/i }));
+    await walkToReview(user);
+    await setStatus(user, 'published');
+    // Scoped to the step strip: Review's own summary now also renders an
+    // "Edit Questions" button, which `/Questions/i` also matches unscoped.
+    await user.click(
+      within(screen.getByRole('navigation', { name: 'Form steps' })).getByRole('button', {
+        name: /Questions/i
+      })
+    );
 
     await submitFromLastStep(user, /^Create opportunity$/);
 
@@ -1588,9 +1609,15 @@ describe('starting a survey from an existing set of questions', () => {
     renderForm();
     await fillNativeSurvey(user);
 
-    await user.click(screen.getByRole('button', { name: /Basic Information/i }));
-    await user.selectOptions(screen.getByLabelText(/Status/i), 'published');
-    await user.click(screen.getByRole('button', { name: /Questions/i }));
+    await walkToReview(user);
+    await setStatus(user, 'published');
+    // Scoped to the step strip: Review's own summary now also renders an
+    // "Edit Questions" button, which `/Questions/i` also matches unscoped.
+    await user.click(
+      within(screen.getByRole('navigation', { name: 'Form steps' })).getByRole('button', {
+        name: /Questions/i
+      })
+    );
     await submitFromLastStep(user, /^Create opportunity$/);
     await screen.findByRole('alert', { name: /There is a problem/i });
     expect(

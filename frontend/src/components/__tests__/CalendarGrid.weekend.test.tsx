@@ -247,8 +247,15 @@ describe('CalendarGrid - sessions on a weekend', () => {
     // Four empty weekdays did not fit. The exact count is asserted, not just
     // that a notice exists: an under-reporting notice is the same silence it
     // was written to replace.
-    expect(screen.getByRole('status')).toHaveTextContent(/4 later days are not shown/i);
-    expect(screen.getByRole('status')).toHaveTextContent(/none of which have sessions/i);
+    //
+    // Bug #112 (notice copy): the wording used to claim a position ("Showing
+    // the first N days. M later days are not shown"), which the anchored /
+    // paged window can make false - an omitted day can be EARLIER than what
+    // is shown as easily as later. The copy below counts without claiming a
+    // position, so it stays accurate on every page.
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '4 days are not shown, none of which have sessions.'
+    );
   });
 
   it('never spends a column on an empty day while a bookable day goes unshown', () => {

@@ -11,40 +11,44 @@ test('draft warning appears in create opportunity form', async ({ page }) => {
   
   // Select poll type
   await page.selectOption('#type', 'poll');
-  
-  // Check status dropdown is set to draft by default
-  const statusValue = await page.inputValue('#status');
-  expect(statusValue).toBe('draft');
-  
-  // Check if status help text shows the warning
-  const statusHelp = await page.locator('#status-help');
-  await expect(statusHelp).toContainText('⚠️ DRAFT');
-  await expect(statusHelp).toContainText('Not visible to users');
-  
-  console.log('✅ Draft warning is visible in status dropdown!');
-  
+
   // Fill in required fields
   await page.fill('#title', 'Test Draft Poll Study');
   await page.fill('#purpose_one_liner', 'This is a test to verify draft warnings appear correctly in the UI');
-  
+
   // Go to next tab. Since C3 every forward control names its destination -
   // "Continue: {next step}" - and the label is derived from the step list
   // rather than written at the call site, which is what removed the old
   // "Continue to Link Setup" that then landed the author on Questions.
   await page.click('text=Continue: Content & Details');
   await page.waitForTimeout(500);
-  
+
   // Go to external link tab
   await page.click('text=Continue: External Link');
   await page.waitForTimeout(500);
-  
+
   // Fill external link
   await page.fill('#external_link_optional', 'https://example.com/poll');
-  
-  // On to Review, which is the only step that commits.
+
+  // On to Review, which is the only step that commits - and, since #111,
+  // where Status now lives too. It moved off Basic Information deliberately:
+  // publishing reads as the LAST decision on the form, not the first.
   await page.click('text=Continue: Review');
   await page.waitForTimeout(500);
-  
+
+  // Check status dropdown is set to draft by default. `#status` is a stable
+  // id, not an accessible name - Review's Status control has no
+  // `<label htmlFor="status">` any more, only an `<h3>Status</h3>` heading.
+  const statusValue = await page.inputValue('#status');
+  expect(statusValue).toBe('draft');
+
+  // Check if status help text shows the warning
+  const statusHelp = await page.locator('#status-help');
+  await expect(statusHelp).toContainText('⚠️ DRAFT');
+  await expect(statusHelp).toContainText('Not visible to users');
+
+  console.log('✅ Draft warning is visible in status dropdown!');
+
   // Submit the form
   await page.click('button:has-text("Create opportunity")');
   

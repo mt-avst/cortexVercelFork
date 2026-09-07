@@ -34,13 +34,27 @@ const formatDateForInput = (isoString: string | undefined): string => {
   }
 };
 
-/** Parse YYYY-MM-DD from <input type="date"> as that calendar day at noon UTC (stable round-trip). */
+/**
+ * Parse YYYY-MM-DD from <input type="date"> as that calendar day at noon UTC
+ * (stable round-trip).
+ *
+ * A native date input fires onChange on every keystroke of the year segment,
+ * not just once a complete year is typed. While the year is only partly
+ * typed - with month and day already valid - it reports a short, zero-padded
+ * year embedded in an otherwise-complete date string (typing just the "6" of
+ * "2026" reports "0006-06-15"). `Date.UTC`/`new Date()` then apply
+ * JavaScript's legacy two-digit-year rule (any year 0-99 silently gets 1900
+ * added), so that one keystroke becomes 1906 instead of being recognised as
+ * unfinished (#110). Requiring a plausible four-digit year rejects every one
+ * of those transient values outright, so a mid-edit keystroke never reaches
+ * the caller.
+ */
 const formatDateToISO = (dateValue: string): string | undefined => {
   if (!dateValue) return undefined;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) return undefined;
   const parts = dateValue.split('-').map((p) => parseInt(p, 10));
-  if (parts.length !== 3 || parts.some((n) => Number.isNaN(n))) return undefined;
   const [year, month, day] = parts;
-  if (month < 1 || month > 12 || day < 1 || day > 31) return undefined;
+  if (year < 1000 || month < 1 || month > 12 || day < 1 || day > 31) return undefined;
   const ms = Date.UTC(year, month - 1, day, 12, 0, 0);
   const date = new Date(ms);
   if (isNaN(date.getTime())) return undefined;
@@ -53,8 +67,19 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
   handleInputChange,
   handleBlur
 }) => {
+  // An explicit clear (value === '') always propagates, setting the field to
+  // undefined. Anything else that fails to parse is a mid-edit keystroke, not
+  // a deliberate clear, so it is ignored - the previous value in formData
+  // stays put rather than being overwritten with `undefined` (which would
+  // otherwise blank out a perfectly good date on every unfinished keystroke).
   const handleDateChange = (field: 'start_date' | 'end_date', value: string) => {
-    handleInputChange(field, formatDateToISO(value));
+    if (value === '') {
+      handleInputChange(field, undefined);
+      return;
+    }
+    const iso = formatDateToISO(value);
+    if (iso === undefined) return;
+    handleInputChange(field, iso);
   };
 
   const isExternalLinkType = ['poll', 'survey', 'question', 'unmoderated'].includes(formData.type);
@@ -73,7 +98,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
         </div>
 
         <div className="row g-3" style={{ alignItems: 'flex-start' }}>
-          <div className="col-md-6">
+          <div className="col-md-12">
             <div className="form-group mb-3" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
               <label htmlFor="type" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5' }}>
                 Research Study Type *
@@ -192,37 +217,6 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
               </div>
             </div>
           )}
-          
-          {/* Always rendered. This was behind `!allowUserSubmission`, the
-              non-admin mode removed in #46 - only an admin ever reaches this
-              form, and an admin always gets the Status control. */}
-          <div className="col-md-6">
-            <div className="form-group mb-3" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-              <label htmlFor="status" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5' }}>Status</label>
-              <div id="status-help" className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4' }}>
-                {formData.status === 'draft' ? (
-                  <strong className="text-warning">⚠️ DRAFT - Not visible to users. Change to Published to make visible.</strong>
-                ) : (
-                  'Published opportunities are visible to all users'
-                )}
-              </div>
-              <select
-                id="status"
-                className={`form-select ${validationErrors.status ? 'is-invalid' : ''}`}
-                style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto', width: '100%' }}
-                value={formData.status}
-                onChange={(e) => handleInputChange('status', e.target.value)}
-                aria-describedby={validationErrors.status ? 'status-error status-help' : 'status-help'}
-                aria-invalid={validationErrors.status ? 'true' : 'false'}
-              >
-                <option value="draft" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>📝 Draft - Not visible to users</option>
-                <option value="published" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>🌐 Published - Visible to users</option>
-              </select>
-              {validationErrors.status && (
-                <FieldError id="status-error">{validationErrors.status}</FieldError>
-              )}
-            </div>
-          </div>
         </div>
 
         <div className="row g-3" style={{ alignItems: 'flex-start' }}>

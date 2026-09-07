@@ -217,6 +217,13 @@ export const clearTypeConditionalErrors = (
 export const FIELD_LOCATIONS: Record<string, { tab: number; control?: string }> = {
   type: { tab: 1, control: 'type' },
   title: { tab: 1, control: 'title' },
+  // `status` has no entry, deliberately: it is a closed two-option select and
+  // no validator in this file ever assigns `errors.status` or
+  // `fieldErrors.status`, so it is a field that can never fail - the
+  // completeness test below asserts exactly that. Moving its control to
+  // Review (#111) does not change this; if a validator ever does start
+  // setting it, it must be routed to `REVIEW_STEP_ID`, not tab 1, since that
+  // is where the control now lives.
   meeting_location_optional: { tab: 1, control: 'meeting_location_optional' },
   purpose_one_liner: { tab: 1, control: 'purpose_one_liner' },
   default_duration_minutes: { tab: 1, control: 'default_duration_minutes' },
@@ -461,7 +468,7 @@ export const getTabsForType = (
   deliveryMode: 'native' | 'external' = 'external'
 ): FormStep[] => {
   const tabs: FormStep[] = [
-    { id: 1, key: 'basics', title: 'Basic Information', description: 'Configure type and status' },
+    { id: 1, key: 'basics', title: 'Basic Information', description: 'Configure type and details' },
     { id: 2, key: 'content', title: 'Content & Details', description: 'Define opportunity content' }
   ];
 
@@ -2524,6 +2531,26 @@ const OpportunityForm: React.FC = () => {
       : null;
 
   /**
+   * Whether a participant could actually start this study, for Review's share
+   * block (#108).
+   *
+   * Mirrors `OpportunityDetail`'s own `hasStartablePath`/inline expression for
+   * the one shape that check does not otherwise cover here: a test or
+   * interview starts by BOOKING A SLOT, and `findPublishProblem` above says
+   * nothing about slots at all, so a session-less booking type would
+   * otherwise be reported shareable the moment its status is set to
+   * Published. Every other shape defaults to `true` because
+   * `publishRefusal`, computed above from the same live `formData.status`,
+   * already refuses a Published status with no study or no external link -
+   * so this share block never renders "shareable" over content that publish
+   * itself would have refused.
+   */
+  const shareLinkStartable =
+    formData.type === 'test' || formData.type === 'interview'
+      ? sessions.length > 0
+      : true;
+
+  /**
    * Say the step change out loud.
    *
    * Moving between steps replaces the whole panel and changes nothing a screen
@@ -4353,6 +4380,17 @@ const OpportunityForm: React.FC = () => {
     // indistinguishable from "field not set" in the dirty check.
     value: string | number | boolean | null | undefined
   ) => {
+    // Bug #109: `successMessage` (and the "Saved" state it drives via
+    // `justSaved`) used to be cleared only by the save-confirmation timeout or
+    // the next save. An edit made inside that window kept reading "Saved" over
+    // now-unpersisted work until the timer caught up - the save button was
+    // disabled through the same window so nothing was actually lost, but the
+    // signal was wrong for as long as 3000ms. Cleared here, unconditionally,
+    // so any edit drops the confirmation the instant it happens rather than on
+    // the next tick of a timer. `successMessage` is otherwise only set after a
+    // save resolves and cleared at the start of the next one, so this does not
+    // touch the in-flight-save handling.
+    setSuccessMessage('');
     setFormData(prev => {
       // The source choice and anything copied under it belong to the authoring
       // surface that is going away, so they are cleared for EVERY type change
@@ -4902,6 +4940,7 @@ const OpportunityForm: React.FC = () => {
                         onSaveAndExit={handleSaveAndExit}
                         saving={saving}
                         disabled={saveControlsDisabled}
+                        justSaved={Boolean(successMessage)}
                         onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
                         {...continueControl}
                         onNext={() => continueFromStep(continueControl.onNext)}
@@ -4925,6 +4964,7 @@ const OpportunityForm: React.FC = () => {
                         onSaveAndExit={handleSaveAndExit}
                         saving={saving}
                         disabled={saveControlsDisabled}
+                        justSaved={Boolean(successMessage)}
                         {...backwardControl}
                         onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
                         {...continueControl}
@@ -4996,6 +5036,7 @@ const OpportunityForm: React.FC = () => {
                           onSaveAndExit={handleSaveAndExit}
                           saving={saving}
                           disabled={saveControlsDisabled}
+                          justSaved={Boolean(successMessage)}
                           {...backwardControl}
                           onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
                           {...continueControl}
@@ -5028,6 +5069,7 @@ const OpportunityForm: React.FC = () => {
                         onSaveAndExit={handleSaveAndExit}
                         saving={saving}
                         disabled={saveControlsDisabled}
+                        justSaved={Boolean(successMessage)}
                         {...backwardControl}
                         onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
                         {...continueControl}
@@ -5114,6 +5156,7 @@ const OpportunityForm: React.FC = () => {
                         onSaveAndExit={handleSaveAndExit}
                         saving={saving}
                         disabled={saveControlsDisabled}
+                        justSaved={Boolean(successMessage)}
                         {...backwardControl}
                         onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
                         {...continueControl}
@@ -5162,6 +5205,7 @@ const OpportunityForm: React.FC = () => {
                         onSaveAndExit={handleSaveAndExit}
                         saving={saving}
                         disabled={saveControlsDisabled}
+                        justSaved={Boolean(successMessage)}
                         {...backwardControl}
                         onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
                         {...continueControl}
@@ -5186,6 +5230,7 @@ const OpportunityForm: React.FC = () => {
                         onSaveAndExit={handleSaveAndExit}
                         saving={saving}
                         disabled={saveControlsDisabled}
+                        justSaved={Boolean(successMessage)}
                         {...backwardControl}
                         onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
                         {...continueControl}
@@ -5254,6 +5299,15 @@ const OpportunityForm: React.FC = () => {
                         publishRefusal={publishRefusal}
                         onEdit={goToStepAndFocus}
                         isEdit={isEdit}
+                        status={formData.status}
+                        onStatusChange={(status) => handleInputChange('status', status)}
+                        statusError={validationErrors.status}
+                        shareLink={
+                          persistedOpportunityId
+                            ? { opportunityId: persistedOpportunityId, startable: shareLinkStartable }
+                            : null
+                        }
+                        role={user?.role}
                       />
 
                       {/*
@@ -5269,6 +5323,7 @@ const OpportunityForm: React.FC = () => {
                         onSaveAndExit={handleSaveAndExit}
                         saving={saving}
                         disabled={saveControlsDisabled}
+                        justSaved={Boolean(successMessage)}
                         {...backwardControl}
                         /*
                           No `onSave` here, deliberately, where every other step

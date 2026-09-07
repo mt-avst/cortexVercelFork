@@ -171,6 +171,37 @@ const fillCreateThreshold = () => {
   });
 };
 
+/**
+ * Walk forward to Review, whatever step the form is currently showing.
+ *
+ * Status (#111) only renders there now, so any test that needs to change it
+ * has to arrive first - a no-op if Review is already on screen, since the
+ * loop only clicks a `Continue: ` control when one exists.
+ */
+const goToReview = () => {
+  for (let guard = 0; guard <= 6; guard += 1) {
+    const forward = screen.queryByRole('button', { name: /^Continue: /i });
+    if (!forward) return;
+    fireEvent.click(forward);
+  }
+  throw new Error('goToReview never reached a step with no forward control');
+};
+
+/**
+ * Choose Status from Review.
+ *
+ * Review has no `<label htmlFor="status">` any more - only an
+ * `<h3>Status</h3>` heading (see `git show 1b744f5 -- BasicInfoTab.tsx` for
+ * the label it used to carry) - so it is the one `<select>` Review renders,
+ * found by role rather than by name.
+ */
+const setStatus = (status: 'draft' | 'published') => {
+  goToReview();
+  fireEvent.change(within(screen.getByTestId('review-step')).getByRole('combobox'), {
+    target: { value: status }
+  });
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
@@ -590,9 +621,7 @@ describe('what an autosave refuses to do', () => {
       timeout: PAST_THE_DEBOUNCE
     });
 
-    fireEvent.change(screen.getByLabelText(/^Status/i), {
-      target: { value: 'published' }
-    });
+    setStatus('published');
 
     // Still reporting, rather than having disappeared - and naming the one
     // thing it cannot carry.
@@ -1072,9 +1101,7 @@ describe('leaving the form', () => {
     renderEditForm(draftOpportunity);
     await screen.findByDisplayValue('Developer experience pulse');
 
-    fireEvent.change(screen.getByLabelText(/^Status/i), {
-      target: { value: 'published' }
-    });
+    setStatus('published');
 
     await new Promise((resolve) => setTimeout(resolve, PAST_THE_DEBOUNCE));
 
@@ -1094,9 +1121,7 @@ describe('leaving the form', () => {
     renderEditForm(draftOpportunity);
     await screen.findByDisplayValue('Developer experience pulse');
 
-    fireEvent.change(screen.getByLabelText(/^Status/i), {
-      target: { value: 'published' }
-    });
+    setStatus('published');
 
     await new Promise((resolve) => setTimeout(resolve, 12_000));
 

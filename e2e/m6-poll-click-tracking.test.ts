@@ -101,28 +101,35 @@ test.describe('M6 Poll Click Tracking', () => {
     const opportunityId = opportunityIdMatch ? opportunityIdMatch[1] : null;
     expect(opportunityId).toBeTruthy();
 
-    // Ensure we're on Basic Info tab and change status to published
-    await page.waitForSelector('#status', { state: 'visible', timeout: 10000 });
     // Wait for the study's data, not just the controls. Reached via a
-    // client-side route the form mounts EMPTY - #status is visible and enabled
-    // while #title is still '' - and loadOpportunity() then replaces the whole
-    // form state. A status selected in that window is silently reverted, the
-    // PATCH sends 'draft', and the study never publishes. This was a ~50% flake.
+    // client-side route the form mounts EMPTY - #title is visible while still
+    // '' - and loadOpportunity() then replaces the whole form state. Acting on
+    // a control in that window would be silently reverted. This was a ~50%
+    // flake before the load-gate fix (#94/hydration-gate).
+    await page.waitForSelector('#title', { state: 'visible', timeout: 10000 });
     await expect(page.locator('#title')).toHaveValue(UNIQUE_TITLE, { timeout: 15000 });
-    await page.selectOption('#status', 'published');
-    await page.waitForTimeout(800);
-    
+
     // Visit External Link tab to ensure validation runs (poll requires external link when published)
     await page.locator('.nav-link').filter({ hasText: 'External Link' }).click();
     await page.waitForTimeout(500);
 
-    // Then on to Review, which is where an edit is saved from since C3.
+    // Then on to Review, which is where an edit is saved from since C3 - and,
+    // since #111, where Status now lives too. It moved off Basic Information
+    // deliberately: publishing reads as the LAST decision on the form, not
+    // the first.
     await page
       .locator('nav[aria-label="Form steps"] .nav-link')
       .filter({ hasText: 'Review' })
       .click();
     await page.waitForTimeout(300);
-    
+
+    // Review's Status control has no `<label htmlFor="status">` any more -
+    // only an `<h3>Status</h3>` heading - so `#status` (a stable id, not an
+    // accessible name) is what still finds it.
+    await page.waitForSelector('#status', { state: 'visible', timeout: 10000 });
+    await page.selectOption('#status', 'published');
+    await page.waitForTimeout(800);
+
     // Scroll to bottom where submit button is and click the terminal control
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await page.waitForTimeout(300);
