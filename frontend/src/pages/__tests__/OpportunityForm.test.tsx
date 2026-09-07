@@ -208,6 +208,21 @@ const submitFromLastStep = (name: RegExp = /^(Create opportunity|Save changes)$/
   fireEvent.click(screen.getByRole('button', { name }));
 };
 
+/**
+ * Choose Status from Review (#111 moved the control off Basic Information).
+ *
+ * Review has no `<label htmlFor="status">` any more - only an
+ * `<h3>Status</h3>` heading - so it is the one `<select>` Review renders,
+ * found by role rather than by name. Walks to Review first if it is not
+ * already on screen; the caller is left ON Review afterwards.
+ */
+const setStatus = (status: 'draft' | 'published') => {
+  walkToReview();
+  fireEvent.change(within(screen.getByTestId('review-step')).getByRole('combobox'), {
+    target: { value: status }
+  });
+};
+
 describe('clearTypeConditionalErrors', () => {
   it('drops external-link and participant-type errors, keeps the study error, when switching to unmoderated', () => {
     const cleared = clearTypeConditionalErrors(
@@ -281,7 +296,13 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     expect(
       screen.getByRole('combobox', { name: /Research Study Type/i })
     ).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: /Status/i })).toBeInTheDocument();
+    // Status (#111) is no longer on the first step - it moved to Review, the
+    // last decision on the form rather than the first. See
+    // `ReviewStep.test.tsx` for the control itself. Queried by id rather than
+    // an accessible name: Review's own Status control has none (see
+    // `ReviewStep.tsx` - only an `<h3>Status</h3>` heading), so a name-scoped
+    // query would report "absent" whether or not the control existed.
+    expect(document.getElementById('status')).toBeNull();
     // Create mode makes no fetch for an existing opportunity.
     expect(vi.mocked(getOpportunity)).not.toHaveBeenCalled();
   });
@@ -1183,12 +1204,17 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     });
 
     // Back to the Task List tab and on to Review, which is where the save
-    // control lives since C3. It stays disabled while the post-save success
-    // banner is up, so wait it out rather than racing it - a click during that
-    // window is silently dropped.
+    // control lives since C3. It stays disabled AND reads "Saved" (#109)
+    // while the post-save confirmation is up, so wait both out rather than
+    // racing them - a click during that window is silently dropped, and the
+    // exact name will not match while the checkmark is still showing.
     fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
     walkToReview();
-    const saveAgain = await screen.findByRole('button', { name: /^Save changes$/ });
+    const saveAgain = await screen.findByRole(
+      'button',
+      { name: /^Save changes$/ },
+      { timeout: 5000 }
+    );
     await vi.waitFor(() => expect(saveAgain).not.toBeDisabled(), { timeout: 5000 });
     fireEvent.click(saveAgain);
 
@@ -1569,9 +1595,15 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     fireEvent.change(screen.getByLabelText(/purpose/i), {
       target: { value: 'Find out where people stall in the checkout flow' }
     });
-    fireEvent.change(screen.getByLabelText(/Status/i), { target: { value: 'published' } });
+    setStatus('published');
 
-    fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+    // Scoped to the step strip: Review's own summary now also renders an
+    // "Edit Task List" button, which `/Task List/i` also matches unscoped.
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'Form steps' })).getByRole('button', {
+        name: /Task List/i
+      })
+    );
     fireEvent.click(
       await screen.findByRole('radio', { name: /Start from an existing task list/i })
     );
@@ -1600,9 +1632,15 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     fireEvent.change(screen.getByLabelText(/purpose/i), {
       target: { value: 'Find out where people stall in the checkout flow' }
     });
-    fireEvent.change(screen.getByLabelText(/Status/i), { target: { value: 'published' } });
+    setStatus('published');
 
-    fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+    // Scoped to the step strip: Review's own summary now also renders an
+    // "Edit Task List" button, which `/Task List/i` also matches unscoped.
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'Form steps' })).getByRole('button', {
+        name: /Task List/i
+      })
+    );
     submitFromLastStep(/^Create/i);
     await screen.findByRole('alert', { name: /There is a problem/i });
     expect(summarisedErrorKeys()).toEqual(['inline_study_steps']);

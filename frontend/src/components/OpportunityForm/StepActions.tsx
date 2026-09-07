@@ -70,6 +70,18 @@ type StepActionsProps = ForwardControl &
    * not be read is one of the reasons, and it is the one most easily dropped.
    */
   disabled: boolean;
+  /**
+   * True for a few seconds immediately after THIS row's save genuinely
+   * persisted, so the button the author actually pressed says so - not just a
+   * banner above the fold they may already have scrolled past.
+   *
+   * Driven by the form's `successMessage`, which is set once and only once
+   * the save request has resolved successfully against the server (issue
+   * #109: a save that gave no acknowledgement read as a dead end). Passed in
+   * rather than decided here, for the same reason `disabled` is: this
+   * component must not invent its own idea of when a save succeeded.
+   */
+  justSaved?: boolean;
 };
 
 /**
@@ -104,7 +116,8 @@ const StepActions: React.FC<StepActionsProps> = ({
   isEdit,
   saving,
   disabled,
-  submitVariant = 'success'
+  submitVariant = 'success',
+  justSaved = false
 }) => (
   <div className="border-top mt-4 pt-4">
     <div className="d-flex justify-content-between align-items-center gap-2">
@@ -134,6 +147,11 @@ const StepActions: React.FC<StepActionsProps> = ({
             <>
               <span className="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
               Saving...
+            </>
+          ) : justSaved ? (
+            <>
+              <CheckCircle size={16} className="me-2" />
+              Saved
             </>
           ) : (
             <>
@@ -179,6 +197,11 @@ const StepActions: React.FC<StepActionsProps> = ({
             <>
               <span className="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
               {isEdit ? 'Updating...' : 'Creating...'}
+            </>
+          ) : justSaved ? (
+            <>
+              <CheckCircle size={16} className="me-2" />
+              Saved
             </>
           ) : (
             <>

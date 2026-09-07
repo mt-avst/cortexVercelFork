@@ -1013,9 +1013,14 @@ describe('reopening an opportunity that has a task list', () => {
       // controls are disabled while `saving` is true AND for as long as the
       // success message is up - 3000ms on a draft, which this fixture is - so
       // the wait has to outlast that timer or the third click never lands.
-      const saveButton = await screen.findByRole('button', {
-        name: /Save Changes/i
-      });
+      // The button's NAME is also "Saved" (#109) for that same window, so
+      // `findByRole`'s own retry needs the same 5s allowance, not the
+      // default 1s, or it gives up before the confirmation clears.
+      const saveButton = await screen.findByRole(
+        'button',
+        { name: /Save Changes/i },
+        { timeout: 5000 }
+      );
       await waitFor(() => expect(saveButton).not.toBeDisabled(), {
         timeout: 5000
       });

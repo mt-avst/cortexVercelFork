@@ -408,16 +408,19 @@ describe('the strip reports steps other than the first', () => {
     renderForm();
     selectType('unmoderated');
     fillBasics();
-    fireEvent.change(screen.getByRole('combobox', { name: /Status/i }), {
-      target: { value: 'published' }
-    });
 
     // Straight from step 1 to Consent - no longer the last step, but still
     // reached with steps 2 and 3 UNVISITED, which is the only state the
     // reported-errors map is load-bearing for - and on to Review, the step
-    // that now carries the submit control.
+    // that now carries the submit control AND the Status choice (#111).
     fireEvent.click(steps()[3]);
     fireEvent.click(screen.getByRole('button', { name: 'Continue: Review' }));
+    // Review's Status control has no `<label htmlFor="status">` - only an
+    // `<h3>Status</h3>` heading - so it is found by role, scoped to Review,
+    // rather than by name.
+    fireEvent.change(within(screen.getByTestId('review-step')).getByRole('combobox'), {
+      target: { value: 'published' }
+    });
     fireEvent.click(screen.getByRole('button', { name: /Create Opportunity/i }));
 
     // Publishing an unmoderated study with no tasks fails on step 3.

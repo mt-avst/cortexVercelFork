@@ -67,7 +67,15 @@ export interface ReviewSummaryInput {
   type: string;
   title: string;
   purpose: string;
-  /** 'draft' | 'published'. */
+  /**
+   * 'draft' | 'published'.
+   *
+   * No longer read by `itemsForStep` (#111): the choice moved off the summary
+   * and onto its own live control on `ReviewStep` itself, which is not a fact
+   * this module has anything to say about. Kept as a required field so the
+   * caller does not have to special-case what it passes, and so existing
+   * fixtures built against this shape stay valid.
+   */
   status: string;
   description: string;
   product: string;
@@ -303,14 +311,7 @@ const itemsForStep = (step: ReviewStepRef, input: ReviewSummaryInput): ReviewIte
           label: 'Purpose',
           value: orNotSet(input.purpose),
           missing: !input.purpose
-        },
-        {
-          label: 'Status',
-          value:
-            input.status === 'published'
-              ? 'Published — visible to participants'
-              : 'Draft — not visible to participants'
-        },
+        }
       ];
 
       /*

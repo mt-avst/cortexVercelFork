@@ -101,8 +101,24 @@ const walkToReview = () => {
   throw new Error('walkToReview never reached a step with no Continue control');
 };
 
-const submitFromReview = () => {
+/**
+ * Choose Status from Review (#111 moved the control off Basic Information).
+ *
+ * Review has no `<label htmlFor="status">` any more - only an
+ * `<h3>Status</h3>` heading - so it is the one `<select>` Review renders,
+ * found by role rather than by name. Must be called once Review is on
+ * screen (e.g. after `walkToReview()`).
+ */
+const setStatus = (status: 'draft' | 'published') =>
+  fireEvent.change(within(screen.getByTestId('review-step')).getByRole('combobox'), {
+    target: { value: status },
+  });
+
+const submitFromReview = (status?: 'draft' | 'published') => {
   walkToReview();
+  if (status) {
+    setStatus(status);
+  }
   fireEvent.click(screen.getByRole('button', { name: /^Create opportunity$/ }));
 };
 
@@ -256,15 +272,16 @@ describe('Continue can never pass what Submit refuses', () => {
     // is none of Continue's business.
     renderForm();
     fillStepOne();
-    fireEvent.change(screen.getByLabelText(/Status/i), { target: { value: 'published' } });
 
     continueForward();
 
     expect(currentStepName()).toMatch(/Content & Details/i);
     expect(queryErrorSummary()).toBeNull();
 
-    // ...and the same form is refused at Submit, for that very field.
-    submitFromReview();
+    // ...and the same form is refused at Submit, for that very field. Status
+    // (#111) is chosen from Review now, so it is set on the way through
+    // rather than back on step 1.
+    submitFromReview('published');
     expect(summarisedErrorKeys()).toEqual(['external_link_optional']);
   });
 

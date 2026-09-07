@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -69,6 +69,34 @@ const renderEdit = () =>
     </MemoryRouter>
   );
 
+/**
+ * Status moved off Basic Information onto Review (#111), so reaching it now
+ * means walking every step's forward control first. `OPPORTUNITY` already
+ * satisfies every step's validation for the poll shape it fixtures, so no
+ * field needs filling along the way - only advancing.
+ */
+const advanceToReview = () => {
+  for (let guard = 0; guard <= 6; guard += 1) {
+    const forward = screen.queryByRole('button', { name: /^Continue: /i });
+    if (!forward) return;
+    fireEvent.click(forward);
+  }
+  throw new Error('advanceToReview never reached a step with no forward control');
+};
+
+/**
+ * Review's Status control (#111) has no `<label htmlFor="status">` - it sits
+ * under an `<h3>Status</h3>` heading instead, unlike its old Basic
+ * Information home, which did have one (see `git show 1b744f5 --
+ * BasicInfoTab.tsx`). `getByLabelText` therefore cannot find it post-move;
+ * it is the only `<select>` Review renders, so `getByRole('combobox')`,
+ * scoped to the review step, finds it without relying on a name that does
+ * not exist. Filed as a real accessibility regression worth a follow-up
+ * fix - not something a test file can correct.
+ */
+const statusControl = () =>
+  within(screen.getByTestId('review-step')).getByRole('combobox') as HTMLSelectElement;
+
 describe('OpportunityForm edit-mode hydration gate', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -115,8 +143,11 @@ describe('OpportunityForm edit-mode hydration gate', () => {
     // The title is the proof that what renders is hydrated, not empty.
     const title = (await screen.findByLabelText(/title/i)) as HTMLInputElement;
     expect(title.value).toBe(OPPORTUNITY.title);
-    const status = screen.getByLabelText(/status/i) as HTMLSelectElement;
-    expect(status.value).toBe('draft');
+
+    // Status (#111) now lives on Review, not Basic Information - reach it
+    // before reading it.
+    advanceToReview();
+    expect(statusControl().value).toBe('draft');
   });
 
   it('a status chosen after hydration survives to the save payload', async () => {
@@ -127,10 +158,17 @@ describe('OpportunityForm edit-mode hydration gate', () => {
 
     renderEdit();
 
-    const status = (await screen.findByLabelText(/status/i)) as HTMLSelectElement;
-    fireEvent.change(status, { target: { value: 'published' } });
+    // Status (#111) now lives on Review, not Basic Information - reach it
+    // before choosing one.
+    await screen.findByLabelText(/title/i);
+    advanceToReview();
 
-    fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }));
+    fireEvent.change(statusControl(), { target: { value: 'published' } });
+
+    // On Review the commit control is the terminal "Save changes" button,
+    // not the per-step "Save Changes" shortcut (there is deliberately no
+    // shortcut on this step - see StepActions usage in OpportunityForm.tsx).
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() => expect(updateOpportunity).toHaveBeenCalled());
     const body = vi.mocked(updateOpportunity).mock.calls[0][1] as Record<string, unknown>;

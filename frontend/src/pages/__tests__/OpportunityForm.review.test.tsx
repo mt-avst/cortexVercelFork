@@ -173,7 +173,7 @@ const commitControl = () =>
 /** Fill step 1 well enough to be allowed forward. */
 const fillBasics = (
   type: string,
-  { status = 'draft', title = 'A study with a long enough title' } = {}
+  { title = 'A study with a long enough title' } = {}
 ) => {
   fireEvent.change(screen.getByLabelText(/Research Study Type/i), { target: { value: type } });
   fireEvent.change(screen.getByLabelText(/^Title/i), { target: { value: title } });
@@ -184,7 +184,23 @@ const fillBasics = (
   if (location) {
     fireEvent.change(location, { target: { value: 'Zoom' } });
   }
-  fireEvent.change(screen.getByLabelText(/^Status/i), { target: { value: status } });
+};
+
+/**
+ * Choose Status, from wherever Review currently is (#111 moved the control
+ * off Basic Information).
+ *
+ * Review has no `<label htmlFor="status">` any more - only an
+ * `<h3>Status</h3>` heading (see `git show 1b744f5 -- BasicInfoTab.tsx` for
+ * the label it used to carry) - so it is found by role rather than by name;
+ * it is the only `<select>` Review renders. `formData.status` is a single
+ * piece of state that survives navigating away from Review, so a caller only
+ * has to be ON Review at the moment this runs - not still there afterwards.
+ */
+const setStatus = (status: 'draft' | 'published') => {
+  fireEvent.change(within(screen.getByTestId('review-step')).getByRole('combobox'), {
+    target: { value: status }
+  });
 };
 
 /**
@@ -404,8 +420,9 @@ describe('a publish that would be refused is previewed, never blocked', () => {
     ['poll', PUBLISH_PROBLEM_MESSAGES.external_link_required, 'External Link']
   ])('on the %s path, in the server\'s own words', (type, message, stepTitle) => {
     renderCreate();
-    fillBasics(type, { status: 'published' });
+    fillBasics(type);
     walkForward();
+    setStatus('published');
 
     const alert = screen.getByRole('alert');
     // The message is imported from the shared predicate the SERVER throws
@@ -418,9 +435,10 @@ describe('a publish that would be refused is previewed, never blocked', () => {
 
   it('previews the native survey refusal, which is a different rule from the external one', () => {
     renderCreate();
-    fillBasics('survey', { status: 'published' });
+    fillBasics('survey');
     fireEvent.click(screen.getByLabelText(/in Cortex/i));
     walkForward();
+    setStatus('published');
 
     expect(screen.getByRole('alert')).toHaveTextContent(
       PUBLISH_PROBLEM_MESSAGES.native_survey_study_required
@@ -433,7 +451,7 @@ describe('a publish that would be refused is previewed, never blocked', () => {
 
   it('says nothing about a draft, because the guard is about publishing', () => {
     renderCreate();
-    fillBasics('unmoderated', { status: 'draft' });
+    fillBasics('unmoderated');
     walkForward();
 
     /*
@@ -447,8 +465,9 @@ describe('a publish that would be refused is previewed, never blocked', () => {
 
   it('leaves the commit control enabled while it is refusing', () => {
     renderCreate();
-    fillBasics('unmoderated', { status: 'published' });
+    fillBasics('unmoderated');
     walkForward();
+    setStatus('published');
 
     expect(screen.getByRole('alert')).toBeInTheDocument();
     // The server is the authority on this, and a disabled button that is wrong
@@ -562,8 +581,9 @@ describe('a value the participant cannot use is never marked by colour alone', (
 
   it('pairs the colour with a shape, on a flagged row and not on a satisfied one', () => {
     renderCreate();
-    fillBasics('unmoderated', { status: 'published' });
+    fillBasics('unmoderated');
     walkForward();
+    setStatus('published');
 
     // Flagged: a published task list with nothing in it.
     const tasks = valueFor('Tasks');
@@ -897,8 +917,9 @@ describe('a publish that WOULD be allowed says nothing', () => {
    */
   it('shows no refusal for a published external poll that has a link', () => {
     renderCreate();
-    fillBasics('poll', { status: 'published' });
+    fillBasics('poll');
     walkForward();
+    setStatus('published');
     fireEvent.click(strip()[2]);
     fireEvent.change(screen.getByLabelText(/External Link/i), {
       target: { value: 'https://example.com/poll' }
@@ -912,8 +933,9 @@ describe('a publish that WOULD be allowed says nothing', () => {
   it('shows no refusal for a published test, which needs no study at all', () => {
     // The twin path: a booked session has no study, so no rule applies.
     renderCreate();
-    fillBasics('test', { status: 'published' });
+    fillBasics('test');
     walkForward();
+    setStatus('published');
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
@@ -933,8 +955,9 @@ describe('the form refuses a link the server would refuse', () => {
      * message is imported rather than restated for exactly that reason.
      */
     renderCreate();
-    fillBasics('question', { status: 'published' });
+    fillBasics('question');
     walkForward();
+    setStatus('published');
     fireEvent.click(strip()[2]);
     fireEvent.change(screen.getByLabelText(/External Link/i), { target: { value: link } });
     fireEvent.click(strip()[strip().length - 1]);
@@ -950,8 +973,9 @@ describe('the form refuses a link the server would refuse', () => {
 
   it('lets a real web address through, so the refusal is about the scheme and not the field', async () => {
     renderCreate();
-    fillBasics('question', { status: 'published' });
+    fillBasics('question');
     walkForward();
+    setStatus('published');
     fireEvent.click(strip()[2]);
     fireEvent.change(screen.getByLabelText(/External Link/i), {
       target: { value: 'http://example.com/answer' }

@@ -145,20 +145,21 @@ describe('buildReviewSummary', () => {
       expect(item?.missing).toBe(true);
     });
 
-    it('describes draft and published status in full sentences', () => {
-      const draft = findItem(
-        findSection(buildReviewSummary(completeInput({ status: 'draft' })), 'basics'),
-        'Status'
-      );
-      const published = findItem(
-        findSection(
-          buildReviewSummary(completeInput({ status: 'published' })),
-          'basics'
-        ),
-        'Status'
-      );
-      expect(draft?.value).toBe('Draft — not visible to participants');
-      expect(published?.value).toBe('Published — visible to participants');
+    /*
+     * #111 moved Status off Basic Information and onto Review as a live
+     * control (`ReviewStep`'s own `<select id="status">`), rather than a
+     * read-only summary row here - `buildReviewSummary` no longer emits a
+     * "Status" item in the basics section at all, so an assertion against
+     * one can only pass by accident (a missing item reads as `undefined`,
+     * not as a thrown error) or fail for the wrong reason. The equivalent
+     * coverage - that draft and published each read as a full sentence -
+     * now lives on the component that owns the wording:
+     * `ReviewStep.test.tsx` > "describes draft and published in full
+     * sentences via the status hint".
+     */
+    it('no longer carries a Status item in the basics section (#111 moved it to a live control on Review)', () => {
+      const sections = buildReviewSummary(completeInput({ status: 'draft' }));
+      expect(findItem(findSection(sections, 'basics'), 'Status')).toBeUndefined();
     });
 
     it('states a default duration only on the shapes that ask for one', () => {

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Session, CalendarEvent } from '../api/types';
 import { getMyCalendarEvents, getCalendarConnectionStatus, getMyBookings } from '../api/client';
 import { logger } from '../utils/logger';
-import { Info } from 'lucide-react';
+import { Info, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from 'framer-motion';
 
 interface CalendarGridProps {
@@ -129,7 +129,31 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
   const [calendarConnected, setCalendarConnected] = useState(false);
   const [loadingCalendar, setLoadingCalendar] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
-  
+
+  /**
+   * How many pages of session days the participant has stepped forward (or
+   * back) from the default window computed below. Zero is "wherever the
+   * default window lands" - see `anchorIndex`.
+   *
+   * Bug #112: this control did not exist at all, on any page. The grid drew
+   * a single static window with no way to move it, so a participant whose
+   * bookable days had been pushed out of that window - see the comment on
+   * `daysWithSessions` below - had no route back to a bookable day.
+   */
+  const [navPage, setNavPage] = useState(0);
+
+  /**
+   * Resets paging whenever `sessions` changes identity - a refetch (new
+   * bookings, a slot added or removed) recomputes `daysWithSessions` from
+   * scratch, and a `navPage` left over from the previous data set can point
+   * at a page that no longer exists, or a page that exists but is no longer
+   * the one the participant was looking at. Landing back on the default
+   * (bookable-anchored) window is the safe, always-valid state to return to.
+   */
+  useEffect(() => {
+    setNavPage(0);
+  }, [sessions]);
+
   // Cursor spotlight state - scoped to grid area only
   const gridContainerRef = useRef<HTMLDivElement>(null);
   const [isMouseInGrid, setIsMouseInGrid] = useState(false);
@@ -450,6 +474,63 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
    * week that also had weekday sessions was sliced off the end, which is the
    * same defect as the Monday-to-Friday filter wearing a different hat.
    */
+  /** Every day in `sessionsByDate` that actually carries a session, in date order. */
+  const daysWithSessions = useMemo(
+    () => sessionsByDate.filter(([, daySessions]) => daySessions.length > 0),
+    [sessionsByDate]
+  );
+
+  /**
+   * Where the current page starts within `daysWithSessions`.
+   *
+   * Bug #112: an opportunity carrying more than MAX_VISIBLE_DAYS distinct
+   * session days used to have its whole truncation budget spent on the
+   * CHRONOLOGICALLY EARLIEST of them, with no regard for whether those had
+   * already passed. A study that had been open for several weeks - old
+   * sessions still in the data, new ones added on top - could fill all seven
+   * slots with past days and push this week, and everything after it, out of
+   * the window entirely. That is the reported defect exactly: a participant
+   * shown last week's (unbookable) availability with nothing on screen able
+   * to reach a bookable day.
+   *
+   * The fix is the default page: it starts at the earliest day that has not
+   * yet ended, not the earliest day full stop, whenever such a day exists.
+   * `navPage` then steps a full window's worth forward or back from there,
+   * so "next" and "previous" always mean "relative to a page that opened on
+   * a bookable day", not "relative to the true beginning of the opportunity".
+   *
+   * Deliberately NOT gated on the truncation branch below - it is cheap to
+   * compute unconditionally, and doing so once here rather than duplicating
+   * the "which day is today" check in two places is the whole point of
+   * pulling it out.
+   */
+  const anchorIndex = useMemo(() => {
+    if (daysWithSessions.length === 0) return 0;
+
+    // Nothing to skip forward past: every day with a session already fits in
+    // one page, so paging further would only produce an empty page. This
+    // mirrors the untruncated early-return below for `visibleDays` and keeps
+    // `navPage` a no-op until there is genuinely more than one page.
+    if (daysWithSessions.length <= MAX_VISIBLE_DAYS) return 0;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const firstUpcoming = daysWithSessions.findIndex(([dateKey]) => new Date(dateKey) >= today);
+    // No day left to book at all - an opportunity that has fully lapsed has
+    // nothing better to default to, so this falls back to the true earliest
+    // day rather than an anchor that would show nothing.
+    const defaultAnchor = firstUpcoming === -1 ? 0 : firstUpcoming;
+
+    const paged = defaultAnchor + navPage * MAX_VISIBLE_DAYS;
+    return Math.min(Math.max(paged, 0), daysWithSessions.length - 1);
+  }, [daysWithSessions, navPage]);
+
+  /** Whether there is an earlier or a later page than the one on screen. */
+  const canGoToPreviousPage = anchorIndex > 0;
+  const canGoToNextPage = anchorIndex + MAX_VISIBLE_DAYS < daysWithSessions.length;
+  /** The navigation control only makes sense once there is more than one page to move between. */
+  const showWeekNav = daysWithSessions.length > MAX_VISIBLE_DAYS;
+
   const visibleDays = useMemo(() => {
     if (sessionsByDate.length <= MAX_VISIBLE_DAYS) {
       return sessionsByDate;
@@ -466,27 +547,42 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
     // invisible to the participant, with the budget spent on days that carry
     // nothing.
     //
-    // Days that HAVE sessions are therefore taken first. If even those overflow
-    // the budget the earliest win, which is the honest answer for an
-    // opportunity running over months, and the notice below reports the rest.
+    // Days that HAVE sessions are therefore taken first, starting from
+    // `anchorIndex` rather than always from the beginning - see the comment
+    // there for why. If even a single page of those overflows the budget the
+    // earliest of THAT page win, and the notice below reports the rest.
     const kept = new Set(
-      sessionsByDate
-        .filter(([, daySessions]) => daySessions.length > 0)
-        .slice(0, MAX_VISIBLE_DAYS)
+      daysWithSessions
+        .slice(anchorIndex, anchorIndex + MAX_VISIBLE_DAYS)
         .map(([dateKey]) => dateKey)
     );
 
-    // Anything left over is spent on the empty days between them, so a run of
-    // days still reads as a week rather than as a row of disconnected dates.
-    for (const [dateKey, daySessions] of sessionsByDate) {
+    // Anything left over is spent on the empty days between and after them, so
+    // a run of days still reads as a week rather than as a row of disconnected
+    // dates.
+    //
+    // Bug #112 (backfill): this walk starts at the anchored window's OWN first
+    // day, not at the beginning of `sessionsByDate`. Starting from the global
+    // beginning pulled in whichever empty days were chronologically earliest
+    // full stop - for an anchor sitting weeks into the opportunity, that meant
+    // empty days from BEFORE the anchor, reintroducing "showing last week" as
+    // clutter beside the anchored days rather than as the whole window. Empty
+    // fill must only ever be contiguous with, and after, the anchored bookable
+    // days.
+    const anchorDateKey = daysWithSessions[anchorIndex]?.[0];
+    const anchorStartIndex = anchorDateKey
+      ? sessionsByDate.findIndex(([dateKey]) => dateKey === anchorDateKey)
+      : 0;
+    for (let i = Math.max(anchorStartIndex, 0); i < sessionsByDate.length; i++) {
       if (kept.size >= MAX_VISIBLE_DAYS) break;
+      const [dateKey, daySessions] = sessionsByDate[i];
       if (daySessions.length === 0) kept.add(dateKey);
     }
 
     // Filtered rather than assembled, so the result stays in date order
     // whichever order the two passes above added things in.
     return sessionsByDate.filter(([dateKey]) => kept.has(dateKey));
-  }, [sessionsByDate]);
+  }, [sessionsByDate, daysWithSessions, anchorIndex]);
 
   /**
    * What the window could not fit. Announced below the grid rather than simply
@@ -741,8 +837,69 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
         </div>
       )}
 
+      {/*
+        Week navigation (#112). Only rendered once there is more than one
+        page of session days to move between - see `showWeekNav` - so an
+        opportunity short enough to fit in one screen, which is most of
+        them, is unchanged by this control's existence.
+      */}
+      {showWeekNav && (
+        <div
+          className="calendar-week-nav d-flex justify-content-between align-items-center mb-3"
+          role="group"
+          aria-label="Session days navigation"
+        >
+          <button
+            type="button"
+            onClick={() => setNavPage(page => page - 1)}
+            disabled={!canGoToPreviousPage}
+            aria-label="Show earlier session days"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '4px 10px',
+              fontSize: '0.8rem',
+              fontWeight: 500,
+              border: '1px solid var(--border-card)',
+              borderRadius: '4px',
+              backgroundColor: 'transparent',
+              color: 'var(--text-muted)',
+              cursor: canGoToPreviousPage ? 'pointer' : 'not-allowed',
+              opacity: canGoToPreviousPage ? 1 : 0.5,
+            }}
+          >
+            <ChevronLeft size={14} aria-hidden="true" />
+            Previous
+          </button>
+          <button
+            type="button"
+            onClick={() => setNavPage(page => page + 1)}
+            disabled={!canGoToNextPage}
+            aria-label="Show later session days"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '4px 10px',
+              fontSize: '0.8rem',
+              fontWeight: 500,
+              border: '1px solid var(--border-card)',
+              borderRadius: '4px',
+              backgroundColor: 'transparent',
+              color: 'var(--text-muted)',
+              cursor: canGoToNextPage ? 'pointer' : 'not-allowed',
+              opacity: canGoToNextPage ? 1 : 0.5,
+            }}
+          >
+            Next
+            <ChevronRight size={14} aria-hidden="true" />
+          </button>
+        </div>
+      )}
+
       {/* Calendar Timeline - Page scroll with viewport-sticky headers */}
-      <div className="calendar-timeline" style={{ 
+      <div className="calendar-timeline" style={{
         position: 'relative',
         overflow: 'visible'
       }}>
@@ -1201,7 +1358,16 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
         <div className="alert alert-info d-flex align-items-center mt-3" role="status">
           <Info size={16} className="me-2" aria-hidden="true" />
           <span>
-            {`Showing the first ${visibleDays.length} days. ${omittedDays.length} later `}
+            {/*
+              Bug #112 (notice copy): this used to read "Showing the first N
+              days. M later days are not shown" unconditionally. Once the
+              window can be anchored past day zero or paged backward, the
+              omitted set includes EARLIER days too, so "first" and "later"
+              are both frequently false. The wording below counts what is
+              omitted without claiming a position for it, so it stays correct
+              on every page rather than only the default one.
+            */}
+            {`${omittedDays.length} `}
             {omittedDays.length === 1 ? 'day is' : 'days are'}
             {' not shown, '}
             {omittedDaysWithSessions === 0
@@ -1209,6 +1375,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
               : omittedDaysWithSessions === 1
                 ? '1 of which has sessions.'
                 : `${omittedDaysWithSessions} of which have sessions.`}
+            {showWeekNav ? ' Use Previous / Next to see them.' : ''}
           </span>
         </div>
       )}
