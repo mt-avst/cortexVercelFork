@@ -168,3 +168,81 @@
 .survey-consent p {
   margin: 0;
 }
+
+/*
+ * Generic classes the runner shares with the recorded flow - button,
+ * body-copy, status-copy, alert-banner - are defined ONLY under .fh-recording
+ * (see recording-session.css), which this surface is deliberately not inside.
+ * Without these the consent gate's Accept and Decline rendered as two unstyled
+ * controls at opposite ends of the flex .actions row, reading as loose text
+ * rather than buttons. Redefined here under .survey-runner in Cortex tokens.
+ *
+ * The fill is --accent-fill-text-safe (brand-orange-800, ~4.7:1 under white in
+ * both themes), never --accent-coral, which fails AA as the note at the top of
+ * this file records.
+ */
+.survey-runner .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 3rem;
+  padding: 0.85rem 1.4rem;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: var(--accent-fill-text-safe);
+  color: #ffffff;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+
+.survey-runner .button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-fill-text-safe) 90%, #000);
+}
+
+.survey-runner .button:focus-visible {
+  outline: 2px solid var(--accent-coral);
+  outline-offset: 2px;
+}
+
+.survey-runner .button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Secondary (Decline / Back): quiet, bordered, primary-coloured text. Both
+   classes are present in the markup, so this must out-specify .button above. */
+.survey-runner .button.button-secondary {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border-color: var(--border-subtle);
+}
+
+.survey-runner .button.button-secondary:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.survey-runner .body-copy {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.survey-runner .alert-banner {
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+}
+
+.survey-runner .alert-banner.alert-danger {
+  border-color: var(--text-danger, #ff6b6b);
+  background: color-mix(in srgb, var(--text-danger, #ff6b6b) 10%, transparent);
+}
+
+.survey-runner .alert-banner .status-copy {
+  margin: 0;
+  color: var(--text-primary);
+}
