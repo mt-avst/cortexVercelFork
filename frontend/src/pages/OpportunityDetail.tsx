@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { getOpportunity, bookSession, trackOpportunityClick, getMyCalendarEvents, getRecordedStudyBrief, startRecordedStudySession, startSurveySession } from '../api/client';
 import type { RecordedStudyBrief } from '@shared/types';
-import { formatStudyDate, formatTimeRange, formatTimeZoneLabel, formatDateTime } from '../utils/datetime';
+import { formatStudyDate, formatTimeRange, formatTimeZoneLabel, formatClockTime, formatDateTime } from '../utils/datetime';
+import './booking-slot-list.css';
 import { Opportunity, CalendarEvent, Session } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -106,6 +107,48 @@ const renderPollDescription = (description: string) => {
   }
 
   return <div>{result}</div>;
+};
+
+/**
+ * Group future, non-conflicting sessions into one section per calendar day, in
+ * chronological order. The Table view renders these as a date stated once with
+ * its timezone, then the day's start times as chips - rather than a row per
+ * slot repeating the date and zone. Grouping is by the day as the participant
+ * reads it (their local zone), which is the same instant formatStudyDate and
+ * the chips print, so a slot never lands under a different date than its label.
+ */
+interface SessionDayGroup {
+  key: string;
+  dateStr: string | null;
+  zone: string | null;
+  sessions: Session[];
+}
+
+const groupSessionsByDay = (sessions: Session[]): SessionDayGroup[] => {
+  const ordered = [...sessions].sort(
+    (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+  );
+  const groups: SessionDayGroup[] = [];
+  const byKey = new Map<string, SessionDayGroup>();
+
+  for (const session of ordered) {
+    const start = new Date(session.start_time);
+    const key = start.toDateString();
+    let group = byKey.get(key);
+    if (!group) {
+      group = {
+        key,
+        dateStr: formatStudyDate(start),
+        zone: formatTimeZoneLabel(start),
+        sessions: [],
+      };
+      byKey.set(key, group);
+      groups.push(group);
+    }
+    group.sessions.push(session);
+  }
+
+  return groups;
 };
 
 const OpportunityDetail: React.FC = () => {
@@ -1108,70 +1151,74 @@ const OpportunityDetail: React.FC = () => {
                                     {conflictedCount} conflicted slot{conflictedCount !== 1 ? 's' : ''} hidden from view
                                   </div>
                                 )}
-                                <div className="table-responsive momentum-table-container">
-                                  <table className="table" aria-label="Available sessions">
-                                    <thead>
-                                      <tr>
-                                        <th scope="col">Date</th>
-                                        <th scope="col">Time</th>
-                                        <th scope="col">Action</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {sessionsWithoutConflicts.length === 0 ? (
-                                        <tr>
-                                          <td colSpan={3} className="text-center py-4">
-                                            <small className="text-muted">
-                                              {futureSessions.length === 0
-                                                ? 'No available sessions'
-                                                : 'All available sessions conflict with your calendar'}
-                                            </small>
-                                          </td>
-                                        </tr>
-                                      ) : (
-                                        sessionsWithoutConflicts.map((session) => {
-                                    const startDate = new Date(session.start_time);
-                                    const endDate = new Date(session.end_time);
-
-                                    // This is the screen the complaint is about: "The session
-                                    // times on the opportunity page do not say which timezone
-                                    // they are in. I booked an hour out." Shipping the zone on
-                                    // My Bookings while the screen where the decision is MADE
-                                    // still had none would have left the reported bug unfixed.
-                                    const dateStr = formatStudyDate(startDate);
-                                    const timeSlotStr = `${formatTimeRange(startDate, endDate)} ${formatTimeZoneLabel(startDate)}`;
-
-                                    return (
-                                      <tr key={session.id}>
-                                        <td>{dateStr}</td>
-                                        <td>{timeSlotStr}</td>
-                                        <td>
-                                          {session.remaining > 0 ? (
-                                            <button
-                                              className="btn btn-primary btn-sm"
-                                              onClick={() => setConfirmBooking({ show: true, session })}
-                                              disabled={bookingLoading === session.id}
-                                              aria-label={`Book session on ${dateStr} from ${timeSlotStr}`}
-                                            >
-                                              {bookingLoading === session.id ? (
-                                                <>
-                                                  <span className="visually-hidden">Booking session...</span>
-                                                  Booking...
-                                                </>
-                                              ) : (
-                                                'Book'
-                                              )}
-                                            </button>
-                                          ) : (
-                                            <span className="badge bg-danger" aria-label="Session is full">Full</span>
+                                <div className="momentum-table-container" aria-label="Available sessions">
+                                  {sessionsWithoutConflicts.length === 0 ? (
+                                    <div className="text-center py-4">
+                                      <small className="text-muted">
+                                        {futureSessions.length === 0
+                                          ? 'No available sessions'
+                                          : 'All available sessions conflict with your calendar'}
+                                      </small>
+                                    </div>
+                                  ) : (
+                                    groupSessionsByDay(sessionsWithoutConflicts).map((group) => (
+                                      <div className="slot-day-group" key={group.key}>
+                                        <div className="slot-day-header">
+                                          {group.dateStr}
+                                          {/* The timezone the reported "I booked an hour out"
+                                              bug was about, stated once per day rather than on
+                                              every row - still on the screen where the decision
+                                              is made, and in every chip's aria-label below. */}
+                                          {group.zone && (
+                                            <span className="slot-day-zone"> · times {group.zone}</span>
                                           )}
-                                        </td>
-                                      </tr>
-                                    );
-                                  })
-                                      )}
-                                    </tbody>
-                                  </table>
+                                        </div>
+                                        <div className="slot-chips">
+                                          {group.sessions.map((session) => {
+                                            const startDate = new Date(session.start_time);
+                                            const endDate = new Date(session.end_time);
+                                            const startStr = formatClockTime(startDate);
+                                            const rangeStr = `${formatTimeRange(startDate, endDate)} ${formatTimeZoneLabel(startDate)}`;
+                                            const isLoading = bookingLoading === session.id;
+
+                                            if (session.remaining <= 0) {
+                                              return (
+                                                <span
+                                                  key={session.id}
+                                                  className="slot-chip slot-chip-full"
+                                                  title={`Full: ${rangeStr}`}
+                                                  aria-label={`${rangeStr} is full`}
+                                                >
+                                                  {startStr} · Full
+                                                </span>
+                                              );
+                                            }
+
+                                            return (
+                                              <button
+                                                key={session.id}
+                                                type="button"
+                                                className="slot-chip"
+                                                onClick={() => setConfirmBooking({ show: true, session })}
+                                                disabled={isLoading}
+                                                title={rangeStr}
+                                                aria-label={`Book session on ${group.dateStr} at ${rangeStr}`}
+                                              >
+                                                {isLoading ? (
+                                                  <>
+                                                    <span className="visually-hidden">Booking session...</span>
+                                                    Booking…
+                                                  </>
+                                                ) : (
+                                                  startStr
+                                                )}
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    ))
+                                  )}
                                 </div>
                               </>
                             );
