@@ -41,8 +41,8 @@ vi.mock('../../utils/navigation', () => ({
 
 type ManagerProps = React.ComponentProps<typeof AdminSessionManager>;
 
-const renderManager = (props: Partial<ManagerProps> = {}) =>
-  render(
+const renderManager = (props: Partial<ManagerProps> = {}) => {
+  const utils = render(
     <MemoryRouter>
       <AdminSessionManager
         opportunityId="opp-1"
@@ -53,6 +53,12 @@ const renderManager = (props: Partial<ManagerProps> = {}) =>
       />
     </MemoryRouter>
   );
+  // Row 6: the session list is the default view now. These suites exercise the
+  // calendar grid (and its manual-entry panel), so switch to it up front -
+  // which also proves the segmented Calendar/Table toggle swaps the view.
+  fireEvent.click(screen.getByRole('button', { name: 'Calendar' }));
+  return utils;
+};
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 200));
 
