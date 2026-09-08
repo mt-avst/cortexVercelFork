@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import AdminFeedback from '../AdminFeedback';
@@ -101,5 +101,29 @@ describe('AdminFeedback under the bounded list contract', () => {
 
     expect(screen.getByText('2')).toBeInTheDocument();
     expect(screen.queryByText('2+')).not.toBeInTheDocument();
+  });
+});
+
+describe('AdminFeedback header accessibility (row 13)', () => {
+  it('exposes sortable columns as buttons carrying a live aria-sort', async () => {
+    mockGetFeedback.mockResolvedValue({ items: [item(1)], has_more: false });
+
+    render(<AdminFeedback />);
+    await waitFor(() => {
+      expect(screen.getByText('feedback body 1')).toBeInTheDocument();
+    });
+
+    // Default sort is created_at desc: Date starts descending, the others unsorted.
+    const dateSort = screen.getByRole('button', { name: /^Date/ });
+    expect(dateSort.closest('th')).toHaveAttribute('aria-sort', 'descending');
+
+    const categorySort = screen.getByRole('button', { name: /^Category/ });
+    expect(categorySort.closest('th')).toHaveAttribute('aria-sort', 'none');
+    fireEvent.click(categorySort);
+    expect(categorySort.closest('th')).toHaveAttribute('aria-sort', 'ascending');
+
+    // A non-sortable header stays a plain column header with no button.
+    const feedbackHeader = screen.getByRole('columnheader', { name: 'Feedback' });
+    expect(feedbackHeader).toHaveAttribute('scope', 'col');
   });
 });

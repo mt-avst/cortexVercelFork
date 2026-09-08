@@ -106,6 +106,10 @@ const AdminFeedback: React.FC = () => {
     }
   };
 
+  // aria-sort carries the sorted column and direction to a screen reader (row 13).
+  const ariaSortFor = (field: 'created_at' | 'category' | 'user_name'): 'ascending' | 'descending' | 'none' =>
+    sortField === field ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none';
+
   const sortedFeedback = [...feedback].sort((a, b) => {
     let aValue: string | number | null = a[sortField];
     let bValue: string | number | null = b[sortField];
@@ -281,11 +285,28 @@ const AdminFeedback: React.FC = () => {
             color: var(--text-muted);
           }
           .admin-feedback .sortable {
-            cursor: pointer;
             user-select: none;
           }
-          .admin-feedback .sortable:hover {
-            color: var(--brand-headline) !important;
+          /* The click target is a real button now (row 13); it fills the header
+             cell and inherits its type so nothing shifts visually. */
+          .admin-feedback .feedback-th-sort {
+            display: block;
+            width: 100%;
+            padding: 0;
+            border: 0;
+            background: none;
+            font: inherit;
+            color: inherit;
+            text-align: inherit;
+            cursor: pointer;
+          }
+          .admin-feedback .feedback-th-sort:hover {
+            color: var(--brand-headline);
+          }
+          .admin-feedback .feedback-th-sort:focus-visible {
+            outline: 2px solid var(--focus-ring, var(--brand-headline));
+            outline-offset: 2px;
+            border-radius: 2px;
           }
           .admin-feedback .feedback-heading {
             color: var(--text-primary);
@@ -420,30 +441,27 @@ const AdminFeedback: React.FC = () => {
           <table className="table feedback-table">
             <thead>
               <tr>
-                <th 
-                  className="sortable"
-                  onClick={() => handleSort('created_at')}
-                  style={{ width: '150px' }}
-                >
-                  Date {sortField === 'created_at' && (sortDirection === 'asc' ? '↑' : '↓')}
+                <th className="sortable" scope="col" aria-sort={ariaSortFor('created_at')} style={{ width: '150px' }}>
+                  <button type="button" className="feedback-th-sort" onClick={() => handleSort('created_at')}>
+                    Date
+                    <span aria-hidden="true">{sortField === 'created_at' ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}</span>
+                  </button>
                 </th>
-                <th 
-                  className="sortable"
-                  onClick={() => handleSort('category')}
-                  style={{ width: '130px' }}
-                >
-                  Category {sortField === 'category' && (sortDirection === 'asc' ? '↑' : '↓')}
+                <th className="sortable" scope="col" aria-sort={ariaSortFor('category')} style={{ width: '130px' }}>
+                  <button type="button" className="feedback-th-sort" onClick={() => handleSort('category')}>
+                    Category
+                    <span aria-hidden="true">{sortField === 'category' ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}</span>
+                  </button>
                 </th>
-                <th 
-                  className="sortable"
-                  onClick={() => handleSort('user_name')}
-                  style={{ width: '180px' }}
-                >
-                  User {sortField === 'user_name' && (sortDirection === 'asc' ? '↑' : '↓')}
+                <th className="sortable" scope="col" aria-sort={ariaSortFor('user_name')} style={{ width: '180px' }}>
+                  <button type="button" className="feedback-th-sort" onClick={() => handleSort('user_name')}>
+                    User
+                    <span aria-hidden="true">{sortField === 'user_name' ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}</span>
+                  </button>
                 </th>
-                <th>Feedback</th>
+                <th scope="col">Feedback</th>
                 {isSuperadmin && (
-                  <th style={{ width: '80px', textAlign: 'center' }}>Actions</th>
+                  <th scope="col" style={{ width: '80px', textAlign: 'center' }}>Actions</th>
                 )}
               </tr>
             </thead>

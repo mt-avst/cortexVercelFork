@@ -383,11 +383,11 @@ const AdminManagement: React.FC = () => {
                 <table className="table table-hover">
                   <thead>
                     <tr>
-                      <th>Name</th>
-                      <th>Email</th>
-                      <th>Role</th>
-                      <th>Created</th>
-                      <th>Actions</th>
+                      <th scope="col">Name</th>
+                      <th scope="col">Email</th>
+                      <th scope="col">Role</th>
+                      <th scope="col">Created</th>
+                      <th scope="col">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -438,12 +438,12 @@ const AdminManagement: React.FC = () => {
                 <table className="table table-hover">
                   <thead>
                     <tr>
-                      <th>Name</th>
-                      <th>Email</th>
-                      <th>Current Role</th>
-                      <th>Requesting</th>
-                      <th>Requested</th>
-                      <th>Actions</th>
+                      <th scope="col">Name</th>
+                      <th scope="col">Email</th>
+                      <th scope="col">Current Role</th>
+                      <th scope="col">Requesting</th>
+                      <th scope="col">Requested</th>
+                      <th scope="col">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -522,13 +522,13 @@ const AdminManagement: React.FC = () => {
                 <table className="table table-hover">
                   <thead>
                     <tr>
-                      <th>Name</th>
-                      <th>Email</th>
-                      <th>Requested Role</th>
-                      <th>Requested</th>
-                      <th>Status</th>
-                      <th>Reviewed</th>
-                      <th>Notes</th>
+                      <th scope="col">Name</th>
+                      <th scope="col">Email</th>
+                      <th scope="col">Requested Role</th>
+                      <th scope="col">Requested</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Reviewed</th>
+                      <th scope="col">Notes</th>
                     </tr>
                   </thead>
                   <tbody>

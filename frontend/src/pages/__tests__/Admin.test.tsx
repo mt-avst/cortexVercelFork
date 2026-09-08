@@ -159,7 +159,7 @@ describe('Admin page', () => {
     renderAdmin();
     await screen.findByText('Checkout usability test');
 
-    fireEvent.click(screen.getByRole('button', { name: '⋮' }));
+    fireEvent.click(screen.getByRole('button', { name: /Actions for Checkout usability test/i }));
 
     expect(screen.getByRole('button', { name: 'Analytics' })).toBeInTheDocument();
   });
@@ -273,5 +273,46 @@ describe('Admin page', () => {
     // The admin header must not render for a gated-out user.
     expect(screen.queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Task lists' })).not.toBeInTheDocument();
+  });
+});
+
+describe('Admin dashboard accessibility (row 13)', () => {
+  it('exposes each sortable Studies column as a button with a live aria-sort', async () => {
+    renderAdmin();
+    await screen.findByText('Checkout usability test');
+
+    // The sortable header is a real button (keyboard-operable), not a click-only th.
+    const studySort = screen.getByRole('button', { name: /^Study/ });
+    const studyHeader = studySort.closest('th') as HTMLElement;
+
+    // Default sort is created_at desc, so Study starts unsorted and Created starts descending -
+    // aria-sort carries that state to a screen reader, which the bare ↑/↓ glyph never did.
+    expect(studyHeader).toHaveAttribute('aria-sort', 'none');
+    expect(screen.getByRole('columnheader', { name: /^Created/ })).toHaveAttribute('aria-sort', 'descending');
+
+    fireEvent.click(studySort);
+    expect(studySort.closest('th')).toHaveAttribute('aria-sort', 'ascending');
+    fireEvent.click(studySort);
+    expect(studySort.closest('th')).toHaveAttribute('aria-sort', 'descending');
+  });
+
+  it('marks the Studies column headers as column headers with scope', async () => {
+    renderAdmin();
+    await screen.findByText('Checkout usability test');
+    // A non-sortable header and a sortable one both carry scope=col; a plain <th>
+    // without scope is what the audit flagged.
+    expect(screen.getByRole('columnheader', { name: 'Recruitment' })).toHaveAttribute('scope', 'col');
+    expect(screen.getByRole('button', { name: /^Study/ }).closest('th')).toHaveAttribute('scope', 'col');
+  });
+
+  it('names the row actions menu after the study, not the ⋮ glyph', async () => {
+    renderAdmin();
+    await screen.findByText('Checkout usability test');
+
+    expect(
+      screen.getByRole('button', { name: /Actions for Checkout usability test/i })
+    ).toBeInTheDocument();
+    // The glyph is no longer any button's accessible name.
+    expect(screen.queryByRole('button', { name: '⋮' })).not.toBeInTheDocument();
   });
 });

@@ -133,6 +133,12 @@ const Admin: React.FC = () => {
     }
   };
 
+  // aria-sort tells a screen reader which column is sorted and which way - the
+  // bare ↑/↓ glyph never did (row 13). Only the active column is asc/desc; the
+  // rest are 'none' so the table reports one sorted column, not seven.
+  const ariaSortFor = (field: 'title' | 'created_at' | 'type' | 'status'): 'ascending' | 'descending' | 'none' =>
+    sortField === field ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none';
+
   const toggleQuickFilter = (filter: QuickFilter) => {
     setQuickFilter((current) => (current === filter ? null : filter));
   };
@@ -779,26 +785,38 @@ const Admin: React.FC = () => {
                       <table className="table table-hover admin-data-table">
                         <thead>
                           <tr>
-                            <th className="admin-th col-title" onClick={() => handleSort('title')}>
-                              Study {sortField === 'title' && (sortDirection === 'asc' ? '↑' : '↓')}
+                            <th className="admin-th col-title" scope="col" aria-sort={ariaSortFor('title')}>
+                              <button type="button" className="admin-th-sort" onClick={() => handleSort('title')}>
+                                Study
+                                <span className="admin-th-sort-caret" aria-hidden="true">{sortField === 'title' ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}</span>
+                              </button>
                             </th>
-                            <th className="admin-th col-type" onClick={() => handleSort('type')}>
-                              Type {sortField === 'type' && (sortDirection === 'asc' ? '↑' : '↓')}
+                            <th className="admin-th col-type" scope="col" aria-sort={ariaSortFor('type')}>
+                              <button type="button" className="admin-th-sort" onClick={() => handleSort('type')}>
+                                Type
+                                <span className="admin-th-sort-caret" aria-hidden="true">{sortField === 'type' ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}</span>
+                              </button>
                             </th>
-                            <th className="admin-th col-status" onClick={() => handleSort('status')}>
-                              Status {sortField === 'status' && (sortDirection === 'asc' ? '↑' : '↓')}
+                            <th className="admin-th col-status" scope="col" aria-sort={ariaSortFor('status')}>
+                              <button type="button" className="admin-th-sort" onClick={() => handleSort('status')}>
+                                Status
+                                <span className="admin-th-sort-caret" aria-hidden="true">{sortField === 'status' ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}</span>
+                              </button>
                             </th>
                             {/* Recruitment replaces the old "Booked" column - same booked/capacity
                                 figure the "Booked" cell showed, now with the percentage the
                                 progress bar was already drawing. There is deliberately no
                                 Capacity column beside it: that duplicated the denominator. */}
-                            <th className="admin-th col-recruitment">Recruitment</th>
-                            <th className="admin-th col-metric col-numeric">Clicks</th>
-                            <th className="admin-th col-next">Next session / deadline</th>
-                            <th className="admin-th col-date" onClick={() => handleSort('created_at')}>
-                              Created {sortField === 'created_at' && (sortDirection === 'asc' ? '↑' : '↓')}
+                            <th className="admin-th col-recruitment" scope="col">Recruitment</th>
+                            <th className="admin-th col-metric col-numeric" scope="col">Clicks</th>
+                            <th className="admin-th col-next" scope="col">Next session / deadline</th>
+                            <th className="admin-th col-date" scope="col" aria-sort={ariaSortFor('created_at')}>
+                              <button type="button" className="admin-th-sort" onClick={() => handleSort('created_at')}>
+                                Created
+                                <span className="admin-th-sort-caret" aria-hidden="true">{sortField === 'created_at' ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}</span>
+                              </button>
                             </th>
-                            <th className="admin-th col-actions">Actions</th>
+                            <th className="admin-th col-actions" scope="col">Actions</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -949,9 +967,10 @@ const Admin: React.FC = () => {
                                                       e.stopPropagation();
                                                     }}
                                                     aria-expanded={openDropdownId === opportunity.id}
-                                                    title="Actions"
+                                                    aria-haspopup={true}
+                                                    aria-label={`Actions for ${opportunity.title}`}
                                                   >
-                                                    ⋮
+                                                    <span aria-hidden="true">⋮</span>
                                                   </button>
                                   {openDropdownId === opportunity.id && (
                                     <div 
