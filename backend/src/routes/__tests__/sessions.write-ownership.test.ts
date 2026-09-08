@@ -150,12 +150,12 @@ const answering = (ownerUserId: string | null, opportunityExists = true): void =
     if (/SELECT id\s+FROM sessions WHERE id = \$1/.test(q)) {
       return opportunityExists ? { rows: [{ id: 'sess-1' }] } : { rows: [] };
     }
-    // PATCH's current-row read, then DELETE's booking-count read.
+    // PATCH's current-row read. DELETE's booking-count read moved to the
+    // transaction client (see the clientQuery arm below) when the delete became
+    // row-locked (cto/AdaptaLabs#34), so there is no pool-side booked_count arm
+    // here any more.
     if (q.includes('SELECT * FROM sessions WHERE id = $1')) {
       return opportunityExists ? { rows: [CURRENT_SESSION_ROW] } : { rows: [] };
-    }
-    if (q.includes('SELECT booked_count FROM sessions WHERE id = $1')) {
-      return opportunityExists ? { rows: [{ booked_count: 0 }] } : { rows: [] };
     }
     if (q.trimStart().startsWith('DELETE')) return { rows: [], rowCount: 2 };
     // autoCloseOpportunityIfNeeded, and anything else.
@@ -296,6 +296,10 @@ describe.each(ROUTES)(
         // failed assertion.
         if (q.includes('UPDATE sessions')) return { rows: [INSERTED_ROW] };
         if (q.includes('overlap_count')) return { rows: [{ overlap_count: '0' }] };
+        // DELETE /api/sessions/:id now reads the booking count under FOR UPDATE
+        // on the transaction client, not the pool (cto/AdaptaLabs#34 TOCTOU
+        // fix). 0 bookings, so the owner-through arm reaches the DELETE.
+        if (q.includes('booked_count FROM sessions WHERE id')) return { rows: [{ booked_count: 0 }] };
         return { rows: [] };
       });
       mockConnect.mockResolvedValue({ query: clientQuery, release: jest.fn() } as never);
