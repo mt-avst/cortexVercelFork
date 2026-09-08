@@ -384,6 +384,27 @@ describe('the Edit links open the step that owns each section', () => {
   });
 });
 
+describe('the moderated consent wording reaches Review', () => {
+  // Row 5: buildReviewSummary read only the survey/recorded consent fields, so a
+  // bookable (test/interview) study's Review showed the recorded-session wording
+  // and reported it as "Custom" - while the Consent step edited
+  // moderated_consent_text. Review must read the moderated field instead.
+  // Audit rows a17-wizard-consent, a18-wizard-review-draft.
+  it.each(['test', 'interview'])('shows the moderated default as an approved template for %s', (type) => {
+    renderCreate();
+    fillBasics(type);
+    walkForward();
+
+    expect(currentStepName()).toMatch(/Review/);
+    // The moderated default wording, not the recorded one (which is about
+    // screen-and-microphone capture and would never say this).
+    expect(screen.getByText(/live session with a researcher on a video call/i)).toBeInTheDocument();
+    // And it resolves to the approved moderated template, not "Custom".
+    expect(screen.getByText(/approved template/i)).toBeInTheDocument();
+    expect(screen.queryByText(/custom wording/i)).not.toBeInTheDocument();
+  });
+});
+
 describe('the summary reads the form as it stands, not as it was on arrival', () => {
   it('shows a value changed after the first visit to Review, on two different steps', () => {
     renderCreate();

@@ -165,6 +165,10 @@ const OpportunityDetail: React.FC = () => {
   useDocumentTitle(opportunity?.title);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
+  // Whether the current `error` is worth a Retry. A closed study, a draft, a
+  // removed study or a permission refusal will answer the same way on reload,
+  // so those hide the button; only a transient failure keeps it.
+  const [errorRetryable, setErrorRetryable] = useState<boolean>(true);
   const [bookingLoading, setBookingLoading] = useState<string | null>(null);
   const [bookingSuccess, setBookingSuccess] = useState<string | null>(null);
   const [firstHandLoading, setFirstHandLoading] = useState(false);
@@ -270,20 +274,33 @@ const OpportunityDetail: React.FC = () => {
 
       setOpportunity(data);
     } catch (err: unknown) {
-      const axiosError = err as { response?: { status?: number; data?: { error?: string } }; message?: string };
+      const axiosError = err as { response?: { status?: number; data?: { error?: string; code?: string } }; message?: string };
+      const status = axiosError.response?.status;
+      const code = axiosError.response?.data?.code;
+      const serverMessage = axiosError.response?.data?.error;
 
-      // Provide more specific error messages
-      if (axiosError.response?.status === 404) {
-        // Could be: opportunity doesn't exist, or it's a draft and user is not admin
-        setError('Opportunity not found. It may have been deleted or you may not have permission to view it.');
-      } else if (axiosError.response?.status === 401) {
-        setError('Please log in to view this opportunity.');
-      } else if (axiosError.response?.status === 403) {
-        setError('You do not have permission to view this opportunity.');
+      // Provide specific error messages, and decide whether a Retry could ever
+      // help. Reloading changes nothing for a study that has closed, is not yet
+      // open, was removed, or that this reader may not see - so those states
+      // drop the Retry button rather than offer a control that reloads into the
+      // same answer. Only a transient failure (5xx, timeout, dropped
+      // connection) is worth retrying.
+      let retryable = false;
+      if (code === 'OPPORTUNITY_CLOSED' || code === 'OPPORTUNITY_NOT_OPEN') {
+        // The server words these two for the participant; keep its sentence.
+        setError(serverMessage || 'This study is not currently available.');
+      } else if (status === 404) {
+        setError('This study could not be found. It may have been removed.');
+      } else if (status === 401) {
+        setError('Please log in to view this study.');
+      } else if (status === 403) {
+        setError('You do not have permission to view this study.');
       } else {
-        const errorMessage = axiosError.response?.data?.error || axiosError.message || 'Failed to load opportunity';
-        setError(`Failed to load opportunity: ${errorMessage}`);
+        const errorMessage = serverMessage || axiosError.message || 'Failed to load study';
+        setError(`Failed to load study: ${errorMessage}`);
+        retryable = true;
       }
+      setErrorRetryable(retryable);
 
       // Drop the loaded study when the server said it is no longer ours to
       // show, and keep it when the server simply did not answer.
@@ -296,8 +313,7 @@ const OpportunityDetail: React.FC = () => {
       // something that is not bookable. A 5xx, a timeout or a dropped
       // connection says nothing about entitlement, so there the content on
       // screen is still the best thing to show and the banner annotates it.
-      const status = axiosError.response?.status;
-      if (status === 401 || status === 403 || status === 404) {
+      if (status === 401 || status === 403 || status === 404 || status === 410) {
         setOpportunity(null);
       }
     } finally {
@@ -661,18 +677,31 @@ const OpportunityDetail: React.FC = () => {
   // An opportunity in hand means the error is about one action, and taking the
   // study away to report it costs more than it explains.
   if (error && !opportunity) {
+    // A retryable (transient) failure reads as an error and offers Retry; a
+    // terminal state - closed, not yet open, removed, or not permitted - reads
+    // as calm information with no dead control.
     return (
       <div className="container mt-4">
         <h1>Opportunity Details</h1>
-        <div className="alert alert-danger" role="alert">
+        <div className={`alert ${errorRetryable ? 'alert-danger' : 'alert-info'}`} role="alert">
           {error}
-          <button
-            className="btn btn-sm btn-outline-danger ms-2"
-            onClick={() => window.location.reload()}
-            style={{ color: '#c82333', borderColor: '#c82333' }}
-          >
-            Retry
-          </button>
+          {errorRetryable && (
+            <button
+              className="btn btn-sm btn-outline-danger ms-2"
+              onClick={() => window.location.reload()}
+              style={{ color: '#c82333', borderColor: '#c82333' }}
+            >
+              Retry
+            </button>
+          )}
+          <div className="mt-3">
+            <button
+              className="btn btn-sm btn-outline-secondary"
+              onClick={() => navigate('/')}
+            >
+              ← Back to Cortex
+            </button>
+          </div>
         </div>
       </div>
     );

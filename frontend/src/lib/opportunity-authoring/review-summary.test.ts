@@ -714,6 +714,22 @@ describe('buildReviewSummary', () => {
       expect(section?.focusFieldId).toBe('inline_study_consent_text-heading');
     });
 
+    it('addresses the moderated consent field on a shape with a sessions step', () => {
+      // The bookable (moderated) shapes carry consent under
+      // moderated_consent_text; the Edit link had nothing to focus for them.
+      const moderatedConsentSteps: ReviewStepRef[] = [
+        { id: 1, key: 'basics', title: 'Basic Information' },
+        { id: 3, key: 'sessions', title: 'Session Management' },
+        { id: 4, key: 'consent', title: 'Consent' },
+        { id: 5, key: 'review', title: 'Review' }
+      ];
+      const section = findSection(
+        buildReviewSummary(completeInput({ steps: moderatedConsentSteps })),
+        'consent'
+      );
+      expect(section?.focusFieldId).toBe('moderated_consent_text-heading');
+    });
+
     it('marks empty consent wording as missing', () => {
       const item = findItem(
         findSection(
