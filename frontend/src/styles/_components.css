@@ -5389,13 +5389,42 @@ body.theme-dark .legend-label-past {
 
 /* Admin table header styling */
 .admin-th {
-  cursor: pointer;
   user-select: none;
   font-weight: 600;
   padding: 12px 8px;
   white-space: normal;
   line-height: 1.3;
   text-align: center;
+}
+
+/* The sortable header's click target is a real button (row 13): keyboard-
+   operable and named, filling the cell so the layout is unchanged. The pointer
+   cursor moved here from .admin-th, so non-sortable headers no longer imply
+   they can be clicked. */
+.admin-th-sort {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  /* Block + inherit so the button keeps the <th>'s own text-align (the admin
+     headers are centred); a flex button would pack to the left and disagree
+     with its centred body column. The caret is an inline span, so it flows
+     after the label under the same alignment. */
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.admin-th-sort:hover {
+  color: var(--brand-headline);
+}
+
+.admin-th-sort:focus-visible {
+  outline: 2px solid var(--focus-ring, var(--brand-headline));
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 .admin-th-title {

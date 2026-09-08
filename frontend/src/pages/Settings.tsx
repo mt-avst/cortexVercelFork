@@ -249,6 +249,7 @@ const Settings: React.FC = () => {
                                     className="form-check-input"
                                     type="checkbox"
                                     id="toggleBookEmail"
+                                    aria-label="Email on Booking"
                                     checked={preferences.on_book_email}
                                     onChange={() => handleToggle('on_book_email')}
                                     disabled={saving}
@@ -274,6 +275,7 @@ const Settings: React.FC = () => {
                                     className="form-check-input"
                                     type="checkbox"
                                     id="toggleCancelEmail"
+                                    aria-label="Email on Cancellation"
                                     checked={preferences.on_cancel_email}
                                     onChange={() => handleToggle('on_cancel_email')}
                                     disabled={saving}
