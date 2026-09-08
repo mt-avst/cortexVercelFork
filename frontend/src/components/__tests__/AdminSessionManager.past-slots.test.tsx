@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -81,6 +81,10 @@ describe('AdminSessionManager Start Date input (#101)', () => {
         />
       </MemoryRouter>
     );
+
+    // Row 6: the calendar's Start Date control lives in the grid view, which is
+    // no longer the default - switch to it before reading the input.
+    fireEvent.click(screen.getByRole('button', { name: 'Calendar' }));
 
     const input = (await screen.findByLabelText('Start Date')) as HTMLInputElement;
     const now = new Date();

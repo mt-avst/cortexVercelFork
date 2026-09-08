@@ -1027,12 +1027,22 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                         // The height should match exactly the time difference, not be fixed
 
                         const timeLabel = slotTimeLabel(slot);
-                        const shouldShowLabel = isSelected || isConfirmed || !!session;
+                        // A real button, not a coloured div (row 6). It is
+                        // reachable by keyboard and announced by a screen
+                        // reader with its full time span, matching the gutter
+                        // slots below - the selected state was colour-only and
+                        // the tile carried no role at all.
+                        const actionable = !status.isBlocked && !status.isPast;
 
                         return (
                           <div
                             key={slotKeyOf(slot)}
                             className={`${status.slotClass} position-absolute`}
+                            role="button"
+                            tabIndex={actionable ? 0 : -1}
+                            aria-pressed={status.isSelected || status.isConfirmed}
+                            aria-disabled={!actionable || undefined}
+                            aria-label={slotTooltip(slot, status)}
                             style={{
                               width: 'calc(100% - 16px)',
                               left: '8px',
@@ -1055,22 +1065,21 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                             }}
                             title={slotTooltip(slot, status)}
                             onClick={() => clickSlot(slot, status)}
-                            onMouseEnter={(e) => {
-                              // Show time label on hover (CSS handles visual hover states)
-                              const labelElement = e.currentTarget.querySelector('.timeslot-label') as HTMLElement;
-                              if (labelElement) {
-                                labelElement.style.opacity = '1';
-                              }
-                            }}
-                            onMouseLeave={(e) => {
-                              // Hide time label on mouse leave (unless selected/confirmed/has session)
-                              const labelElement = e.currentTarget.querySelector('.timeslot-label') as HTMLElement;
-                              if (labelElement && !shouldShowLabel) {
-                                labelElement.style.opacity = '0';
+                            onKeyDown={(e) => {
+                              // Enter/Space act like a click, because this is a
+                              // button now. Blocked and past tiles are tabIndex
+                              // -1 and take no key, matching clickSlot's refusal.
+                              if (actionable && (e.key === 'Enter' || e.key === ' ')) {
+                                e.preventDefault();
+                                clickSlot(slot, status);
                               }
                             }}
                           >
-                            {/* Display time span label on the cell - show on hover or when selected */}
+                            {/* The time span, shown AT REST (row 6). It was
+                                opacity:0 until hover, so the grid read as blank
+                                tiles - the .timeslot-label CSS already carries a
+                                themed, high-contrast colour for every slot
+                                state, so nothing here needs to set one. */}
                             {timeLabel !== null && (
                               <div
                                 className="timeslot-label"
@@ -1085,9 +1094,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                                   textOverflow: 'ellipsis',
                                   textAlign: 'center',
                                   pointerEvents: 'none',
-                                  lineHeight: '1.2',
-                                  opacity: shouldShowLabel ? 1 : 0,
-                                  transition: 'opacity 0.2s ease'
+                                  lineHeight: '1.2'
                                 }}>
                                 {timeLabel}
                               </div>
@@ -1287,22 +1294,30 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   );
 };
 
-// List View Component - Just shows the sessions table
+/**
+ * The session list (row 6).
+ *
+ * The DEFAULT view now, and no longer read-only: editing a study opens here on
+ * every session that already exists - in chronological order, including the
+ * ones outside the calendar grid's narrow window that it never drew at rest -
+ * and each row can be removed. The calendar grid is reached through "Add
+ * slots", which makes it the opt-in tool for creating more rather than the
+ * gate every author has to pass to see what is already booked.
+ */
 const ListView: React.FC<{
   sessions: Session[];
   isTemporary: boolean;
-}> = ({ sessions, isTemporary }) => {
-  logger.debug('📋 ListView rendering with sessions:', {
-    sessionsCount: sessions.length,
-    sessions: sessions.map(s => ({
-      id: s.id,
-      start_time: s.start_time,
-      end_time: s.end_time,
-      capacity: s.capacity,
-      booked_count: s.booked_count
-    }))
-  });
-  
+  onRemove: (session: Session) => void;
+  onAddSlots: () => void;
+  disabled: boolean;
+  loading: boolean;
+}> = ({ sessions, isTemporary, onRemove, onAddSlots, disabled, loading }) => {
+  // A NEW array before sorting - the prop is owned by the parent, and sorting
+  // it in place would be a mutation of shared state (coding-style).
+  const orderedSessions = [...sessions].sort(
+    (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+  );
+
   return (
     <div className="list-view">
       <style>
@@ -1333,7 +1348,7 @@ const ListView: React.FC<{
           }
           .momentum-table-container tbody tr {
             background: transparent;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            border-bottom: 1px solid var(--border-card);
             transition: background-color var(--transition-card);
           }
           .momentum-table-container tbody tr:hover {
@@ -1352,7 +1367,7 @@ const ListView: React.FC<{
         `}
       </style>
       <div className="card">
-        <div className="card-header d-flex justify-content-between align-items-center">
+        <div className="card-header d-flex justify-content-between align-items-center gap-2 flex-wrap">
           <div>
             <h6 className="mb-0">Existing Sessions</h6>
             {isTemporary && sessions.length > 0 && (
@@ -1362,18 +1377,45 @@ const ListView: React.FC<{
               </small>
             )}
           </div>
-          {sessions.length > 0 && (
-            <small className="text-muted">
-              Total slots: {sessions.reduce((sum, s) => sum + s.capacity, 0)} • 
-              Remaining: {sessions.reduce((sum, s) => sum + s.remaining, 0)}
-            </small>
-          )}
+          <div className="d-flex align-items-center gap-3">
+            {sessions.length > 0 && (
+              <small className="text-muted">
+                Total slots: {sessions.reduce((sum, s) => sum + s.capacity, 0)} •
+                Remaining: {sessions.reduce((sum, s) => sum + s.remaining, 0)}
+              </small>
+            )}
+            {/* The one place the calendar grid is reached from the list. Named
+                for what it does, not for the view it opens. */}
+            {sessions.length > 0 && (
+              <button
+                type="button"
+                className="btn btn-outline-primary btn-sm"
+                onClick={onAddSlots}
+                disabled={disabled}
+              >
+                <Plus size={14} className="me-1" />
+                Add slots
+              </button>
+            )}
+          </div>
         </div>
         <div className="card-body">
           {sessions.length === 0 ? (
-            <div className="text-center text-muted py-3">
+            <div className="text-center text-muted py-4">
               <CalendarX size={32} className="text-muted" />
-              <p className="mt-2 mb-0">No sessions created yet</p>
+              <p className="mt-2 mb-1">No sessions yet</p>
+              <p className="mb-3">
+                <small>Add time slots for participants to book.</small>
+              </p>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={onAddSlots}
+                disabled={disabled}
+              >
+                <Plus size={14} className="me-1" />
+                Add slots
+              </button>
             </div>
           ) : (
             <div className="table-responsive momentum-table-container">
@@ -1386,32 +1428,54 @@ const ListView: React.FC<{
                     <th>Booked</th>
                     <th>Remaining</th>
                     <th>Location/Link</th>
+                    <th className="text-end">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {sessions.map((session) => (
-                    <tr key={session.id}>
-                      <td>{formatDateTime(session.start_time)}</td>
-                      <td>{formatDateTime(session.end_time)}</td>
-                      <td>{session.capacity}</td>
-                      <td>{session.booked_count}</td>
-                      <td>
-                        <span className={`badge ${session.remaining > 0 ? 'bg-success' : 'bg-danger'}`}>
-                          {session.remaining}
-                        </span>
-                      </td>
-                      <td>
-                        {session.location_or_meet_link_optional && (
-                          <small className="text-muted">
-                            {session.location_or_meet_link_optional.length > 30 
-                              ? `${session.location_or_meet_link_optional.substring(0, 30)}...`
-                              : session.location_or_meet_link_optional
-                            }
-                          </small>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {orderedSessions.map((session) => {
+                    // Booked sessions are not removable here, for the same
+                    // reason Reset All refuses them: dropping a booked slot
+                    // would strand the participant who booked it.
+                    const hasBookings = session.booked_count > 0;
+                    const removeTitle = hasBookings
+                      ? `Cannot remove: ${session.booked_count} booking${session.booked_count === 1 ? '' : 's'}`
+                      : 'Remove this session';
+                    return (
+                      <tr key={session.id}>
+                        <td>{formatDateTime(session.start_time)}</td>
+                        <td>{formatDateTime(session.end_time)}</td>
+                        <td>{session.capacity}</td>
+                        <td>{session.booked_count}</td>
+                        <td>
+                          <span className={`badge ${session.remaining > 0 ? 'bg-success' : 'bg-danger'}`}>
+                            {session.remaining}
+                          </span>
+                        </td>
+                        <td>
+                          {session.location_or_meet_link_optional && (
+                            <small className="text-muted">
+                              {session.location_or_meet_link_optional.length > 30
+                                ? `${session.location_or_meet_link_optional.substring(0, 30)}...`
+                                : session.location_or_meet_link_optional
+                              }
+                            </small>
+                          )}
+                        </td>
+                        <td className="text-end">
+                          <button
+                            type="button"
+                            className="btn btn-outline-danger btn-sm"
+                            onClick={() => onRemove(session)}
+                            disabled={disabled || loading || hasBookings}
+                            title={removeTitle}
+                            aria-label={`Remove session on ${formatDateTime(session.start_time)}`}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1525,10 +1589,23 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
    */
   const backLabel = onBackLabel ? `Previous: ${onBackLabel}` : 'Previous step';
   const continueLabel = onContinueLabel ? `Continue: ${onContinueLabel}` : 'Continue';
+  /**
+   * The forward control shown WHILE a selection is pending. It names its
+   * commit, because it does one - "Continue" alone here is exactly what
+   * dropped the selection (row 6). The plain `continueLabel` above stays on
+   * the no-selection row, where there is nothing to commit.
+   */
+  const confirmAndContinueLabel = onContinueLabel
+    ? `Confirm & continue: ${onContinueLabel}`
+    : 'Confirm & continue';
   const [confirmedSlots, setConfirmedSlots] = useState<Set<string>>(getStoredConfirmedSlots);
   
-  // Calendar view mode
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  // View mode. Defaults to the LIST (row 6), not the calendar grid: editing a
+  // study opens on a plain list of the sessions that already exist - including
+  // ones outside the grid's tomorrow-to-+7-days window, which the grid never
+  // showed at rest - and the calendar is the opt-in tool for adding more. This
+  // mirrors the participant Table-default shipped in !365/!366.
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
@@ -2297,16 +2374,25 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
     });
   }, [selectedSlots, confirmedSlots, sessions, onSessionsChange, persistSelectedSlots, persistConfirmedSlots, persistManualSlotKeys]);
 
-  const handleCreateSessionsFromSelected = async () => {
+  /**
+   * Commit the pending selection into real (or temporary) sessions.
+   *
+   * Returns whether the commit succeeded, so the forward control can decide
+   * whether to advance: "Confirm & continue" must NOT leave the step when the
+   * commit was refused, or it reproduces the silent drop this replaced - the
+   * whole point of row 6 is that a selection can no longer vanish on the way
+   * to Review.
+   */
+  const handleCreateSessionsFromSelected = async (): Promise<boolean> => {
     if (selectedSlots.size === 0) {
       setError('Please select at least one time slot');
-      return;
+      return false;
     }
 
     // Validate opportunityId for non-temporary sessions
     if (!isTemporary && (!opportunityId || opportunityId.trim() === '')) {
       setError('Cannot create sessions: Opportunity ID is missing. Please save the opportunity first.');
-      return;
+      return false;
     }
 
     try {
@@ -2365,7 +2451,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
         
         // Refresh calendar to show updated state immediately (before navigation)
         await loadCalendarData();
-        return;
+        return true;
       }
 
       // Note: We allow sessions from different opportunities to run simultaneously
@@ -2402,10 +2488,11 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       });
       setSelectedSlots(new Set());
       persistSelectedSlots(new Set());
-      
+
       // Refresh calendar to show updated state immediately
       await loadCalendarData();
-      
+      return true;
+
     } catch (err: unknown) {
       const axiosError = err as {
         response?: { data?: { error?: string; details?: string[] } };
@@ -2425,9 +2512,29 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
           ? data.details.join(' ')
           : data?.error || 'Failed to create sessions';
       setError(message);
+      return false;
     } finally {
       setLoading(false);
     }
+  };
+
+  /**
+   * The forward control's behaviour when a selection is still pending (row 6).
+   *
+   * It used to call `onContinue` directly, which advanced to Review while the
+   * uncommitted `selectedSlots` were simply discarded - "1 slot selected"
+   * became "0 slots" on the next step. Now it commits first and only advances
+   * if that succeeded, so the selection is kept rather than dropped. A refused
+   * commit (a past slot, an overlap, a server error) keeps the author on this
+   * step in front of the reason.
+   */
+  const handleConfirmAndContinue = async () => {
+    if (!onContinue) return;
+    if (selectedSlots.size > 0) {
+      const committed = await handleCreateSessionsFromSelected();
+      if (!committed) return;
+    }
+    onContinue();
   };
 
   const handleClearSelected = () => {
@@ -2439,16 +2546,63 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
     persistManualSlotKeys(new Set());
   };
 
-  const handleClearVisualState = () => {
-    setSelectedSlots(new Set());
-    setConfirmedSlots(new Set());
-    setManualSlotKeys(new Set());
-    persistSelectedSlots(new Set());
-    persistConfirmedSlots(new Set());
-    persistManualSlotKeys(new Set());
-    // Force refresh calendar to clear any visual state
-    loadCalendarData();
-  };
+  /**
+   * Remove ONE session from the list (row 6).
+   *
+   * The list is a management surface now, not a read-only table, so it needs a
+   * per-row removal - it is also the only removal that reaches a session the
+   * grid cannot draw (an off-hours one, cto/AdaptaLabs#95) without hunting for
+   * its gutter chip. Refuses a booked session for the same reason Reset All
+   * does: deleting it would strand the participant who booked it. A real
+   * session is deleted server-side; a temporary one (not yet saved) is just
+   * dropped from the array.
+   */
+  const handleRemoveSession = useCallback(async (session: Session) => {
+    setError('');
+    if (session.booked_count > 0) {
+      setError(
+        `That session has ${session.booked_count} booking${session.booked_count === 1 ? '' : 's'} ` +
+        `and cannot be removed. Cancel the booking${session.booked_count === 1 ? '' : 's'} first.`
+      );
+      return;
+    }
+
+    const isTemp = session.id.startsWith('temp-session-');
+    if (!isTemp) {
+      try {
+        setLoading(true);
+        const { deleteSession } = await import('../api/client');
+        await deleteSession(session.id);
+      } catch (error: unknown) {
+        const err = error as { response?: { data?: { error?: string }; status?: number } };
+        const message = err.response?.data?.error
+          ?? (error instanceof Error ? error.message : 'Failed to remove the session. Please try again.');
+        logger.error('Error removing session', { error: err, statusCode: err.response?.status, message });
+        setError(message);
+        return;
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    onSessionsChange(sessions.filter(s => s.id !== session.id));
+
+    // Drop any lingering selection/confirmation/manual key for this slot, so a
+    // removed session cannot linger as a ghost in the grid's confirmed set.
+    const slotKey = `${toISOString(session.start_time)}|${toISOString(session.end_time)}`;
+    setSelectedSlots(prev => {
+      if (!prev.has(slotKey)) return prev;
+      const next = new Set(prev); next.delete(slotKey); persistSelectedSlots(next); return next;
+    });
+    setConfirmedSlots(prev => {
+      if (!prev.has(slotKey)) return prev;
+      const next = new Set(prev); next.delete(slotKey); persistConfirmedSlots(next); return next;
+    });
+    setManualSlotKeys(prev => {
+      if (!prev.has(slotKey)) return prev;
+      const next = new Set(prev); next.delete(slotKey); persistManualSlotKeys(next); return next;
+    });
+  }, [sessions, onSessionsChange, persistSelectedSlots, persistConfirmedSlots, persistManualSlotKeys]);
 
   const handleResetAllSessions = () => {
     // Always allow reset if there are any visual states or sessions
@@ -2685,6 +2839,12 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
 
       <div className="calendar-mode">
 
+          {/* The calendar's own controls - date range, duration, manual entry -
+              belong to the grid, so they only appear with it (row 6). In the
+              list view they were noise stacked above a read-only table; the
+              list reaches the grid through its own "Add slots" button instead. */}
+          {viewMode === 'grid' && (
+            <>
           {/* Calendar Controls */}
           <div className="calendar-control-panel">
             <div className="control-panel-row">
@@ -2869,6 +3029,8 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
               </div>
             )}
           </div>
+            </>
+          )}
 
           {/* View Switcher */}
           <div className="control-panel-subtle mb-2">
@@ -2895,17 +3057,21 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                 </button>
               </div>
 
-              {/* Ghost Refresh Button */}
-              <button
-                type="button"
-                onClick={loadCalendarData}
-                disabled={disabled || loading}
-                title="Refresh calendar to see latest booking status"
-                className="btn-ghost"
-              >
-                <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
-                Refresh
-              </button>
+              {/* Ghost Refresh Button - reloads the availability grid, so it
+                  only belongs with the grid (row 6). In the list view it
+                  reloaded nothing the view showed. */}
+              {viewMode === 'grid' && (
+                <button
+                  type="button"
+                  onClick={loadCalendarData}
+                  disabled={disabled || loading}
+                  title="Refresh calendar to see latest booking status"
+                  className="btn-ghost"
+                >
+                  <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
+                  Refresh
+                </button>
+              )}
 
               {/* Reset Button - pushed to right */}
               <button
@@ -2969,15 +3135,29 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                 </div>
               ) : (
                 <ListView
-                  key={`list-${startDate.toISOString()}-${endDate.toISOString()}-${durationMinutes}-${availableSlots.length}`}
+                  key={`list-${sessions.length}`}
                   sessions={sessions}
                   isTemporary={isTemporary}
+                  onRemove={handleRemoveSession}
+                  onAddSlots={() => setViewMode('grid')}
+                  disabled={disabled}
+                  loading={loading}
                 />
               )}
             </div>
           </div>
 
-          {/* Selected Slots Actions */}
+          {/*
+            Selected-slots action bar (row 6 rework).
+
+            The controls used to sit in a row with "Clear Selection" absolutely
+            centred over the top of Back and Continue, so it painted across the
+            forward button. This is a single wrapping flex row instead: Back on
+            the left, everything else pushed right by a spacer, nothing
+            overlapping. And the forward control is "Confirm & continue", which
+            commits the pending selection before advancing - the bare "Continue"
+            here dropped it silently.
+          */}
           {selectedSlots.size > 0 && (
             <div className="mb-3">
               <div className="selection-actions-panel">
@@ -2985,26 +3165,9 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                 <div className="selection-summary-count">
                   <strong>{selectedSlots.size}</strong> slot{selectedSlots.size !== 1 ? 's' : ''} selected
                 </div>
-                
-                {/*
-                  Said "Create Opportunity" while this button WAS the commit
-                  point. It no longer creates the opportunity - Review does -
-                  so it now says what it actually does, in both modes: on a new
-                  opportunity the slots are held until Review saves, and on an
-                  existing one they are created immediately.
-                */}
-                <button
-                  type="button"
-                  className="btn btn-success btn-sm min-w-180"
-                  onClick={handleCreateSessionsFromSelected}
-                  disabled={disabled || loading}
-                >
-                  {loading ? 'Confirming...' : 'Confirm selected slots'}
-                </button>
-                
-                {/* Clear Selection and Back buttons on same row */}
+
                 <div className="selection-actions-row">
-                  {/* Back button - left aligned */}
+                  {/* Back - left aligned */}
                   {onBack && (
                     <button
                       type="button"
@@ -3016,28 +3179,48 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                       {backLabel}
                     </button>
                   )}
+
+                  {/* Spacer: pushes the confirm/continue cluster to the right
+                      without absolute positioning, so nothing overlaps. */}
+                  <div className="selection-actions-spacer" />
+
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary btn-sm"
+                    onClick={handleClearSelected}
+                    disabled={disabled}
+                  >
+                    Clear Selection
+                  </button>
+
+                  {/*
+                    Said "Create Opportunity" while this button WAS the commit
+                    point. It no longer creates the opportunity - Review does -
+                    so it names what it actually does: on a new opportunity the
+                    slots are held until Review saves, on an existing one they
+                    are created immediately. It stays on this step so more slots
+                    can be added.
+                  */}
+                  <button
+                    type="button"
+                    className="btn btn-success btn-sm min-w-180"
+                    onClick={handleCreateSessionsFromSelected}
+                    disabled={disabled || loading}
+                  >
+                    {loading ? 'Confirming...' : 'Confirm selected slots'}
+                  </button>
+
                   {onContinue && (
                     <button
                       type="button"
                       className="btn btn-primary btn-sm"
-                      onClick={onContinue}
+                      onClick={handleConfirmAndContinue}
                       disabled={disabled || loading}
                     >
-                      {continueLabel}
+                      {confirmAndContinueLabel}
                       <ArrowRight size={16} className="ms-2" />
                     </button>
                   )}
-                  {/* Clear Selection - centered */}
-                  <div className="selection-actions-center">
-                    <button
-                      type="button"
-                      className="btn btn-outline-secondary btn-sm"
-                      onClick={handleClearSelected}
-                      disabled={disabled}
-                    >
-                      Clear Selection
-                    </button>
-                  </div>
                 </div>
               </div>
             </div>
