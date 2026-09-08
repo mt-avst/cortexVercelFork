@@ -27,7 +27,8 @@ export const CALENDAR_LEGEND_ITEMS = [
   { className: 'legend-available', label: 'Available', labelClass: 'legend-label-available' },
   { className: 'legend-conflict', label: 'Conflict', labelClass: 'legend-label-conflict' },
   { className: 'legend-full', label: 'Full', labelClass: 'legend-label-full' },
-  { className: 'legend-booked', label: 'Booked', labelClass: 'legend-label-booked' }
+  { className: 'legend-booked', label: 'Booked', labelClass: 'legend-label-booked' },
+  { className: 'legend-past', label: 'Past', labelClass: 'legend-label-past' }
 ];
 
 /**

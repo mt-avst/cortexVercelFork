@@ -4640,7 +4640,12 @@ body.theme-dark .calendar-day-title {
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  overflow: hidden !important;
+  /* overflow stays VISIBLE: the booking-confirm popover is an absolutely
+     positioned CHILD of this slot, sitting above it (bottom: 100% + 12px).
+     Clipping here hid it entirely - the slot turned selected but the Confirm
+     CTA never showed, regardless of its z-index: 9999. The label is clipped on
+     .timeslot-label below instead, so long times still truncate. */
+  overflow: visible !important;
 }
 
 /* Slot text readability - uses flexbox of parent for centering */
@@ -4653,7 +4658,13 @@ body.theme-dark .calendar-day-title {
   letter-spacing: 0;
   text-align: center;
   white-space: nowrap;
-  
+  /* Clip the LABEL, not the slot - preserves the time-truncation the slot's
+     old overflow: hidden gave, without clipping the confirm popover. */
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
   /* Prevent interaction */
   pointer-events: none;
 }
@@ -4723,41 +4734,51 @@ body.theme-dark .calendar-slot-ghost:hover .timeslot-label {
 
    The glow and borders below keep the identity orange: nothing is read off them.
    ============================================================ */
+/* YOUR BOOKING - brand orange, but an OUTLINE, not a solid fill. The solid
+   orange fill is reserved for .calendar-slot-selected (the slot you are
+   actively confirming now). Booked and selected used to be the same solid
+   orange separated only by a border width, so "already booked" and "about to
+   book" looked identical. Outline vs solid keeps both in the brand colour while
+   making them unmistakably different states. */
 .calendar-slot-booked {
-  background: var(--accent-fill-text-safe) !important;
-  border: 1px solid transparent !important;
+  background: rgba(197, 78, 18, 0.10) !important; /* brand-orange-800 tint */
+  border: 2px solid var(--accent-fill-text-safe) !important;
   border-radius: 8px !important;
 }
 
 .calendar-slot-booked .timeslot-label {
-  color: #FFFFFF !important; /* White text on orange */
+  color: var(--accent-fill-text-safe) !important; /* orange text on the tint */
   font-weight: 700 !important;
 }
 
-/* Dark mode: Same solid fill - the "hero" state */
+/* Dark mode: same outline treatment, lighter orange for contrast on dark */
 body.theme-dark .calendar-slot-booked {
-  background: var(--accent-fill-text-safe) !important;
-  border: 1px solid transparent !important;
-  box-shadow: 0 0 10px rgba(255, 90, 31, 0.3) !important; /* subtle brand glow */
+  background: rgba(255, 122, 51, 0.14) !important;
+  border: 2px solid #FB923C !important; /* orange-400 */
+  box-shadow: 0 0 8px rgba(255, 90, 31, 0.2) !important; /* subtle brand glow */
 }
 
 body.theme-dark .calendar-slot-booked .timeslot-label {
-  color: #FFFFFF !important;
+  color: #FDBA74 !important; /* orange-300 */
 }
 
 /* ============================================================
    FULL SLOT - "Dead End" / Inactive State
-   Light: Soft Red | Dark: Dimmed Gray (pushed to background)
+   Neutral grey in both themes. It was soft RED in light, which reads as an
+   error - but a full slot is not an error, it is simply taken, and it means
+   the same thing to a participant as it does in dark mode where it was already
+   grey. Red also collided with nothing useful and left two alarm colours (red
+   Full, amber Conflict) for the one idea "you cannot book this".
    ============================================================ */
 .calendar-slot-full {
-  background: rgba(239, 68, 68, 0.1) !important; /* red-50ish */
-  border: 1px solid rgba(239, 68, 68, 0.3) !important;
+  background: rgba(156, 163, 175, 0.15) !important; /* gray-400 tint */
+  border: 1px solid rgba(156, 163, 175, 0.4) !important;
   border-radius: 8px !important;
   opacity: 0.7 !important;
 }
 
 .calendar-slot-full .timeslot-label {
-  color: #dc2626 !important; /* red-600 */
+  color: #6b7280 !important; /* gray-500 */
 }
 
 /* DARK MODE: Dimmed/Inactive look - visible border for accessibility */
@@ -5196,9 +5217,11 @@ body.theme-dark .booking-popover-cancel:hover {
   color: #065f46; /* emerald-800 */
 }
 
-/* Dark Mode: Emerald Glow */
+/* Dark Mode: Emerald Glow. Match the SOLID slot (emerald-500/80), not the old
+   emerald-500/10 - the swatch was nearly invisible while the slot it keys is a
+   bold solid green, so the key did not look like the thing it explained. */
 body.theme-dark .legend-available {
-  background-color: rgba(16, 185, 129, 0.1); /* emerald-500/10 */
+  background-color: rgba(16, 185, 129, 0.8); /* emerald-500/80 - matches slot */
   border: 1px solid #34d399; /* emerald-400 */
   box-shadow: 0 0 6px rgba(52, 211, 153, 0.25);
 }
@@ -5228,14 +5251,14 @@ body.theme-dark .legend-label-conflict {
   color: #fef08a; /* yellow-200 */
 }
 
-/* ---- FULL: The Dead End (Dimmed) ---- */
+/* ---- FULL: The Dead End (Dimmed) ---- neutral grey, matching the slot. */
 .legend-full {
-  background-color: rgba(239, 68, 68, 0.1); /* red-50ish */
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background-color: rgba(156, 163, 175, 0.15); /* gray-400 tint */
+  border: 1px solid rgba(156, 163, 175, 0.4);
 }
 
 .legend-label-full {
-  color: #dc2626; /* red-600 */
+  color: #6b7280; /* gray-500 */
 }
 
 /* Dark Mode: Dimmed/Inactive - visible border for accessibility */
@@ -5248,29 +5271,48 @@ body.theme-dark .legend-label-full {
   color: #9ca3af; /* gray-400 - slightly lighter for readability */
 }
 
-/* ---- YOUR BOOKING: The Hero (Mode Agnostic) ----
-   The swatch has no text on it, so it needs no contrast of its own - but it is
-   the key to the booked slot, and a legend that does not match the thing it
-   explains is worse than a slightly lighter orange. It follows the fill. */
+/* ---- YOUR BOOKING ---- an OUTLINE swatch, following the slot. The booked
+   slot is now an orange outline (the solid orange belongs to the selected
+   state), so the key follows it: orange border, tinted fill, orange label. */
 .legend-booked {
-  background-color: var(--accent-fill-text-safe);
-  border: 1px solid transparent;
+  background-color: rgba(197, 78, 18, 0.10); /* brand-orange-800 tint */
+  border: 2px solid var(--accent-fill-text-safe);
 }
 
 .legend-label-booked {
-  color: #FF5A1F;
+  color: var(--accent-fill-text-safe);
   font-weight: 600;
 }
 
-/* Dark Mode: Same solid fill - with subtle glow */
+/* Dark Mode: same outline, lighter orange for contrast on dark */
 body.theme-dark .legend-booked {
-  background-color: var(--accent-fill-text-safe);
-  border: 1px solid transparent;
-  box-shadow: 0 0 8px rgba(255, 90, 31, 0.3);
+  background-color: rgba(255, 122, 51, 0.14);
+  border: 2px solid #FB923C; /* orange-400 */
+  box-shadow: 0 0 8px rgba(255, 90, 31, 0.2);
 }
 
 body.theme-dark .legend-label-booked {
-  color: #FF5A1F;
+  color: #FDBA74; /* orange-300 */
+}
+
+/* ---- PAST: elapsed, unbookable. Now keyed, because the grid renders it. ---- */
+.legend-past {
+  background-color: rgba(156, 163, 175, 0.4); /* matches .calendar-slot-past */
+  border: 1px dashed rgba(156, 163, 175, 0.5);
+}
+
+.legend-label-past {
+  color: #6b7280; /* gray-500 */
+  text-decoration: line-through;
+}
+
+body.theme-dark .legend-past {
+  background-color: rgba(107, 114, 128, 0.6); /* gray-500 */
+  border: 1px dashed rgba(107, 114, 128, 0.7);
+}
+
+body.theme-dark .legend-label-past {
+  color: #d1d5db; /* gray-300 */
 }
 
 /* Legacy hint (icon + text) */
@@ -9002,7 +9044,11 @@ body.theme-light .calendar-day-header-cell {
   right: 6px !important;
   width: calc(100% - 12px) !important;
   min-width: 80px !important;
-  overflow: hidden;
+  /* visible, not hidden: this is the calendar the participant actually books
+     in (root is `calendar-view calendar-hud`), and hidden here re-clips the
+     confirm popover the base rule just un-clipped. The label is clipped on
+     .timeslot-label instead. */
+  overflow: visible;
 }
 
 /* ============================================================
