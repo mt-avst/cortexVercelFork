@@ -611,18 +611,47 @@ router.delete('/:id', requireAdmin, asyncHandler(async (req: Request, res: Respo
   const access = await checkSessionOwnership(sessionId, req.user!.id, req.user!.role);
   enforceSessionOwnership(access, req.user!.role, 'Only the owner can delete this session');
   
-  // Check if session has bookings
-  const sessionCheck = await pool.query('SELECT booked_count FROM sessions WHERE id = $1', [sessionId]);
-  if (sessionCheck.rows.length === 0) {
-    throw new NotFoundError('Session');
+  // Re-read the booking count and delete in ONE transaction holding FOR UPDATE
+  // on the session row (cto/AdaptaLabs#34 family). This was a SELECT booked_count
+  // and a DELETE on two separate pooled connections with no lock: a booking that
+  // committed between them was deleted anyway - the exact harm the count check
+  // exists to prevent, and one the new list Remove button makes a routine action.
+  //
+  // Every writer of booked_count takes the session row lock first, so once we
+  // hold it the count is the committed truth: book and reschedule take
+  // FOR UPDATE NOWAIT and fail fast against a row we are deleting, and cancel's
+  // UPDATE blocks until we commit. A plain FOR UPDATE (not NOWAIT) is right here
+  // - a delete racing a booking should WAIT for it to commit, then read the
+  // non-zero count and refuse, rather than erroring.
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const sessionCheck = await client.query(
+      'SELECT booked_count FROM sessions WHERE id = $1 FOR UPDATE',
+      [sessionId]
+    );
+    if (sessionCheck.rows.length === 0) {
+      throw new NotFoundError('Session');
+    }
+    if (sessionCheck.rows[0].booked_count > 0) {
+      throw new ValidationError('Cannot delete session with existing bookings');
+    }
+
+    await client.query('DELETE FROM sessions WHERE id = $1', [sessionId]);
+
+    await client.query('COMMIT');
+  } catch (error) {
+    // Guarded as at :278/:564: a ROLLBACK that throws on a dead connection would
+    // replace the error that caused it. NotFound/Validation are thrown here too,
+    // so they roll back a transaction that has written nothing - harmless - and
+    // reach the error middleware unchanged.
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
   }
-  
-  if (sessionCheck.rows[0].booked_count > 0) {
-    throw new ValidationError('Cannot delete session with existing bookings');
-  }
-  
-  await pool.query('DELETE FROM sessions WHERE id = $1', [sessionId]);
-  
+
   res.status(204).send();
 }));
 
