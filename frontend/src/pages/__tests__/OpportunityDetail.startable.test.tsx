@@ -123,6 +123,25 @@ describe('OpportunityDetail call to action', () => {
   });
 
   /**
+   * A native poll's visible label is "Start poll". Its accessible name fell
+   * through to the generic native branch and announced "Start survey in
+   * Cortex" - a WCAG 2.5.3 label-in-name failure, and voice control ("click
+   * start poll") missed it entirely. The name must contain the visible words
+   * and must not say "survey".
+   */
+  it('names a native poll button after the poll, not the survey (WCAG 2.5.3)', async () => {
+    load({ type: 'poll', delivery_mode: 'native', firsthand_study_id: 'study_poll' });
+    renderDetail();
+    await screen.findByText(base.title);
+
+    expect(
+      screen.getByRole('button', { name: /start poll in Cortex/i })
+    ).toBeEnabled();
+    // The pre-fix bug: the same button was reachable as ".../survey...".
+    expect(screen.queryByRole('button', { name: /survey/i })).toBeNull();
+  });
+
+  /**
    * The recorded path reads the other field, and must keep working: its start
    * button is enabled by the linked study, with no external link anywhere.
    */
