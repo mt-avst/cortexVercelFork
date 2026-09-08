@@ -97,6 +97,7 @@ describe('OpportunityDetail - what an error takes away', () => {
     });
 
     renderDetail();
+    await user.click(await screen.findByRole('button', { name: 'Switch to calendar view' }));
     await user.click(await screen.findByRole('button', { name: 'stub book' }));
 
     await waitFor(() => expect(screen.getByText(/Session is full/i)).toBeInTheDocument());
@@ -112,6 +113,7 @@ describe('OpportunityDetail - what an error takes away', () => {
     });
 
     renderDetail();
+    await user.click(await screen.findByRole('button', { name: 'Switch to calendar view' }));
     await user.click(await screen.findByRole('button', { name: 'stub book' }));
 
     const dismiss = await screen.findByRole('button', { name: 'Close error message' });
@@ -131,6 +133,7 @@ describe('OpportunityDetail - what an error takes away', () => {
     });
 
     renderDetail();
+    await user.click(await screen.findByRole('button', { name: 'Switch to calendar view' }));
     await user.click(await screen.findByRole('button', { name: 'stub book' }));
     await screen.findByText(/Session is full/i);
 
@@ -168,6 +171,7 @@ describe('OpportunityDetail - what an error takes away', () => {
     });
 
     renderDetail();
+    await user.click(await screen.findByRole('button', { name: 'Switch to calendar view' }));
     await user.click(await screen.findByRole('button', { name: 'stub book' }));
     await screen.findByText(/Session is full/i);
 
@@ -199,6 +203,7 @@ describe('OpportunityDetail - what an error takes away', () => {
 
     renderDetail();
     await screen.findByText('Checkout flow walkthrough');
+    await user.click(await screen.findByRole('button', { name: 'Switch to calendar view' }));
     await user.click(screen.getByRole('button', { name: 'stub book' }));
     await screen.findByText(/Server error occurred/i);
 
@@ -222,6 +227,7 @@ describe('OpportunityDetail - what an error takes away', () => {
     });
 
     renderDetail();
+    await user.click(await screen.findByRole('button', { name: 'Switch to calendar view' }));
     await user.click(await screen.findByRole('button', { name: 'stub book' }));
 
     // The old takeway was destructive but never missable. Now the banner sits
@@ -236,6 +242,7 @@ describe('OpportunityDetail - what an error takes away', () => {
     vi.mocked(bookSession).mockResolvedValue({ id: 'booking-1' } as never);
 
     renderDetail();
+    await user.click(await screen.findByRole('button', { name: 'Switch to calendar view' }));
     await user.click(await screen.findByRole('button', { name: 'stub book' }));
     await screen.findByText(/Successfully booked/i);
 
@@ -257,6 +264,7 @@ describe('OpportunityDetail - what an error takes away', () => {
     });
 
     renderDetail();
+    await user.click(await screen.findByRole('button', { name: 'Switch to calendar view' }));
     await user.click(await screen.findByRole('button', { name: 'stub book' }));
     await screen.findByText(/Session is full/i);
 
