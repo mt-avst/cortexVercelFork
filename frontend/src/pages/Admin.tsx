@@ -1071,6 +1071,27 @@ const Admin: React.FC = () => {
                   </div>
                   <div className="table-responsive">
                     <table className="table table-hover mb-0">
+                      {/*
+                        State the truncation (register #16), as a <caption> so a
+                        screen reader meets it ON ENTERING the table rather than
+                        after leaving it - a <p> below is read too late to stop
+                        the 15 rows being taken as the whole list. caption-side
+                        keeps it visually below. Shown only when rows are
+                        actually withheld: the row count is measured (the rows
+                        rendered, not a literal 15, so it stays honest if the
+                        server cap moves) and guarded > 0, so a stale response
+                        with no array cannot render "the  most recent".
+                      */}
+                      {(dashboardStats?.recent_bookings?.length ?? 0) > 0 &&
+                        (dashboardStats?.total_bookings ?? 0) > (dashboardStats?.recent_bookings?.length ?? 0) && (
+                        <caption
+                          className="admin-bookings-truncation text-muted"
+                          style={{ captionSide: 'bottom', paddingTop: '0.75rem' }}
+                        >
+                          Showing the {dashboardStats?.recent_bookings?.length} most recent of{' '}
+                          {dashboardStats?.total_bookings} bookings. Export CSV for the full list.
+                        </caption>
+                      )}
                       <thead>
                         {/* Named columns. This table shares `.admin-dashboard` with the
                             Research Studies table, so anything addressed by POSITION

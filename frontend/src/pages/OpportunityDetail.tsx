@@ -1357,6 +1357,12 @@ const OpportunityDetail: React.FC = () => {
                           }
                           aria-label={
                             isNativeSurvey && opportunity.type === 'question' ? 'Answer question in Cortex' :
+                            // A native poll's visible label is "Start poll", so its
+                            // accessible name has to contain those words (WCAG 2.5.3
+                            // label-in-name; voice control keys on the visible text).
+                            // Without this it fell to the generic native branch below
+                            // and announced "Start survey in Cortex" on a poll.
+                            isNativeSurvey && opportunity.type === 'poll' ? 'Start poll in Cortex' :
                             isNativeSurvey ? 'Start survey in Cortex' :
                             opportunity.type === 'poll' ? 'Open poll in new tab' :
                             opportunity.type === 'survey' ? 'Open survey in new tab' :

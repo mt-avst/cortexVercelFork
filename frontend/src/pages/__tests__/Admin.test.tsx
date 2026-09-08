@@ -98,6 +98,20 @@ const renderAdmin = () =>
     </MemoryRouter>
   );
 
+/** A Recent-bookings row. Shape matches RecentBookingItem from the server. */
+const recentBooking = (i: number) => ({
+  id: `b-${i}`,
+  opportunity_id: 'opp-1',
+  // Distinct from the studies-table row's title: Bootstrap renders every
+  // tab-pane in the DOM, so a shared title makes findByText ambiguous.
+  opportunity_title: 'Booked study',
+  session_start: '2026-09-13T13:00:00.000Z',
+  participant_name: `Participant ${i}`,
+  participant_email: `p${i}@example.com`,
+  status: 'booked',
+  booked_at: '2026-09-01T10:00:00.000Z',
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
   // Reset to the admin default; the non-admin test mutates this.
@@ -148,6 +162,44 @@ describe('Admin page', () => {
     fireEvent.click(screen.getByRole('button', { name: '⋮' }));
 
     expect(screen.getByRole('button', { name: 'Analytics' })).toBeInTheDocument();
+  });
+
+  it('states the truncation when Recent bookings is capped below the total (register #16)', async () => {
+    // The table is capped at the 15 most recent server-side while the tab
+    // badge counts all 47, so the researcher must be told the 15 are not the
+    // whole list.
+    const fifteen = Array.from({ length: 15 }, (_, i) => recentBooking(i));
+    vi.mocked(getDashboardStats).mockResolvedValue({
+      ...fixtures.stats,
+      total_bookings: 47,
+      recent_bookings: fifteen,
+    } as never);
+    renderAdmin();
+    await screen.findByText('Checkout usability test');
+
+    fireEvent.click(screen.getByRole('tab', { name: /Bookings/ }));
+
+    expect(
+      screen.getByText(/Showing the 15 most recent of 47 bookings/i)
+    ).toBeInTheDocument();
+  });
+
+  it('does not claim truncation when every booking is already shown', async () => {
+    // The control: with the same code path but nothing withheld, the note must
+    // NOT appear - a `>=` where the fix uses `>` would trip this.
+    const three = Array.from({ length: 3 }, (_, i) => recentBooking(i));
+    vi.mocked(getDashboardStats).mockResolvedValue({
+      ...fixtures.stats,
+      total_bookings: 3,
+      recent_bookings: three,
+    } as never);
+    renderAdmin();
+    await screen.findByText('Checkout usability test');
+
+    fireEvent.click(screen.getByRole('tab', { name: /Bookings/ }));
+
+    expect(screen.getByText('Participant 0')).toBeInTheDocument();
+    expect(screen.queryByText(/most recent of/i)).toBeNull();
   });
 
   it('navigates to Task Lists from the header', async () => {
