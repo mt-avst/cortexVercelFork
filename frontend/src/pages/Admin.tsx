@@ -988,22 +988,23 @@ const Admin: React.FC = () => {
                                       >
                                         Copy
                                       </button>
-                                      {/* Analytics - Only for polls, surveys, and unmoderated tests */}
-                                      {(opportunity.type === 'poll' || opportunity.type === 'survey' || opportunity.type === 'unmoderated') && (
-                                        <>
-                                          <div className="dropdown-divider" />
-                                          <button
-                                            className="dropdown-item"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              navigate(`/admin/opportunities/${opportunity.id}/analytics`);
-                                              closeDropdown();
-                                            }}
-                                          >
-                                            Analytics
-                                          </button>
-                                        </>
-                                      )}
+                                      {/* Analytics for EVERY study type. The page always renders
+                                          an Overview (views/clicks), and the moderated types (test,
+                                          interview) reach their booked-participant roster only
+                                          through here - gating this to poll/survey/unmoderated left
+                                          that roster unreachable. Audit rows a04-row-actions-menu,
+                                          a64-analytics-live-session-participants. */}
+                                      <div className="dropdown-divider" />
+                                      <button
+                                        className="dropdown-item"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          navigate(`/admin/opportunities/${opportunity.id}/analytics`);
+                                          closeDropdown();
+                                        }}
+                                      >
+                                        Analytics
+                                      </button>
                                       <div className="dropdown-divider" />
                                       <button
                                         className="dropdown-item text-danger"

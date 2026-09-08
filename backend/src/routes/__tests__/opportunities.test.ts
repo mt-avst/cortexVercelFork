@@ -7280,6 +7280,60 @@ describe('Opportunities API', () => {
       });
     });
 
+    // Row 3 of the Mav/Petra audit: a non-admin landing on a study that exists
+    // but is not published must get an answer that names WHY - closed vs not
+    // yet open - rather than the same 404 a genuinely-missing id gets. The
+    // codes are what the participant page reads to pick its message and to drop
+    // the dead Retry button, so they are pinned by name here.
+    const closedRow = { ...publishedRow, status: 'closed' };
+    const draftRow = { ...publishedRow, status: 'draft' };
+
+    it('answers 410 OPPORTUNITY_CLOSED to a non-admin for a closed study', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [closedRow] });
+
+      const response = await request(listening(employeeApp))
+        .get('/api/opportunities/1')
+        .expect(410);
+
+      expect(response.body.code).toBe('OPPORTUNITY_CLOSED');
+      // The sessions query must NOT have run - an unavailable study pays for one
+      // read, not two. Only the opportunity lookup was queued above.
+      expect(mockQuery).toHaveBeenCalledTimes(1);
+    });
+
+    it('answers 404 OPPORTUNITY_NOT_OPEN to a non-admin for a draft study', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [draftRow] });
+
+      const response = await request(listening(employeeApp))
+        .get('/api/opportunities/1')
+        .expect(404);
+
+      expect(response.body.code).toBe('OPPORTUNITY_NOT_OPEN');
+      // No draft contents leak: only the reason is disclosed.
+      expect(JSON.stringify(response.body)).not.toContain('Published study');
+    });
+
+    it('answers a plain 404 NOT_FOUND to a non-admin for a missing id', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+
+      const response = await request(listening(employeeApp))
+        .get('/api/opportunities/1')
+        .expect(404);
+
+      expect(response.body.code).toBe('NOT_FOUND');
+    });
+
+    it('still serves a closed study to an admin at 200', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [closedRow] });
+      mockQuery.mockResolvedValueOnce({ rows: [] }); // sessions
+
+      const response = await request(listening(app))
+        .get('/api/opportunities/1')
+        .expect(200);
+
+      expect(response.body).toMatchObject({ id: '1', status: 'closed' });
+    });
+
     it('strips owner fields from the GET / list for anonymous participants', async () => {
       mockQuery.mockResolvedValueOnce({ rows: [publishedRow] }); // opportunities query
       mockQuery.mockResolvedValueOnce({ rows: [] }); // sessions batch

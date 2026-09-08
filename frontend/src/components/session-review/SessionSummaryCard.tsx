@@ -22,6 +22,25 @@ const SESSION_STATUS_BADGE: Record<string, string> = {
   failed: ''
 };
 
+// Shown alongside the session status. A session can be `completed` while its
+// transcript `failed`, and leaving that off the summary let a failed transcript
+// read as a wholly successful session ("Completed") with the failure buried far
+// down in the Transcript section. Row 8, a71-session-review-transcript-failed.
+const TRANSCRIPT_STATUS_LABELS: Record<string, string> = {
+  not_requested: 'Not requested',
+  queued: 'Queued',
+  processing: 'Processing',
+  complete: 'Complete',
+  failed: 'Failed'
+};
+
+const TRANSCRIPT_STATUS_BADGE: Record<string, string> = {
+  complete: 'cortex-badge--best',
+  processing: 'cortex-badge--info',
+  queued: 'cortex-badge--info',
+  failed: ''
+};
+
 function formatTimestamp(value: string | null): string {
   if (!value) return 'Not recorded';
   // Shared formatter, so a reviewer reading a recording and a participant
@@ -51,6 +70,12 @@ const SessionSummaryCard: React.FC<{
           <p className="cortex-stat-subtitle" style={{ marginBottom: '4px' }}>Status</p>
           <span className={`cortex-badge ${SESSION_STATUS_BADGE[session.session_status] ?? ''}`}>
             {SESSION_STATUS_LABELS[session.session_status] ?? session.session_status}
+          </span>
+        </div>
+        <div>
+          <p className="cortex-stat-subtitle" style={{ marginBottom: '4px' }}>Transcript</p>
+          <span className={`cortex-badge ${TRANSCRIPT_STATUS_BADGE[session.transcript_status] ?? ''}`}>
+            {TRANSCRIPT_STATUS_LABELS[session.transcript_status] ?? session.transcript_status}
           </span>
         </div>
         <div>

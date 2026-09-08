@@ -44,15 +44,15 @@ const steps: FirstHandOutputStep[] = [
 
 describe('ResponsesSection', () => {
   it('renders prompts with text and choice responses', () => {
-    render(<ResponsesSection steps={steps} />);
+    render(<ResponsesSection steps={steps} hasRecording />);
 
     expect(screen.getByText('How did you find the checkout?')).toBeInTheDocument();
     expect(screen.getByText('It was straightforward.')).toBeInTheDocument();
     expect(screen.getByText('Excellent')).toBeInTheDocument();
   });
 
-  it('reads an unanswered step as spoken, not as missing data', () => {
-    render(<ResponsesSection steps={steps} />);
+  it('reads an unanswered step as spoken when there is a recording', () => {
+    render(<ResponsesSection steps={steps} hasRecording />);
 
     // Two unanswered steps here - one legacy open_text, one instruction -
     // and neither is data loss: capture of typed answers was removed, so
@@ -63,8 +63,21 @@ describe('ResponsesSection', () => {
     expect(screen.queryByText('No response recorded')).toBeNull();
   });
 
+  it('does not claim a recording holds the answer when there is none', () => {
+    // An abandoned session has no recording card; pointing every unanswered
+    // task at "the recording" fabricated an answer. Row 8.
+    render(<ResponsesSection steps={steps} hasRecording={false} />);
+
+    expect(
+      screen.getAllByText('No response recorded')
+    ).toHaveLength(2);
+    expect(screen.queryByText('Answered out loud - in the recording')).toBeNull();
+    // A stored answer is still shown regardless of recording state.
+    expect(screen.getByText('It was straightforward.')).toBeInTheDocument();
+  });
+
   it('still shows answers stored by sessions run before the change', () => {
-    render(<ResponsesSection steps={steps} />);
+    render(<ResponsesSection steps={steps} hasRecording />);
 
     // Historic data is not rewritten: a session that did capture typed
     // answers still shows them.
@@ -73,7 +86,7 @@ describe('ResponsesSection', () => {
   });
 
   it('shows an empty state when there are no steps', () => {
-    render(<ResponsesSection steps={[]} />);
+    render(<ResponsesSection steps={[]} hasRecording />);
 
     expect(screen.getByText('No steps recorded for this session.')).toBeInTheDocument();
   });

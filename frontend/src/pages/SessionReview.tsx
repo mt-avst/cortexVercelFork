@@ -144,7 +144,13 @@ const SessionReviewPage: React.FC = () => {
             task that nobody was asked to do - and then reports it as having no
             response. Filtered HERE rather than inside ResponsesSection, which
             the unpushed participant-launch branch rewrites. */}
-        <ResponsesSection steps={outputs.steps.filter((step) => step.type !== 'end')} />
+        <ResponsesSection
+          steps={outputs.steps.filter((step) => step.type !== 'end')}
+          // A recording exists when this session has at least one asset - the
+          // same rows AssetsSection shows. Without one, the per-step fallback
+          // must not claim the answer is "in the recording".
+          hasRecording={outputs.assets.length > 0}
+        />
         <TranscriptSection
           transcript={outputs.transcript}
           transcriptStatus={outputs.session.transcript_status}

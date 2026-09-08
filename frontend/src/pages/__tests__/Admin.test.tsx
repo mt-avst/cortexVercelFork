@@ -137,6 +137,19 @@ describe('Admin page', () => {
     expect(screen.getByText('Active studies')).toBeInTheDocument();
   });
 
+  it('offers Analytics in the row menu for a moderated (test) study', async () => {
+    // Row 4: Analytics used to be gated to poll/survey/unmoderated, so a
+    // moderated study - the fixture is a `test` - had no way through to its
+    // Analytics page and therefore no way to its participant roster. Opening
+    // the row's kebab must now surface Analytics for it.
+    renderAdmin();
+    await screen.findByText('Checkout usability test');
+
+    fireEvent.click(screen.getByRole('button', { name: '⋮' }));
+
+    expect(screen.getByRole('button', { name: 'Analytics' })).toBeInTheDocument();
+  });
+
   it('navigates to Task Lists from the header', async () => {
     renderAdmin();
     fireEvent.click(await screen.findByRole('button', { name: 'Task lists' }));

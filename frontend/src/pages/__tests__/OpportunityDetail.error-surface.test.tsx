@@ -154,15 +154,49 @@ describe('OpportunityDetail - what an error takes away', () => {
     // Nothing loaded, so the error IS the page - the full-page view is correct
     // here and must not be lost while making the inline one reachable.
     //
-    // Asserted on the Retry button and the full sentence, NOT on "Opportunity
-    // not found": the separate `if (!opportunity)` fallback further down says
-    // exactly that too, so the obvious matcher passes against a build where the
-    // takeover has been removed entirely. It did, until this mutation caught it.
-    expect(await screen.findByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    // Asserted on the takeover's OWN sentence, which the separate
+    // `if (!opportunity)` fallback ("Opportunity not found") does not share, so
+    // this cannot pass against a build where the takeover has been removed and
+    // the fallback shows through. Row 3: a genuine 404 is terminal, so it offers
+    // no dead Retry that would reload straight into the same 404.
     expect(
-      screen.getByText(/may have been deleted or you may not have permission/i)
+      await screen.findByText(/could not be found\. It may have been removed/i)
     ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'stub book' })).not.toBeInTheDocument();
+  });
+
+  it('shows a calm "closed" state with no dead Retry when the study has closed', async () => {
+    vi.mocked(getOpportunity).mockRejectedValue({
+      response: {
+        status: 410,
+        data: { error: 'This study has closed and is no longer accepting participants.', code: 'OPPORTUNITY_CLOSED' },
+      },
+    });
+
+    renderDetail();
+
+    // The server's own participant-facing sentence is kept, and Retry is gone:
+    // reloading a closed study answers the same way. Evidence e10-detail-live-session-closed.
+    expect(await screen.findByText(/this study has closed/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'stub book' })).not.toBeInTheDocument();
+  });
+
+  it('shows a "not open yet" state with no dead Retry for a draft study', async () => {
+    vi.mocked(getOpportunity).mockRejectedValue({
+      response: {
+        status: 404,
+        data: { error: "This study isn't open yet. Check back once the researcher publishes it.", code: 'OPPORTUNITY_NOT_OPEN' },
+      },
+    });
+
+    renderDetail();
+
+    // Evidence e10-detail-interview-draft: a draft link must read as "not open
+    // yet", not as the old "deleted or no permission" 404.
+    expect(await screen.findByText(/isn't open yet/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
   });
 
   it('keeps a readable page when the refresh from the banner also fails', async () => {
@@ -280,7 +314,8 @@ describe('OpportunityDetail - what an error takes away', () => {
     await waitFor(() => {
       expect(screen.queryByText('Checkout flow walkthrough')).not.toBeInTheDocument();
     });
-    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    // A 404 on refresh is terminal - the study is gone, so no dead Retry.
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'stub book' })).not.toBeInTheDocument();
   });
 });

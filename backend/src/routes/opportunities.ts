@@ -84,6 +84,44 @@ import { isOpportunityOwner } from '../utils/opportunityOwnership';
 
 import { Opportunity, CreateOpportunityRequest, UpdateOpportunityRequest, Session, CreateSessionRequest, isAdminRole } from '../types';
 
+/**
+ * The refusal a NON-ADMIN gets for an opportunity that exists but is not
+ * published, keyed on why it is not viewable rather than flattened to a bare
+ * 404. `GET /:id` used to answer 404 for missing, closed and draft alike, and
+ * the participant page could only say "not found, maybe deleted, maybe no
+ * permission" with a Retry that reloaded into the same 404.
+ *
+ *  - `closed` -> 410 Gone. The study WAS public (a participant may hold a real
+ *    link to it), so telling them it has closed discloses nothing new and is
+ *    the honest state. 410 is the exact HTTP semantics: the resource existed
+ *    and is deliberately no longer available.
+ *  - anything else (`draft`, and any not-yet-published state) -> 404 with a
+ *    distinct code, so the participant sees "not open yet" rather than "not
+ *    found". This does let a holder of the (UUID) id tell a draft apart from a
+ *    genuinely-missing id, which is a deliberate, minimal disclosure: opportunity
+ *    ids are unguessable and their existence is not a guarded secret here
+ *    (cto/AdaptaLabs#10 settled that for the admin id-space; this is the weaker
+ *    participant case). No title or details are echoed for either state - only
+ *    the reason - so a draft's contents stay private.
+ *
+ * The frontend reads `code`, not the status, to choose the message and to drop
+ * the dead Retry button on these two terminal states.
+ */
+function unavailableOpportunityError(status: string): AppError {
+  if (status === 'closed') {
+    return new AppError(
+      'This study has closed and is no longer accepting participants.',
+      410,
+      'OPPORTUNITY_CLOSED'
+    );
+  }
+  return new AppError(
+    "This study isn't open yet. Check back once the researcher publishes it.",
+    404,
+    'OPPORTUNITY_NOT_OPEN'
+  );
+}
+
 const router: Router = Router();
 
 /**
@@ -1486,36 +1524,47 @@ router.get('/:id', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req:
     if (!opportunity) {
       throw new NotFoundError('Opportunity');
     }
-    
+
     // Non-admin users can only see published opportunities
     if (!isAdmin && opportunity.status !== 'published') {
-      throw new NotFoundError('Opportunity');
+      throw unavailableOpportunityError(opportunity.status);
     }
 
     res.json(isAdmin ? opportunity : toPublicOpportunity(opportunity));
     return;
   }
-  
+
   // Use database - LEFT JOIN so opportunities show even when owner not in users (e.g. demo/session-only)
-  let query = `
+  //
+  // The status filter is NOT in the SQL any more, deliberately. Filtering
+  // `AND o.status = 'published'` in the query collapsed three distinct answers
+  // - missing, closed, and not-yet-open - into the same empty result, and the
+  // participant page could only render one of them: "not found, maybe deleted,
+  // maybe no permission" plus a Retry that reloads into the identical 404. A
+  // participant landing on a study that has since CLOSED, or on a draft link
+  // shared before launch, was told the study did not exist. Load the row first,
+  // then decide, so closed and not-open become their own honest states.
+  const query = `
     SELECT o.*, u.name as owner_name, u.email as owner_email
     FROM opportunities o
     LEFT JOIN users u ON o.owner_user_id = u.id
     WHERE o.id = $1
   `;
   const params = [id];
-  
-  // Non-admin users can only see published opportunities
-  if (!isAdmin) {
-    query += ` AND o.status = 'published'`;
-  }
-  
+
   const result = await pool.query(query, params);
-  
+
   if (result.rows.length === 0) {
     throw new NotFoundError('Opportunity');
   }
-  
+
+  // Non-admin users can only VIEW published opportunities, but a non-published
+  // row that exists is a different fact from one that does not. Decide before
+  // the sessions query so an unavailable study never pays for a second read.
+  if (!isAdmin && result.rows[0].status !== 'published') {
+    throw unavailableOpportunityError(result.rows[0].status);
+  }
+
   // Get sessions for this opportunity with dynamic booked_count calculation
   const sessionsResult = await pool.query(`
     SELECT s.*,

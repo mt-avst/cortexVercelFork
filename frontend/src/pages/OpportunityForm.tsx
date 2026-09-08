@@ -106,7 +106,8 @@ import {
   MODERATED_CONSENT_TEMPLATE,
   RECORDED_CONSENT_TEMPLATE,
   SURVEY_CONSENT_TEMPLATE,
-  resolveConsentTemplate
+  resolveConsentTemplate,
+  type ConsentKind
 } from '@shared/firsthand/consent-templates';
 import {
   DEFAULT_SURVEY_CONSENT_TEXT,
@@ -2401,6 +2402,38 @@ const OpportunityForm: React.FC = () => {
     order: Object.keys(FIELD_LOCATIONS)
   });
 
+  // The consent vocabulary the CURRENT shape authors, extended past
+  // `authoringKind` to cover the moderated (bookable) shapes. Their Consent
+  // step is keyed by the `sessions` step in getTabsForType, so the same test
+  // decides it here.
+  const reviewConsentKind: ConsentKind | null =
+    authoringKind ?? (tabs.some((tab) => tab.key === 'sessions') ? 'moderated' : null);
+
+  // The three consent fields for that vocabulary, read straight from formData
+  // so Review shows exactly what the Consent step edits. One object rather than
+  // three parallel ternaries at the call site, so a vocabulary cannot be
+  // half-wired (right text, wrong claimed template).
+  const reviewConsentSource =
+    reviewConsentKind === 'survey'
+      ? {
+          text: formData.inline_survey_consent_text,
+          templateId: formData.inline_survey_consent_template_id,
+          templateVersion: formData.inline_survey_consent_template_version
+        }
+      : reviewConsentKind === 'recorded'
+      ? {
+          text: formData.inline_study_consent_text,
+          templateId: formData.inline_study_consent_template_id,
+          templateVersion: formData.inline_study_consent_template_version
+        }
+      : reviewConsentKind === 'moderated'
+      ? {
+          text: formData.moderated_consent_text,
+          templateId: formData.moderated_consent_template_id,
+          templateVersion: formData.moderated_consent_template_version
+        }
+      : null;
+
   /**
    * The check-answers screen, derived on EVERY render rather than snapshotted
    * when the author arrives on it.
@@ -2450,31 +2483,29 @@ const OpportunityForm: React.FC = () => {
     // false alarm on the screen whose job is to be the last chance to notice
     // costs more than no screen at all.
     targetUrl: normaliseTargetUrl(formData.inline_study_target_url),
-    consentText:
-      authoringKind === 'survey'
-        ? formData.inline_survey_consent_text
-        : formData.inline_study_consent_text,
+    // Which consent VOCABULARY this shape's Consent step is in. `authoringKind`
+    // only knows the two study-authoring vocabularies (survey, recorded); the
+    // two moderated shapes (test, interview) carry their own consent under
+    // `moderated_consent_text`, and Review never read it - so a bookable study's
+    // Consent step showed "Standard live-session consent" while Review printed
+    // the recorded-session wording and called it "Custom". Derived from the
+    // step set, like `authoringKind`, so it cannot disagree with getTabsForType:
+    // the moderated shapes are exactly the ones with a `sessions` step.
+    // Audit rows a17-wizard-consent, a18-wizard-review-draft.
+    consentText: reviewConsentSource?.text ?? '',
     // Resolved, not claimed. The form holds what the wording ARRIVED as; this
     // asks the same function the server asks whether the wording still IS that,
     // so an author who edited an approved template sees "Custom" here rather
     // than the approval they no longer have.
-    consentTemplate: authoringKind
-      ? resolveConsentTemplate({
-          kind: authoringKind,
-          consentText:
-            authoringKind === 'survey'
-              ? formData.inline_survey_consent_text
-              : formData.inline_study_consent_text,
-          claimedTemplateId:
-            authoringKind === 'survey'
-              ? formData.inline_survey_consent_template_id
-              : formData.inline_study_consent_template_id,
-          claimedTemplateVersion:
-            authoringKind === 'survey'
-              ? formData.inline_survey_consent_template_version
-              : formData.inline_study_consent_template_version
-        })
-      : null,
+    consentTemplate:
+      reviewConsentKind && reviewConsentSource
+        ? resolveConsentTemplate({
+            kind: reviewConsentKind,
+            consentText: reviewConsentSource.text,
+            claimedTemplateId: reviewConsentSource.templateId,
+            claimedTemplateVersion: reviewConsentSource.templateVersion
+          })
+        : null,
     copiedFromStudyId: formData.copied_from_study_id,
     copiedFromStudyTitle: formData.copied_from_title,
     linkedStudyId: formData.firsthand_study_id?.trim() ?? '',
@@ -4637,9 +4668,12 @@ const OpportunityForm: React.FC = () => {
                   </p>
                 </div>
                 <div className="d-flex align-items-center gap-3">
-                  {/* Analytics button - only for question-carrying types and
-                      unmoderated tests in edit mode */}
-                  {isEdit && id && (QUESTION_CARRYING_TYPES.has(formData.type) || formData.type === 'unmoderated') && (
+                  {/* Analytics button for every study type in edit mode. The
+                      analytics page renders an Overview for all types and is the
+                      only route to a moderated study's participant roster, so it
+                      must not be gated to question-carrying and unmoderated types
+                      (audit row a64-analytics-live-session-participants). */}
+                  {isEdit && id && (
                     <button
                       className="btn btn-outline-primary btn-sm text-sm"
                       onClick={() => navigate(`/admin/opportunities/${id}/analytics`)}

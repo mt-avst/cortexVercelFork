@@ -292,6 +292,13 @@ const consentFieldId = (steps: readonly ReviewStepRef[]): string | undefined => 
   if (steps.some((step) => step.key === 'taskList')) {
     return 'inline_study_consent_text-heading';
   }
+  // The moderated (bookable) shapes carry consent under moderated_consent_text,
+  // keyed by their `sessions` step. Without this the Edit link on the Consent
+  // section had no field to focus for a test/interview study and opened the
+  // step with focus left where it was.
+  if (steps.some((step) => step.key === 'sessions')) {
+    return 'moderated_consent_text-heading';
+  }
   return undefined;
 };
 
