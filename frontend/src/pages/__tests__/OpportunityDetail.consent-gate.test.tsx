@@ -122,6 +122,7 @@ describe('booking an opportunity that carries consent wording', () => {
     vi.mocked(bookSession).mockResolvedValue({ id: 'booking-1' } as never);
 
     renderDetail();
+    await user.click(await screen.findByRole('button', { name: 'Switch to calendar view' }));
     await user.click(await screen.findByRole('button', { name: 'stub book' }));
 
     // The wording itself, not a paraphrase - the participant accepts THIS text.
@@ -137,6 +138,7 @@ describe('booking an opportunity that carries consent wording', () => {
     vi.mocked(bookSession).mockResolvedValue({ id: 'booking-1' } as never);
 
     renderDetail();
+    await user.click(await screen.findByRole('button', { name: 'Switch to calendar view' }));
     await user.click(await screen.findByRole('button', { name: 'stub book' }));
     await screen.findByText(CONSENT_WORDING);
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
@@ -150,6 +152,7 @@ describe('booking an opportunity that carries consent wording', () => {
     vi.mocked(bookSession).mockResolvedValue({ id: 'booking-1' } as never);
 
     renderDetail();
+    await user.click(await screen.findByRole('button', { name: 'Switch to calendar view' }));
     await user.click(await screen.findByRole('button', { name: 'stub book' }));
     await screen.findByText(CONSENT_WORDING);
     await user.click(screen.getByRole('button', { name: 'Accept and book' }));
@@ -173,6 +176,7 @@ describe('booking an opportunity that carries consent wording', () => {
     });
 
     renderDetail();
+    await user.click(await screen.findByRole('button', { name: 'Switch to calendar view' }));
     await user.click(await screen.findByRole('button', { name: 'stub book' }));
     await screen.findByText(CONSENT_WORDING);
     await user.click(screen.getByRole('button', { name: 'Accept and book' }));
@@ -191,6 +195,7 @@ describe('booking an opportunity without consent wording', () => {
     vi.mocked(bookSession).mockResolvedValue({ id: 'booking-1' } as never);
 
     renderDetail();
+    await user.click(await screen.findByRole('button', { name: 'Switch to calendar view' }));
     await user.click(await screen.findByRole('button', { name: 'stub book' }));
 
     await waitFor(() => {

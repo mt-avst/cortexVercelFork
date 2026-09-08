@@ -213,7 +213,10 @@ const OpportunityDetail: React.FC = () => {
       : externalLinkIsUsable
   );
   const [recordedStudyBrief, setRecordedStudyBrief] = useState<RecordedStudyBrief | null>(null);
-  const [viewMode, setViewMode] = useState<'table' | 'calendar'>('calendar');
+  // Default to the grouped-day list ('table'). For the clustered availability
+  // these studies produce it reads faster than the diary grid, which spends
+  // most of its height on empty hours. Calendar stays one click away.
+  const [viewMode, setViewMode] = useState<'table' | 'calendar'>('table');
   const [userCalendarEvents, setUserCalendarEvents] = useState<CalendarEvent[]>([]);
   const [loadingCalendar, setLoadingCalendar] = useState(false);
   // Table view booking confirmation state

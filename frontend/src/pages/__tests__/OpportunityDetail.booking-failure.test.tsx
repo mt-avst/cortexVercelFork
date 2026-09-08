@@ -113,6 +113,7 @@ describe('OpportunityDetail - reporting a booking failure to the grid', () => {
     });
 
     renderDetail();
+    await user.click(await screen.findByRole('button', { name: 'Switch to calendar view' }));
     await user.click(await screen.findByRole('button', { name: 'stub book' }));
 
     await waitFor(() => expect(bookOutcome).toBe('rejected'));
@@ -123,6 +124,7 @@ describe('OpportunityDetail - reporting a booking failure to the grid', () => {
     vi.mocked(bookSession).mockResolvedValue({ id: 'booking-1' } as never);
 
     renderDetail();
+    await user.click(await screen.findByRole('button', { name: 'Switch to calendar view' }));
     await user.click(await screen.findByRole('button', { name: 'stub book' }));
 
     // Guards the lazy over-correction: rethrowing unconditionally would satisfy
@@ -141,6 +143,7 @@ describe('OpportunityDetail - reporting a booking failure to the grid', () => {
     });
 
     renderDetail();
+    await user.click(await screen.findByRole('button', { name: 'Switch to calendar view' }));
     await user.click(await screen.findByRole('button', { name: 'stub book' }));
 
     await waitFor(() => expect(bookOutcome).toBe('rejected'));
@@ -157,6 +160,7 @@ describe('OpportunityDetail - reporting a booking failure to the grid', () => {
     mockUser = null;
 
     renderDetail();
+    await user.click(await screen.findByRole('button', { name: 'Switch to calendar view' }));
     await user.click(await screen.findByRole('button', { name: 'stub book' }));
 
     await waitFor(() => expect(bookOutcome).toBe('rejected'));

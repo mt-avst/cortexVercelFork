@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -110,6 +111,9 @@ describe('OpportunityDetail with no upcoming sessions (#113)', () => {
     renderDetail();
     await screen.findByText(base.title);
 
+    // Calendar is no longer the default view, so switch to it to assert the
+    // grid mounts. The toggle itself is the #113 control below.
+    await userEvent.click(await screen.findByRole('button', { name: 'Switch to calendar view' }));
     expect(await screen.findByTestId('calendar-grid')).toBeInTheDocument();
     expect(screen.queryByText(/no upcoming sessions/i)).toBeNull();
     // The positive control for the two suppressions above.
@@ -134,6 +138,7 @@ describe('OpportunityDetail with no upcoming sessions (#113)', () => {
     renderDetail();
     await screen.findByText(base.title);
 
+    await userEvent.click(await screen.findByRole('button', { name: 'Switch to calendar view' }));
     expect(await screen.findByTestId('calendar-grid')).toBeInTheDocument();
     expect(screen.queryByText(/no upcoming sessions/i)).toBeNull();
   });
