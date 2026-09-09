@@ -54,13 +54,13 @@ Design tokens are CSS custom properties defined in `_tokens.css`. Always use tok
 --text-body: rgba(224, 224, 224, 0.8); /* Body text */
 --text-muted: rgba(224, 224, 224, 0.6); /* Secondary text */
 
-/* Brand Orange Scale (Unified) */
---brand-orange-300: #FFB380;          /* Lightest - highlights */
---brand-orange-400: #FF8F4D;          /* Light - hover states */
---brand-orange-500: #FF7A33;          /* Primary - main brand */
---brand-orange-600: #E86C24;          /* Medium - light mode primary */
---brand-orange-700: #D35F1D;          /* Dark - light mode hover */
---brand-orange-800: #C54E12;          /* Darkest - deep accents */
+/* Brand Orange Scale (Unified - #FF5A1F, one hue in both themes) */
+--brand-orange-300: #FFB59A;          /* Lightest - highlights */
+--brand-orange-400: #FF8C62;          /* Light - hover states */
+--brand-orange-500: #FF5A1F;          /* Primary - identity colour */
+--brand-orange-600: #E6511C;          /* Medium - deeper fill */
+--brand-orange-700: #BF4417;          /* Fill that carries white text (5.18) */
+--brand-orange-800: #B33F16;          /* Text on a light ground (5.18 cream) */
 
 /* Brand Aliases (use these) */
 --brand-headline: var(--brand-orange-500);
@@ -90,8 +90,8 @@ Design tokens are CSS custom properties defined in `_tokens.css`. Always use tok
 ### Typography
 
 ```css
---font-family-base: 'Inter', -apple-system, sans-serif;
---font-family-heading: 'Montserrat', -apple-system, sans-serif;
+--font-family-base: 'Manrope', -apple-system, sans-serif;
+--font-family-display: 'Fraunces', Georgia, serif;
 
 --font-size-xs: 0.75rem;    /* 12px */
 --font-size-sm: 0.875rem;   /* 14px */

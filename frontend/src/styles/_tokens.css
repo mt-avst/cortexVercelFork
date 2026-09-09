@@ -119,42 +119,49 @@
      Single source of truth for all orange brand colors
      ============================================================ */
   
-  /* Brand Orange Scale */
-  --brand-orange-300: #FFB380; /* Lightest - highlights */
-  --brand-orange-400: #FF8F4D; /* Light - hover states */
-  --brand-orange-500: #FF7A33; /* Primary - main brand color */
-  --brand-orange-vibrant: #FF6B2B; /* Punchier orange for primary CTAs */
-  --brand-orange-600: #E86C24; /* Medium - light mode primary */
-  --brand-orange-700: #D35F1D; /* Dark - light mode hover */
-  --brand-orange-800: #C54E12; /* Darkest - deep accents */
+  /* Brand Orange Scale - one hue, #FF5A1F (Adaptavist orange), shared by both
+     themes (audit row 12; decision Nick 2026-09-08). Was two hues under one set
+     of names: #FF7A33 (vibrant) here and #dd6e42 (terracotta) under
+     body.theme-light, so --brand-orange-500 - the identity colour - changed hue
+     with the theme. The steps are lightness variants of the one anchor; the
+     darker ones are computed to clear AA where they carry or are text (measured
+     against #FFFFFF and the #f7f2ea ground in brand-identity.test.ts). */
+  --brand-orange-300: #FFB59A; /* Lightest - highlights */
+  --brand-orange-400: #FF8C62; /* Light - hover states */
+  --brand-orange-500: #FF5A1F; /* Primary - identity colour */
+  --brand-orange-vibrant: #FF5A1F; /* CTAs - the identity orange is already vivid */
+  --brand-orange-600: #E6511C; /* Medium - deeper fill */
+  --brand-orange-700: #BF4417; /* Fill that carries white text - 5.18 on #fff */
+  --brand-orange-800: #B33F16; /* Text on a light ground - 5.18 on cream, 5.77 on #fff */
   
   /* Semantic Brand Aliases.
 
      These are IDENTITY colours. None of them may carry text, and the comment
      that used to sit here said the opposite - "WCAG AA where used with white
-     text" - which is not true of any of them. Measured, white text on each:
+     text" - which is not true of any of them. Measured, white text on each
+     (#FF5A1F ramp):
 
-       --brand-headline  / 500  #FF7A33  2.60
-       --brand-secondary / 400  #FF8F4D  2.14
-       --brand-primary   / 700  #D35F1D  3.87   <- and 3.29 in light mode,
-                                                   where it resolves to #dd6e42
+       --brand-headline  / 500  #FF5A1F  3.12
+       --brand-secondary / 400  #FF8C62  2.29
+       --brand-primary   / 600  #E6511C  3.78
 
-     Nothing on the base ramp clears 4.5 under white until 800 (#C54E12, 4.70).
-     The false claim was load-bearing: it is why an active leaderboard tab, an
-     outline button's hover fill and the .bg-primary utility all put white text
-     on 3.87, and why the light theme had to be corrected separately in !195
-     while the dark theme was left as it was.
-
-     Use these for fills, borders, icons and the logotype - anywhere nothing has
-     to be read off the colour. When a fill has to carry text, use
-     --accent-fill-text-safe below. */
+     The identity steps are for fills, borders, icons and the logotype - things
+     seen, not read off. Every one of them must FAIL white text at AA: a fill
+     that carries text uses --accent-fill-text-safe below (800), and
+     e2e/accessibility.test.ts asserts --brand-primary stays below 4.5 in both
+     themes so the two roles can never quietly collapse into one. That is why
+     --brand-primary is 600 (3.78), NOT the text-safe 700 (5.18). The false "AA
+     where used with white text" claim was once load-bearing - it put white text
+     on 3.87 across an active leaderboard tab, an outline button's hover fill and
+     the .bg-primary utility - so the policy is enforced now by
+     accent-fill-policy.test.ts and brand-identity.test.ts, not by a comment. */
   --brand-headline: var(--brand-orange-500);
-  --brand-primary: var(--brand-orange-700);
+  --brand-primary: var(--brand-orange-600);
   --brand-secondary: var(--brand-orange-400);
   --brand-gradient: linear-gradient(135deg, var(--brand-orange-500) 0%, var(--brand-orange-600) 100%);
 
-  /* The accent fill that is allowed to carry white text, resolved PER THEME so
-     one unscoped rule is correct in both.
+  /* The accent fill that is allowed to carry white text, resolved so one
+     unscoped rule is correct in both themes.
 
      !195 introduced --accent-fill-on-light / --accent-text-on-light, and they
      do their job, but their name commits them to one theme: they are declared
@@ -162,13 +169,12 @@
      scoped to light, and the dark half of the same component is a separate edit
      that somebody has to remember. Nobody did, which is the defect this fixes.
 
-     This token carries the base (dark) value here and is redefined under
-     `body.theme-light` in _themes.css. The two ramps differ - base 700 is
-     #D35F1D where light 700 is #b9552d - so the safe step is not the same
-     number in each: 800 here at 4.70, 700 there at 4.77.
-
-     --accent-fill-on-light keeps working and keeps its value; light-scoped
-     rules already using it are correct and are left alone. */
+     Since row 12 both themes share ONE #FF5A1F ramp, so this token has the same
+     value everywhere: 800 (#B33F16), white text on it 5.77. It is still
+     redefined under `body.theme-light` in _themes.css - the policy test
+     (accent-fill-policy.test.ts) requires a definition wherever unscoped rules
+     apply, and the light redefinition keeps working via --accent-fill-on-light
+     (700, #BF4417, 5.18 under white). */
   --accent-fill-text-safe: var(--brand-orange-800);
 
   /* Cortex Brand Identity */
@@ -279,11 +285,18 @@
      TYPOGRAPHY
      ============================================================ */
   
-  /* Font Family */
-  --font-family-base: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 
-    'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 
+  /* Font Family.
+     Bound here at :root so BOTH themes inherit one typographic identity - the
+     theme blocks carry colour, not type (audit row 12). Manrope (UI) and
+     Fraunces (display) are the brand faces; Inter was only ever the :root
+     default that the light theme overrode, which made the wordmark a different
+     typeface in each theme. Manrope loads via Google Fonts (index.html);
+     Fraunces is self-hosted (@font-face in _base.css). */
+  --font-family-base: 'Manrope', system-ui, -apple-system, BlinkMacSystemFont,
+    'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans',
     'Droid Sans', 'Helvetica Neue', sans-serif;
-  --font-family-mono: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', 
+  --font-family-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --font-family-mono: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono',
     'Droid Sans Mono', 'Source Code Pro', monospace;
 
   /* Font Sizes */
