@@ -863,18 +863,18 @@ const Admin: React.FC = () => {
                                 e.currentTarget.blur();
                               }}
                             >
-                              <td className="col-title">
+                              <td className="col-title" data-label="Study">
                                 <div>
                                   <strong className="row-title">{opportunity.title}</strong>
                                   <small className="row-desc">{opportunity.purpose_one_liner}</small>
                                 </div>
                               </td>
-                              <td className="col-type">
+                              <td className="col-type" data-label="Type">
                                 <span className={`${getTypeBadgeClass(opportunity.type)} badge--${opportunity.type}`}>
                                   {getAdminTypeLabel(opportunity.type)}
                                 </span>
                               </td>
-                              <td className="col-status">
+                              <td className="col-status" data-label="Status">
                                 <span className={`admin-study-status admin-study-status--${opportunity.status}`}>
                                   {getDisplayStatus(opportunity.status)}
                                 </span>
@@ -886,7 +886,7 @@ const Admin: React.FC = () => {
                                   the same progress bar the old Booked cell drew plus the percentage.
                                   A study with no sessions (poll, survey, one-question) has no slots
                                   to recruit into, so it shows a dash rather than "0 / 0". */}
-                              <td className="col-recruitment">
+                              <td className="col-recruitment" data-label="Recruitment">
                                 {recruitment ? (
                                   <div className="admin-recruitment">
                                     <div className="admin-recruitment__top">
@@ -901,13 +901,13 @@ const Admin: React.FC = () => {
                                   <span className="admin-cell-empty">–</span>
                                 )}
                               </td>
-                              <td className="col-metric col-numeric">
+                              <td className="col-metric col-numeric" data-label="Clicks">
                                 {opportunity.clicks_total ?? 0}
                               </td>
                               {/* Next session / deadline: the soonest upcoming slot, else a future
                                   closing time, else "Completed" once every slot has passed. All
                                   from real fields - no invented session ordinal. */}
-                              <td className="col-next">
+                              <td className="col-next" data-label="Next / deadline">
                                 {milestone ? (
                                   <div className="admin-next">
                                     <span className="admin-next__date">
@@ -928,12 +928,12 @@ const Admin: React.FC = () => {
                                   <span className="admin-cell-empty">–</span>
                                 )}
                               </td>
-                              <td className="col-date">
+                              <td className="col-date" data-label="Created">
                                 <small className="admin-cell-metadata">
                                   {formatStudyDate(opportunity.created_at)}
                                 </small>
                               </td>
-                              <td className="col-actions">
+                              <td className="col-actions" data-label="Actions">
                                 <div className="admin-action-group">
                                   <button
                                     type="button"

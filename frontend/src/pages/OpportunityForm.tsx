@@ -4763,7 +4763,7 @@ const OpportunityForm: React.FC = () => {
 
           <div className="card shadow-sm border-0">
             <div className="card-header border-0 py-4">
-              <div className="d-flex align-items-center justify-content-between">
+              <div className="d-flex align-items-center justify-content-between form-edit-header">
                 <div>
                   <h1 className="mb-1 form-title form-title-lg">
                     {isEdit ? 'Edit Opportunity' : 'Create New Opportunity'}

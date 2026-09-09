@@ -253,10 +253,66 @@ test.describe('Accessibility Tests', () => {
     await page.goto('/admin');
     await page.waitForLoadState('load');
     await page.waitForTimeout(500);
-    
+
     const accessibilityScanResults = await new AxeBuilder({ page }).analyze();
-    
+
     expect(accessibilityScanResults.violations).toEqual([]);
+  });
+
+  // Audit row 14. At 390px the Research Studies table forced a ~530px document,
+  // so the row-action kebab sat off the right edge, unreachable. The fix reflows
+  // the table to cards below 768px. jsdom (the vitest suite) applies no CSS and
+  // the scans above run at 1280px, so this is the ONLY place the phone reflow
+  // can fail by name: it asserts the document does not scroll sideways and the
+  // actions cell stays within the viewport. Kept a layout assertion rather than
+  // only an axe pass because the regression is geometric, not an axe rule.
+  test('Admin dashboard fits a 390px phone with the row actions reachable', async ({ page }) => {
+    await page.route('**/api/me', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'admin-1',
+          name: 'Admin User',
+          email: 'admin@example.com',
+          role: 'researcher_admin',
+        }),
+      });
+    });
+    await page.route('**/api/dashboard', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/admin');
+    await page.waitForLoadState('load');
+    await page.waitForTimeout(500);
+
+    // The studies table must have reflowed to cards (a real table would carry
+    // its intrinsic min-width and re-open the horizontal scroll).
+    const actions = page.locator('.admin-data-table td.col-actions').first();
+    await expect(actions).toBeVisible();
+
+    const metrics = await page.evaluate(() => {
+      const de = document.documentElement;
+      const cell = document.querySelector('.admin-data-table td.col-actions');
+      const rect = cell?.getBoundingClientRect();
+      return {
+        scrollW: de.scrollWidth,
+        clientW: de.clientWidth,
+        actionsRight: rect ? rect.right : null,
+      };
+    });
+
+    // No horizontal document overflow - the "530px document at 390px" symptom.
+    expect(metrics.scrollW).toBeLessThanOrEqual(metrics.clientW + 1);
+    // The row actions are within the viewport, not off the right edge.
+    expect(metrics.actionsRight).not.toBeNull();
+    expect(metrics.actionsRight as number).toBeLessThanOrEqual(metrics.clientW + 1);
+
+    // The reflowed cards stay accessible at phone width.
+    const scan = await new AxeBuilder({ page }).analyze();
+    expect(scan.violations).toEqual([]);
   });
 
   test('Forms should be accessible', async ({ page }) => {

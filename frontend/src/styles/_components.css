@@ -2067,6 +2067,44 @@ body.landing-page .header .text-muted,
   outline-offset: var(--focus-outline-offset);
 }
 
+/* Row 14: the header collapses to one menu below 768px. Above it, the desktop
+   toolbar lays the controls out in a single row; below it, that toolbar is
+   hidden and every control lives inside one dropdown, reached from the menu
+   button. The two layouts are mutually exclusive so the a11y tree never
+   exposes both. Previously the toolbar was allowed to wrap, and at phone width
+   its second row landed on the logo mark and clipped it. */
+.header-actions--desktop {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-4);
+  flex-wrap: nowrap;
+}
+
+.header-actions--mobile {
+  display: none;
+  align-items: center;
+}
+
+.header-menu-trigger {
+  padding: var(--spacing-2);
+}
+
+@media (max-width: 767.98px) {
+  .header-actions--desktop {
+    display: none;
+  }
+
+  .header-actions--mobile {
+    display: flex;
+  }
+
+  /* The collapsed menu must never be wider than the viewport it opens over.
+     At 390px the profile dropdown used to open 345px wide and cover the page. */
+  .header .dropdown-menu {
+    max-width: calc(100vw - 2 * var(--spacing-4));
+  }
+}
+
 /* ============================================================
    SETTINGS PAGE
    ============================================================ */
@@ -3100,6 +3138,69 @@ body.admin-page .header .container {
   min-width: 200px;
 }
 
+/* ============================================================
+   ROW 14 - Research Studies table reflows to cards on phone.
+   Under `table-layout: fixed` the column min-widths force a ~530px
+   document at 390px, pushing the row actions (and the kebab) off the
+   right edge where they cannot be reached. Below 768px each row becomes
+   a card with its column name shown inline above the value, so nothing
+   is unreachable and the page stops forcing a horizontal scroll. The
+   breakpoint matches the header's collapse point. The label sits on its
+   own line above the value so cells that hold several nodes (status +
+   "Auto-closed", the recruitment ratio + bar) never misalign.
+   ============================================================ */
+@media (max-width: 767.98px) {
+  .admin-data-table,
+  .admin-data-table tbody,
+  .admin-data-table tr {
+    display: block;
+    width: 100%;
+  }
+
+  /* Every cell becomes a block, overriding the older phone rules that hid
+     columns 4-8 by :nth-child (which is what put the row actions out of
+     reach). !important beats those higher-specificity nth-child hides. */
+  .admin-data-table td {
+    display: block !important;
+    width: auto !important;
+    min-width: 0 !important;
+    padding: 0.4rem 0 !important;
+    text-align: left !important;
+    border: 0;
+  }
+
+  /* The column names move into each cell as data-label, so the header row is
+     redundant here. display:none rather than clip: a clipped header row keeps
+     its wide sort buttons in the layout and re-expands the document. */
+  .admin-data-table thead {
+    display: none;
+  }
+
+  .admin-data-table tr.admin-row-clickable {
+    border: 1px solid var(--border-subtle-current);
+    border-radius: var(--radius-md);
+    background: var(--surface-glass-current);
+    padding: var(--spacing-2) var(--spacing-3);
+    margin-bottom: var(--spacing-3);
+  }
+
+  .admin-data-table td::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 0.15rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  /* Actions: buttons and the kebab left-aligned beneath their label. */
+  .admin-data-table td.col-actions .admin-action-group {
+    justify-content: flex-start;
+  }
+}
+
 .row-title {
   color: #FFFFFF;
   font-weight: 600;
@@ -3628,15 +3729,19 @@ body.theme-dark .admin-data-table td.col-date {
     min-width: 150px;
     max-width: 40%;
   }
-  /* Hide less critical columns */
-  .admin-dashboard table.table-hover thead th:nth-child(4),
-  .admin-dashboard table.table-hover tbody td:nth-child(4),
-  .admin-dashboard table.table-hover thead th:nth-child(5),
-  .admin-dashboard table.table-hover tbody td:nth-child(5),
-  .admin-dashboard table.table-hover thead th:nth-child(6),
-  .admin-dashboard table.table-hover tbody td:nth-child(6),
-  .admin-dashboard table.table-hover thead th:nth-child(7),
-  .admin-dashboard table.table-hover tbody td:nth-child(7) {
+  /* Hide less critical columns. Scoped away from the Research Studies table
+     (.admin-data-table), which reflows to cards below 768px instead - without
+     :not() these fired at exactly 768.0px, one pixel above the card
+     breakpoint, hiding the studies columns while the table had not yet
+     reflowed. The Recent bookings table keeps this older treatment. */
+  .admin-dashboard table.table-hover:not(.admin-data-table) thead th:nth-child(4),
+  .admin-dashboard table.table-hover:not(.admin-data-table) tbody td:nth-child(4),
+  .admin-dashboard table.table-hover:not(.admin-data-table) thead th:nth-child(5),
+  .admin-dashboard table.table-hover:not(.admin-data-table) tbody td:nth-child(5),
+  .admin-dashboard table.table-hover:not(.admin-data-table) thead th:nth-child(6),
+  .admin-dashboard table.table-hover:not(.admin-data-table) tbody td:nth-child(6),
+  .admin-dashboard table.table-hover:not(.admin-data-table) thead th:nth-child(7),
+  .admin-dashboard table.table-hover:not(.admin-data-table) tbody td:nth-child(7) {
     display: none;
   }
   .admin-dashboard .table-responsive {
@@ -3647,8 +3752,11 @@ body.theme-dark .admin-data-table td.col-date {
 
 /* Extra small screens - show only essential columns */
 @media (max-width: 576px) {
-  .admin-dashboard table.table-hover thead th:nth-child(8),
-  .admin-dashboard table.table-hover tbody td:nth-child(8) {
+  /* Not the studies table: it reflows to cards and must keep its Actions
+     column (nth-child(8)) reachable - hiding it here is what made the row
+     actions unreachable on a phone. */
+  .admin-dashboard table.table-hover:not(.admin-data-table) thead th:nth-child(8),
+  .admin-dashboard table.table-hover:not(.admin-data-table) tbody td:nth-child(8) {
     display: none;
   }
   .admin-dashboard table.table-hover thead th,
@@ -5486,6 +5594,33 @@ body.theme-dark .legend-label-past {
   min-height: calc(100vh - 4rem);
   border-radius: 0;
   padding: 16px 40px 40px !important; /* Tighter top, uniform sides/bottom */
+}
+
+/* Row 14: the admin shell nests several padded cards (page container -> main
+   card -> tabs card -> card body). At 1440px that reads as generous breathing
+   room; at 390px the side paddings stacked to ~230px and squeezed the content
+   into ~160px, wrapping study titles one word per line. Trim the two widest
+   side paddings on phone so the cards use the viewport. Placed after the
+   !important base rule so it wins the cascade. */
+@media (max-width: 767.98px) {
+  .admin-card-main {
+    padding-left: var(--spacing-3) !important;
+    padding-right: var(--spacing-3) !important;
+  }
+
+  .admin-page-container {
+    padding-left: var(--spacing-3);
+    padding-right: var(--spacing-3);
+  }
+
+  /* This row carries Bootstrap's negative gutter margins and a width cap that,
+     with the trimmed container padding above, left an uneven right-hand gap.
+     Zero the gutters on phone so the cards sit symmetrically in the viewport. */
+  .row.admin-dashboard {
+    margin-left: 0;
+    margin-right: 0;
+    max-width: 100%;
+  }
 }
 
 /* Dashboard/Page Title - Large heading style */
@@ -9954,6 +10089,21 @@ body.theme-light .landing-tagline {
   margin-bottom: var(--spacing-3);
 }
 
+/* Row 14: on phone the title and the action buttons stack, so the buttons get
+   the full width and wrap within it. Kept on one space-between row they never
+   wrapped - they widened the document instead and pushed "Create Study" off the
+   edge. */
+@media (max-width: 767.98px) {
+  .admin-header-section {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .admin-table-actions {
+    justify-content: flex-start;
+  }
+}
+
 /* Admin stats grid */
 .admin-stats-grid {
   display: grid;
@@ -12346,6 +12496,22 @@ body.theme-light .btn-ghost-danger {
 
 .form-user-info-text {
   font-size: 0.9rem;
+}
+
+/* Row 14: the Edit Opportunity header packs the title, the Analytics button
+   and the signed-in user into one space-between row. At 390px they collided
+   (the button drew over the title) and the user chip overran the edge. Stack
+   them on phone so each keeps its own line and nothing overflows. */
+@media (max-width: 767.98px) {
+  .form-edit-header {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: var(--spacing-3);
+  }
+
+  .form-edit-header > div:last-child {
+    flex-wrap: wrap;
+  }
 }
 
 /* ============================================================

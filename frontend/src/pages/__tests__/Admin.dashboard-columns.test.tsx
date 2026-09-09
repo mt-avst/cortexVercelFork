@@ -184,3 +184,35 @@ describe('Research Studies table: Capacity and Booked said the same thing', () =
     expect(within(row as HTMLElement).getByText('2 / 3')).toBeInTheDocument();
   });
 });
+
+// The phone layout (audit row 14) reflows this table into cards below 768px,
+// showing each value under its column name. That name comes from the cell's
+// `data-label`, so a cell added or a label renamed without updating it would
+// leave a phone card field silently unlabelled. jsdom cannot see the CSS, so
+// this pins the labels as literals instead - it fails by name if the reflow's
+// labels drift from the columns.
+describe('Research Studies table: every body cell is labelled for the phone card reflow', () => {
+  it('gives each cell a data-label matching its column, in order', async () => {
+    renderAdmin();
+    const table = await findStudiesTable();
+    const row = (await within(table).findByText('Checkout usability test')).closest('tr');
+    expect(row).not.toBeNull();
+
+    const cells = Array.from((row as HTMLElement).querySelectorAll('td'));
+    expect(cells.length).toBeGreaterThan(0);
+    for (const td of cells) {
+      expect(td.getAttribute('data-label')?.trim()).toBeTruthy();
+    }
+
+    expect(cells.map((td) => td.getAttribute('data-label'))).toEqual([
+      'Study',
+      'Type',
+      'Status',
+      'Recruitment',
+      'Clicks',
+      'Next / deadline',
+      'Created',
+      'Actions',
+    ]);
+  });
+});
