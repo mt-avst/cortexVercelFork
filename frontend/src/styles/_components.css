@@ -9456,30 +9456,32 @@ body.theme-light .landing-page-wrapper {
   display: none;
 }
 
-/* Horizontally centred on the right-hand door, sitting in the open space
-   above it. The graphic is absolutely positioned inside the hero stack,
-   whose left edge is the text column's (and the doors') shared left edge -
-   so all horizontal maths is relative to that one edge.
+/* Sits beside the copy, straddling the copy column's right edge in the open
+   space to its right. The graphic is absolutely positioned inside the hero
+   stack, whose left edge is the copy column's - so all horizontal maths is
+   relative to that one edge. The copy column's width is --copy-col-w (defined
+   on .landing-hero-stack), so its right edge sits at that distance from the
+   shared left edge; `left` centres the graphic (its own width --ng-w) on that
+   edge - half over the column's ragged-right whitespace, half in the free space
+   beyond. Anchoring to the same variable the column uses means the two cannot
+   drift apart; --ng-w binds the centring maths to the rendered width likewise.
 
-   The doors are a two-column 1fr/1fr grid, container width min(58vw, 680px),
-   column gap 1.5rem (--spacing-6). The right column therefore spans from
-   (W + gap)/2 to W, so its centre sits at (3W + gap)/4 from the shared left
-   edge. `left` places the graphic's own width (--ng-w) centred on that point.
-   Width is bound to one variable so the centring maths and the rendered width
-   cannot drift apart.
+   Re-anchored for the single-CTA hero (cto/AdaptaLabs#120): the previous maths
+   centred it on a right-hand door that no longer exists.
 
-   Breakpoint 1180px, not the old 1400px: at 1400 the graphic was hidden from
-   a real ~1280px laptop window, the machine it most needed to work on. Below
-   1180 the doors narrow and the graphic would crowd the copy, so it stays
-   hidden there. Verified by DOM measurement at 1281px: graphic centre lands
-   on the right door's centre, clear of both the copy and the doors. */
-@media (min-width: 1180px) {
+   Breakpoint 900px, not the old 1180: it now shows on narrower laptop and
+   tablet-landscape windows, not just wide ones. It stays hidden below 900
+   because that is where its right edge would clip past the viewport (measured:
+   ~2px over at 850, ~46px over at 800), never on mobile. Verified by DOM
+   measurement across 900-1440px: the graphic clears the copy, the CTA and the
+   section below. */
+@media (min-width: 900px) {
   .landing-node-graphic {
     --ng-w: min(23.5vw, 337px);
     display: block;
     position: absolute;
     top: 4.5rem;
-    left: calc((3 * min(58vw, 680px) + 1.5rem) / 4 - var(--ng-w) / 2);
+    left: calc(var(--copy-col-w) - var(--ng-w) / 2);
     width: var(--ng-w);
     height: auto;
     z-index: 0;
@@ -9531,8 +9533,11 @@ body.theme-light .landing-page-wrapper {
   z-index: 10;
   text-align: left;
   width: 100%;
-  /* Content-sized column, not the full container width */
-  max-width: min(85vw, 36rem);
+  /* Content-sized column, not the full container width. Exposed as a variable
+     so the node graphic can anchor to this exact right edge without hardcoding
+     the same value (see .landing-node-graphic). */
+  --copy-col-w: min(85vw, 36rem);
+  max-width: var(--copy-col-w);
   margin-left: var(--hero-inset);
   padding: 2rem 0;
 }
