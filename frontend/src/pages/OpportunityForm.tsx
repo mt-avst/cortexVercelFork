@@ -266,7 +266,11 @@ export const FIELD_LOCATIONS: Record<string, { tab: number; control?: string }> 
     control: 'inline_survey_duration_minutes'
   },
   inline_survey_consent_text: { tab: 4, control: 'inline_survey_consent_text-heading' },
-  moderated_consent_text: { tab: 4, control: 'moderated_consent_text-heading' }
+  moderated_consent_text: { tab: 4, control: 'moderated_consent_text-heading' },
+  // Audit row 15: the Session Management step (tab 3 for test/interview). Like
+  // `inline_study_steps`, the slots are a list with no single input to land on,
+  // so the summary link lands on the step HEADING (id + tabIndex={-1}).
+  sessions: { tab: 3, control: 'sessions-heading' }
 };
 
 /**
@@ -1963,6 +1967,28 @@ const OpportunityForm: React.FC = () => {
         errors.external_link_optional =
           'Enter the link participants will follow to take part';
       }
+    } else if (
+      formData.status === 'published' &&
+      (formData.type === 'test' || formData.type === 'interview')
+    ) {
+      // Audit row 15: a live session or an interview is taken by BOOKING a slot.
+      // Published with none, it appears on the dashboard as LIVE and on the
+      // participant home as "Book a time" with nothing bookable behind it, and
+      // Review reports the study Completed. `sessions` holds the slots the
+      // author has added (temporary and persisted alike), so gate publish on
+      // there being at least one - which also flips the Session Management step
+      // off "Completed" while it is empty.
+      //
+      // ponytail: this gate is CLIENT-SIDE only. The server still permits a
+      //   direct-API publish of a slotless test/interview, because the wizard
+      //   writes slots AFTER the publish write, so a naive backend slot-gate
+      //   would reject the normal authoring flow. Server enforcement needs a
+      //   findPublishProblem branch + a commit reorder.
+      //   -> cto/AdaptaLabs#118
+      if (sessions.length === 0) {
+        errors.sessions =
+          'Add at least one session slot before publishing a live session or interview';
+      }
     }
 
     /*
@@ -2224,7 +2250,7 @@ const OpportunityForm: React.FC = () => {
     // `lastAnnouncedStep` guard, not this. The memo earns its place on the
     // renders driven by other state - `validationErrors`, `activeTab`,
     // `saving`, `sessions`, `refusalCount` - which is most of them.
-  }, [formData, deliveryMode, studyIsReadOnly, hasLinkedStudy, studyMissing]);
+  }, [formData, deliveryMode, studyIsReadOnly, hasLinkedStudy, studyMissing, sessions]);
 
   /**
    * The same rules, run for the same reason they have always been run: a save
@@ -5279,7 +5305,7 @@ const OpportunityForm: React.FC = () => {
                       <div className="form-section mb-5">
                         <div className="d-flex align-items-center mb-4 pb-3" style={{ borderBottom: 'none' }}>
                           <div>
-                            <h2 className="h4 mb-1 section-title" style={{ fontSize: '1.5rem', lineHeight: '1.3', fontWeight: '600' }}>Session Management</h2>
+                            <h2 id="sessions-heading" tabIndex={-1} className="h4 mb-1 section-title" style={{ fontSize: '1.5rem', lineHeight: '1.3', fontWeight: '600' }}>Session Management</h2>
                             <p className="mb-0 section-description" style={{ fontSize: '0.95rem' }}>
                               Create time slots for participants to book
                             </p>
