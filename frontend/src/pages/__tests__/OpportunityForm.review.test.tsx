@@ -7,6 +7,7 @@ import OpportunityForm from '../OpportunityForm';
 import { createOpportunity, createSessions, getOpportunity, updateOpportunity } from '../../api/client';
 import { PUBLISH_PROBLEM_MESSAGES } from '@shared/firsthand/publish-readiness';
 import { EXTERNAL_LINK_PROTOCOL_MESSAGE } from '@shared/firsthand/url-safety';
+import { summaryLinkFor } from './helpers/error-summary';
 import {
   errorSummary,
   inlineErrorText,
@@ -494,6 +495,76 @@ describe('a publish that would be refused is previewed, never blocked', () => {
     // The server is the authority on this, and a disabled button that is wrong
     // is unrecoverable: the author cannot press it to find out why.
     expect(commitControl()).toBeEnabled();
+  });
+});
+
+describe('publishing a live session or interview needs at least one slot (audit row 15)', () => {
+  it.each(['test', 'interview'])(
+    'refuses to publish a slotless %s, naming the Session Management step',
+    (type) => {
+      renderCreate();
+      fillBasics(type);
+      walkForward();
+      setStatus('published');
+
+      // No slot confirmed on the Session Management step. Publishing here would
+      // put "Book a time" on the participant home with nothing to book.
+      fireEvent.click(commitControl() as HTMLElement);
+
+      expect(vi.mocked(createOpportunity)).not.toHaveBeenCalled();
+      expect(
+        screen.getByText(
+          'Add at least one session slot before publishing a live session or interview'
+        )
+      ).toBeInTheDocument();
+    }
+  );
+
+  it('the refusal summary link lands focus on the Session Management heading', async () => {
+    // Guards the FIELD_LOCATIONS control id against a silent typo: focus() on an
+    // id nothing renders throws nothing and lands on document.body, and every
+    // other test would still pass.
+    renderCreate();
+    fillBasics('test');
+    walkForward();
+    setStatus('published');
+    fireEvent.click(commitControl() as HTMLElement);
+
+    fireEvent.click(summaryLinkFor('sessions'));
+
+    await waitFor(() =>
+      expect(document.activeElement).toBe(document.getElementById('sessions-heading'))
+    );
+  });
+
+  it('flips the Session Management step off "Completed" while it is empty and publishing', () => {
+    // The a19 defect: Review reported the study Completed on an empty study.
+    renderCreate();
+    fillBasics('test');
+    walkForward();
+    setStatus('published');
+
+    const sessionStep = strip().find((step) =>
+      /Session Management/.test(step.textContent ?? '')
+    ) as HTMLElement;
+    expect(sessionStep.textContent).toMatch(/Needs attention/i);
+    expect(sessionStep.textContent).not.toMatch(/Completed/i);
+  });
+
+  it('allows a slotless live session to be saved as a DRAFT - the gate is about publishing', async () => {
+    renderCreate();
+    fillBasics('test');
+    walkForward();
+    // status stays draft.
+
+    fireEvent.click(commitControl() as HTMLElement);
+
+    await waitFor(() => expect(vi.mocked(createOpportunity)).toHaveBeenCalledTimes(1));
+    expect(
+      screen.queryByText(
+        'Add at least one session slot before publishing a live session or interview'
+      )
+    ).not.toBeInTheDocument();
   });
 });
 
