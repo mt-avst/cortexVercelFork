@@ -30,7 +30,7 @@ describe('choosing an arm', () => {
     const { onChange } = renderChoice({ value: 'copy' });
 
     fireEvent.click(
-      screen.getByRole('radio', { name: 'Create questions for this opportunity' })
+      screen.getByRole('radio', { name: 'Create questions for this study' })
     );
 
     expect(onChange).toHaveBeenCalledWith('blank');
@@ -67,7 +67,7 @@ describe('choosing an arm', () => {
     renderChoice();
 
     const blank = screen.getByRole('radio', {
-      name: 'Create questions for this opportunity'
+      name: 'Create questions for this study'
     }) as HTMLInputElement;
     const copy = screen.getByRole('radio', {
       name: /Start from an existing set of questions/

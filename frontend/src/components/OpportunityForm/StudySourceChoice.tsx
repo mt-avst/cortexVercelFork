@@ -56,7 +56,7 @@ const StudySourceChoice: React.FC<StudySourceChoiceProps> = ({
         onChange={() => onChange('blank')}
       />
       <label className="form-check-label" htmlFor={`${idPrefix}_source_blank`}>
-        Create {noun}s for this opportunity
+        Create {noun}s for this study
       </label>
     </div>
 

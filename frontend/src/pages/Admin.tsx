@@ -502,7 +502,7 @@ const Admin: React.FC = () => {
                           {dashboardStats.published_opportunities + dashboardStats.draft_opportunities}
                         </h2>
                         <small className="stat-subtitle">
-                          {dashboardStats.published_opportunities} live · {dashboardStats.draft_opportunities} draft
+                          {dashboardStats.published_opportunities} published · {dashboardStats.draft_opportunities} draft
                         </small>
                       </div>
                     </div>
@@ -547,7 +547,7 @@ const Admin: React.FC = () => {
                           </div>
                         </div>
                         <h2 className="mb-0 stat-value">{dashboardStats.available_slots}</h2>
-                        <small className="stat-subtitle">Across all live studies</small>
+                        <small className="stat-subtitle">Across all published studies</small>
                       </div>
                     </div>
                   </div>
@@ -857,7 +857,7 @@ const Admin: React.FC = () => {
                                  carries an aria-label, and axe reports the combination as
                                  presentation-role-conflict. It is a real row, so it keeps
                                  the implicit row role. */
-                              aria-label={`Opportunity: ${opportunity.title}`}
+                              aria-label={`Study: ${opportunity.title}`}
                               onFocus={(e) => {
                                 // Prevent focus on table rows
                                 e.currentTarget.blur();

@@ -233,7 +233,7 @@ export const getOpportunity = async (id: string, params?: { _t?: number }): Prom
     // If API returns array, take the first item (or find by ID)
     const opportunity = data.find((opp: Opportunity) => opp.id === id) || data[0];
     if (!opportunity) {
-      throw new Error('Opportunity not found');
+      throw new Error('Study not found');
     }
     return opportunity;
   }

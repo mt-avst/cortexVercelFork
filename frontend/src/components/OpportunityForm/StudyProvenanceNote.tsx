@@ -45,7 +45,7 @@ const StudyProvenanceNote: React.FC<StudyProvenanceNoteProps> = ({
         Copied from{' '}
         {title ? <strong>{title}</strong> : <span>a set that no longer exists</span>}
         {when ? ` on ${when}` : ''}. Later changes to the original will not affect
-        this opportunity, and changes you make here will not affect the original.
+        this study, and changes you make here will not affect the original.
       </div>
       {onChooseAnother && (
         <button

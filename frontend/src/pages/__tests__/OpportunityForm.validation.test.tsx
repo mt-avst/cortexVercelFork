@@ -119,7 +119,7 @@ const submitFromReview = (status?: 'draft' | 'published') => {
   if (status) {
     setStatus(status);
   }
-  fireEvent.click(screen.getByRole('button', { name: /^Create opportunity$/ }));
+  fireEvent.click(screen.getByRole('button', { name: /^Create study$/ }));
 };
 
 /**
@@ -254,7 +254,7 @@ describe('Continue can never pass what Submit refuses', () => {
       screen.getByRole('navigation', { name: 'Form steps' })
     ).getAllByRole('button');
     fireEvent.click(strip[strip.length - 1]);
-    fireEvent.click(screen.getByRole('button', { name: /^Create opportunity$/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Create study$/ }));
     const submitKeys = summarisedErrorKeys();
 
     // Non-vacuous by construction: a fixture that produced NO errors would make
@@ -364,7 +364,7 @@ describe('the error summary is reachable, and says one thing per problem', () =>
       target: { value: 'specific' },
     });
     fireEvent.click(strip[strip.length - 1]);
-    fireEvent.click(screen.getByRole('button', { name: /^Create opportunity$/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Create study$/ }));
   };
 
   it('takes focus when it appears, so a refusal is not announced to nobody', () => {
@@ -385,7 +385,7 @@ describe('the error summary is reachable, and says one thing per problem', () =>
       screen.getByRole('navigation', { name: 'Form steps' })
     ).getAllByRole('button');
     fireEvent.click(strip[strip.length - 1]);
-    fireEvent.click(screen.getByRole('button', { name: /^Create opportunity$/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Create study$/ }));
 
     expect(document.activeElement).toBe(errorSummary());
   });
@@ -624,7 +624,7 @@ describe('a refusal preserves every keystroke', () => {
     });
 
     fireEvent.click(strip[strip.length - 1]);
-    fireEvent.click(screen.getByRole('button', { name: /^Create opportunity$/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Create study$/ }));
 
     expect(summarisedErrorKeys()).toEqual(['title']);
 
@@ -675,7 +675,7 @@ describe('a summary link lands on the item it names', () => {
     fireEvent.click(await screen.findByRole('button', { name: /^Add question$/i }));
 
     walkToReview();
-    fireEvent.click(screen.getByRole('button', { name: /^Create opportunity$/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Create study$/ }));
   };
 
   it('numbers the question in the message, so a list of them is readable', async () => {
@@ -811,7 +811,7 @@ describe('a per-item message renumbers when its item moves', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Add question$/i }));
 
     walkToReview();
-    fireEvent.click(screen.getByRole('button', { name: /^Create opportunity$/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Create study$/ }));
   };
 
   it('numbers it from the live position, not from where it was when it failed', async () => {

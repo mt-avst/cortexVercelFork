@@ -180,7 +180,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
     } catch (err: unknown) {
       const axiosError = err as { response?: { status?: number } };
       if (axiosError.response?.status === 403) {
-        setError('You do not have permission to view analytics for this opportunity');
+        setError('You do not have permission to view analytics for this study');
       }
     } finally {
       setLoadingAnalytics(false);
@@ -258,7 +258,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
 
       setSurveyResultsError(
         response?.status === 403
-          ? 'Only the opportunity owner can view these responses'
+          ? 'Only the study owner can view these responses'
           : yourOwnReadsAreRunning
             ? 'You already have responses loading. Wait for those to finish, then try again.'
             : busy
@@ -284,7 +284,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
       const response = (err as { response?: { status?: number } }).response;
       setBookingsError(
         response?.status === 403
-          ? 'Only the opportunity owner can view its participants'
+          ? 'Only the study owner can view its participants'
           : 'Could not load the participants'
       );
       setBookings([]);
@@ -317,9 +317,9 @@ const OpportunityAnalyticsPage: React.FC = () => {
     } catch (err: unknown) {
       const axiosError = err as { response?: { status?: number } };
       if (axiosError.response?.status === 404) {
-        setError('Opportunity not found');
+        setError('Study not found');
       } else if (axiosError.response?.status === 403) {
-        setError('You do not have permission to view analytics for this opportunity');
+        setError('You do not have permission to view analytics for this study');
       } else {
         setError('Failed to load analytics');
       }
@@ -458,7 +458,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
             </button>
             <ErrorState 
               title="Unable to Load Analytics"
-              message={error || 'Opportunity not found'}
+              message={error || 'Study not found'}
               onAction={() => loadData()}
               actionLabel="Retry"
             />

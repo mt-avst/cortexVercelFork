@@ -203,7 +203,7 @@ const walkToReview = () => {
  * Review is where every save happens now (C3), so this always walks whatever
  * distance is left via `walkToReview` before clicking the terminal control.
  */
-const submitFromLastStep = (name: RegExp = /^(Create opportunity|Save changes)$/) => {
+const submitFromLastStep = (name: RegExp = /^(Create study|Save changes)$/) => {
   walkToReview();
   fireEvent.click(screen.getByRole('button', { name }));
 };
@@ -952,7 +952,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     await screen.findByText(/Copied from/i);
 
     fireEvent.click(
-      screen.getByRole('radio', { name: /Create tasks for this opportunity/i })
+      screen.getByRole('radio', { name: /Create tasks for this study/i })
     );
 
     await openAllCards();
@@ -1016,7 +1016,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     // Not locked to a chooser: the source choice is offered and writing them
     // here is the default, exactly as on create.
     expect(
-      await screen.findByRole('radio', { name: /Create tasks for this opportunity/i })
+      await screen.findByRole('radio', { name: /Create tasks for this study/i })
     ).toBeChecked();
     expect(
       screen.getByRole('radio', { name: /Start from an existing task list/i })
@@ -1071,7 +1071,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     fireEvent.click(await screen.findByRole('button', { name: /^Start from this Demo Study$/ }));
     await screen.findByText(/Copied from/i);
     fireEvent.click(
-      screen.getByRole('radio', { name: /Create tasks for this opportunity/i })
+      screen.getByRole('radio', { name: /Create tasks for this study/i })
     );
 
     expect(screen.getByRole('button', { name: /Save Changes/i })).toBeInTheDocument();
@@ -1337,7 +1337,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     selectType('unmoderated');
 
     fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
-    await screen.findByRole('radio', { name: /Create tasks for this opportunity/i });
+    await screen.findByRole('radio', { name: /Create tasks for this study/i });
 
     expect(vi.mocked(getFirstHandStudies)).not.toHaveBeenCalled();
   });
@@ -1380,7 +1380,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       // The blank arm is selected, not the copy arm, and there is no leftover
       // provenance note naming a task list this survey never came from.
       expect(
-        await screen.findByRole('radio', { name: /Create questions for this opportunity/i })
+        await screen.findByRole('radio', { name: /Create questions for this study/i })
       ).toBeChecked();
       expect(screen.queryByText(/Copied from/i)).toBeNull();
 
@@ -1428,7 +1428,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
 
       expect(
-        await screen.findByRole('radio', { name: /Create tasks for this opportunity/i })
+        await screen.findByRole('radio', { name: /Create tasks for this study/i })
       ).toBeChecked();
       expect(screen.queryByText(/Copied from/i)).toBeNull();
 
@@ -1470,7 +1470,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
 
       expect(
-        await screen.findByRole('radio', { name: /Create tasks for this opportunity/i })
+        await screen.findByRole('radio', { name: /Create tasks for this study/i })
       ).toBeChecked();
       expect(screen.queryByText(/Copied from/i)).toBeNull();
     });

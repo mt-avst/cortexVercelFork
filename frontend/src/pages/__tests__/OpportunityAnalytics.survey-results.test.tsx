@@ -265,7 +265,7 @@ describe('reading the answers', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Responses' }));
 
     expect(
-      await screen.findByText(/Only the opportunity owner can view these responses/i)
+      await screen.findByText(/Only the study owner can view these responses/i)
     ).toBeTruthy();
     expect(screen.queryByText(/participants/)).toBeNull();
   });

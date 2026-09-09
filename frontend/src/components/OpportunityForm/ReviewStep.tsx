@@ -104,7 +104,7 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
       <p className="mb-0 section-description">
         {isEdit
           ? 'Check everything before you save. Any change you have not already saved is still only on this screen.'
-          : 'Your last chance to check everything before the opportunity is created. Nothing has been saved yet.'}
+          : 'Your last chance to check everything before the study is created. Nothing has been saved yet.'}
       </p>
     </div>
 
@@ -187,7 +187,7 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
         {status === 'draft' ? (
           <strong className="text-warning">⚠️ DRAFT - Not visible to users. Change to Published to make visible.</strong>
         ) : (
-          'Published opportunities are visible to all users'
+          'Published studies are visible to all users'
         )}
       </div>
       <select
@@ -228,7 +228,7 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
         <div className="card-body">
           <h2 className="h6 mb-2">Share this study</h2>
           <p className="text-muted mb-0" style={{ fontSize: '0.875rem' }}>
-            Publish to share this link. Once this opportunity is published,
+            Publish to share this link. Once this study is published,
             its participant link appears here to copy.
           </p>
         </div>

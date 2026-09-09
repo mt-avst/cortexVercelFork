@@ -233,12 +233,12 @@ export const getAdminTypeLabel = (type: Opportunity['type']): string => {
  * derived RECRUITING/RUNNING/ANALYSIS state, which the wireframe showed but
  * which no field supports without inventing lifecycle semantics.
  */
-export const getDisplayStatus = (status: Opportunity['status']): 'DRAFT' | 'LIVE' | 'CLOSED' => {
+export const getDisplayStatus = (status: Opportunity['status']): 'DRAFT' | 'PUBLISHED' | 'CLOSED' => {
   switch (status) {
     case 'draft':
       return 'DRAFT';
     case 'published':
-      return 'LIVE';
+      return 'PUBLISHED';
     case 'closed':
       return 'CLOSED';
     default:

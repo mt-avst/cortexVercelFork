@@ -103,8 +103,8 @@ export type ParticipantPreview =
  * the frame gets a placeholder and the questions - the thing being previewed -
  * get the author's own words.
  */
-const PLACEHOLDER_TITLE = 'Untitled opportunity';
-const PLACEHOLDER_INTRO = 'This opportunity does not have a summary yet.';
+const PLACEHOLDER_TITLE = 'Untitled study';
+const PLACEHOLDER_INTRO = 'This study does not have a summary yet.';
 /**
  * Consent gets a visibly-unreal stand-in rather than the default wording.
  *

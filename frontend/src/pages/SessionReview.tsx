@@ -20,7 +20,7 @@ function errorMessageForStatus(status: number | undefined): string {
     return 'Session outputs are temporarily unavailable. Try again shortly.';
   }
   if (status === 403) {
-    return 'You do not have permission to review sessions for this opportunity.';
+    return 'You do not have permission to review sessions for this study.';
   }
   return 'Failed to load session outputs.';
 }

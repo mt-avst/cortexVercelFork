@@ -221,7 +221,7 @@ const PendingApprovals: React.FC = () => {
                 <div className="pending-approvals__grid">
                   <div>
                     <p className="pending-approvals__detail-title">Session Details</p>
-                    <p className="pending-approvals__detail"><strong>Opportunity:</strong> {approval.opportunity_title}</p>
+                    <p className="pending-approvals__detail"><strong>Study:</strong> {approval.opportunity_title}</p>
                     <p className="pending-approvals__detail"><strong>Type:</strong> {approval.opportunity_type}</p>
                     <p className="pending-approvals__detail"><strong>Start:</strong> {formatDate(approval.start_time)}</p>
                     <p className="pending-approvals__detail"><strong>End:</strong> {formatDate(approval.end_time)}</p>

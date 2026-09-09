@@ -331,7 +331,7 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
           <div className="alert alert-info py-2 px-3 mb-4" style={{ fontSize: '0.875rem' }}>
             These questions belong to another researcher, so they are not
             editable here - and the Task Lists area applies the same rule. Ask
-            their owner to change them, or create a new opportunity and start
+            their owner to change them, or create a new study and start
             from a copy of them.
           </div>
         )}

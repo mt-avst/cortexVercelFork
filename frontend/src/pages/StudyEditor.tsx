@@ -492,7 +492,7 @@ export function StudyEditorForm({
     // task study save with no task-page URL unless it was acknowledged.
     if (missingTaskPageUrl && !acknowledgedNoTaskPageUrl) {
       setError(
-        'This task list has task steps but no task page URL. Add one, or confirm it is a survey-style task list.'
+        'This task list has tasks but no task page URL. Add one, or confirm it is a survey-style task list.'
       );
       return;
     }
@@ -768,25 +768,25 @@ export function StudyEditorForm({
                 value={status}
               >
                 <option value="draft">draft</option>
-                <option value="launched">launched</option>
+                <option value="launched">published</option>
                 <option value="archived">archived</option>
               </select>
             </div>
           </div>
         </div>
 
-        <h2 className="h5 mt-4 mb-3">Steps</h2>
+        <h2 className="h5 mt-4 mb-3">Tasks</h2>
 
         <ol className="list-unstyled">
           {steps.map((step, index) => (
             <li className="mb-4" key={index}>
               <Card padding="md" hoverable={false}>
                 <CardBody>
-                  <p className="fw-semibold mb-3">Step {step.order}</p>
+                  <p className="fw-semibold mb-3">Task {step.order}</p>
 
                   <div className="form-group mb-3">
                     <label className="form-label" htmlFor={`step-id-${index}`}>
-                      Step id
+                      Task id
                     </label>
                     <input
                       className="form-control"
@@ -999,7 +999,7 @@ export function StudyEditorForm({
                       onClick={() => removeStep(index)}
                       type="button"
                     >
-                      Remove step
+                      Remove task
                     </Button>
                   ) : null}
                 </CardBody>
@@ -1035,7 +1035,7 @@ export function StudyEditorForm({
 
         <div className="d-flex gap-2">
           <Button variant="secondary" onClick={addStep} type="button">
-            Add step
+            Add task
           </Button>
           <Button
             variant="primary"
@@ -1143,8 +1143,8 @@ const StudyEditor: React.FC = () => {
       </h1>
       <p className="text-muted mb-4">
         {isEdit
-          ? 'Changes apply to new participant sessions. Sessions already in flight keep their original step payload.'
-          : 'Define the intro copy, consent and step sequence. An unmoderated opportunity references the task list id once published.'}
+          ? 'Changes apply to new participant sessions. Sessions already in flight keep their original task payload.'
+          : 'Define the intro copy, consent and task sequence. An unmoderated study references the task list id once published.'}
       </p>
 
       {isEdit && loadingStudy ? (

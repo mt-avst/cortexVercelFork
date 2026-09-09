@@ -92,7 +92,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
               Basic Information
             </h2>
             <p className="mb-0 section-description" style={{ fontSize: '0.95rem' }}>
-              Configure the opportunity type and basic details
+              Configure the study type and basic details
             </p>
           </div>
         </div>
@@ -226,7 +226,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                 Title *
               </label>
               <div id="title-help" className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4' }}>
-                Clear, concise title that describes the opportunity (4-140 characters)
+                Clear, concise title that describes the study (4-140 characters)
               </div>
               <input
                 type="text"

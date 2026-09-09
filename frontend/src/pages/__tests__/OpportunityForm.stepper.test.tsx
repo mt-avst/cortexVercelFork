@@ -421,7 +421,7 @@ describe('the strip reports steps other than the first', () => {
     fireEvent.change(within(screen.getByTestId('review-step')).getByRole('combobox'), {
       target: { value: 'published' }
     });
-    fireEvent.click(screen.getByRole('button', { name: /Create Opportunity/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Create study/i }));
 
     // Publishing an unmoderated study with no tasks fails on step 3.
     expect(steps()[2]).toHaveTextContent('Needs attention');
@@ -554,7 +554,7 @@ describe('the strip reports steps other than the first', () => {
     // does not, and that is the half that strands. The submit control lives
     // on Review now, one step further on than Consent.
     fireEvent.click(screen.getByRole('button', { name: 'Continue: Review' }));
-    fireEvent.click(screen.getByRole('button', { name: /Create Opportunity/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Create study/i }));
     expect(steps()[2]).toHaveTextContent('Needs attention');
 
     // Switching delivery mode discards the questions and replaces step 3 with
@@ -777,7 +777,7 @@ describe('exiting the form', () => {
         </Routes>
       </MemoryRouter>
     );
-    await screen.findByText(/Failed to load opportunity/i);
+    await screen.findByText(/Failed to load study/i);
 
     typeInto(/^Title/i, 'Typed over a form that never loaded');
     fireEvent.click(screen.getByRole('button', { name: /Exit to dashboard/i }));
