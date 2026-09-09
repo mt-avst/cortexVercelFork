@@ -3,7 +3,6 @@ import { oidcLogin } from '../api/client';
 import OrganicNeuralBackground from '../components/OrganicNeuralBackground';
 import { useTheme } from '../contexts/ThemeContext';
 import SalesSections from '../components/SalesSections';
-import { DoorCard, OPENING_DOORS } from '../components/DoorCard';
 
 /**
  * Landing Page Component - Adaptavist Cortex
@@ -11,8 +10,11 @@ import { DoorCard, OPENING_DOORS } from '../components/DoorCard';
  * Rendered only while signed out (Home.tsx), so its whole audience is cold or
  * returning-but-signed-out. The first viewport therefore has to answer, in
  * order: what is this, is it for me, what do I do. The lockup answers the
- * first, the proposition the second, and the two doors the third. Nothing a
- * cold visitor needs sits behind a scroll.
+ * first, the proposition the second, and a single "Access Cortex" CTA the
+ * third. Signed out, every route in leads to the same sign-in, so the hero
+ * offers one way in rather than forcing an audience choice with no payoff; the
+ * two-audience split lives in the closing doors at the foot of the narrative,
+ * after the pitch. Nothing a cold visitor needs sits behind a scroll.
  *
  * Full-screen neural cloud background, responsive typography lockup, glass UI.
  * All styles use CSS classes from _components.css for proper theming.
@@ -35,7 +37,7 @@ const HERO_FIND_OUT: ReadonlyArray<string> = [
   'Where you say what you actually think.',
 ];
 
-const HERO_TAGLINE = 'Our collective intelligence';
+const HERO_TAGLINE = 'Cortex is our collective intelligence';
 
 const Landing: React.FC = memo(() => {
   const { theme } = useTheme();
@@ -115,32 +117,38 @@ const Landing: React.FC = memo(() => {
             </p>
             <p className="landing-tagline">{HERO_TAGLINE}</p>
           </div>
-        </div>
 
-        {/* The two doors, in the fold. Signed out, both lead to sign-in. */}
-        <div className="landing-doors sales-doors">
-          {OPENING_DOORS.map((door) => (
-            <DoorCard key={door.cta} door={door} onAccessCortex={handleLogin} isLoading={isLoading} />
-          ))}
+          {/* One primary way in. Lives inside the hero stack so it rides the
+              copy's left rail at every width. No scroll cue - the loop diagram
+              peeking above the fold carries the read, and the "See how it works"
+              label lives as the eyebrow over that section (SalesSections). */}
+          <div className="landing-cta-single">
+            <button
+              type="button"
+              className={`btn-power ${isLoading ? 'disabled' : ''}`}
+              onClick={handleLogin}
+              disabled={isLoading}
+              aria-busy={isLoading}
+              data-cta="access"
+            >
+              {googleLoading ? (
+                <span className="d-flex align-items-center gap-2">
+                  <span className="spinner-border spinner-border-sm" aria-hidden="true" />
+                  Connecting...
+                </span>
+              ) : (
+                <>
+                  Access Cortex
+                  <span className="btn-arrow" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M5 12H19M19 12L12 5M19 12L12 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
-
-        {/* Quiet route in for anyone who already knows which door is theirs */}
-        <button
-          type="button"
-          className="landing-signin-link"
-          onClick={handleLogin}
-          disabled={isLoading}
-          aria-busy={isLoading}
-        >
-          {googleLoading ? (
-            <span className="d-flex align-items-center gap-2">
-              <span className="spinner-border spinner-border-sm" aria-hidden="true" />
-              Connecting...
-            </span>
-          ) : (
-            'Already using Cortex? Sign in'
-          )}
-        </button>
 
       </div>
 

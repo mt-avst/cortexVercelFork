@@ -9859,111 +9859,43 @@ body.theme-light .landing-tagline {
   text-shadow: none;
 }
 
-/* Doors in the fold - their own object, not scaled to the copy column's
-   width. They share its left edge and run wider than it, into the space
-   the hard-left column freed up.
-   Carries .sales-doors too, so the margin needs both classes to outrank it */
-.landing-doors.sales-doors {
+/* Single primary CTA in the fold. Lives inside the hero
+   stack, so it inherits the copy column's left edge - no parallel inset to
+   drift off the spine. */
+.landing-cta-single {
   position: relative;
   z-index: 10;
-  width: 100%;
-  max-width: min(58vw, 680px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-3);
   margin-top: var(--spacing-6);
-  margin-left: var(--hero-inset);
-  text-align: left;
 }
 
-/* The door surface must hold up over the particle field */
-body.theme-dark .landing-doors .sales-door {
-  background: rgba(10, 10, 14, 0.82);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+/* Mav: lose the halo. The pill earns its place with colour and weight, not a
+   glow. Scoped to the landing CTA so the shared .btn-power is untouched
+   elsewhere. */
+.landing-cta-single .btn-power {
+  box-shadow: none;
 }
 
-body.theme-light .landing-doors .sales-door {
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-}
-
-/* Sign-in for the returning visitor - a text control, not a third orange
-   button. margin-left nets out its own left padding, so the link's TEXT
-   lines up with the shared edge, not the button's invisible hit-area. */
-.landing-signin-link {
-  appearance: none;
-  -webkit-appearance: none;
-  position: relative;
-  z-index: 10;
-  background: none;
-  border: none;
-  padding: 0.5rem 0.75rem;
-  margin-left: calc(var(--hero-inset) - 0.75rem);
-  margin-top: var(--spacing-5);
-  font-family: var(--font-family-base);
-  font-size: var(--font-size-small);
-  font-weight: 500;
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
-  cursor: pointer;
-  border-radius: 6px;
-  transition: color 0.2s ease;
-}
-
-body.theme-dark .landing-signin-link {
-  color: rgba(255, 255, 255, 0.72);
-  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
-}
-
-/* Soft backing so the underline does not fight the particle ring beneath it */
-body.theme-light .landing-signin-link {
-  color: #475569;
-  background: rgba(255, 255, 255, 0.78);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-}
-
-.landing-signin-link:hover {
-  color: var(--color-cortex-orange);
-}
-
-/* The light-theme orange is 3.1:1 on the backing; the darker one the tagline uses passes */
-body.theme-light .landing-signin-link:hover {
-  color: #C2410C;
-}
-
-.landing-signin-link:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--focus-ring);
-}
-
-/* Box-shadow rings vanish under forced colours; give the ring a real outline there */
-@media (forced-colors: active) {
-  .landing-signin-link:focus-visible {
-    outline: 2px solid CanvasText;
-    outline-offset: 2px;
-  }
-}
-
-.landing-signin-link:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+.landing-cta-single .btn-power:hover {
+  box-shadow: none;
 }
 
 /* Desktop: shift the whole hard-left column further right, about 2 inches
-   (192px) at typical laptop/desktop widths. Scoped to >=768px, where the
-   doors are already two-up and there is room - the tighter mobile/tablet
-   inset below is untouched. */
+   (192px) at typical laptop/desktop widths. Scoped to >=768px, where there
+   is room - the tighter mobile/tablet inset below is untouched. */
 @media (min-width: 768px) {
   .landing-layout-container {
     --hero-inset: clamp(11rem, 19vw, 17rem);
   }
 }
 
-/* Mobile: doors stack, so the fold scrolls - give the stack room to breathe.
-   The desktop asymmetry (narrow copy column, doors capped narrower still)
-   has no room to work with on a phone, so both widen back out - they keep
-   the shared left inset, but stop being deliberately narrower than the
-   viewport. */
+/* Mobile: give the hero stack room to breathe. The desktop asymmetry (narrow
+   copy column) has no room to work with on a phone, so the copy widens back
+   out - it keeps the shared left inset, but stops being deliberately narrower
+   than the viewport. */
 @media (max-width: 640px) {
   .landing-hero-stack {
     max-width: min(90vw, 600px);
@@ -9975,11 +9907,6 @@ body.theme-light .landing-signin-link:hover {
     width: 100vw;
     max-width: 100vw;
     height: min(75vh, 560px);
-  }
-
-  .landing-doors.sales-doors {
-    max-width: min(92vw, 960px);
-    margin-top: var(--spacing-4);
   }
 }
 
@@ -11542,6 +11469,14 @@ body.theme-light .col-actions .dropdown-menu .dropdown-divider {
 /* ============================================================
    LOOP - the feedback loop diagram beside its explanation
    ============================================================ */
+
+/* Section eyebrow over the loop - the base .sales-kicker with a touch wider
+   tracking and more air beneath, so it reads as the label for the whole block
+   and echoes the hero eyebrow's uppercase letterspacing. */
+.sales-loop-kicker {
+  letter-spacing: 0.16em;
+  margin-bottom: var(--spacing-5);
+}
 
 .sales-loop {
   display: grid;

@@ -2,12 +2,12 @@ import React from 'react';
 
 /**
  * The two entry doors, one per reader: a kicker naming the reader, a title
- * and a button. The hero shows the opening pair inside the first viewport, so
- * a cold visitor sees which door is theirs without scrolling; the proposition
- * above them does the explaining, so the doors carry no body copy. The closing
- * pair at the foot of the narrative is a short reprise. Signed out, both
- * routes lead to the same sign-in, so the labels carry the two-audience
- * framing and nothing else.
+ * and a button. They live only at the foot of the narrative now - the hero
+ * offers a single way in, because signed out both doors route to the same
+ * sign-in and the choice had no payoff before the pitch. Here, after the
+ * pitch, the two-audience framing is the point: the reader picks the door that
+ * is theirs. Signed out both still lead to the same sign-in, so the labels
+ * carry the framing and nothing else.
  */
 
 export type DoorId = 'access' | 'take-part';
@@ -19,21 +19,6 @@ export interface Door {
   /** Stable hook for tests and analytics, independent of the button's copy. */
   ctaId: DoorId;
 }
-
-export const OPENING_DOORS: ReadonlyArray<Door> = [
-  {
-    who: 'The people building it',
-    title: 'Stop guessing what people need',
-    cta: 'Run a study',
-    ctaId: 'access',
-  },
-  {
-    who: 'The people who’ll tell the truth about it',
-    title: 'Shape what you’ll be using next year',
-    cta: 'Take part',
-    ctaId: 'take-part',
-  },
-];
 
 export const CLOSING_DOORS: ReadonlyArray<Door> = [
   {
