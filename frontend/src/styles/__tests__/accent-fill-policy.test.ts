@@ -91,7 +91,7 @@ describe('accent fill policy', () => {
 
     expect(
       offenders,
-      `Use var(--accent-fill-text-safe) for a fill that carries text; it is defined in both themes and measures 4.77 light / 4.70 dark.\n  ${offenders.join('\n  ')}`
+      `Use var(--accent-fill-text-safe) for a fill that carries text; it is defined in both themes and measures 5.77 under white on the unified #FF5A1F ramp.\n  ${offenders.join('\n  ')}`
     ).toEqual([]);
   });
 

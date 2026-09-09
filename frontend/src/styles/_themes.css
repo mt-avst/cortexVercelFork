@@ -75,43 +75,34 @@ body.theme-light {
   --fs-ink: #14213d;
   --fs-muted: #5f6b7a;
   --fs-line: rgba(20, 33, 61, 0.12);
-  --fs-accent: #dd6e42;
-  --fs-accent-strong: #b9552d;
+  /* Accent folded into the one Cortex orange at row 12 (was a terracotta
+     scale). --fs-accent is the identity step, --fs-accent-strong the text-safe
+     fill step (700, #BF4417, 5.18 under white). */
+  --fs-accent: var(--brand-orange-500);
+  --fs-accent-strong: var(--brand-orange-700);
   --fs-success: #2f6f5e;
   --fs-danger: #a63d40;
   --fs-shadow: 0 24px 70px rgba(20, 33, 61, 0.08);
 
-  /* Typography — Manrope UI, Fraunces display (see _base.css h1–h3) */
-  --font-family-base: 'Manrope', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-family-display: 'Fraunces', Georgia, 'Times New Roman', serif;
-
-  /* Terracotta brand scale (aligned to FirstHand accent) */
-  --brand-orange-300: #f0b49a;
-  --brand-orange-400: #e89572;
-  --brand-orange-500: #dd6e42;
-  --brand-orange-vibrant: #d46032;
-  --brand-orange-600: #dd6e42;
-  --brand-orange-700: #b9552d;
-  --brand-orange-800: #9a4524;
+  /* Typography and the orange ramp are bound once at :root (see _tokens.css)
+     and shared by both themes since row 12 - the light block carries colour
+     roles only, below. */
 
   /* ------------------------------------------------------------------
      ACCESSIBLE ACCENT ROLES (light mode)
 
-     #dd6e42 - brand-orange-500, the identity colour - fails WCAG AA in
-     every text role it was being used in, measured in the live DOM:
-       white text ON it .................. 3.29  (needs 4.5)
-       it as text on the cream page ...... 2.95
-       it as text on a white card ........ 3.29
-     That hit the skip link (an accessibility feature failing contrast),
-     the active filter chip, the active leaderboard tab, leaderboard
-     scores and the hero italic.
+     brand-orange-500 - the identity colour, #FF5A1F since row 12 - fails
+     WCAG AA in every text role, measured against the light grounds:
+       white text ON it .................. 3.12  (needs 4.5)
+       it as text on the cream page ...... 2.80
+     That would hit the skip link, the active filter chip, the active
+     leaderboard tab, leaderboard scores and the hero italic.
 
-     The ramp already had passing steps - components were simply reaching
-     for 500. No new colours introduced:
-       800 as text on cream 5.80 / on white 6.46
-       700 under white text 4.77
-     500 stays exactly as it is for fills, borders, icons and the logo,
-     where nothing has to be read off it.
+     The ramp carries passing steps - reach for them by role, not 500:
+       800 (#B33F16) as text on cream 5.18 / on white 5.77
+       700 (#BF4417) under white text 5.18
+     500 stays for fills, borders, icons and the logo, where nothing has
+     to be read off it.
      ------------------------------------------------------------------ */
   --accent-text-on-light: var(--brand-orange-800);
   --accent-fill-on-light: var(--brand-orange-700);
@@ -186,8 +177,9 @@ body.theme-light {
   --text-on-dark: var(--fs-ink);
 
   /* Brand — headline navy; primary actions use ink; warm accent for emphasis.
-     --brand-primary is #dd6e42 here and cannot carry text either: white on it
-     is 3.29. Fills that carry text use --accent-fill-text-safe above. */
+     --brand-primary is the identity orange (#FF5A1F) here and cannot carry text
+     either: white on it is 3.12. Fills that carry text use
+     --accent-fill-text-safe above. */
   --brand-headline: var(--fs-ink);
   --brand-primary: var(--fs-accent);
   --brand-secondary: var(--fs-accent-strong);
@@ -209,7 +201,7 @@ body.theme-light {
 
   /* Focus — terracotta ring on navy-friendly field */
   --focus-ring: var(--fs-accent);
-  --focus-ring-color: rgba(221, 110, 66, 0.28);
+  --focus-ring-color: rgba(255, 90, 31, 0.28);
 
   /* Accent */
   --accent-coral: var(--fs-accent);
@@ -295,7 +287,7 @@ body.theme-light::before {
   width: 100%;
   height: 100%;
   background:
-    radial-gradient(circle at 50% 0%, rgba(221, 110, 66, 0.06) 0%, transparent 72%),
+    radial-gradient(circle at 50% 0%, rgba(255, 90, 31, 0.06) 0%, transparent 72%),
     radial-gradient(circle at 90% 25%, rgba(20, 33, 61, 0.04) 0%, transparent 48%),
     radial-gradient(circle at 10% 80%, rgba(255, 251, 246, 0.9) 0%, transparent 45%);
   pointer-events: none;
@@ -313,7 +305,7 @@ body.theme-light .momentum-card {
 }
 
 body.theme-light .card:hover {
-  border-color: rgba(221, 110, 66, 0.35);
+  border-color: rgba(255, 90, 31, 0.35);
   box-shadow: var(--shadow-card-hover);
 }
 
@@ -750,8 +742,8 @@ body.theme-light .filter-chip--all:hover {
 }
 
 body.theme-light .filter-chip--all.is-active {
-  /* was --brand-orange-600, which the light ramp aliases to 500 (#dd6e42):
-     white on it measures 3.29 against a 4.5 floor */
+  /* was --brand-orange-600, an identity step white text cannot sit on;
+     --accent-fill-on-light (700, #BF4417) carries white at 5.18 */
   background-color: var(--accent-fill-on-light);
   color: #FFFFFF;
   border-color: var(--accent-fill-on-light);
@@ -972,7 +964,7 @@ body.theme-light .admin-page-bg::before {
   width: 100%;
   height: 100%;
   background:
-    radial-gradient(circle at 50% 0%, rgba(221, 110, 66, 0.06) 0%, transparent 72%),
+    radial-gradient(circle at 50% 0%, rgba(255, 90, 31, 0.06) 0%, transparent 72%),
     radial-gradient(circle at 85% 30%, rgba(20, 33, 61, 0.035) 0%, transparent 50%);
   pointer-events: none;
   z-index: 0;
@@ -2880,8 +2872,8 @@ body.theme-dark .opportunity-form .btn-primary {
 }
 
 body.theme-dark .opportunity-form .btn-primary:hover {
-  background-color: #FF8F4D;
-  border-color: #FF8F4D;
+  background-color: var(--brand-orange-400);
+  border-color: var(--brand-orange-400);
 }
 
 body.theme-dark .opportunity-form .btn-success {
@@ -3461,14 +3453,14 @@ body.theme-dark .sales-section + .sales-section {
 
    These components take their colour from an unscoped rule in
    _components.css or _utilities.css, so in light mode they resolve to
-   --brand-orange-500 (#dd6e42), which fails WCAG AA as text on every
-   light surface this app paints:
-     cream page #f7f2ea 2.95 | listing #f8fafc 3.14 | card #fffbf6 3.19
+   --brand-orange-500 (#FF5A1F since row 12), which fails WCAG AA as text
+   on every light surface this app paints:
+     cream page #f7f2ea 2.80 | listing #f8fafc 2.98 | card #fffbf6 3.03
    Each moves to the ramp step documented under ACCESSIBLE ACCENT ROLES
-   at the top of this file - 800 where the colour IS the text (5.80 to
-   6.46 across those surfaces), 700 where white text sits on it (4.77).
-   500 keeps its job for fills, borders, icons and the logo, where
-   nothing has to be read off it.
+   at the top of this file - 800 (#B33F16) where the colour IS the text
+   (5.18 to 5.77 across those surfaces), 700 (#BF4417) where white text
+   sits on it (5.18). 500 keeps its job for fills, borders, icons and the
+   logo, where nothing has to be read off it.
 
    Deliberately not listed here, and still on 500:
      .cortex-brand-title, .landing-parent-brand  - logotype

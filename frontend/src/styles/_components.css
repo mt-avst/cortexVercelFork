@@ -1785,11 +1785,11 @@ body.theme-light .badge--question {
   /* An accessibility feature that failed contrast: white on --brand-primary
      resolves to 3.29 in light mode.
 
-     The fallback this used to carry said dark mode "already passes". It does
-     not - the fallback arm resolves to --brand-primary, which is #D35F1D there,
-     and white on it is 3.87. The light half was measured and the dark half was
-     assumed, on the skip link of all things. No fallback is needed now, because
-     --accent-fill-text-safe is defined in both themes. */
+     The fallback this used to carry said dark mode "already passes". It did
+     not - the fallback arm resolved to an identity step white text failed on.
+     No fallback is needed now: --accent-fill-text-safe is defined in both
+     themes, and since row 12 both resolve to the one 800 step (#B33F16, 5.77
+     under white). */
   background: var(--accent-fill-text-safe);
   color: #FFFFFF;
   padding: var(--spacing-2) var(--spacing-4);
@@ -6980,11 +6980,11 @@ body.theme-light .btn-booking-join {
    that canvas before scanning in dark mode; this is the violation doing so
    uncovered.
 
-   800 rather than 700, because the two themes carry different ramps: the light
-   700 is #b9552d, the base 700 is #D35F1D, and it is the base one that applies
-   here. Note that `--brand-primary` resolves to that same base 700 and is
-   labelled in _tokens.css as "WCAG AA where used with white text", which is not
-   true of it - 3.87. Only this button is corrected here; the token's claim is
+   800 rather than 700: both are text-safe on the unified #FF5A1F ramp (700
+   #BF4417 5.18, 800 #B33F16 5.77 under white), and this fill takes the 800 step
+   for headroom. Note that `--brand-primary` (700) is an identity alias, not a
+   text-bearing fill; the old _tokens.css claim that it was "WCAG AA where used
+   with white text" was wrong. Only this button is corrected here; the claim is
    wrong for every dark component that trusts it, and that is a wider change
    than this one. */
 body.theme-dark .btn-booking-join {
@@ -11035,8 +11035,9 @@ body.theme-light .admin-subtitle {
 }
 
 /* White label on the fill, so the fill must be the text-safe step. !195 fixed
-   the light half of this in a body.theme-light block; dark still resolved to
-   #D35F1D at 3.87. The border keeps the identity colour - nothing is read off a
+   the light half of this in a body.theme-light block; dark then resolved to an
+   identity step at 3.87. Both now take --accent-fill-text-safe on the unified
+   #FF5A1F ramp. The border keeps the identity colour - nothing is read off a
    1px edge. */
 .leaderboard-tab--active {
   color: #FFFFFF;
