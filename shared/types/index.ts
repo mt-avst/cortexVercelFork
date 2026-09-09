@@ -140,6 +140,19 @@ export interface Opportunity {
   owner_email?: string;
   sessions?: Session[];
   clicks_total?: number; // Click count for polls/surveys (M6)
+  /**
+   * The signed-in participant's own completion of THIS study, present only on
+   * native survey/poll/one-question responses (the three types that leave no
+   * booking) and only when someone is signed in (audit row 10). `completed` is
+   * true once they have answered - the detail page then shows the completion
+   * and drops the Start button, and the home row reads "Completed" - and false
+   * (or the whole object absent) means they can still take part. `completedAt`
+   * is the ISO timestamp of that completion, or null.
+   */
+  completion?: {
+    completed: boolean;
+    completedAt: string | null;
+  };
 }
 
 export interface CreateOpportunityRequest {

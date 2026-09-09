@@ -55,6 +55,32 @@ describe('OpportunityRow', () => {
     expect(screen.queryByText(/book/i)).toBeNull();
   });
 
+  // Audit row 10: a native survey/poll the viewer has already answered reads
+  // "Completed", not a fresh start - the three types that leave no booking now
+  // leave a trace on the home row.
+  it('reads Completed instead of a start verb once the viewer has answered', () => {
+    renderRow(opp({ type: 'survey', completion: { completed: true, completedAt: '2026-09-02T09:00:00.000Z' } }));
+
+    expect(screen.getByText('Completed')).toBeVisible();
+    expect(screen.queryByText('Open survey')).toBeNull();
+  });
+
+  it('keeps the start verb when completion is absent or unfinished', () => {
+    renderRow(opp({ type: 'poll', completion: { completed: false, completedAt: null } }));
+
+    expect(screen.getByText('Open poll')).toBeVisible();
+    expect(screen.queryByText('Completed')).toBeNull();
+  });
+
+  it('stays one link to the study even when completed', () => {
+    renderRow(opp({ type: 'survey', completion: { completed: true, completedAt: null } }));
+
+    const links = screen.getAllByRole('link');
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAttribute('href', '/opportunities/opp-1');
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+
   // One interactive element per row. A button nested inside a link is two
   // targets for one destination, and a keyboard user meets both.
   it('is a single link to the study whose name carries the title AND the verb', () => {

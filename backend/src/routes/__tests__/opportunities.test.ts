@@ -31,6 +31,8 @@ jest.mock('../../firsthand/runtime-repository', () => ({
   // Defaults to "this participant has no session yet", which is the common
   // case. Tests that care about resuming or refusing queue their own.
   findParticipantSessionForOpportunity: jest.fn(async () => null),
+  // Defaults to "no completion trace for anyone". Row-10 tests queue their own.
+  findParticipantCompletionsForOpportunities: jest.fn(async () => []),
 }));
 
 // Defaults to "nobody answered". Every results test that cares queues its own
@@ -196,7 +198,10 @@ import { addMockOpportunity, deleteMockOpportunity } from '../../../../demo/mock
 import { pool } from '../../config';
 import { isDatabaseAvailable } from '../../utils/database';
 import { createSession } from '../../firsthand/session-create';
-import { findParticipantSessionForOpportunity } from '../../firsthand/runtime-repository';
+import {
+  findParticipantCompletionsForOpportunities,
+  findParticipantSessionForOpportunity
+} from '../../firsthand/runtime-repository';
 import { claimStudyIfUnowned, countStudyTasks, createStudy, deleteStudyUnchecked, getStudyById, isStudiesPersistenceConfigured, updateStudy } from '../../firsthand/studies-repository';
 import { listResponsesForOpportunity, studyHasResponses } from '../../firsthand/survey-results-repository';
 import { toCsvParticipantRow } from '../../firsthand/survey-csv';
@@ -219,6 +224,10 @@ const mockCreateSession = createSession as jest.MockedFunction<any>;
 const mockFindParticipantSession =
   findParticipantSessionForOpportunity as jest.MockedFunction<
     typeof findParticipantSessionForOpportunity
+  >;
+const mockFindParticipantCompletions =
+  findParticipantCompletionsForOpportunities as jest.MockedFunction<
+    typeof findParticipantCompletionsForOpportunities
   >;
 const mockCreateStudy = createStudy as jest.MockedFunction<any>;
 const mockClaimStudyIfUnowned = claimStudyIfUnowned as jest.MockedFunction<any>;
@@ -284,6 +293,140 @@ describe('Opportunities API', () => {
     }
   });
 
+
+  describe('participant completion trace (audit row 10)', () => {
+    const nativeSurveyRow = {
+      id: 'op-nsv',
+      type: 'survey',
+      delivery_mode: 'native',
+      title: 'How was it',
+      purpose_one_liner: 'A quick survey',
+      default_duration_minutes: 30,
+      status: 'published',
+      owner_user_id: 'someone-else',
+      firsthand_study_id: 'study-1',
+      external_link_optional: null,
+      created_at: new Date('2026-09-01T10:00:00.000Z'),
+      updated_at: new Date('2026-09-01T10:00:00.000Z'),
+      start_date: null,
+      end_date: null,
+      owner_name: 'Owner',
+      owner_email: 'owner@example.com'
+    };
+
+    it('marks a native survey the participant has completed, with its date', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [nativeSurveyRow] }); // opportunity row
+      // the sessions query falls through to the default { rows: [] }
+      mockFindParticipantCompletions.mockResolvedValueOnce([
+        {
+          opportunityId: 'op-nsv',
+          sessionStatus: 'completed',
+          completedAt: '2026-09-02T09:00:00.000Z'
+        }
+      ]);
+
+      const response = await request(listening(app))
+        .get('/api/opportunities/op-nsv')
+        .expect(200);
+
+      expect(response.body.completion).toEqual({
+        completed: true,
+        completedAt: '2026-09-02T09:00:00.000Z'
+      });
+      // Keyed on the signed-in user and the opportunity's own id.
+      expect(mockFindParticipantCompletions).toHaveBeenCalledWith({
+        participantId: 'test-user-id',
+        opportunityIds: ['op-nsv']
+      });
+    });
+
+    it('reports not-completed when the participant has no answered session', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [nativeSurveyRow] });
+      // default completions mock returns [] - no row for this opportunity
+
+      const response = await request(listening(app))
+        .get('/api/opportunities/op-nsv')
+        .expect(200);
+
+      expect(response.body.completion).toEqual({ completed: false, completedAt: null });
+    });
+
+    it('does not treat a still-in-progress session as completed', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [nativeSurveyRow] });
+      mockFindParticipantCompletions.mockResolvedValueOnce([
+        { opportunityId: 'op-nsv', sessionStatus: 'link_opened', completedAt: null }
+      ]);
+
+      const response = await request(listening(app))
+        .get('/api/opportunities/op-nsv')
+        .expect(200);
+
+      // An unfinished session resumes rather than blocks, so the trace must not
+      // claim completion - otherwise the page would hide the Start button on a
+      // survey the participant can still finish.
+      expect(response.body.completion).toEqual({ completed: false, completedAt: null });
+    });
+
+    it('does not attach a completion trace to a bookable study', async () => {
+      const bookableRow = {
+        ...nativeSurveyRow,
+        id: 'op-book',
+        type: 'test',
+        delivery_mode: 'external',
+        firsthand_study_id: null
+      };
+      mockQuery.mockResolvedValueOnce({ rows: [bookableRow] });
+
+      const response = await request(listening(app))
+        .get('/api/opportunities/op-book')
+        .expect(200);
+
+      // A test/interview leaves its trace in bookings, not here, and the runtime
+      // read must not even run for it.
+      expect(response.body.completion).toBeUndefined();
+      expect(mockFindParticipantCompletions).not.toHaveBeenCalled();
+    });
+
+    it('marks the completed native row in the listing and leaves others untouched', async () => {
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          nativeSurveyRow,
+          {
+            ...nativeSurveyRow,
+            id: 'op-int',
+            type: 'interview',
+            delivery_mode: 'external',
+            firsthand_study_id: null
+          }
+        ]
+      }); // listing query; the sessions and clicks batches fall to default []
+      mockFindParticipantCompletions.mockResolvedValueOnce([
+        {
+          opportunityId: 'op-nsv',
+          sessionStatus: 'completed',
+          completedAt: '2026-09-02T09:00:00.000Z'
+        }
+      ]);
+
+      const response = await request(listening(app))
+        .get('/api/opportunities')
+        .expect(200);
+
+      const survey = response.body.find((o: { id: string }) => o.id === 'op-nsv');
+      const interview = response.body.find((o: { id: string }) => o.id === 'op-int');
+      expect(survey.completion).toEqual({
+        completed: true,
+        completedAt: '2026-09-02T09:00:00.000Z'
+      });
+      expect(interview.completion).toBeUndefined();
+      // Only the native row is looked up - the bookable one never reaches the
+      // runtime read.
+      expect(mockFindParticipantCompletions).toHaveBeenCalledWith({
+        participantId: 'test-user-id',
+        opportunityIds: ['op-nsv']
+      });
+    });
+  });
 
   describe('GET /api/opportunities', () => {
     it('should return opportunities list', async () => {

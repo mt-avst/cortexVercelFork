@@ -53,6 +53,25 @@ export const transcriptStates = [
   "failed"
 ] as const;
 
+/**
+ * The runtime statuses that mean the participant has ANSWERED and the run is
+ * closed to a fresh attempt: a completed session, or one whose recording is
+ * still uploading. Native surveys never upload, but the status set is shared
+ * with recorded runs, so the gate must cover both.
+ *
+ * Pinned here as the single source for the "already answered" question, which
+ * three call sites ask independently and must never disagree on:
+ *   - the survey-session mint gate, which refuses a second attempt (409);
+ *   - the participant detail read, which surfaces the completion trace;
+ *   - the participant listing read, which marks the home row Completed.
+ * A test pins the exact membership as a literal (state-model.test.ts).
+ */
+export const answeredRuntimeStates = ["completed", "uploading"] as const;
+
+export function isAnsweredRuntimeStatus(status: string): boolean {
+  return (answeredRuntimeStates as readonly string[]).includes(status);
+}
+
 export type SessionLifecycleState = (typeof sessionLifecycleStates)[number];
 export type MicrophonePermissionState =
   (typeof microphonePermissionStates)[number];

@@ -217,6 +217,17 @@ const OpportunityDetail: React.FC = () => {
       ? opportunity?.firsthand_study_id
       : externalLinkIsUsable
   );
+
+  // The participant's own completion of this native survey/poll/one-question
+  // (audit row 10). When set, the page shows the completion instead of a Start
+  // button - the server already refuses a second answer with a 409, so a live
+  // button here would only ever hand back an error. The date is best-effort:
+  // an older completed session may have no `completed_at`, and the sentence
+  // reads without it.
+  const hasCompletedNativeSurvey = Boolean(
+    isNativeSurvey && opportunity?.completion?.completed
+  );
+  const completedOnLabel = formatStudyDate(opportunity?.completion?.completedAt);
   const [recordedStudyBrief, setRecordedStudyBrief] = useState<RecordedStudyBrief | null>(null);
   // Default to the grouped-day list ('table'). For the clustered availability
   // these studies produce it reads faster than the diary grid, which spends
@@ -1308,7 +1319,32 @@ const OpportunityDetail: React.FC = () => {
                           anchor below it: it opens in this tab, in Cortex, and
                           the anchor's whole job is to hand off. An EXTERNAL
                           question still takes the anchor, unchanged. */}
-                      {opportunity.type === 'poll' || opportunity.type === 'survey' || opportunity.type === 'unmoderated' || isNativeSurvey ? (
+                      {hasCompletedNativeSurvey ? (
+                        <div
+                          className="survey-completed-state"
+                          role="status"
+                          data-testid="survey-completed-state"
+                        >
+                          <CheckCircle
+                            size={20}
+                            className="survey-completed-state__icon"
+                            aria-hidden="true"
+                          />
+                          <div>
+                            <p className="survey-completed-state__title">
+                              {opportunity.type === 'poll'
+                                ? 'You have completed this poll'
+                                : opportunity.type === 'question'
+                                ? 'You have answered this question'
+                                : 'You have completed this survey'}
+                              {completedOnLabel ? ` on ${completedOnLabel}` : ''}
+                            </p>
+                            <p className="survey-completed-state__note">
+                              Your response has been recorded. You can only take part once.
+                            </p>
+                          </div>
+                        </div>
+                      ) : opportunity.type === 'poll' || opportunity.type === 'survey' || opportunity.type === 'unmoderated' || isNativeSurvey ? (
                         <button
                           className="btn btn-primary w-100 mission-cta-btn"
                           onClick={async () => {

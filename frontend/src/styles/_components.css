@@ -12725,6 +12725,18 @@ body.theme-dark {
   transform: translateX(3px);
 }
 
+/* Audit row 10: the viewer has already completed this study. Muted, because the
+   point is that there is nothing left to do - it is a status, not a call to
+   action. Uses the meta colour, which already passes AA on this ground. */
+.opportunity-row__action--done {
+  color: var(--opportunity-row-meta);
+  font-weight: 500;
+}
+
+.opportunity-row__link:hover .opportunity-row__action--done svg {
+  transform: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .opportunity-row__link,
   .opportunity-row__action svg {
@@ -12733,6 +12745,38 @@ body.theme-dark {
   .opportunity-row__link:hover .opportunity-row__action svg {
     transform: none;
   }
+}
+
+/* Audit row 10: the participant's own completion of a native survey/poll/one
+   question, shown on the detail page where the Start button was. The server
+   already refuses a second answer (409), so a live button here would only hand
+   back an error - this states the fact instead. Text colours inherit the card
+   (AA by design); the green is on the decorative icon only. */
+.survey-completed-state {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--opportunity-row-rule);
+  border-radius: 8px;
+  background: transparent;
+}
+
+.survey-completed-state__icon {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--status-success);
+}
+
+.survey-completed-state__title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.survey-completed-state__note {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+  color: var(--opportunity-row-meta);
 }
 
 /* Under ~640px the action drops below the text rather than squeezing the

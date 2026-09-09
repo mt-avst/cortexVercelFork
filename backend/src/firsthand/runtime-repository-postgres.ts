@@ -339,6 +339,53 @@ export async function findParticipantSessionForOpportunityPostgres(input: {
   });
 }
 
+/**
+ * The most recent runtime session this participant holds for each of the given
+ * opportunities, if any. Batched by `ANY(...)` so a listing of N opportunities
+ * costs one query, not N - the same shape as the sessions batch in
+ * `GET /api/opportunities`.
+ *
+ * Returns the raw `sessionStatus` rather than a boolean: whether a status counts
+ * as "answered" is a policy the caller decides through `isAnsweredRuntimeStatus`,
+ * so the two cannot drift from the mint gate that asks the same question.
+ * `DISTINCT ON (opportunity_id) ... ORDER BY created_at DESC` keeps the latest
+ * attempt per opportunity, matching `findParticipantSessionForOpportunity`.
+ */
+export async function findParticipantCompletionsForOpportunitiesPostgres(input: {
+  participantId: string;
+  opportunityIds: readonly string[];
+}): Promise<
+  Array<{ opportunityId: string; sessionStatus: string; completedAt: string | null }>
+> {
+  if (input.opportunityIds.length === 0) {
+    return [];
+  }
+
+  return withRuntimeDatabaseClient(async (client) => {
+    const result = await client.query<{
+      opportunity_id: string;
+      session_status: string;
+      completed_at: Date | null;
+    }>(
+      `
+        SELECT DISTINCT ON (opportunity_id)
+               opportunity_id, session_status, completed_at
+        FROM runtime_sessions
+        WHERE participant_id = $1
+          AND opportunity_id = ANY($2::text[])
+        ORDER BY opportunity_id, created_at DESC
+      `,
+      [input.participantId, [...input.opportunityIds]]
+    );
+
+    return result.rows.map((row) => ({
+      opportunityId: row.opportunity_id,
+      sessionStatus: row.session_status,
+      completedAt: row.completed_at ? row.completed_at.toISOString() : null
+    }));
+  });
+}
+
 export async function getRuntimeSessionPostgres(
   sessionId: string,
   input?: {
