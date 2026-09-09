@@ -1724,7 +1724,16 @@ router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOp
     hasLinkedStudy: Boolean(linkedStudyId),
     hasInlineStudy: Boolean(inlineStudy),
     hasInlineSurvey: Boolean(inlineSurvey),
-    externalLink: data.external_link_optional
+    externalLink: data.external_link_optional,
+    // A create writes NO sessions - they are a separate `POST /api/sessions`
+    // against the returned id - so a fresh row has zero bookable slots by
+    // construction. For `test`/`interview` that makes `false` the honest and
+    // only correct value, and it closes the direct-API hole (#118): a bookable
+    // study cannot be published in one create call. The wizard reaches a
+    // published live session by creating as draft, adding slots, then updating
+    // to published (see OpportunityForm `handleSubmit`), which is the update
+    // guard's job below, not this one.
+    hasBookableSlot: false
     // No `removingLinkedStudy`: nothing is being removed from an opportunity
     // that does not exist yet.
   });
@@ -2243,10 +2252,33 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
   // part of "is this publishable"; it is this endpoint's separate decision to
   // leave an unrelated edit to a row ALREADY in the bad state alone.
   if (publishGuardApplies) {
+    // Whether this opportunity has a slot a participant could still book, for
+    // the moderated-type gate (#118). Counted ONLY for `test`/`interview`, so an
+    // ordinary poll/survey publish pays no extra query, and against the
+    // participant-actionable predicate `end_time > NOW()` - the same set as
+    // `UPCOMING_SESSIONS_ONLY` and the `bookings.ts` booking refusal, NOT a bare
+    // `COUNT(*)`. A study whose only slots are in the past is as unbookable as
+    // one with none, and publishing it would re-open exactly the a21 defect.
+    //
+    // `undefined` for every other type: `findPublishProblem` only consults this
+    // for moderated types, and passing a signal it will not read would be noise.
+    // The wizard persists its temporary slots BEFORE this publishing update
+    // (OpportunityForm `handleSubmit`), so by the time control reaches here the
+    // author's slots are already rows this query can see.
+    let hasBookableSlot: boolean | undefined;
+    if (MODERATED_CONSENT_TYPES.has(existingType)) {
+      const slotCount = await pool.query(
+        'SELECT 1 FROM sessions WHERE opportunity_id = $1 AND end_time > NOW() LIMIT 1',
+        [id]
+      );
+      hasBookableSlot = slotCount.rowCount ? slotCount.rowCount > 0 : false;
+    }
+
     const updatePublishProblem = findPublishProblem({
       willBePublished: true,
       type: existingType,
       deliveryMode: newDeliveryMode,
+      hasBookableSlot,
       // Trimmed for the same reason as the create guard: an all-whitespace id
       // would otherwise satisfy this and store NULL.
       hasLinkedStudy: Boolean(newFirstHandStudyId?.trim()),

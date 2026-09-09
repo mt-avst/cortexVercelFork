@@ -34,7 +34,8 @@ export type PublishProblemCode =
   | "unmoderated_study_required"
   | "unmoderated_study_removed"
   | "native_survey_study_required"
-  | "external_link_required";
+  | "external_link_required"
+  | "bookable_slot_required";
 
 export interface PublishProblem {
   code: PublishProblemCode;
@@ -48,7 +49,9 @@ export const PUBLISH_PROBLEM_MESSAGES: Record<PublishProblemCode, string> = {
   native_survey_study_required:
     "Add questions, or link an existing set of questions, before publishing",
   external_link_required:
-    "External link is required for published polls, surveys and one-question opportunities"
+    "External link is required for published polls, surveys and one-question opportunities",
+  bookable_slot_required:
+    "Add at least one upcoming time slot before publishing a live session or interview"
 };
 
 /**
@@ -78,6 +81,7 @@ import {
   isPublishableExternalLink
 } from "./url-safety";
 import { QUESTION_CARRYING_TYPES, runsNativeSurvey } from "./delivery";
+import { MODERATED_CONSENT_TYPES } from "./consent-templates";
 
 /**
  * The RESULTING state of the opportunity, not the request that produced it.
@@ -112,6 +116,19 @@ export interface PublishReadinessInput {
    * had one. Changes the wording, never the outcome.
    */
   removingLinkedStudy?: boolean;
+  /**
+   * Whether the opportunity has at least one bookable (upcoming) session slot,
+   * for the moderated-type gate below. TRI-STATE on purpose:
+   *   - `false`     -> the caller counted zero bookable slots. A moderated
+   *                    publish is refused.
+   *   - `true`      -> at least one. Permitted.
+   *   - `undefined` -> the caller cannot report it. The gate does NOT fire, so a
+   *                    caller that never counts (the create route, which writes
+   *                    its sessions in a SEPARATE request, and every pre-#118
+   *                    caller) is not refused every moderated publish. Only a
+   *                    positive report of zero gates. See the branch below.
+   */
+  hasBookableSlot?: boolean;
 }
 
 /**
@@ -136,6 +153,27 @@ export const findPublishProblem = (
       };
     }
     return null;
+  }
+
+  // A live session or interview is BOOKED, not handed off: its participant
+  // starts by choosing a slot, so a published one with no bookable slot is a
+  // study advertised as LIVE / "Book a time" over nothing anyone can book -
+  // audit row 15 (a19 Review "Completed", a21 dashboard "Book a time" with
+  // nothing bookable).
+  //
+  // `MODERATED_CONSENT_TYPES` is `{test, interview}` - the same set that decides
+  // which bookings carry consent - so "which types are booked" is decided once,
+  // not re-listed here.
+  //
+  // Guarded on `=== false`, NOT `!input.hasBookableSlot`: the signal is
+  // tri-state (see the field doc), and `undefined` means the caller could not
+  // count. Only a positive report of zero refuses; the create route (sessions
+  // are a separate write) and every pre-#118 caller pass no signal and sail
+  // through, exactly as before.
+  if (MODERATED_CONSENT_TYPES.has(input.type)) {
+    return input.hasBookableSlot === false
+      ? { code: "bookable_slot_required" }
+      : null;
   }
 
   // Asked about the type AND the mode rather than about `deliveryMode` alone,

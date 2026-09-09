@@ -520,6 +520,25 @@ describe('publishing a live session or interview needs at least one slot (audit 
     }
   );
 
+  it('previews the refusal on Review before publish is pressed (#118 parity)', () => {
+    // Parity with every other publish problem: the Review banner names the
+    // refusal PROACTIVELY, from the shared publish-problem message, not only
+    // once the commit is pressed. This is the preview half the row-15 "S" left
+    // open and cto/AdaptaLabs#118 closed, alongside the server gate.
+    renderCreate();
+    fillBasics('test');
+    walkForward();
+    setStatus('published');
+
+    const banner = screen.getByRole('alert');
+    expect(banner).toHaveTextContent(
+      'Add at least one upcoming time slot before publishing a live session or interview'
+    );
+    expect(
+      within(banner).getByRole('button', { name: /Session Management/ })
+    ).toBeInTheDocument();
+  });
+
   it('the refusal summary link lands focus on the Session Management heading', async () => {
     // Guards the FIELD_LOCATIONS control id against a silent typo: focus() on an
     // id nothing renders throws nothing and lands on document.body, and every
@@ -1022,11 +1041,19 @@ describe('a publish that WOULD be allowed says nothing', () => {
     expect(commitControl()).toBeEnabled();
   });
 
-  it('shows no refusal for a published test, which needs no study at all', () => {
-    // The twin path: a booked session has no study, so no rule applies.
+  it('shows no refusal for a published test once it has a session slot', () => {
+    // The twin path: a booked session has no study or link, but since #118 it
+    // DOES need at least one bookable slot - so the "allowed" case is one WITH a
+    // slot confirmed. The slotless refusal is asserted by the audit-row-15
+    // describe above; this is its positive control.
     renderCreate();
     fillBasics('test');
-    walkForward();
+    // The same navigation the slot-writing test above uses: two forwards reach
+    // the Session Management step, where the stub confirms one slot.
+    fireEvent.click(forwardControl()!);
+    fireEvent.click(forwardControl()!);
+    fireEvent.click(screen.getByRole('button', { name: 'stub: confirm one slot' }));
+    walkForward(); // -> Review (through Consent)
     setStatus('published');
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();

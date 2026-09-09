@@ -2365,5 +2365,26 @@
     "runner": "vitest",
     "spec": "src/firsthand/consent-templates.test.ts",
     "test": "a live session with no wording of its own falls back to the moderated baseline"
+  },
+  {
+    "id": "publish-gate-refuses-slotless-bookable",
+    "why": "cto/AdaptaLabs audit row 15 / #118. A published live session (test) or interview must have at least one bookable slot, or the participant home advertises LIVE / \"Book a time\" over nothing anyone can book (the a19/a21 defect). `findPublishProblem` refuses it on `hasBookableSlot === false`, which the create guard supplies as false (a create writes no sessions) and the update guard supplies from a real `end_time > NOW()` count. Flipping the comparison to `=== true` inverts the gate - it would permit a slotless publish and refuse one that has a slot - and leaks nothing, breaks no schema and touches no auth, so no gate reading for authorisation or validity flags it. The tri-state signal is the subtle part: `undefined` must stay permitted, so the naive `!input.hasBookableSlot` a tidy-up would reach for refuses every caller that cannot count. Proven by mutation before entry: `=== true` left every other suite green except the named test.",
+    "file": "shared/firsthand/publish-readiness.ts",
+    "anchor": "    return input.hasBookableSlot === false",
+    "mutation": "    return input.hasBookableSlot === true",
+    "runner": "vitest",
+    "spec": "src/firsthand/publish-readiness.test.ts",
+    "test": "bookable_slot_required fires on a positive report of no bookable slot"
+  },
+  {
+    "id": "publish-gate-counts-only-upcoming-slots",
+    "why": "cto/AdaptaLabs audit row 15 / #118, the ROUTE half. The update publish guard supplies `hasBookableSlot` from a count over the participant-ACTIONABLE set (`end_time > NOW()`), matching UPCOMING_SESSIONS_ONLY and the bookings refusal - NOT a bare COUNT(*). A study whose only slot ended yesterday is as unbookable as one with none, so dropping the `AND end_time > NOW()` clause would count that past slot and re-open the a21 defect: a dashboard advertising LIVE / 'Book a time' over nothing anyone can book. A text or mocked assertion cannot see which rows a real NOW() comparison excludes (the shared unit half pins the predicate, not the query), so this is a needsDatabase entry killed by a real-Postgres past-slot test. Proven by mutation before entry: the bare-count query permitted the past-only publish, failing only the named test.",
+    "file": "backend/src/routes/opportunities.ts",
+    "anchor": "        'SELECT 1 FROM sessions WHERE opportunity_id = $1 AND end_time > NOW() LIMIT 1',",
+    "mutation": "        'SELECT 1 FROM sessions WHERE opportunity_id = $1 LIMIT 1',",
+    "runner": "vitest",
+    "spec": "src/routes/__tests__/opportunities.publish-slot-gate-postgres.test.ts",
+    "test": "counts only upcoming slots: a test whose only slot is in the past cannot publish",
+    "needsDatabase": true
   }
 ]
