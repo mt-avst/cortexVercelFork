@@ -456,7 +456,7 @@ const MyBookings: React.FC = () => {
 
         {sessionEvents.length > 0 && (
           <section className="my-bookings-section my-bookings-section-past">
-            <h2 className="my-bookings-section-title">Recorded sessions</h2>
+            <h2 className="my-bookings-section-title">Completed studies</h2>
             <div className="booking-cards-grid">
               {sessionEvents.map((event) => (
                 <Card key={event.id} className="booking-card booking-card-past">
@@ -499,7 +499,7 @@ const MyBookings: React.FC = () => {
                       href={`/opportunities/${event.opportunity_id}`}
                       className="btn-booking-reschedule"
                     >
-                      View opportunity
+                      View study
                     </a>
                   </CardFooter>
                 </Card>

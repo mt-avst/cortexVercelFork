@@ -187,8 +187,8 @@ const StudySourcePicker: React.FC<StudySourcePickerProps> = ({
     return (
       <div className="form-text">
         {draftCount > 0
-          ? `Nothing launched to start from yet. ${draftCount} in draft - launch one in the Task Lists area, or choose "Create ${noun}s for this opportunity" above.`
-          : `Nothing to start from yet. Choose "Create ${noun}s for this opportunity" above.`}
+          ? `Nothing published to start from yet. ${draftCount} in draft - publish one in the Task Lists area, or choose "Create ${noun}s for this study" above.`
+          : `Nothing to start from yet. Choose "Create ${noun}s for this study" above.`}
       </div>
     );
   }

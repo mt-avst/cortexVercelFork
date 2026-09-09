@@ -47,7 +47,7 @@ const ContentDetailsTab: React.FC<ContentDetailsTabProps> = ({
                 style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: '120px', resize: 'vertical' }}
                 value={formData.description_optional}
                 onChange={(e) => handleInputChange('description_optional', e.target.value)}
-                placeholder="Provide detailed information about the opportunity, what participants will be doing, what they need to prepare, etc."
+                placeholder="Provide detailed information about the study, what participants will be doing, what they need to prepare, etc."
               />
               {validationErrors.description_optional && (
                 <FieldError>{validationErrors.description_optional}</FieldError>
@@ -63,7 +63,7 @@ const ContentDetailsTab: React.FC<ContentDetailsTabProps> = ({
                 Product/Feature (Optional)
               </label>
               <div className="form-text mb-2" style={{ fontSize: '0.875rem' }}>
-                Specific product, feature, or area this opportunity relates to
+                Specific product, feature, or area this study relates to
               </div>
               <input
                 type="text"
@@ -88,7 +88,7 @@ const ContentDetailsTab: React.FC<ContentDetailsTabProps> = ({
                 Participant Type
               </label>
               <div className="form-text mb-2" style={{ fontSize: '0.875rem' }}>
-                Who can participate in this opportunity
+                Who can participate in this study
               </div>
               <select
                 id="participant_type_required"

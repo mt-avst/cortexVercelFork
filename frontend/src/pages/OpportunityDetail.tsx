@@ -605,7 +605,7 @@ const OpportunityDetail: React.FC = () => {
       } else if (axiosError.response?.status === 401) {
         setError('Please log in to book sessions');
       } else if (axiosError.response?.status === 404) {
-        setError('Session not found or opportunity not published');
+        setError('Session not found or study not published');
       } else if (axiosError.response?.status === 400) {
         // The server's own sentence: a 400 here is either the past-session
         // refusal or the consent-acceptance refusal, and hardcoding one of
@@ -670,12 +670,12 @@ const OpportunityDetail: React.FC = () => {
   if (loading && !opportunity) {
     return (
       <div className="container mt-4" aria-busy="true" aria-live="polite">
-        <h1>Loading Opportunity</h1>
+        <h1>Loading study</h1>
         <div className="text-center py-5">
-          <div className="spinner-border" role="status" aria-label="Loading opportunity">
-            <span className="visually-hidden">Loading opportunity...</span>
+          <div className="spinner-border" role="status" aria-label="Loading study">
+            <span className="visually-hidden">Loading study...</span>
           </div>
-          <p className="mt-2">Loading opportunity...</p>
+          <p className="mt-2">Loading study...</p>
         </div>
       </div>
     );
@@ -705,7 +705,7 @@ const OpportunityDetail: React.FC = () => {
     // as calm information with no dead control.
     return (
       <div className="container mt-4">
-        <h1>Opportunity Details</h1>
+        <h1>Study details</h1>
         <div className={`alert ${errorRetryable ? 'alert-danger' : 'alert-info'}`} role="alert">
           {error}
           {errorRetryable && (
@@ -733,9 +733,9 @@ const OpportunityDetail: React.FC = () => {
   if (!opportunity) {
     return (
       <div className="container mt-4">
-        <h1>Opportunity Details</h1>
+        <h1>Study details</h1>
         <div className="alert alert-warning" role="alert">
-          Opportunity not found
+          Study not found
         </div>
       </div>
     );
@@ -771,7 +771,7 @@ const OpportunityDetail: React.FC = () => {
       {/* Living Neural Background - Dark Mode Only */}
       {isDark && <SlowNeuralBackground />}
 
-      <section className="container mt-4" aria-label="Opportunity details" style={{ position: 'relative', zIndex: 1 }}>
+      <section className="container mt-4" aria-label="Study details" style={{ position: 'relative', zIndex: 1 }}>
         <div className="row">
           <div className="col-12">
           {/* Back button */}
@@ -832,7 +832,7 @@ const OpportunityDetail: React.FC = () => {
                   className="btn btn-sm btn-outline-danger me-2"
                   onClick={() => loadOpportunity(true)}
                   disabled={loading}
-                  aria-label="Refresh opportunity data"
+                  aria-label="Refresh study data"
                 >
                   <RefreshCw size={14} className="me-1" aria-hidden="true" />
                   Refresh Data
@@ -1364,7 +1364,7 @@ const OpportunityDetail: React.FC = () => {
                                 if (status === 404) {
                                   setError('This survey is not available. Please contact your research team.');
                                 } else if (status === 403) {
-                                  setError('This opportunity is not yet available. Please try again later.');
+                                  setError('This study is not yet available. Please try again later.');
                                 } else if (status === 409) {
                                   // The backend refuses a second mint once a
                                   // session is completed or uploading, rather
@@ -1396,7 +1396,7 @@ const OpportunityDetail: React.FC = () => {
                                 } else if (status === 503) {
                                   setError('This study is not yet configured. Please contact your research team.');
                                 } else if (status === 403) {
-                                  setError('This opportunity is not yet available. Please try again later.');
+                                  setError('This study is not yet available. Please try again later.');
                                 } else {
                                   setError('Could not start session. Please try again or contact support.');
                                 }
@@ -1480,7 +1480,7 @@ const OpportunityDetail: React.FC = () => {
                           type="button"
                           className="btn btn-secondary w-100 mission-cta-btn"
                           disabled
-                          aria-label="This opportunity has no working link yet"
+                          aria-label="This study has no working link yet"
                         >
                           Link unavailable
                         </button>

@@ -168,7 +168,7 @@ const forwardControl = () => screen.queryByRole('button', { name: /^Continue: / 
  * does nothing reads exactly like one that works.
  */
 const commitControl = () =>
-  screen.queryByRole('button', { name: 'Create opportunity' }) ??
+  screen.queryByRole('button', { name: 'Create study' }) ??
   screen.queryByRole('button', { name: 'Save changes' });
 
 /** Fill step 1 well enough to be allowed forward. */
@@ -276,7 +276,7 @@ describe('Review is the only step that commits', () => {
         Array(expectedSteps - 1).fill(null)
       );
       expect(seen[seen.length - 1].step).toMatch(/Review/);
-      expect(seen[seen.length - 1].commitControl).toBe('Create opportunity');
+      expect(seen[seen.length - 1].commitControl).toBe('Create study');
       // The step the author came from is named on the way back, and it differs
       // per path - which is what makes this a check on five shapes rather than
       // the same check five times.
@@ -295,7 +295,7 @@ describe('Review is the only step that commits', () => {
 
     expect(seen[seen.length - 1].commitControl).toBe('Save changes');
     expect(
-      screen.queryByRole('button', { name: 'Create opportunity' })
+      screen.queryByRole('button', { name: 'Create study' })
     ).not.toBeInTheDocument();
   });
 
@@ -598,7 +598,7 @@ describe('the commit still happens, and only from Review', () => {
     });
     fireEvent.click(strip()[strip().length - 1]);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Create opportunity' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create study' }));
 
     await waitFor(() => expect(vi.mocked(createOpportunity)).toHaveBeenCalledTimes(1));
   });
@@ -616,7 +616,7 @@ describe('the time slots confirmed on the session step are written by the commit
     fireEvent.click(forwardControl()!);
 
     expect(currentStepName()).toMatch(/Review/);
-    fireEvent.click(screen.getByRole('button', { name: 'Create opportunity' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create study' }));
 
     await waitFor(() => expect(vi.mocked(createOpportunity)).toHaveBeenCalledTimes(1));
     // Against the id the CREATE returned, not the temporary one - and with
@@ -662,7 +662,7 @@ describe('the time slots confirmed on the session step are written by the commit
       target: { value: 'https://example.com/poll' }
     });
     fireEvent.click(strip()[strip().length - 1]);
-    fireEvent.click(screen.getByRole('button', { name: 'Create opportunity' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create study' }));
 
     // The opportunity IS created - asserted first, so the absence below cannot
     // pass by the commit having failed altogether.
@@ -802,7 +802,7 @@ describe('the form itself cannot commit, only the control on Review', () => {
       target: { value: 'https://example.com/poll' }
     });
     fireEvent.click(strip()[strip().length - 1]);
-    fireEvent.click(screen.getByRole('button', { name: 'Create opportunity' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create study' }));
 
     await waitFor(() => expect(vi.mocked(createOpportunity)).toHaveBeenCalledTimes(1));
   });
@@ -847,7 +847,7 @@ describe('a save that half-worked is not announced as a success', () => {
     // Consent sits between Session Management and Review since #79.
     fireEvent.click(forwardControl()!);
     fireEvent.click(forwardControl()!);
-    fireEvent.click(screen.getByRole('button', { name: 'Create opportunity' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create study' }));
 
     await waitFor(() => expect(vi.mocked(createOpportunity)).toHaveBeenCalledTimes(1));
 
@@ -880,7 +880,7 @@ describe('a save that half-worked is not announced as a success', () => {
     // Consent sits between Session Management and Review since #79.
     fireEvent.click(forwardControl()!);
     fireEvent.click(forwardControl()!);
-    fireEvent.click(screen.getByRole('button', { name: 'Create opportunity' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create study' }));
 
     await waitFor(() => expect(vi.mocked(createOpportunity)).toHaveBeenCalledTimes(1));
   };
@@ -923,7 +923,7 @@ describe('a save that half-worked is not announced as a success', () => {
     await commitWithFailingSessions({ response: { status: 409, data: {} } });
 
     expect(await bannerText(/time slots were not/i)).toBe(
-      'The opportunity was saved but its time slots were not. Add them from the dashboard.'
+      'The study was saved but its time slots were not. Add them from the dashboard.'
     );
     expect(currentStepName()).toMatch(/Review/);
   });
@@ -948,7 +948,7 @@ describe('a save that half-worked is not announced as a success', () => {
 
     const banner = await bannerText(/time slots were not/i);
     expect(banner).toBe(
-      'The opportunity was saved but its time slots were not. Add them from the dashboard.'
+      'The study was saved but its time slots were not. Add them from the dashboard.'
     );
     expect(banner).not.toMatch(/foreign key constraint/i);
     expect(screen.queryByText(/foreign key constraint/i)).not.toBeInTheDocument();
@@ -959,7 +959,7 @@ describe('a save that half-worked is not announced as a success', () => {
     await commitWithFailingSessions(undefined);
 
     expect(await bannerText(/time slots were not/i)).toBe(
-      'The opportunity was saved but its time slots were not. Add them from the dashboard.'
+      'The study was saved but its time slots were not. Add them from the dashboard.'
     );
     expect(currentStepName()).toMatch(/Review/);
   });
@@ -1080,7 +1080,7 @@ describe('the form refuses a link the server would refuse', () => {
     fireEvent.click(strip()[2]);
     fireEvent.change(screen.getByLabelText(/External Link/i), { target: { value: link } });
     fireEvent.click(strip()[strip().length - 1]);
-    fireEvent.click(screen.getByRole('button', { name: 'Create opportunity' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create study' }));
 
     // Scoped OUT of the summary. Since D1 the summary carries the same
     // sentence, and this test's name promises the message is beside the field.
@@ -1100,7 +1100,7 @@ describe('the form refuses a link the server would refuse', () => {
       target: { value: 'http://example.com/answer' }
     });
     fireEvent.click(strip()[strip().length - 1]);
-    fireEvent.click(screen.getByRole('button', { name: 'Create opportunity' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create study' }));
 
     await waitFor(() => expect(vi.mocked(createOpportunity)).toHaveBeenCalledTimes(1));
   });

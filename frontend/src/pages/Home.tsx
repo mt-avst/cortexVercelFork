@@ -233,15 +233,15 @@ const Home: React.FC = memo(() => {
                   <Inbox size={48} className="empty-state-icon" />
                   <h4 className="empty-state-title">No studies available</h4>
                   <p className="mb-2">No Cortex activities available at the moment.</p>
-                  <p className="empty-state-text">Check back later for new opportunities to participate!</p>
+                  <p className="empty-state-text">Check back later for new studies to participate!</p>
                 </div>
               )}
               
               {!loading && !error && opportunities.length > 0 && filteredOpportunities.length === 0 && (
                 <div className="empty-state">
                   <Filter size={48} className="empty-state-icon" />
-                  <h4 className="empty-state-title">No opportunities found</h4>
-                  <p className="mb-2">No opportunities match the selected filter.</p>
+                  <h4 className="empty-state-title">No studies found</h4>
+                  <p className="mb-2">No studies match the selected filter.</p>
                   <button 
                     className="btn btn-outline-primary mt-3" 
                     onClick={() => setSelectedType('all')}
@@ -253,7 +253,7 @@ const Home: React.FC = memo(() => {
               
               {/* Loading skeleton cards */}
               {loading && (
-                <div className="row" aria-busy="true" aria-live="polite" aria-label="Loading opportunities">
+                <div className="row" aria-busy="true" aria-live="polite" aria-label="Loading studies">
                   {[...Array(6)].map((_, index) => (
                     <div key={index} className="col-md-6 col-lg-4 mb-4">
                       <div className="card h-100">

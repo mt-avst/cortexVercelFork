@@ -141,7 +141,7 @@ const setStatus = async (user: ReturnType<typeof userEvent.setup>, status: strin
  */
 const submitFromLastStep = async (
   user: ReturnType<typeof userEvent.setup>,
-  name: RegExp = /^(Create opportunity|Save changes)$/
+  name: RegExp = /^(Create study|Save changes)$/
 ) => {
   await walkToReview(user);
   await user.click(screen.getByRole('button', { name }));
@@ -347,7 +347,7 @@ describe('authoring a native survey', () => {
         'What nearly stopped you?'
       );
 
-      await submitFromLastStep(user, /^Create opportunity$/);
+      await submitFromLastStep(user, /^Create study$/);
 
       await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
 
@@ -438,7 +438,7 @@ describe('authoring a native survey', () => {
       'How easy was that?'
     );
 
-    await submitFromLastStep(user, /^Create opportunity$/);
+    await submitFromLastStep(user, /^Create study$/);
 
     await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
 
@@ -475,7 +475,7 @@ describe('authoring a native survey', () => {
       'How easy was that?'
     );
 
-    await submitFromLastStep(user, /^Create opportunity$/);
+    await submitFromLastStep(user, /^Create study$/);
     await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
 
     const body = vi.mocked(createOpportunity).mock.calls[0][0] as {
@@ -505,7 +505,7 @@ describe('authoring a native survey', () => {
     await user.clear(screen.getByLabelText(/Consent text/i));
     await user.type(screen.getByLabelText(/Consent text/i), 'Our own survey wording');
     await walkToReview(user);
-    await user.click(screen.getByRole('button', { name: /^Create opportunity$/ }));
+    await user.click(screen.getByRole('button', { name: /^Create study$/ }));
 
     await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
 
@@ -578,7 +578,7 @@ describe('authoring a native survey', () => {
 
     await user.selectOptions(screen.getByLabelText(/^Type$/i), 'nps');
 
-    await submitFromLastStep(user, /^Create opportunity$/);
+    await submitFromLastStep(user, /^Create study$/);
     await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
 
     const body = vi.mocked(createOpportunity).mock.calls[0][0] as {
@@ -617,7 +617,7 @@ describe('authoring a native survey', () => {
     await user.selectOptions(screen.getByLabelText(/^Type$/i), 'nps');
     await user.selectOptions(screen.getByLabelText(/^Type$/i), 'rating');
 
-    await submitFromLastStep(user, /^Create opportunity$/);
+    await submitFromLastStep(user, /^Create study$/);
     await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
 
     const body = vi.mocked(createOpportunity).mock.calls[0][0] as {
@@ -661,7 +661,7 @@ describe('authoring a native survey', () => {
     await user.selectOptions(screen.getByLabelText(/^Type$/i), 'open_text');
     await user.selectOptions(screen.getByLabelText(/^Type$/i), 'single_choice');
 
-    await submitFromLastStep(user, /^Create opportunity$/);
+    await submitFromLastStep(user, /^Create study$/);
     await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
 
     const body = vi.mocked(createOpportunity).mock.calls[0][0] as {
@@ -698,7 +698,7 @@ describe('authoring a native survey', () => {
     // one that survives the move is identifiable.
     await user.click(screen.getByRole('button', { name: /^Add question$/i }));
 
-    await submitFromLastStep(user, /^Create opportunity$/);
+    await submitFromLastStep(user, /^Create study$/);
     await screen.findByRole('alert', { name: /There is a problem/i });
     // The message is NUMBERED now, which is what makes a summary of six empty
     // questions readable - and what makes this assertion able to tell which
@@ -782,7 +782,7 @@ describe('authoring a native survey', () => {
       'Which tool slows you down?'
     );
 
-    await submitFromLastStep(user, /^Create opportunity$/);
+    await submitFromLastStep(user, /^Create study$/);
     await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
 
     const body = vi.mocked(createOpportunity).mock.calls[0][0] as {
@@ -813,7 +813,7 @@ describe('authoring a native survey', () => {
     await user.click(screen.getByLabelText('Required'));
     await user.selectOptions(screen.getByLabelText(/^Type$/i), 'instruction');
 
-    await submitFromLastStep(user, /^Create opportunity$/);
+    await submitFromLastStep(user, /^Create study$/);
     await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
 
     const body = vi.mocked(createOpportunity).mock.calls[0][0] as {
@@ -854,7 +854,7 @@ describe('authoring a native survey', () => {
     await user.type(screen.getByLabelText(/Estimated completion time/i), '5000');
     await user.click(screen.getByRole('button', { name: /Use the automatic estimate/i }));
 
-    await submitFromLastStep(user, /^Create opportunity$/);
+    await submitFromLastStep(user, /^Create study$/);
     await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
 
     const body = vi.mocked(createOpportunity).mock.calls[0][0] as {
@@ -909,7 +909,7 @@ describe('authoring a native survey', () => {
       'https://example.com/form'
     );
 
-    await submitFromLastStep(user, /^Create opportunity$/);
+    await submitFromLastStep(user, /^Create study$/);
 
     await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
   });
@@ -1050,7 +1050,7 @@ describe('authoring a native survey', () => {
       'https://example.com/form'
     );
 
-    await submitFromLastStep(user, /^Create opportunity$/);
+    await submitFromLastStep(user, /^Create study$/);
 
     await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
 
@@ -1232,7 +1232,7 @@ describe('starting a survey from an existing set of questions', () => {
     await user.clear(prompts[1]);
     await user.type(prompts[1], 'Which docs did you actually open?');
 
-    await submitFromLastStep(user, /^Create opportunity$/);
+    await submitFromLastStep(user, /^Create study$/);
     await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
 
     const body = vi.mocked(createOpportunity).mock.calls[0][0] as {
@@ -1424,7 +1424,7 @@ describe('starting a survey from an existing set of questions', () => {
     await screen.findByDisplayValue('Draft saved early');
     await user.click(screen.getByRole('button', { name: /Questions/i }));
     expect(
-      await screen.findByRole('radio', { name: /Create questions for this opportunity/i })
+      await screen.findByRole('radio', { name: /Create questions for this study/i })
     ).toBeChecked();
 
     await user.click(
@@ -1445,7 +1445,7 @@ describe('starting a survey from an existing set of questions', () => {
     await fillNativeSurvey(user);
 
     expect(
-      screen.getByRole('radio', { name: /Create questions for this opportunity/i })
+      screen.getByRole('radio', { name: /Create questions for this study/i })
     ).toBeChecked();
     expect(vi.mocked(getFirstHandStudies)).not.toHaveBeenCalled();
   });
@@ -1590,7 +1590,7 @@ describe('starting a survey from an existing set of questions', () => {
       })
     );
 
-    await submitFromLastStep(user, /^Create opportunity$/);
+    await submitFromLastStep(user, /^Create study$/);
 
     await screen.findByRole('alert', { name: /There is a problem/i });
     const message = inlineErrorText(
@@ -1618,7 +1618,7 @@ describe('starting a survey from an existing set of questions', () => {
         name: /Questions/i
       })
     );
-    await submitFromLastStep(user, /^Create opportunity$/);
+    await submitFromLastStep(user, /^Create study$/);
     await screen.findByRole('alert', { name: /There is a problem/i });
     expect(
       inlineErrorText(/Add at least one question before publishing/i)

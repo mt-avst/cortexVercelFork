@@ -474,7 +474,7 @@ export const getTabsForType = (
 ): FormStep[] => {
   const tabs: FormStep[] = [
     { id: 1, key: 'basics', title: 'Basic Information', description: 'Configure type and details' },
-    { id: 2, key: 'content', title: 'Content & Details', description: 'Define opportunity content' }
+    { id: 2, key: 'content', title: 'Content & Details', description: 'Define study content' }
   ];
 
   // Every question-carrying type has two shapes. Native delivery collects the
@@ -1496,7 +1496,7 @@ const OpportunityForm: React.FC = () => {
             // list because the read failed, and A0 would write exactly that
             // over the real thing, so no save is allowed until it succeeds.
             setStudyLoadError(
-              'The linked task list or questions could not be loaded, so this opportunity cannot be saved right now. Reload the page to try again.'
+              'The linked task list or questions could not be loaded, so this study cannot be saved right now. Reload the page to try again.'
             );
           }
 
@@ -1712,9 +1712,9 @@ const OpportunityForm: React.FC = () => {
     } catch (err: unknown) {
       const axiosError = err as { response?: { status?: number; data?: { error?: string } } };
       if (axiosError.response?.status === 404) {
-        setError('Opportunity not found. It may have been deleted or you may not have permission to edit it.');
+        setError('Study not found. It may have been deleted or you may not have permission to edit it.');
       } else {
-        setError('Failed to load opportunity');
+        setError('Failed to load study');
       }
     } finally {
       setLoadingOpportunity(false);
@@ -1928,7 +1928,7 @@ const OpportunityForm: React.FC = () => {
       if (studyIsReadOnly) {
         if (!formData.firsthand_study_id?.trim()) {
           errors.firsthand_study_id =
-            'Add a task list before publishing - this opportunity has none';
+            'Add a task list before publishing - this study has none';
         }
       } else if (formData.inline_study_steps.length === 0) {
         // Named against the thing the author does, not the object model. The
@@ -1948,7 +1948,7 @@ const OpportunityForm: React.FC = () => {
       if (studyIsReadOnly) {
         if (!formData.firsthand_study_id?.trim()) {
           errors.firsthand_study_id =
-            'Add questions before publishing - this opportunity has none';
+            'Add questions before publishing - this study has none';
         }
       } else if (formData.inline_survey_questions.length === 0) {
         errors.inline_survey_questions =
@@ -2052,7 +2052,7 @@ const OpportunityForm: React.FC = () => {
         formData.inline_study_steps.length === 0
       ) {
         errors.inline_study_steps =
-          'A task list needs at least one task. Add one, or delete the opportunity if you no longer need it';
+          'A task list needs at least one task. Add one, or delete the study if you no longer need it';
       }
 
       if (
@@ -2060,7 +2060,7 @@ const OpportunityForm: React.FC = () => {
         formData.inline_survey_questions.length === 0
       ) {
         errors.inline_survey_questions =
-          'A set of questions needs at least one question. Add one, or delete the opportunity if you no longer need it';
+          'A set of questions needs at least one question. Add one, or delete the study if you no longer need it';
       }
     }
 
@@ -3777,8 +3777,8 @@ const OpportunityForm: React.FC = () => {
         axiosError?.response?.status === 409 ? axiosError?.response?.data?.error : undefined;
       setError(
         overlapMessage
-          ? `${overlapMessage.replace(/\.$/, '')}. The opportunity was saved but its time slots were not - change the times on the Session Management step and save again.`
-          : 'The opportunity was saved but its time slots were not. Add them from the dashboard.'
+          ? `${overlapMessage.replace(/\.$/, '')}. The study was saved but its time slots were not - change the times on the Session Management step and save again.`
+          : 'The study was saved but its time slots were not. Add them from the dashboard.'
       );
       /*
        * Reported to the CALLER, not only to `setError`.
@@ -4198,7 +4198,7 @@ const OpportunityForm: React.FC = () => {
             timestamp: Date.now(),
             message: isDraft
               ? `⚠️ Study ${isEdit ? 'updated' : 'created'} as DRAFT - Not visible to users yet. Change status to Published to make it visible.`
-              : (isEdit ? 'Opportunity updated successfully!' : 'Opportunity created successfully!')
+              : (isEdit ? 'Study updated successfully!' : 'Study created successfully!')
           }
         });
       }
@@ -4305,7 +4305,7 @@ const OpportunityForm: React.FC = () => {
         return undefined;
       }
 
-      setError(axiosError.response?.data?.error || 'Failed to save opportunity');
+      setError(axiosError.response?.data?.error || 'Failed to save study');
     } finally {
       setSaving(false);
       manualSaveRef.current = false;
@@ -4681,7 +4681,7 @@ const OpportunityForm: React.FC = () => {
   if (loading) {
     return (
       <div className="d-flex justify-content-center align-items-center min-h-50vh" aria-busy="true" aria-live="polite">
-        <h1 className="visually-hidden">Create Opportunity</h1>
+        <h1 className="visually-hidden">Create study</h1>
         <div className="spinner-border text-primary" role="status" aria-label="Loading">
           <span className="visually-hidden">Loading...</span>
         </div>
@@ -4704,9 +4704,9 @@ const OpportunityForm: React.FC = () => {
   if (isEdit && loadingOpportunity) {
     return (
       <div className="d-flex justify-content-center align-items-center min-h-50vh" aria-busy="true" aria-live="polite">
-        <h1 className="visually-hidden">Edit Opportunity</h1>
-        <div className="spinner-border text-primary" role="status" aria-label="Loading opportunity">
-          <span className="visually-hidden">Loading opportunity...</span>
+        <h1 className="visually-hidden">Edit study</h1>
+        <div className="spinner-border text-primary" role="status" aria-label="Loading study">
+          <span className="visually-hidden">Loading study...</span>
         </div>
       </div>
     );
@@ -4766,7 +4766,7 @@ const OpportunityForm: React.FC = () => {
               <div className="d-flex align-items-center justify-content-between form-edit-header">
                 <div>
                   <h1 className="mb-1 form-title form-title-lg">
-                    {isEdit ? 'Edit Opportunity' : 'Create New Opportunity'}
+                    {isEdit ? 'Edit study' : 'Create new study'}
                   </h1>
                   <p className="mb-0 form-subtitle form-subtitle-md">
                     {isEdit ? 'Update study details and sessions' : 'Set up a new Cortex research study'}
@@ -5474,7 +5474,7 @@ const OpportunityForm: React.FC = () => {
                           as well as the author.
                         */
                         onSubmit={() => handleSubmit()}
-                        submitLabel={isEdit ? 'Save changes' : 'Create opportunity'}
+                        submitLabel={isEdit ? 'Save changes' : 'Create study'}
                       />
                     </>
                   )}
@@ -5496,7 +5496,7 @@ const OpportunityForm: React.FC = () => {
       <ConfirmationModal
         show={pendingExit !== null}
         title="Leave without saving?"
-        message="This opportunity has changes that have not been saved. Leaving now discards them."
+        message="This study has changes that have not been saved. Leaving now discards them."
         confirmLabel="Discard and leave"
         cancelLabel="Stay on this form"
         variant="warning"
@@ -5534,7 +5534,7 @@ const OpportunityForm: React.FC = () => {
       <ConfirmationModal
         show={confirmingDiscard}
         title="Discard this draft?"
-        message="This deletes the draft opportunity and cannot be undone. Any questions or tasks you authored here stay in the Task Lists area, where you can delete them separately."
+        message="This deletes the draft study and cannot be undone. Any questions or tasks you authored here stay in the Task Lists area, where you can delete them separately."
         confirmLabel="Discard it"
         cancelLabel="Keep working on it"
         variant="danger"

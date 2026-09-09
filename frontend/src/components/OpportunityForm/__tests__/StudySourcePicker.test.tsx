@@ -425,11 +425,11 @@ describe('loading, error and busy states', () => {
 });
 
 describe('empty state', () => {
-  it('mentions the drafts waiting to be launched when there are some', () => {
+  it('mentions the drafts waiting to be published when there are some', () => {
     renderPicker({ studies: [], draftCount: 4 });
 
     expect(
-      screen.getByText(/Nothing launched to start from yet\. 4 in draft/)
+      screen.getByText(/Nothing published to start from yet\. 4 in draft/)
     ).toBeInTheDocument();
   });
 

@@ -150,7 +150,7 @@ describe('OpportunityDetail - what an error takes away', () => {
     // one that failed, so restoring the banner without removing it would have
     // started booking participants into slots they never chose.
     expect(screen.queryByRole('button', { name: /retry booking/i })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Refresh opportunity data' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Refresh study data' })).toBeInTheDocument();
   });
 
   it('still takes the page over when there is no study to show', async () => {
@@ -228,7 +228,7 @@ describe('OpportunityDetail - what an error takes away', () => {
     vi.mocked(getOpportunity).mockRejectedValue({
       response: { status: 500, data: { error: 'upstream exploded' } },
     });
-    await user.click(screen.getByRole('button', { name: 'Refresh opportunity data' }));
+    await user.click(screen.getByRole('button', { name: 'Refresh study data' }));
 
     await waitFor(() => expect(screen.getByText(/upstream exploded/i)).toBeInTheDocument());
     expect(screen.getByText('Checkout flow walkthrough')).toBeInTheDocument();
@@ -259,11 +259,11 @@ describe('OpportunityDetail - what an error takes away', () => {
     vi.mocked(getOpportunity).mockImplementationOnce(
       () => new Promise((resolve) => { release = resolve; }) as never
     );
-    await user.click(screen.getByRole('button', { name: 'Refresh opportunity data' }));
+    await user.click(screen.getByRole('button', { name: 'Refresh study data' }));
 
     // Mid-flight: the request has not resolved and must not have taken the page.
     expect(screen.getByText('Checkout flow walkthrough')).toBeInTheDocument();
-    expect(screen.queryByText(/Loading opportunity/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Loading study/i)).not.toBeInTheDocument();
 
     release({ ...fixture });
     await waitFor(() => expect(screen.getByText('Checkout flow walkthrough')).toBeInTheDocument());
@@ -332,7 +332,7 @@ describe('OpportunityDetail - what an error takes away', () => {
     vi.mocked(getOpportunity).mockRejectedValue({
       response: { status: 404, data: { error: 'not found' } },
     });
-    await user.click(screen.getByRole('button', { name: 'Refresh opportunity data' }));
+    await user.click(screen.getByRole('button', { name: 'Refresh study data' }));
 
     await waitFor(() => {
       expect(screen.queryByText('Checkout flow walkthrough')).not.toBeInTheDocument();

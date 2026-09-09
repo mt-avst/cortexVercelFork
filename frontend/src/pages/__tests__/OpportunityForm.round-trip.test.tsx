@@ -265,7 +265,7 @@ const walkToReview = () => {
  * Review is where every save happens now (C3), so this always walks whatever
  * distance is left via `walkToReview` before clicking the terminal control.
  */
-const submitFromLastStep = (name: RegExp = /^(Create opportunity|Save changes)$/) => {
+const submitFromLastStep = (name: RegExp = /^(Create study|Save changes)$/) => {
   walkToReview();
   fireEvent.click(screen.getByRole('button', { name }));
 };
@@ -1756,7 +1756,7 @@ describe('when the linked study no longer exists', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Task List/i }));
 
     expect(
-      await screen.findByRole('radio', { name: /Create tasks for this opportunity/i })
+      await screen.findByRole('radio', { name: /Create tasks for this study/i })
     ).toBeChecked();
     expect(
       screen.getByRole('radio', { name: /Start from an existing task list/i })
@@ -1835,7 +1835,7 @@ describe('when the linked set of questions no longer exists', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Questions/i }));
 
     expect(
-      await screen.findByRole('radio', { name: /Create questions for this opportunity/i })
+      await screen.findByRole('radio', { name: /Create questions for this study/i })
     ).toBeChecked();
     expect(
       screen.getByRole('radio', { name: /Start from an existing set of questions/i })
@@ -1874,7 +1874,7 @@ describe('when the linked study cannot be read', () => {
     renderEdit('/admin/opportunities/opp-1/edit');
 
     expect(
-      await screen.findByText(/could not be loaded, so this opportunity cannot be saved/i)
+      await screen.findByText(/could not be loaded, so this study cannot be saved/i)
     ).toBeInTheDocument();
 
     // A real edit, so the Save control is rendered at all - the point is that
@@ -1912,7 +1912,7 @@ describe('when the linked study cannot be read', () => {
 
     renderEdit('/admin/opportunities/opp-1/edit');
 
-    await screen.findByText(/could not be loaded, so this opportunity cannot be saved/i);
+    await screen.findByText(/could not be loaded, so this study cannot be saved/i);
 
     expect(
       await screen.findByRole('button', { name: /Continue: Content & Details/i })
@@ -1944,7 +1944,7 @@ describe('when the linked study cannot be read', () => {
 
     renderEdit('/admin/opportunities/opp-1/edit');
 
-    await screen.findByText(/could not be loaded, so this opportunity cannot be saved/i);
+    await screen.findByText(/could not be loaded, so this study cannot be saved/i);
 
     // A real edit, so the Save Changes shortcut renders at all - the point
     // below is that it renders DISABLED, on the step before Review too.

@@ -244,7 +244,7 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
           <div className="alert alert-info py-2 px-3 mb-4" style={{ fontSize: '0.875rem' }}>
             This task list belongs to another researcher, so it is not editable
             here - and the Task Lists area applies the same rule. Ask its owner
-            to change it, or create a new opportunity and start from a copy of
+            to change it, or create a new study and start from a copy of
             it.
           </div>
         )}

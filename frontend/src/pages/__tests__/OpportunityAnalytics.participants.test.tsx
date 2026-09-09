@@ -191,7 +191,7 @@ describe('the Participants tab', () => {
     await user.click(screen.getByRole('tab', { name: 'Participants' }));
 
     expect(
-      await screen.findByText('Only the opportunity owner can view its participants')
+      await screen.findByText('Only the study owner can view its participants')
     ).toBeTruthy();
     expect(screen.queryByText('Nobody has booked a session yet.')).toBeNull();
   });

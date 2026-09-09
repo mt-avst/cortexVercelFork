@@ -509,7 +509,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         return `${timeSpan} - Session: ${session.capacity} capacity, ${session.booked_count} booked, ${session.remaining} remaining`;
       }
       if (isBusy) return `${timeSpan} - This time slot conflicts with existing calendar events`;
-      if (isAllocated) return `${timeSpan} - This slot is allocated to another opportunity`;
+      if (isAllocated) return `${timeSpan} - This slot is allocated to another study`;
       if (isSelected) return `${timeSpan} - Selected for session creation`;
       if (isConfirmed) return `${timeSpan} - Session confirmed`;
       if (isPast) return `${timeSpan} - This time is in the past and cannot be scheduled`;
@@ -1373,7 +1373,7 @@ const ListView: React.FC<{
             {isTemporary && sessions.length > 0 && (
               <small className="text-warning">
                 <Clock size={14} className="me-1" />
-                Sessions will be saved when opportunity is created
+                Sessions will be saved when the study is created
               </small>
             )}
           </div>
@@ -2391,7 +2391,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
 
     // Validate opportunityId for non-temporary sessions
     if (!isTemporary && (!opportunityId || opportunityId.trim() === '')) {
-      setError('Cannot create sessions: Opportunity ID is missing. Please save the opportunity first.');
+      setError('Cannot create sessions: Study ID is missing. Please save the study first.');
       return false;
     }
 
@@ -2758,7 +2758,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       {disabled && !isTemporary && !opportunityId && (
         <div className="alert alert-info" role="alert">
           <Info size={18} className="me-2" />
-          Please wait while the opportunity loads, or save the opportunity first before adding sessions.
+          Please wait while the study loads, or save the study first before adding sessions.
         </div>
       )}
 
@@ -2780,7 +2780,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                 ></button>
               </div>
               <div className="modal-body">
-                <p>Are you sure you want to delete all {sessions.length} session(s) for this opportunity?</p>
+                <p>Are you sure you want to delete all {sessions.length} session(s) for this study?</p>
                 <div className="alert alert-warning">
                   <Info size={18} className="me-2" />
                   <strong>This action cannot be undone.</strong> All session data will be permanently deleted.

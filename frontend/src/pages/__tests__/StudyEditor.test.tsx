@@ -98,7 +98,7 @@ describe('StudyEditorForm - create', () => {
     expect(
       screen.getByRole('button', { name: /Create task list/i })
     ).toBeInTheDocument();
-    expect(screen.getByText('Step 1')).toBeInTheDocument();
+    expect(screen.getByText('Task 1')).toBeInTheDocument();
   });
 
   it('warns and blocks submit when a task step has no target url, then unblocks on acknowledgement', () => {
@@ -558,7 +558,7 @@ describe('StudyEditorForm - read only', () => {
     // The whole fieldset, not just the button: the consent copy is the field
     // the attack rewrites, so it must not look editable either.
     expect(screen.getByLabelText('Consent text')).toBeDisabled();
-    expect(screen.getByRole('button', { name: /Add step/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Add task/i })).toBeDisabled();
   });
 
   it('leaves the owner’s own study fully editable', () => {
@@ -632,7 +632,7 @@ describe('StudyEditorForm - step id namespacing', () => {
   it('sends the minted study id on create, and prefixes every step with it', async () => {
     renderForm();
     fillRequiredFields({ title: 'Prefixed study' });
-    fireEvent.click(screen.getByRole('button', { name: /Add step/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Add task/i }));
     fireEvent.change(screen.getAllByLabelText('Prompt')[1], {
       target: { value: 'Second task' },
     });
@@ -693,10 +693,10 @@ describe('StudyEditorForm - step id namespacing', () => {
     });
 
     // The payload trims, so a spaced id claims the untrimmed sequence too.
-    fireEvent.change(screen.getByLabelText('Step id'), {
+    fireEvent.change(screen.getByLabelText('Task id'), {
       target: { value: '  study_abc_step_002  ' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /Add step/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Add task/i }));
     fireEvent.change(screen.getAllByLabelText('Prompt')[1], {
       target: { value: 'Second task' },
     });
@@ -734,7 +734,7 @@ describe('StudyEditorForm - step id namespacing', () => {
       ],
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /Add step/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Add task/i }));
     fireEvent.change(screen.getAllByLabelText('Prompt')[2], {
       target: { value: 'New task' },
     });
@@ -764,7 +764,7 @@ describe('StudyEditorForm - step id namespacing', () => {
       ],
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /Add step/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Add task/i }));
     fireEvent.change(screen.getAllByLabelText('Prompt')[1], {
       target: { value: 'Second task' },
     });
@@ -851,8 +851,8 @@ describe('StudyEditorForm - step id namespacing', () => {
 
     // Removing step 1 renumbers the survivors' `order` to 1 and 2 but leaves
     // their ids at _002 and _003, so an id derived from position reissues _003.
-    fireEvent.click(screen.getAllByRole('button', { name: /Remove step/i })[0]);
-    fireEvent.click(screen.getByRole('button', { name: /Add step/i }));
+    fireEvent.click(screen.getAllByRole('button', { name: /Remove task/i })[0]);
+    fireEvent.click(screen.getByRole('button', { name: /Add task/i }));
     fireEvent.change(screen.getAllByLabelText('Prompt')[2], {
       target: { value: 'New task' },
     });

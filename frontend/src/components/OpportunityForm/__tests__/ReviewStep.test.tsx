@@ -129,7 +129,7 @@ describe('ReviewStep - Status (#111)', () => {
     render(<ReviewStep {...baseProps} status="published" />);
     expect(statusControl().value).toBe('published');
     expect(
-      screen.getByText('Published opportunities are visible to all users')
+      screen.getByText('Published studies are visible to all users')
     ).toBeInTheDocument();
     // The draft warning is gone, not merely joined by the published one.
     expect(screen.queryByText(/DRAFT/)).not.toBeInTheDocument();

@@ -35,12 +35,12 @@ describe('what the note says', () => {
    * The consequence the checkbox this replaced never stated: from the moment
    * of copying, neither side affects the other again.
    */
-  it('states that later changes to the original will not affect this opportunity', () => {
+  it('states that later changes to the original will not affect this study', () => {
     renderNote();
 
     expect(
       screen.getByText(
-        /Later changes to the original will not affect\s+this opportunity/
+        /Later changes to the original will not affect\s+this study/
       )
     ).toBeInTheDocument();
   });

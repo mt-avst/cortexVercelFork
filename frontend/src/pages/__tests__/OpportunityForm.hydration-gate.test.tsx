@@ -118,7 +118,7 @@ describe('OpportunityForm edit-mode hydration gate', () => {
       </MemoryRouter>
     );
 
-    expect(firstPaint).toContain('Loading opportunity');
+    expect(firstPaint).toContain('Loading study');
     // The controls the author could otherwise reach and have silently discarded.
     expect(firstPaint).not.toContain('id="status"');
     expect(firstPaint).not.toContain('id="title"');

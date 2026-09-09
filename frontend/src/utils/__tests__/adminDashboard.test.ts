@@ -252,9 +252,9 @@ describe('getAdminTypeLabel', () => {
 });
 
 describe('getDisplayStatus', () => {
-  it('maps raw status to the restyled label (published reads LIVE)', () => {
+  it('maps raw status to the restyled label (published reads PUBLISHED)', () => {
     expect(getDisplayStatus('draft')).toBe('DRAFT');
-    expect(getDisplayStatus('published')).toBe('LIVE');
+    expect(getDisplayStatus('published')).toBe('PUBLISHED');
     expect(getDisplayStatus('closed')).toBe('CLOSED');
   });
 });
