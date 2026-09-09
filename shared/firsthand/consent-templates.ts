@@ -312,3 +312,50 @@ export const MODERATED_CONSENT_TEMPLATE = currentConsentTemplate("moderated");
 export const allConsentTemplates = (): ConsentTemplateVersion[] => [
   ...CONSENT_TEMPLATE_VERSIONS
 ];
+
+/**
+ * The opportunity types whose bookings are moderated live sessions - a call
+ * with a researcher that may be recorded. These, and only these, carry consent
+ * at booking time. The single source of this set; the opportunities route
+ * re-exports it, so "which types are moderated" is decided once.
+ *
+ * Not `test`/`interview` widened casually: `test` is the union's value for a
+ * live session, `interview` its sibling. A third bookable moderated type is a
+ * deliberate addition here, not a silent inheritance.
+ */
+export const MODERATED_CONSENT_TYPES: ReadonlySet<string> = new Set([
+  "test",
+  "interview"
+]);
+
+/**
+ * The consent wording a booking of this opportunity type must present, verbatim
+ * - the text the participant accepts and echoes back.
+ *
+ * The rule that closes the audit gap (row 9): a moderated opportunity always has
+ * booking consent, even when nobody typed any. Its own wording when it carries
+ * some; otherwise the Cortex-owned baseline (`moderated-default`), which is why
+ * this reads `MODERATED_CONSENT_TEMPLATE.text` rather than the raw default
+ * constant - if a v2 ever ships, the baseline shown tracks the current template
+ * and stays coherent with the version a booking records against it.
+ *
+ * A non-moderated type has nothing to accept and returns '' - the booking path
+ * treats an empty string as "no consent step", exactly as before.
+ */
+export const bookingConsentText = (
+  type: string,
+  consentText: string | null | undefined
+): string => {
+  // Booking consent is a moderated-type concept. A non-moderated type has
+  // nothing to accept and returns '' even if a stray consent_text somehow rode
+  // along - the write path refuses consent on those types, and a phantom
+  // consent step is worse than none.
+  if (!MODERATED_CONSENT_TYPES.has(type)) {
+    return "";
+  }
+  const stored = typeof consentText === "string" ? consentText.trim() : "";
+  // Trim the baseline too, not just the stored wording: the server echo-compares
+  // a trimmed `seen` against this, so a future template revision that introduced
+  // surrounding whitespace would otherwise refuse every baseline booking.
+  return (stored || MODERATED_CONSENT_TEMPLATE.text).trim();
+};

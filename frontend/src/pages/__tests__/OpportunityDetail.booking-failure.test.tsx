@@ -18,6 +18,12 @@ import { bookSession, getOpportunity } from '../../api/client';
  * CalendarGrid is stubbed here so the assertion is on the seam itself: what the
  * child observes when it awaits onBookSession. The unwind that depends on it is
  * pinned in CalendarGrid.booking.test.tsx.
+ *
+ * Audit row 9: a moderated opportunity (test/interview) now always presents a
+ * Cortex-owned baseline consent before it books, so handleBookSession rejects
+ * to the grid at the consent step - the grid unwinds while the participant
+ * reads - and the booking itself (success or failure) runs when consent is
+ * accepted in the modal. The guard-clause case still rejects before any modal.
  */
 
 const start = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
@@ -116,20 +122,34 @@ describe('OpportunityDetail - reporting a booking failure to the grid', () => {
     await user.click(await screen.findByRole('button', { name: 'Switch to calendar view' }));
     await user.click(await screen.findByRole('button', { name: 'stub book' }));
 
+    // Audit row 9: a moderated booking detours through the baseline consent
+    // modal, so the grid's await rejects at the consent step (its optimistic
+    // mark unwinds while the participant reads). The booking itself, and the
+    // failure this test is about, happen when consent is accepted.
     await waitFor(() => expect(bookOutcome).toBe('rejected'));
-    expect(screen.getByText(/Server error occurred/i)).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: 'Accept and book' }));
+    expect(await screen.findByText(/Server error occurred/i)).toBeInTheDocument();
   });
 
-  it('resolves to the caller when the booking works', async () => {
+  it('unwinds the grid at consent and then books successfully once accepted', async () => {
+    // Audit row 9: a moderated booking always presents consent, so the grid's
+    // await rejects at the consent step (the optimistic mark must not linger
+    // while the participant reads). The successful booking then happens through
+    // the modal's Accept - proving the success path completes rather than being
+    // swallowed, which is what the old direct-booking version guarded.
     vi.mocked(bookSession).mockResolvedValue({ id: 'booking-1' } as never);
 
     renderDetail();
     await user.click(await screen.findByRole('button', { name: 'Switch to calendar view' }));
     await user.click(await screen.findByRole('button', { name: 'stub book' }));
 
-    // Guards the lazy over-correction: rethrowing unconditionally would satisfy
-    // the test above while telling the grid to unwind every successful booking.
-    await waitFor(() => expect(bookOutcome).toBe('resolved'));
+    await waitFor(() => expect(bookOutcome).toBe('rejected'));
+    await user.click(await screen.findByRole('button', { name: 'Accept and book' }));
+    expect(await screen.findByText(/Successfully booked/i)).toBeInTheDocument();
+    expect(bookSession).toHaveBeenCalledWith('sess-1', {
+      consentAccepted: true,
+      consentTextSeen: expect.any(String),
+    });
   });
 
   it('rejects on a 409, the failure the participant actually hits', async () => {
@@ -146,7 +166,10 @@ describe('OpportunityDetail - reporting a booking failure to the grid', () => {
     await user.click(await screen.findByRole('button', { name: 'Switch to calendar view' }));
     await user.click(await screen.findByRole('button', { name: 'stub book' }));
 
+    // Audit row 9: the grid unwinds at the consent step; the 409 arrives when
+    // consent is accepted and the booking is actually attempted.
     await waitFor(() => expect(bookOutcome).toBe('rejected'));
+    await user.click(await screen.findByRole('button', { name: 'Accept and book' }));
     // And the message survives the reload that a capacity failure triggers,
     // which opens with setError('').
     expect(await screen.findByText(/Session is full/i)).toBeInTheDocument();

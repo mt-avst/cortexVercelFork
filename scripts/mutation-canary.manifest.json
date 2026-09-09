@@ -2355,5 +2355,15 @@
     "runner": "jest",
     "spec": "src/routes/__tests__/opportunities.test.ts",
     "test": "refuses a second question"
+  },
+  {
+    "id": "booking-consent-baseline-fallback",
+    "why": "cto/AdaptaLabs audit row 9. A moderated booking (test/interview) must ALWAYS present consent - the researcher's own wording or the Cortex-owned moderated-default baseline - so a live session whose opportunity carries a null consent_text no longer books with no consent shown and no acceptance record. bookingConsentText is the single rule both the booking gate (bookings.ts) and the participant detail page resolve from; dropping the `|| baseline` fallback returns '' for a null-consent moderated opportunity, which the booking gate reads as 'nothing to accept' and books silently - the exact pre-fix exposure. Proven by mutation before entry: `return stored;` left every suite green except the named test (and the three baseline refusal tests in bookings.consent-acceptance.test.ts).",
+    "file": "shared/firsthand/consent-templates.ts",
+    "anchor": "  return (stored || MODERATED_CONSENT_TEMPLATE.text).trim();",
+    "mutation": "  return stored;",
+    "runner": "vitest",
+    "spec": "src/firsthand/consent-templates.test.ts",
+    "test": "a live session with no wording of its own falls back to the moderated baseline"
   }
 ]

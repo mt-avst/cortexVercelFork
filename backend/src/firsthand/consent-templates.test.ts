@@ -20,7 +20,10 @@ import { DEFAULT_CONSENT_TEXT } from "../../../shared/firsthand/inline-study";
 import { DEFAULT_SURVEY_CONSENT_TEXT } from "../../../shared/firsthand/survey-authoring";
 import {
   DEFAULT_MODERATED_CONSENT_TEXT,
-  MODERATED_CONSENT_TEMPLATE_ID
+  MODERATED_CONSENT_TEMPLATE_ID,
+  MODERATED_CONSENT_TYPES,
+  MODERATED_CONSENT_TEMPLATE,
+  bookingConsentText
 } from "../../../shared/firsthand/consent-templates";
 
 const RECORDED_V1 = currentConsentTemplate("recorded");
@@ -528,5 +531,47 @@ describe("the moderated kind never reaches firsthand.studies (#79)", () => {
       "utf8"
     );
     expect(sql0013).not.toMatch(/moderated/);
+  });
+});
+
+describe("bookingConsentText (audit row 9 - baseline on the booking path)", () => {
+  // Pinned as literals: the set is a governance decision, and deriving the
+  // expectation from the constant under test could not see it change.
+  it("is exactly the two moderated bookable types", () => {
+    expect([...MODERATED_CONSENT_TYPES].sort()).toEqual(["interview", "test"]);
+  });
+
+  it.each(["test", "interview"])(
+    "returns the Cortex baseline for a %s with no wording of its own",
+    (type) => {
+      expect(bookingConsentText(type, null)).toBe(MODERATED_CONSENT_TEMPLATE.text);
+      expect(bookingConsentText(type, "")).toBe(MODERATED_CONSENT_TEMPLATE.text);
+      expect(bookingConsentText(type, "   ")).toBe(MODERATED_CONSENT_TEMPLATE.text);
+    }
+  );
+
+  it("returns a moderated opportunity's OWN wording, trimmed, over the baseline", () => {
+    expect(bookingConsentText("test", "  We record the call.  ")).toBe("We record the call.");
+  });
+
+  it.each(["survey", "poll", "question", "unmoderated"])(
+    "returns '' for %s - a non-moderated type has nothing to accept",
+    (type) => {
+      expect(bookingConsentText(type, null)).toBe("");
+      // A stray stored string on a non-moderated type is still not booking
+      // consent - no phantom step.
+      expect(bookingConsentText(type, "leftover text")).toBe("");
+    }
+  );
+
+  it("the baseline it returns is the current moderated template's wording", () => {
+    expect(MODERATED_CONSENT_TEMPLATE.text).toBe(DEFAULT_MODERATED_CONSENT_TEXT);
+    expect(MODERATED_CONSENT_TEMPLATE.id).toBe(MODERATED_CONSENT_TEMPLATE_ID);
+  });
+
+  // A single stable assertion (not table-driven) so the mutation canary can name
+  // one test that fails when the baseline fallback is dropped.
+  it("a live session with no wording of its own falls back to the moderated baseline", () => {
+    expect(bookingConsentText("test", null)).toBe(MODERATED_CONSENT_TEMPLATE.text);
   });
 });

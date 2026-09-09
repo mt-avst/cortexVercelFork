@@ -53,6 +53,10 @@ jest.mock('../../utils/logger', () => ({
 import bookingsRouter, { CONSENT_ACCEPTANCE_REQUIRED, CONSENT_WORDING_CHANGED } from '../bookings';
 import { pool } from '../../config';
 import { errorHandler } from '../../utils/errorHandler';
+import {
+  MODERATED_CONSENT_TEMPLATE,
+  MODERATED_CONSENT_TEMPLATE_ID,
+} from '../../../../shared/firsthand/consent-templates';
 
 const mockQuery = pool.query as unknown as jest.Mock;
 const mockConnect = pool.connect as unknown as jest.Mock;
@@ -82,6 +86,7 @@ const appAs = (id: string) => {
 
 /** A transaction client whose locked session row carries the given consent. */
 const bookingClient = (consent: {
+  opportunity_type: string;
   consent_text: string | null;
   consent_template_id: string | null;
   consent_template_version: number | null;
@@ -145,13 +150,28 @@ const insertCallOn = (client: { query: jest.Mock }) =>
     String(call[0]).includes('INSERT INTO bookings')
   );
 
+// A moderated opportunity carrying its OWN wording (a researcher typed it).
 const WITH_CONSENT = {
+  opportunity_type: 'test',
   consent_text: CONSENT_TEXT,
   consent_template_id: 'moderated-default',
   consent_template_version: 1,
 };
 
+// A moderated opportunity carrying NO wording of its own. Before audit row 9
+// this booked with no consent step at all; now the Cortex-owned baseline
+// applies, resolved at booking time from the type - no server-side seeding.
+const BASELINE_CONSENT = {
+  opportunity_type: 'test',
+  consent_text: null,
+  consent_template_id: null,
+  consent_template_version: null,
+};
+
+// A non-moderated type has nothing to accept at booking - the control that the
+// gate is TYPE-scoped, not "any opportunity with a null consent_text".
 const WITHOUT_CONSENT = {
+  opportunity_type: 'survey',
   consent_text: null,
   consent_template_id: null,
   consent_template_version: null,
@@ -296,7 +316,7 @@ describe('POST /sessions/:id/book on an opportunity carrying consent', () => {
   });
 });
 
-describe('POST /sessions/:id/book on an opportunity without consent', () => {
+describe('POST /sessions/:id/book on a non-moderated opportunity (nothing to accept)', () => {
   it('books exactly as before, with nothing recorded', async () => {
     const client = bookingClient(WITHOUT_CONSENT);
     mockConnect.mockImplementation(async () => client);
@@ -339,9 +359,65 @@ describe('POST /sessions/:id/book on an opportunity without consent', () => {
 
     const sessionSelect = statementsOn(client).find((sql) => sql.includes('FROM sessions'));
     expect(sessionSelect).toBeDefined();
+    // o.type rides too: the baseline gate resolves off the opportunity type,
+    // so a join that stops selecting it would blind the gate to a moderated
+    // session with a null consent_text and book it silently again.
+    expect(sessionSelect).toContain('o.type');
     expect(sessionSelect).toContain('o.consent_text');
     expect(sessionSelect).toContain('o.consent_template_id');
     expect(sessionSelect).toContain('o.consent_template_version');
+  });
+});
+
+describe('POST /sessions/:id/book on a moderated opportunity with no wording of its own (baseline)', () => {
+  const BASELINE_TEXT = MODERATED_CONSENT_TEMPLATE.text;
+  const BASELINE_HASH = createHash('sha256').update(BASELINE_TEXT).digest('hex');
+
+  it('refuses a body without acceptance - the baseline is consent to accept, before any INSERT', async () => {
+    const client = bookingClient(BASELINE_CONSENT);
+    mockConnect.mockImplementation(async () => client);
+
+    const res = await request(listening(appAs('u1')))
+      .post('/api/bookings/sessions/s1/book')
+      .send({});
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe(CONSENT_ACCEPTANCE_REQUIRED);
+    expect(insertCallOn(client)).toBeUndefined();
+    expect(statementsOn(client)).toContain('ROLLBACK');
+  });
+
+  it('refuses an acceptance echoing anything but the baseline wording', async () => {
+    const client = bookingClient(BASELINE_CONSENT);
+    mockConnect.mockImplementation(async () => client);
+
+    const res = await request(listening(appAs('u1')))
+      .post('/api/bookings/sessions/s1/book')
+      .send({ consent_accepted: true, consent_text_seen: 'Some other wording.' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe(CONSENT_WORDING_CHANGED);
+    expect(insertCallOn(client)).toBeUndefined();
+  });
+
+  it('books on acceptance of the baseline, recording moderated-default and the baseline-text hash', async () => {
+    const client = bookingClient(BASELINE_CONSENT);
+    mockConnect.mockImplementation(async () => client);
+
+    const res = await request(listening(appAs('u1')))
+      .post('/api/bookings/sessions/s1/book')
+      .send({ consent_accepted: true, consent_text_seen: BASELINE_TEXT });
+
+    expect(res.status).toBe(201);
+    const values = insertCallOn(client)![1] as unknown[];
+    // The template pair is the baseline's, resolved from the type - NOT the
+    // opportunity's null columns.
+    expect(values).toContain(MODERATED_CONSENT_TEMPLATE_ID);
+    expect(values).toContain(MODERATED_CONSENT_TEMPLATE.version);
+    // The wording itself and its hash are the BASELINE, not empty.
+    expect(values).toContain(BASELINE_TEXT);
+    expect(values).toContain(BASELINE_HASH);
+    expect(values.some((value) => value instanceof Date)).toBe(false);
   });
 });
 
