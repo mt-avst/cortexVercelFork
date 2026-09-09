@@ -99,6 +99,9 @@ describe('OpportunityDetail - what an error takes away', () => {
     renderDetail();
     await user.click(await screen.findByRole('button', { name: 'Switch to calendar view' }));
     await user.click(await screen.findByRole('button', { name: 'stub book' }));
+    // Audit row 9: a moderated booking now goes through the baseline consent
+    // modal first; accept it to reach the booking call this test is about.
+    await user.click(await screen.findByRole('button', { name: 'Accept and book' }));
 
     await waitFor(() => expect(screen.getByText(/Session is full/i)).toBeInTheDocument());
 
@@ -115,6 +118,9 @@ describe('OpportunityDetail - what an error takes away', () => {
     renderDetail();
     await user.click(await screen.findByRole('button', { name: 'Switch to calendar view' }));
     await user.click(await screen.findByRole('button', { name: 'stub book' }));
+    // Audit row 9: a moderated booking now goes through the baseline consent
+    // modal first; accept it to reach the booking call this test is about.
+    await user.click(await screen.findByRole('button', { name: 'Accept and book' }));
 
     const dismiss = await screen.findByRole('button', { name: 'Close error message' });
     await user.click(dismiss);
@@ -135,6 +141,9 @@ describe('OpportunityDetail - what an error takes away', () => {
     renderDetail();
     await user.click(await screen.findByRole('button', { name: 'Switch to calendar view' }));
     await user.click(await screen.findByRole('button', { name: 'stub book' }));
+    // Audit row 9: a moderated booking now goes through the baseline consent
+    // modal first; accept it to reach the booking call this test is about.
+    await user.click(await screen.findByRole('button', { name: 'Accept and book' }));
     await screen.findByText(/Session is full/i);
 
     // The removed button retried the FIRST session with space rather than the
@@ -207,6 +216,9 @@ describe('OpportunityDetail - what an error takes away', () => {
     renderDetail();
     await user.click(await screen.findByRole('button', { name: 'Switch to calendar view' }));
     await user.click(await screen.findByRole('button', { name: 'stub book' }));
+    // Audit row 9: a moderated booking now goes through the baseline consent
+    // modal first; accept it to reach the booking call this test is about.
+    await user.click(await screen.findByRole('button', { name: 'Accept and book' }));
     await screen.findByText(/Session is full/i);
 
     // Second failure, on a page that is already on screen and readable. A
@@ -239,6 +251,8 @@ describe('OpportunityDetail - what an error takes away', () => {
     await screen.findByText('Checkout flow walkthrough');
     await user.click(await screen.findByRole('button', { name: 'Switch to calendar view' }));
     await user.click(screen.getByRole('button', { name: 'stub book' }));
+    // Audit row 9: accept the baseline consent to reach the booking call.
+    await user.click(await screen.findByRole('button', { name: 'Accept and book' }));
     await screen.findByText(/Server error occurred/i);
 
     let release: (value: unknown) => void = () => {};
@@ -263,6 +277,9 @@ describe('OpportunityDetail - what an error takes away', () => {
     renderDetail();
     await user.click(await screen.findByRole('button', { name: 'Switch to calendar view' }));
     await user.click(await screen.findByRole('button', { name: 'stub book' }));
+    // Audit row 9: a moderated booking now goes through the baseline consent
+    // modal first; accept it to reach the booking call this test is about.
+    await user.click(await screen.findByRole('button', { name: 'Accept and book' }));
 
     // The old takeway was destructive but never missable. Now the banner sits
     // above the brief while the calendar and Start Test are below the fold, so
@@ -278,6 +295,9 @@ describe('OpportunityDetail - what an error takes away', () => {
     renderDetail();
     await user.click(await screen.findByRole('button', { name: 'Switch to calendar view' }));
     await user.click(await screen.findByRole('button', { name: 'stub book' }));
+    // Audit row 9: a moderated booking now goes through the baseline consent
+    // modal first; accept it to reach the booking call this test is about.
+    await user.click(await screen.findByRole('button', { name: 'Accept and book' }));
     await screen.findByText(/Successfully booked/i);
 
     // bookingSuccess lives in a different panel and nothing else clears it, so
@@ -300,6 +320,9 @@ describe('OpportunityDetail - what an error takes away', () => {
     renderDetail();
     await user.click(await screen.findByRole('button', { name: 'Switch to calendar view' }));
     await user.click(await screen.findByRole('button', { name: 'stub book' }));
+    // Audit row 9: a moderated booking now goes through the baseline consent
+    // modal first; accept it to reach the booking call this test is about.
+    await user.click(await screen.findByRole('button', { name: 'Accept and book' }));
     await screen.findByText(/Session is full/i);
 
     // Deleted, unpublished, closed, or a draft whose reader lost the role that

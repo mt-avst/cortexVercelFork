@@ -64,7 +64,8 @@ import {
   findPublishProblem
 } from '../../../shared/firsthand/publish-readiness';
 import {
-  resolveConsentTemplate
+  resolveConsentTemplate,
+  MODERATED_CONSENT_TYPES
 } from '../../../shared/firsthand/consent-templates';
 import { isPublishableExternalLink } from '../../../shared/firsthand/url-safety';
 import type { DeliveryMode } from '../validation/schemas';
@@ -346,10 +347,11 @@ export const QUESTIONS_NEED_NATIVE_DELIVERY =
 
 /**
  * Moderated consent (#79) is for the two moderated types and nothing else.
- * Exported so tests assert the exact sentences rather than a word - swapping
- * two refusal messages has left seven green tests lying here before.
+ * The set itself lives in shared/firsthand/consent-templates (the booking path
+ * needs the same rule); re-exported here so this module's callers and tests
+ * keep importing it from where it has always been.
  */
-export const MODERATED_CONSENT_TYPES: ReadonlySet<string> = new Set(['test', 'interview']);
+export { MODERATED_CONSENT_TYPES };
 export const CONSENT_FIELDS_WRONG_TYPE =
   'Consent fields apply only to live sessions and interviews';
 export const CONSENT_CLAIM_WITHOUT_TEXT =

@@ -16,6 +16,7 @@ import { RecordedStudyExpectations } from '../components/RecordedStudyExpectatio
 import { getParticipantFacingType, getEligibilityNote, getTypeBadgeClass, getCardHoverColor } from '../utils/opportunityUtils';
 import { logger } from '../utils/logger';
 import { runsNativeSurvey } from '@shared/firsthand/delivery';
+import { bookingConsentText } from '@shared/firsthand/consent-templates';
 import { isPublishableExternalLink } from '@shared/firsthand/url-safety';
 import { RefreshCw, CheckCircle, CalendarCheck, Info, LayoutGrid, Table2, ExternalLink } from 'lucide-react';
 
@@ -494,6 +495,15 @@ const OpportunityDetail: React.FC = () => {
     // it as implied-by-loadOpportunity reintroduces a violation.
   }, [id, loadOpportunity]);
 
+  // The consent a booking of THIS opportunity must present (audit row 9),
+  // resolved by the shared rule the server also uses: a moderated type
+  // (test/interview) always has consent - the researcher's own wording or the
+  // Cortex-owned baseline - so a live session with no typed wording no longer
+  // books with no consent shown. Non-moderated types resolve to '' (no gate).
+  const bookingConsentWording = opportunity
+    ? bookingConsentText(opportunity.type, opportunity.consent_text)
+    : '';
+
   /**
    * Books a session and owns the message shown when that fails.
    *
@@ -515,13 +525,14 @@ const OpportunityDetail: React.FC = () => {
       throw new Error('User session invalid');
     }
 
-    // The consent gate (#79 step 1b). An opportunity carrying consent wording
-    // books only through an explicit acceptance, so the flow detours through
-    // the consent modal and continues in its Accept handler. Thrown rather
-    // than returned so CalendarGrid unwinds the optimistic "booked" mark while
-    // the participant reads - and no setError first: a pending decision is not
-    // a failure, so nothing belongs in the banner.
-    if (opportunity?.consent_text?.trim()) {
+    // The consent gate (#79 step 1b; baseline extended in audit row 9). A
+    // booking that must present consent - a moderated type always, whether it
+    // carries its own wording or falls back to the baseline - detours through
+    // the consent modal and continues in its Accept handler. Thrown rather than
+    // returned so CalendarGrid unwinds the optimistic "booked" mark while the
+    // participant reads - and no setError first: a pending decision is not a
+    // failure, so nothing belongs in the banner.
+    if (bookingConsentWording) {
       setConsentGate({ show: true, sessionId });
       throw new Error('Consent decision pending');
     }
@@ -542,8 +553,9 @@ const OpportunityDetail: React.FC = () => {
       const bookingResult = await bookSession(sessionId, {
         consentAccepted,
         // The wording THIS page displayed, echoed so the server can refuse an
-        // acceptance of text the participant never saw.
-        consentTextSeen: consentAccepted ? opportunity?.consent_text ?? '' : undefined,
+        // acceptance of text the participant never saw. The resolved booking
+        // wording (own or baseline), the same value the modal showed.
+        consentTextSeen: consentAccepted ? bookingConsentWording : undefined,
       });
 
       // Track action click for successful booking
@@ -1231,7 +1243,19 @@ const OpportunityDetail: React.FC = () => {
                                                 key={session.id}
                                                 type="button"
                                                 className="slot-chip"
-                                                onClick={() => setConfirmBooking({ show: true, session })}
+                                                onClick={() => {
+                                                  // Audit row 9: consent is the single
+                                                  // affirmative step for a moderated booking -
+                                                  // straight to the consent gate, no separate
+                                                  // "Book this session?" press first (the grid
+                                                  // path already does this). Non-moderated types
+                                                  // keep the plain confirm.
+                                                  if (bookingConsentWording) {
+                                                    void handleBookSession(session.id).catch(() => undefined);
+                                                  } else {
+                                                    setConfirmBooking({ show: true, session });
+                                                  }
+                                                }}
                                                 disabled={isLoading}
                                                 title={rangeStr}
                                                 aria-label={`Book session on ${group.dateStr} at ${rangeStr}`}
@@ -1479,12 +1503,13 @@ const OpportunityDetail: React.FC = () => {
         onCancel={() => setConfirmBooking({ show: false, session: null })}
       />
 
-      {/* The consent gate (#79 step 1b): the wording the participant is
-          accepting, verbatim from the opportunity. Cancel books nothing. */}
+      {/* The consent gate (#79 step 1b; baseline extended in audit row 9): the
+          wording the participant is accepting - the opportunity's own or the
+          Cortex-owned baseline. Cancel books nothing. */}
       <ConfirmationModal
         show={consentGate.show}
         title="Consent"
-        message={opportunity?.consent_text?.trim() || ''}
+        message={bookingConsentWording}
         confirmLabel="Accept and book"
         cancelLabel="Cancel"
         variant="primary"

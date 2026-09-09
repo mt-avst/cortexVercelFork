@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import OpportunityDetail from '../OpportunityDetail';
 import { bookSession, getOpportunity } from '../../api/client';
+import { MODERATED_CONSENT_TEMPLATE } from '@shared/firsthand/consent-templates';
 
 /**
  * The consent gate at booking (#79 step 1b).
@@ -17,7 +18,9 @@ import { bookSession, getOpportunity } from '../../api/client';
  *    participant reads
  *  - Cancel books nothing, ever
  *  - Accept books with the explicit flag - the only shape the server accepts
- *  - an opportunity WITHOUT consent books exactly as before, no modal
+ *  - a moderated opportunity with NO wording of its own shows the Cortex-owned
+ *    baseline and books only through accepting it (audit row 9) - a live
+ *    session never books with no consent shown
  *  - a server-side consent refusal reaches the banner as the server's own
  *    sentence, not a hardcoded guess about which 400 this was
  */
@@ -28,9 +31,9 @@ const end = new Date(start.getTime() + 60 * 60 * 1000);
 const CONSENT_WORDING =
   'This is a live session with a researcher on a video call. The call may be recorded.';
 
-const fixture = (consentText: string | null) => ({
+const fixture = (consentText: string | null, type = 'test') => ({
   id: 'opp-1',
-  type: 'test',
+  type,
   title: 'Checkout flow walkthrough',
   purpose_one_liner: 'Find out where people stall in the checkout flow',
   status: 'published',
@@ -106,8 +109,8 @@ const renderDetail = () =>
 
 let user: ReturnType<typeof userEvent.setup>;
 
-const arrange = (consentText: string | null) => {
-  vi.mocked(getOpportunity).mockImplementation(async () => fixture(consentText) as never);
+const arrange = (consentText: string | null, type = 'test') => {
+  vi.mocked(getOpportunity).mockImplementation(async () => fixture(consentText, type) as never);
 };
 
 beforeEach(() => {
@@ -189,22 +192,35 @@ describe('booking an opportunity that carries consent wording', () => {
   });
 });
 
-describe('booking an opportunity without consent wording', () => {
-  it('books straight through with no modal - the gate must not invent a step', async () => {
-    arrange(null);
+describe('booking a moderated opportunity with no wording of its own (audit row 9)', () => {
+  it('shows the Cortex baseline and accepts it - a live session never books with no consent', async () => {
+    // The bug this fixes: a moderated type with a null consent_text used to
+    // book straight through with consentAccepted:false and no modal.
+    arrange(null, 'test');
     vi.mocked(bookSession).mockResolvedValue({ id: 'booking-1' } as never);
 
     renderDetail();
     await user.click(await screen.findByRole('button', { name: 'Switch to calendar view' }));
     await user.click(await screen.findByRole('button', { name: 'stub book' }));
 
+    // The baseline wording itself, verbatim, before anything is booked.
+    expect(await screen.findByText(MODERATED_CONSENT_TEMPLATE.text)).toBeInTheDocument();
+    expect(bookSession).not.toHaveBeenCalled();
+    await waitFor(() => expect(bookOutcome).toBe('rejected'));
+
+    await user.click(screen.getByRole('button', { name: 'Accept and book' }));
     await waitFor(() => {
       expect(bookSession).toHaveBeenCalledWith('sess-1', {
-        consentAccepted: false,
-        consentTextSeen: undefined,
+        consentAccepted: true,
+        consentTextSeen: MODERATED_CONSENT_TEMPLATE.text,
       });
     });
-    expect(screen.queryByRole('button', { name: 'Accept and book' })).not.toBeInTheDocument();
-    await waitFor(() => expect(bookOutcome).toBe('resolved'));
   });
 });
+
+// The type-scoping - that a non-moderated type resolves to no consent - is a
+// pure-function property proven in consent-templates.test.ts (bookingConsentText
+// returns '' for survey/poll/question/unmoderated). It is not re-asserted here
+// because a non-moderated opportunity does not render the session-booking UI at
+// all: every BOOKABLE opportunity is moderated, so the booking path always
+// carries consent now.

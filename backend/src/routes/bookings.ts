@@ -20,6 +20,11 @@ import type { PointsHistoryCursor } from '../services/gamification';
 import { isOpportunityOwner } from '../utils/opportunityOwnership';
 import { z } from 'zod';
 import { VALIDATION } from '../../../shared/constants';
+import {
+  bookingConsentText,
+  MODERATED_CONSENT_TEMPLATE,
+  MODERATED_CONSENT_TEMPLATE_ID
+} from '../../../shared/firsthand/consent-templates';
 import { createHash } from 'crypto';
 
 const router: Router = Router();
@@ -70,6 +75,7 @@ router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request,
     const sessionResult = await client.query(`
       SELECT s.*, o.status as opportunity_status, o.title as opportunity_title,
              o.owner_user_id, o.purpose_one_liner, o.id as opportunity_id,
+             o.type as opportunity_type,
              o.consent_text, o.consent_template_id, o.consent_template_version
       FROM sessions s
       JOIN opportunities o ON s.opportunity_id = o.id
@@ -109,13 +115,35 @@ router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request,
       throw new ValidationError('Cannot book past sessions');
     }
 
-    // The consent gate (#79 step 1b), off the SAME locked row as every other
-    // guard. `=== true` and nothing looser: acceptance is a legal record, so a
-    // truthy string from a mangled client is not it. No wording on the
-    // opportunity means nothing to accept, and the booking is exactly what it
-    // was before consent existed.
-    const consentText =
+    // The consent gate (#79 step 1b; baseline extended in audit row 9), off the
+    // SAME locked row as every other guard. `=== true` and nothing looser:
+    // acceptance is a legal record, so a truthy string from a mangled client is
+    // not it.
+    //
+    // The wording is resolved by the shared booking rule, not read raw: a
+    // MODERATED opportunity (test/interview) always has consent to accept - its
+    // own typed wording, or the Cortex-owned `moderated-default` baseline when
+    // it carries none - so a NULL consent_text on a live session no longer
+    // books silently past this gate. A non-moderated type resolves to '' and
+    // books exactly as before. The frontend resolves the SAME text from the
+    // SAME two inputs (type + consent_text, both on the public payload), so the
+    // echo comparison below still holds with nothing seeded server-side.
+    const storedConsentText =
       typeof session.consent_text === 'string' ? session.consent_text.trim() : '';
+    const consentText = bookingConsentText(session.opportunity_type, session.consent_text);
+    // The acceptance's template pair: the opportunity's stored pair when it
+    // carries its own wording (resolved once at write time), the baseline
+    // template when we fell back to it, and null when there is no consent.
+    const consentTemplateId = !consentText
+      ? null
+      : storedConsentText
+        ? session.consent_template_id
+        : MODERATED_CONSENT_TEMPLATE_ID;
+    const consentTemplateVersion = !consentText
+      ? null
+      : storedConsentText
+        ? session.consent_template_version
+        : MODERATED_CONSENT_TEMPLATE.version;
     if (consentText && req.body?.consent_accepted !== true) {
       await client.query('ROLLBACK');
       throw new ValidationError(CONSENT_ACCEPTANCE_REQUIRED);
@@ -171,15 +199,15 @@ router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request,
     }
 
     // Create booking. The acceptance record pins WHAT was accepted: the
-    // template pair comes from the opportunity row read under the SAME lock as
-    // the gate above, the SNAPSHOT is the trimmed wording itself (a hash can
-    // prove a later edit happened but can never produce the sentence the
-    // participant agreed to), and the hash rides for cheap comparison. The
-    // timestamp is NOW() in SQL, derived from the snapshot param, so it and
-    // created_at come from the SAME clock - an app-host timestamp could
-    // precede the row's own creation time under skew. Everything is null when
-    // the opportunity carries no wording, whatever the body volunteered:
-    // nothing was shown, so nothing was accepted.
+    // template pair resolved above off the SAME locked row as the gate (the
+    // opportunity's stored pair, or the baseline's), the SNAPSHOT is the trimmed
+    // wording itself (a hash can prove a later edit happened but can never
+    // produce the sentence the participant agreed to), and the hash rides for
+    // cheap comparison. The timestamp is NOW() in SQL, derived from the snapshot
+    // param, so it and created_at come from the SAME clock - an app-host
+    // timestamp could precede the row's own creation time under skew. Everything
+    // is null only when there was no consent to accept (a non-moderated type):
+    // nothing was shown, so nothing was recorded.
     const bookingResult = await client.query(`
       INSERT INTO bookings (user_id, session_id, status,
         consent_accepted_at, consent_template_id, consent_template_version,
@@ -192,8 +220,8 @@ router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request,
       userId,
       sessionId,
       consentText || null,
-      consentText ? session.consent_template_id : null,
-      consentText ? session.consent_template_version : null,
+      consentTemplateId,
+      consentTemplateVersion,
       consentText ? createHash('sha256').update(consentText).digest('hex') : null,
     ]);
 
