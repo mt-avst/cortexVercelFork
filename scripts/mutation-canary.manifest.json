@@ -578,8 +578,8 @@
     "id": "opportunity-add-sessions-consults-ownership",
     "why": "POST /api/opportunities/:id/sessions lets one researcher_admin add slots to another's recruitment schedule. `const isOwner = true;` passed 919 of 919 on 6504612. THE ANCHOR IS FOUR LINES AND HAS TO BE: the `const isOwner = ...` line alone appears twice in this file at this indentation - here and on the DELETE handler a hundred lines below - so a one-line anchor is ANCHOR_AMBIGUOUS, and a version of it that was not would have mutated whichever came first. The 403 wording is what separates them.",
     "file": "backend/src/routes/opportunities.ts",
-    "anchor": "    const isOwner = isOpportunityOwner(opportunityCheck.rows[0], req.user);\n    const isSuperadmin = req.user!.role === 'superadmin';\n    if (!isSuperadmin && !isOwner) {\n      return res.status(403).json({ error: 'Only the owner can add sessions to this opportunity' });",
-    "mutation": "    const isOwner = true;\n    const isSuperadmin = req.user!.role === 'superadmin';\n    if (!isSuperadmin && !isOwner) {\n      return res.status(403).json({ error: 'Only the owner can add sessions to this opportunity' });",
+    "anchor": "    const isOwner = isOpportunityOwner(opportunityCheck.rows[0], req.user);\n    const isSuperadmin = req.user!.role === 'superadmin';\n    if (!isSuperadmin && !isOwner) {\n      return res.status(403).json({ error: 'Only the owner can add sessions to this study' });",
+    "mutation": "    const isOwner = true;\n    const isSuperadmin = req.user!.role === 'superadmin';\n    if (!isSuperadmin && !isOwner) {\n      return res.status(403).json({ error: 'Only the owner can add sessions to this study' });",
     "runner": "jest",
     "spec": "src/routes/__tests__/sessions.write-ownership.test.ts",
     "test": "writes nothing at all for a non-owning admin on POST /api/opportunities/:id/sessions"
@@ -588,8 +588,8 @@
     "id": "opportunity-delete-sessions-consults-ownership",
     "why": "The SECOND of two near-identical handlers in one file, and the worse of the pair: DELETE /api/opportunities/:id/sessions removes every session under an opportunity AND every booking attached to them. Its only rail is a probe for bookings in `status = 'booked'`, so anything cancelled or pending goes without a word. Neutering it passed 919 of 919 independently of the POST beside it, which is exactly why it gets its own entry - a fix applied to one of a near-identical pair reads as a fix applied to both, and an entry naming only one would carry that same blind spot into the thing meant to detect it.",
     "file": "backend/src/routes/opportunities.ts",
-    "anchor": "    const isOwner = isOpportunityOwner(opportunityCheck.rows[0], req.user);\n    const isSuperadmin = req.user!.role === 'superadmin';\n    if (!isSuperadmin && !isOwner) {\n      return res.status(403).json({ error: 'Only the owner can delete sessions from this opportunity' });",
-    "mutation": "    const isOwner = true;\n    const isSuperadmin = req.user!.role === 'superadmin';\n    if (!isSuperadmin && !isOwner) {\n      return res.status(403).json({ error: 'Only the owner can delete sessions from this opportunity' });",
+    "anchor": "    const isOwner = isOpportunityOwner(opportunityCheck.rows[0], req.user);\n    const isSuperadmin = req.user!.role === 'superadmin';\n    if (!isSuperadmin && !isOwner) {\n      return res.status(403).json({ error: 'Only the owner can delete sessions from this study' });",
+    "mutation": "    const isOwner = true;\n    const isSuperadmin = req.user!.role === 'superadmin';\n    if (!isSuperadmin && !isOwner) {\n      return res.status(403).json({ error: 'Only the owner can delete sessions from this study' });",
     "runner": "jest",
     "spec": "src/routes/__tests__/sessions.write-ownership.test.ts",
     "test": "writes nothing at all for a non-owning admin on DELETE /api/opportunities/:id/sessions"

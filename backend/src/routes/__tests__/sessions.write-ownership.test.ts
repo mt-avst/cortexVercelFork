@@ -190,7 +190,7 @@ const ROUTES = [
     path: '/api/opportunities/opp-1/sessions',
     body: [VALID_SESSION],
     okStatus: 201,
-    refusal: 'Only the owner can add sessions to this opportunity',
+    refusal: 'Only the owner can add sessions to this study',
     write: /INSERT INTO sessions/,
     writeCount: 1,
     ownershipProbe: /SELECT owner_user_id FROM opportunities/,
@@ -204,7 +204,7 @@ const ROUTES = [
     path: '/api/opportunities/opp-1/sessions',
     body: undefined,
     okStatus: 200,
-    refusal: 'Only the owner can delete sessions from this opportunity',
+    refusal: 'Only the owner can delete sessions from this study',
     // Both the explicit booking sweep and the session delete. Counting them
     // asserts the handler removes participant bookings too, which is the part
     // that makes an unauthorised call unrecoverable.
