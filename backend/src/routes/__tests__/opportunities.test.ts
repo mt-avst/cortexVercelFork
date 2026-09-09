@@ -549,6 +549,33 @@ describe('Opportunities API', () => {
       );
     });
 
+    /*
+     * A live session cannot be created already-published (#118): slots are a
+     * SEPARATE `POST /api/sessions` write, so a create supplies `hasBookableSlot:
+     * false` and a bookable publish in one call is always refused. This is why
+     * the wizard creates as draft, adds slots, then flips to published - and why
+     * a direct API create+publish of a slotless bookable study is closed here.
+     * The guard throws before any query runs.
+     */
+    it.each([['test'], ['interview']])(
+      'refuses to create a published %s in one call (no slots yet, #118)',
+      async (type) => {
+        const response = await request(listening(app))
+          .post('/api/opportunities')
+          .send({
+            type,
+            title: 'Valid Live Session Title',
+            purpose_one_liner: 'This is a valid purpose that meets the minimum length requirement',
+            status: 'published'
+          })
+          .expect(400);
+
+        expect(response.body.error).toBe(
+          'Add at least one upcoming time slot before publishing a live session or interview'
+        );
+      }
+    );
+
     /**
      * The same rule, on the type that was missing from it.
      *
@@ -4928,7 +4955,12 @@ describe('Opportunities API', () => {
         rows: [{ type: 'test', external_link_optional: null, firsthand_study_id: null, participant_type_required: 'any' }]
       });
 
-      // 3. The actual UPDATE ... RETURNING *
+      // 3. Bookable-slot count (#118): a published `test`/`interview` is refused
+      //    with no upcoming slot, so this generic "a normal publish succeeds"
+      //    case supplies one. The gate reads `rowCount`, not the rows.
+      mockQuery.mockResolvedValueOnce({ rows: [{ '?column?': 1 }], rowCount: 1 });
+
+      // 4. The actual UPDATE ... RETURNING *
       mockQuery.mockResolvedValueOnce({ rows: [updatedOpportunity] });
 
       const response = await request(listening(app))
@@ -4945,6 +4977,56 @@ describe('Opportunities API', () => {
         status: 'published',
         sessions: []
       });
+    });
+
+    /*
+     * The slot gate at the ROUTE (#118), not only against `findPublishProblem`.
+     * The predicate being right proves nothing about whether this endpoint asks
+     * it, or whether it supplies the count from the participant-actionable
+     * `end_time > NOW()` set. A direct `PATCH { status: 'published' }` on a
+     * slotless live session is exactly the hole the wizard's client gate could
+     * not close - the whole reason this issue was an M.
+     */
+    it('refuses to publish a live session with no upcoming slot (#118)', async () => {
+      // 1. Ownership check
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+      // 2. Existing-opportunity lookup - a moderated (test) row
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ type: 'test', external_link_optional: null, firsthand_study_id: null, participant_type_required: 'any' }]
+      });
+      // 3. Bookable-slot count returns none: nothing upcoming to book.
+      mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+
+      const response = await request(listening(app))
+        .patch('/api/opportunities/1')
+        .send({ status: 'published' })
+        .expect(400);
+
+      expect(response.body.error).toBe(
+        'Add at least one upcoming time slot before publishing a live session or interview'
+      );
+      // The refusal short-circuits BEFORE the UPDATE write: ownership, existing
+      // lookup and slot count ran, and nothing else. If a later edit adds a
+      // query ahead of the gate, this count moves and says so by name.
+      expect(mockQuery).toHaveBeenCalledTimes(3);
+    });
+
+    it('permits publishing a live session once an upcoming slot exists (#118)', async () => {
+      const updated = {
+        id: '1', type: 'test', title: 'Live Session', status: 'published',
+        owner_user_id: 'test-user-id', created_at: new Date(), updated_at: new Date()
+      };
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] }); // ownership
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ type: 'test', external_link_optional: null, firsthand_study_id: null, participant_type_required: 'any' }]
+      }); // existing
+      mockQuery.mockResolvedValueOnce({ rows: [{ '?column?': 1 }], rowCount: 1 }); // one upcoming slot
+      mockQuery.mockResolvedValueOnce({ rows: [updated] }); // UPDATE ... RETURNING *
+
+      await request(listening(app))
+        .patch('/api/opportunities/1')
+        .send({ status: 'published' })
+        .expect(200);
     });
 
     it('should reject flipping an unmoderated opportunity to an external participant type (M2)', async () => {

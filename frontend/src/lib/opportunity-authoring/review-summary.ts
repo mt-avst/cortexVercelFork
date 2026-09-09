@@ -504,7 +504,8 @@ const STEP_KEY_FOR_PROBLEM: Record<PublishProblemCode, string> = {
   unmoderated_study_required: 'taskList',
   unmoderated_study_removed: 'taskList',
   native_survey_study_required: 'questions',
-  external_link_required: 'externalLink'
+  external_link_required: 'externalLink',
+  bookable_slot_required: 'sessions'
 };
 
 /**

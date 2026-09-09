@@ -1979,12 +1979,12 @@ const OpportunityForm: React.FC = () => {
       // there being at least one - which also flips the Session Management step
       // off "Completed" while it is empty.
       //
-      // ponytail: this gate is CLIENT-SIDE only. The server still permits a
-      //   direct-API publish of a slotless test/interview, because the wizard
-      //   writes slots AFTER the publish write, so a naive backend slot-gate
-      //   would reject the normal authoring flow. Server enforcement needs a
-      //   findPublishProblem branch + a commit reorder.
-      //   -> cto/AdaptaLabs#118
+      // This client gate is the fast half: it blocks the commit and flips the
+      // Session Management chip off "Completed" before any request. The server
+      // now enforces the same rule (cto/AdaptaLabs#118 - a `bookable_slot_required`
+      // branch in `findPublishProblem`, the wizard's slots-before-publish
+      // reorder in `handleSubmit`, and the Review preview via `publishRefusal`),
+      // so a direct-API publish of a slotless test/interview is refused too.
       if (sessions.length === 0) {
         errors.sessions =
           'Add at least one session slot before publishing a live session or interview';
@@ -2562,7 +2562,20 @@ const OpportunityForm: React.FC = () => {
       !authoringInline && Boolean(formData.firsthand_study_id?.trim()),
     hasInlineStudy: authoringKind === 'recorded' && authoringInlineStudy,
     hasInlineSurvey: authoringKind === 'survey' && authoringInlineSurvey,
-    externalLink: formData.external_link_optional
+    externalLink: formData.external_link_optional,
+    /*
+     * Preview parity for the slot gate (#118). The server refuses a bookable
+     * publish with no upcoming slot; passing the count here lets Review show
+     * that refusal PROACTIVELY, the same way every other publish problem is
+     * previewed - the blocking `computeValidationErrors` arm (row 15's "S")
+     * stops the commit, and this makes the Review banner name it too.
+     *
+     * `sessions.length > 0`, not an upcoming-only count: the wizard cannot add a
+     * past slot (the slot picker offers future times), so in the form these are
+     * the same set, and this mirrors `shareLinkStartable` below rather than
+     * duplicating the server's `end_time > NOW()` clock here.
+     */
+    hasBookableSlot: sessions.length > 0
     /*
      * `removingLinkedStudy` is deliberately not passed, and it is not an
      * oversight. The server words its refusal differently for a caller TAKING
@@ -3993,27 +4006,59 @@ const OpportunityForm: React.FC = () => {
       let savedOpportunity: Opportunity;
       // False only when the opportunity saved and its time slots did not.
       let sessionsPersisted = true;
+
+      /*
+       * A publish of a bookable type needs its slots in the DB BEFORE the
+       * publishing write, because the server now refuses a `test`/`interview`
+       * publish with no upcoming slot (#118) and slots are a SEPARATE write
+       * (`persistTemporarySessions` -> `POST /api/sessions`), not part of the
+       * opportunity body. Slots-then-publish is what keeps the ordinary "author
+       * adds slots, presses Finish" flow working against that gate.
+       *
+       * Only these two types, and only on a publish: every other type writes no
+       * temporary slots, and a draft is never gated, so they keep the original
+       * publish-then-persist order and pay nothing.
+       */
+      const publishingBookable =
+        data.status === 'published' &&
+        (formData.type === 'test' || formData.type === 'interview');
+
       // `persistedOpportunityId`, not the route id. An autosave may already
       // have created this draft and rewritten the URL, and POSTing again here
       // would mint a second opportunity for the same piece of work - the
       // author having done nothing but press Finish.
       if (persistedOpportunityId) {
-        savedOpportunity = await updateOpportunity(
-          persistedOpportunityId,
-          data as UpdateOpportunityRequest
-        );
+        if (publishingBookable) {
+          // Slots first, then publish over them. If the slots fail (an overlap
+          // 409), do NOT publish: `persistTemporarySessions` has set the banner
+          // and left the author on the form to fix the times, and the re-read
+          // keeps `savedOpportunity` honest about what is actually stored (still
+          // the pre-publish state) rather than a publish that did not happen.
+          sessionsPersisted = await persistTemporarySessions(persistedOpportunityId);
+          savedOpportunity = sessionsPersisted
+            ? await updateOpportunity(
+                persistedOpportunityId,
+                data as UpdateOpportunityRequest
+              )
+            : await getOpportunity(persistedOpportunityId);
+        } else {
+          savedOpportunity = await updateOpportunity(
+            persistedOpportunityId,
+            data as UpdateOpportunityRequest
+          );
 
-        await persistTemporarySessions(savedOpportunity.id);
+          await persistTemporarySessions(savedOpportunity.id);
+        }
       } else {
-        savedOpportunity = await createOpportunity(data as CreateOpportunityRequest);
+        // Create as a DRAFT when this Finish would publish a bookable type, so
+        // the slots can be seated before the publish gate runs; every other
+        // create still publishes in one call, having no slots to order.
+        savedOpportunity = await createOpportunity(
+          (publishingBookable
+            ? { ...data, status: 'draft' }
+            : data) as CreateOpportunityRequest
+        );
         setOpportunityId(savedOpportunity.id);
-
-        // What is on screen has now been stored, so it is the new baseline
-        // for "would leaving lose anything" - and for whether an autosave has
-        // anything left to send.
-        openingFormData.current = formData;
-        savedSignatureRef.current = dirtySignature(formData);
-        storedFormRef.current = formData;
         setDraftId(savedOpportunity.id);
         selfCreatedIdRef.current = savedOpportunity.id;
         // Landed, for the same reason as the autosave create above: the author
@@ -4036,6 +4081,34 @@ const OpportunityForm: React.FC = () => {
          * below.
          */
         sessionsPersisted = await persistTemporarySessions(savedOpportunity.id);
+
+        // The draft above was seated only so its slots could be written first;
+        // flip it to published now that they exist and the server gate will see
+        // them. Skipped when the slots failed - the study stays a draft rather
+        // than going live with nothing bookable, and the banner from
+        // `persistTemporarySessions` already says why. A later Finish takes the
+        // `persistedOpportunityId` branch above and completes the publish.
+        if (publishingBookable && sessionsPersisted) {
+          savedOpportunity = await updateOpportunity(
+            savedOpportunity.id,
+            { status: 'published' } as UpdateOpportunityRequest
+          );
+        }
+
+        // The new baseline for "would leaving lose anything" - seeded AFTER the
+        // publish flip, and from the STORED status, not the status `formData`
+        // intends. On a create-as-draft whose slots failed the 409, the publish
+        // flip was skipped and the row is still a draft; a baseline claiming
+        // published (which `formData` carries here) would read as no-changes and
+        // hide from the author that the publish did not happen. The row is a
+        // draft exactly when a bookable publish could not seat its slots;
+        // otherwise the store holds what `formData` asked for.
+        const storedStatus =
+          publishingBookable && !sessionsPersisted ? 'draft' : formData.status;
+        const storedForm = { ...formData, status: storedStatus };
+        openingFormData.current = storedForm;
+        savedSignatureRef.current = dirtySignature(storedForm);
+        storedFormRef.current = storedForm;
       }
 
       // Update original form data after successful save
@@ -4072,15 +4145,21 @@ const OpportunityForm: React.FC = () => {
         // point of the deliberate second save is that it carries this value.
         setStaleStudyUpdatedAt(null);
 
-        // Show success message for edit mode
-        const isDraft = formData.status === 'draft';
-        setSuccessMessage(
-          isDraft
-            ? '⚠️ Changes saved as DRAFT - Not visible to users yet. Change status to Published to make it visible.'
-            : 'Changes saved successfully!'
-        );
-        // Clear success message after timeout (longer for draft warnings)
-        setTimeout(() => setSuccessMessage(''), isDraft ? 3000 : 1500);
+        // Show success message for edit mode - but NOT when the slots failed to
+        // save. In the slots-first publish path above, a failed
+        // `persistTemporarySessions` skips the publishing update and leaves its
+        // own error banner up; overwriting it with "Changes saved successfully!"
+        // would tell the author the opposite of what happened.
+        if (sessionsPersisted) {
+          const isDraft = formData.status === 'draft';
+          setSuccessMessage(
+            isDraft
+              ? '⚠️ Changes saved as DRAFT - Not visible to users yet. Change status to Published to make it visible.'
+              : 'Changes saved successfully!'
+          );
+          // Clear success message after timeout (longer for draft warnings)
+          setTimeout(() => setSuccessMessage(''), isDraft ? 3000 : 1500);
+        }
       }
 
       // For edit mode, return the existing opportunity ID

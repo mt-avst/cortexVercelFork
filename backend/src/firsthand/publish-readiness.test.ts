@@ -212,12 +212,66 @@ describe("findPublishProblem", () => {
   });
 
   describe.each([["test"], ["interview"]])("%s", (type) => {
-    it("needs nothing to publish", () => {
+    it("needs no link or study to publish", () => {
       // Both are booked rather than handed off, and Session Management is
       // their only authoring step. Requiring a link here would make a bookable
       // study unpublishable, since the form offers it no link field.
       expect(findPublishProblem(input({ type }))).toBeNull();
     });
+
+    /*
+     * The slot gate (audit row 15 / #118). A live session or interview is
+     * booked, so a published one with no bookable slot is a study advertised as
+     * LIVE / "Book a time" over nothing anyone can book. The signal is
+     * DELIBERATELY tri-state:
+     *   - `false` -> a caller that positively counted zero bookable slots. Gated.
+     *   - `true`  -> at least one. Permitted.
+     *   - absent  -> a caller that cannot report (the create route, which writes
+     *     no sessions in the same request, and every pre-#118 caller). NOT gated,
+     *     or a naive backend would refuse every moderated publish.
+     */
+    it("refuses a publish when the caller reports no bookable slot", () => {
+      expect(findPublishProblem(input({ type, hasBookableSlot: false }))).toEqual({
+        code: "bookable_slot_required"
+      });
+    });
+
+    it("permits a publish when the caller reports a bookable slot", () => {
+      expect(
+        findPublishProblem(input({ type, hasBookableSlot: true }))
+      ).toBeNull();
+    });
+
+    it("permits saving a draft with no bookable slot", () => {
+      expect(
+        findPublishProblem(
+          input({ type, willBePublished: false, hasBookableSlot: false })
+        )
+      ).toBeNull();
+    });
+
+    it("does not gate when the caller cannot report slot state", () => {
+      // The explicit-signal guard, pinned so a reader cannot "tidy" the branch
+      // into `!input.hasBookableSlot` - which would refuse every caller that
+      // passes no signal, breaking the create route and every existing test.
+      expect(findPublishProblem(input({ type }))).toBeNull();
+    });
+  });
+
+  /*
+   * The mutation-canary killer for the slot gate, deliberately OUTSIDE the
+   * describe.each above: `-t` matches by name and the canary refuses an
+   * ambiguous (two-match) selection, so this single, uniquely-named assertion
+   * is the one the manifest names. `=== true` (the pinned mutation) inverts the
+   * gate and fails the first expectation here.
+   */
+  it("bookable_slot_required fires on a positive report of no bookable slot", () => {
+    expect(
+      findPublishProblem(input({ type: "test", hasBookableSlot: false }))
+    ).toEqual({ code: "bookable_slot_required" });
+    expect(
+      findPublishProblem(input({ type: "test", hasBookableSlot: true }))
+    ).toBeNull();
   });
 
   /**
