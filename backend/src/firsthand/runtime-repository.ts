@@ -8,6 +8,7 @@ import type {
 import {
   applyRuntimeMutationPostgres,
   createFreshRuntimeAttemptPostgres,
+  findParticipantCompletionsForOpportunitiesPostgres,
   findParticipantSessionForOpportunityPostgres,
   getRuntimeAssetPostgres,
   getRuntimeSessionPostgres,
@@ -59,6 +60,13 @@ export async function findParticipantSessionForOpportunity(input: {
   participantId: string;
 }) {
   return findParticipantSessionForOpportunityPostgres(input);
+}
+
+export async function findParticipantCompletionsForOpportunities(input: {
+  participantId: string;
+  opportunityIds: readonly string[];
+}) {
+  return findParticipantCompletionsForOpportunitiesPostgres(input);
 }
 
 export async function getRuntimeSession(

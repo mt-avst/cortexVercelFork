@@ -2386,5 +2386,25 @@
     "spec": "src/routes/__tests__/opportunities.publish-slot-gate-postgres.test.ts",
     "test": "counts only upcoming slots: a test whose only slot is in the past cannot publish",
     "needsDatabase": true
+  },
+  {
+    "id": "answered-runtime-set-pins-uploading",
+    "why": "cto/AdaptaLabs audit row 10. `answeredRuntimeStates` is the single source three call sites share for 'has this participant answered' - the survey mint gate's 409, the detail page's completion trace, and the home row's Completed word. Dropping `uploading` would let a survey mid-upload read as re-answerable at all three, and re-answering rewrites the stored responses with no history. Pinned as a literal so the set cannot be narrowed silently: a derived expectation could not see the change. Proven by mutation before entry - the narrowed set failed only the named test.",
+    "file": "backend/src/firsthand/state-model.ts",
+    "anchor": "export const answeredRuntimeStates = [\"completed\", \"uploading\"] as const;",
+    "mutation": "export const answeredRuntimeStates = [\"completed\"] as const;",
+    "runner": "vitest",
+    "spec": "src/firsthand/__tests__/state-model.test.ts",
+    "test": "pins the answered set to exactly completed and uploading"
+  },
+  {
+    "id": "completion-trace-reads-the-real-status",
+    "why": "cto/AdaptaLabs audit row 10, the wiring half. participantCompletionMap derives the participant-facing `completed` flag from the session's real status through `isAnsweredRuntimeStatus`, not from mere presence of a session. Hardcoding it true would mark an in-progress (resumable) survey as Completed, hiding the Start button on a survey the participant can still finish - the exact 'Completed means visited' class this row exists to end. A text assertion cannot see the derivation; this jest route test drives an in-progress session and demands completed:false. Proven by mutation before entry - `const completed = true` failed only the named test.",
+    "file": "backend/src/routes/opportunities.ts",
+    "anchor": "      const completed = isAnsweredRuntimeStatus(row.sessionStatus);",
+    "mutation": "      const completed = true;",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/opportunities.test.ts",
+    "test": "does not treat a still-in-progress session as completed"
   }
 ]

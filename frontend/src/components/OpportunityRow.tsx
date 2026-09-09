@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Clock, Timer, Users } from 'lucide-react';
+import { ArrowRight, Check, Clock, Timer, Users } from 'lucide-react';
 
 import type { Opportunity, User } from '../api/types';
 import {
@@ -61,6 +61,12 @@ export function OpportunityRow({ opportunity, role }: OpportunityRowProps) {
   // Shared with the detail page: this reasoning used to live only here, and the
   // detail page reached the opposite conclusion and printed "Any".
   const eligibility = getEligibilityNote(opportunity);
+
+  // The viewer's own completion of a native survey/poll/one-question (audit row
+  // 10). Only those types ever carry `completion`, so the flag alone is a safe
+  // gate here. The row stays a link to the detail page, which shows the full
+  // completion; the action word just stops promising a fresh start.
+  const isCompleted = Boolean(opportunity.completion?.completed);
 
   return (
     <li className="opportunity-row">
@@ -124,10 +130,17 @@ export function OpportunityRow({ opportunity, role }: OpportunityRowProps) {
             note above about nesting one inside a link. NOT aria-hidden either -
             it is the only verb on the row, and hiding it left assistive tech
             with no statement of what taking part involves. */}
-        <span className="opportunity-row__action">
-          {getParticipantActionLabel(opportunity.type)}
-          <ArrowRight size={16} />
-        </span>
+        {isCompleted ? (
+          <span className="opportunity-row__action opportunity-row__action--done">
+            <Check size={16} aria-hidden="true" />
+            Completed
+          </span>
+        ) : (
+          <span className="opportunity-row__action">
+            {getParticipantActionLabel(opportunity.type)}
+            <ArrowRight size={16} />
+          </span>
+        )}
       </Link>
     </li>
   );

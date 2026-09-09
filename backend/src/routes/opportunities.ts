@@ -23,7 +23,11 @@ import {
 import { AppError, ValidationError, NotFoundError, ForbiddenError, asyncHandler } from '../utils/errorHandler';
 import { toPublicOpportunity, toPublicSession } from '../utils/publicOpportunity';
 import { createSession } from '../firsthand/session-create';
-import { findParticipantSessionForOpportunity } from '../firsthand/runtime-repository';
+import {
+  findParticipantCompletionsForOpportunities,
+  findParticipantSessionForOpportunity
+} from '../firsthand/runtime-repository';
+import { isAnsweredRuntimeStatus } from '../firsthand/state-model';
 import {
   listResponsesForOpportunity,
   openSurveyCsvExport,
@@ -1298,6 +1302,49 @@ const refusedRepeatedParameters = (
 // session at login. The chain re-reads it from `users` first - but only for a
 // session that already claims an admin role, so the anonymous and participant
 // loads of this catalogue issue exactly the queries they always did.
+/**
+ * The participant's own completion trace for a set of native survey/poll/one
+ * question opportunities, keyed by opportunity id. Present so the detail page
+ * and the home row can say "you completed this" instead of offering a Start
+ * button that only 409s (audit row 10).
+ *
+ * Attached for ANY signed-in user, not only participants: during the beta the
+ * all-admin switch lifts every employee to `researcher_admin`, yet those same
+ * people take surveys, so gating on role would hide the trace from everyone.
+ *
+ * `completed` is derived through `isAnsweredRuntimeStatus`, the same predicate
+ * the mint gate uses, so the trace and the 409 can never disagree about what
+ * counts as answered. A read failure degrades to no trace rather than a 500:
+ * the Start button reappears and the mint gate still refuses a second answer.
+ */
+async function participantCompletionMap(
+  participantId: string,
+  opportunityIds: string[]
+): Promise<Map<string, { completed: boolean; completedAt: string | null }>> {
+  const map = new Map<string, { completed: boolean; completedAt: string | null }>();
+  if (opportunityIds.length === 0) {
+    return map;
+  }
+
+  try {
+    const rows = await findParticipantCompletionsForOpportunities({
+      participantId,
+      opportunityIds
+    });
+    for (const row of rows) {
+      const completed = isAnsweredRuntimeStatus(row.sessionStatus);
+      map.set(row.opportunityId, {
+        completed,
+        completedAt: completed ? row.completedAt : null
+      });
+    }
+  } catch (error) {
+    logger.error('Failed to load participant completion trace', { error });
+  }
+
+  return map;
+}
+
 router.get('/', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req: Request, res: Response) => {
   try {
     // FIRST, above every other read: the casts below are only true once this
@@ -1477,9 +1524,29 @@ router.get('/', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req: Re
       }
     }
 
+    // The signed-in participant's completion trace for the native survey/poll/
+    // one-question rows on this page, in one batched read (audit row 10). Only
+    // those types carry a trace; a bookable study leaves its trace in bookings.
+    const completionById = req.user
+      ? await participantCompletionMap(
+          req.user.id,
+          result.rows
+            .filter(opp => runsNativeSurvey(opp.type, opp.delivery_mode))
+            .map(opp => String(opp.id))
+        )
+      : new Map<string, { completed: boolean; completedAt: string | null }>();
+
     // Combine results
     const opportunities = result.rows.map(opportunity => {
       const sessions = allSessionsMap.get(opportunity.id) || [];
+
+      const completion = runsNativeSurvey(opportunity.type, opportunity.delivery_mode)
+        ? (completionById.get(String(opportunity.id)) ?? { completed: false, completedAt: null })
+        : undefined;
+
+      // Kept last before the return, immediately followed by it: a mutation-canary
+      // entry pins `clicks_total ... : undefined;` directly against that `return {`
+      // (clicks-total-is-withheld-not-zeroed). Insert nothing between the two.
       const clicks_total = ((opportunity.type === 'poll' || opportunity.type === 'survey' || opportunity.type === 'unmoderated') && isAdmin)
         ? (clicksMap.get(opportunity.id) ?? 0)
         : undefined;
@@ -1494,6 +1561,7 @@ router.get('/', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req: Re
         end_date: opportunity.end_date ? opportunity.end_date.toISOString() : null,
         sessions,
         clicks_total,
+        ...(completion ? { completion } : {}),
       };
     });
 
@@ -1599,7 +1667,23 @@ router.get('/:id', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req:
     }))
   };
 
-  res.json(isAdmin ? opportunity : toPublicOpportunity(opportunity));
+  // The participant's own completion trace for a native survey/poll/one
+  // question, so the page can say "you completed this" and drop the Start
+  // button instead of offering a retake the mint gate would only 409 (audit
+  // row 10). Attached for any signed-in user - see participantCompletionMap on
+  // why role is not the gate during the beta.
+  const withCompletion =
+    req.user && runsNativeSurvey(row.type, row.delivery_mode)
+      ? {
+          ...opportunity,
+          completion:
+            (await participantCompletionMap(req.user.id, [String(row.id)])).get(
+              String(row.id)
+            ) ?? { completed: false, completedAt: null }
+        }
+      : opportunity;
+
+  res.json(isAdmin ? withCompletion : toPublicOpportunity(withCompletion));
 }));
 
 // POST /api/opportunities - Create opportunity
@@ -3265,7 +3349,7 @@ router.post('/:id/survey-session', requireAuth, participantSessionMintLimiter, p
   });
 
   if (existing) {
-    if (existing.sessionStatus === 'completed' || existing.sessionStatus === 'uploading') {
+    if (isAnsweredRuntimeStatus(existing.sessionStatus)) {
       return res.status(409).json({ error: 'You have already answered this' });
     }
 
