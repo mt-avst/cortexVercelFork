@@ -1326,7 +1326,7 @@ describe('Opportunities API', () => {
         // sentence widened once already, when #78 gave `question` a native
         // path, which is the change this pin caught.
         expect(response.body.error).toBe(
-          'Only polls, surveys and one-question opportunities can carry questions'
+          'Only polls, surveys and one-question studies can carry questions'
         );
       });
 
@@ -1457,7 +1457,7 @@ describe('Opportunities API', () => {
           .expect(400);
 
         expect(response.body.error).toBe(
-          'Only unmoderated opportunities can carry a task list'
+          'Only unmoderated studies can carry a task list'
         );
       });
 
@@ -2713,7 +2713,7 @@ describe('Opportunities API', () => {
           .expect(400);
 
         expect(response.body.error).toBe(
-          'Only unmoderated opportunities can carry a task list'
+          'Only unmoderated studies can carry a task list'
         );
         expect(mockCreateStudy).not.toHaveBeenCalled();
       });
@@ -4279,7 +4279,7 @@ describe('Opportunities API', () => {
         const response = await patchLinked({ inline_study: inlineStudy }, false, true)
           .expect(400);
 
-        expect(response.body.error).toMatch(/also used by another opportunity/);
+        expect(response.body.error).toMatch(/also used by another study/);
         expect(mockUpdateStudy).not.toHaveBeenCalled();
         expect(mockCreateStudy).not.toHaveBeenCalled();
       });
@@ -5206,7 +5206,7 @@ describe('Opportunities API', () => {
         })
         .expect(403);
 
-      expect(response.body.error).toBe('Only the owner can edit this opportunity');
+      expect(response.body.error).toBe('Only the owner can edit this study');
     });
   });
 
@@ -5311,7 +5311,7 @@ describe('Opportunities API', () => {
         .delete('/api/opportunities/1')
         .expect(403);
 
-      expect(response.body.error).toBe('Only the owner can delete this opportunity');
+      expect(response.body.error).toBe('Only the owner can delete this study');
     });
   });
 
@@ -5375,7 +5375,7 @@ describe('Opportunities API', () => {
         .post('/api/opportunities/1/duplicate')
         .expect(403);
 
-      expect(response.body.error).toBe('Only the owner can duplicate this opportunity');
+      expect(response.body.error).toBe('Only the owner can duplicate this study');
     });
   });
 
@@ -5398,7 +5398,7 @@ describe('Opportunities API', () => {
         .post('/api/opportunities/1/close-if-past')
         .expect(200);
 
-      expect(response.body).toEqual({ message: 'Opportunity auto-close check completed' });
+      expect(response.body).toEqual({ message: 'Study auto-close check completed' });
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('UPDATE opportunities'),
         ['closed', '1']
@@ -5414,7 +5414,7 @@ describe('Opportunities API', () => {
         .post('/api/opportunities/1/close-if-past')
         .expect(403);
 
-      expect(response.body.error).toBe('Only the owner can close this opportunity');
+      expect(response.body.error).toBe('Only the owner can close this study');
     });
   });
 
@@ -6094,7 +6094,7 @@ describe('Opportunities API', () => {
         .post('/api/opportunities/1/survey-session')
         .expect(400);
 
-      expect(response.body.error).toBe('Opportunity has no questions linked');
+      expect(response.body.error).toBe('Study has no questions linked');
     });
   });
 
@@ -6143,7 +6143,7 @@ describe('Opportunities API', () => {
         .get('/api/opportunities/1/session-events')
         .expect(403);
 
-      expect(response.body.error).toBe('Only the opportunity owner can view session events');
+      expect(response.body.error).toBe('Only the study owner can view session events');
     });
 
     it('should return 404 when the opportunity does not exist', async () => {
@@ -6242,7 +6242,7 @@ describe('Opportunities API', () => {
         .get(`/api/opportunities/${PATH_SEGMENT}/survey-results`)
         .expect(403);
 
-      expect(response.body.error).toBe('Only the opportunity owner can view survey responses');
+      expect(response.body.error).toBe('Only the study owner can view survey responses');
       // The status alone would still pass with the gate moved below the read.
       // Participants' answers must not have been loaded at all.
       expect(mockListResponsesForOpportunity).not.toHaveBeenCalled();
@@ -6443,7 +6443,7 @@ describe('Opportunities API', () => {
           .get(`/api/opportunities/${PATH_SEGMENT}/survey-results`)
           .expect(404);
 
-        expect(response.body.error).toBe('Opportunity not found');
+        expect(response.body.error).toBe('Study not found');
       });
 
       it('still logs the refusal, so the operator keeps the answer the caller lost', async () => {
@@ -7175,7 +7175,7 @@ describe('Opportunities API', () => {
         .get('/api/opportunities/1/analytics')
         .expect(403);
 
-      expect(response.body.error).toBe('Only the opportunity owner can view analytics');
+      expect(response.body.error).toBe('Only the study owner can view analytics');
     });
 
     it('should return 404 for a missing opportunity', async () => {

@@ -329,9 +329,9 @@ const requiredStudyKindFor = (
  */
 export const STUDY_KIND_MISMATCH: Record<StudyKind, string> = {
   recorded:
-    'This opportunity needs a recorded task list, and that is a set of survey questions',
+    'This study needs a recorded task list, and that is a set of survey questions',
   survey:
-    'This opportunity needs a set of survey questions, and that is a recorded task list'
+    'This study needs a set of survey questions, and that is a recorded task list'
 };
 
 /**
@@ -345,9 +345,9 @@ export const STUDY_KIND_MISMATCH: Record<StudyKind, string> = {
  * three.
  */
 export const ONLY_QUESTION_TYPES_CARRY_QUESTIONS =
-  'Only polls, surveys and one-question opportunities can carry questions';
+  'Only polls, surveys and one-question studies can carry questions';
 export const QUESTIONS_NEED_NATIVE_DELIVERY =
-  'Questions are only used when the opportunity runs in Cortex; set delivery_mode to native';
+  'Questions are only used when the study runs in Cortex; set delivery_mode to native';
 
 /**
  * Moderated consent (#79) is for the two moderated types and nothing else.
@@ -645,7 +645,7 @@ function sendStaleStudyConflict(
   // thing, so one logical refusal has one shape.
   return res.status(409).json({
     error: 'stale_study',
-    message: `Somebody else saved changes to ${subject} after you opened this opportunity. Nothing has been saved, and your edits are still here - save again to replace their version, or open the opportunity in a new tab to compare first.`,
+    message: `Somebody else saved changes to ${subject} after you opened this study. Nothing has been saved, and your edits are still here - save again to replace their version, or open the study in a new tab to compare first.`,
     current_updated_at: currentUpdatedAt
   });
 }
@@ -1432,7 +1432,7 @@ router.get('/', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req: Re
     // over every id returned.
     if (result.rows.length > MAX_OPPORTUNITIES_RETURNED) {
       return res.status(413).json({
-        error: `Too many opportunities to list; this route returns at most ${MAX_OPPORTUNITIES_RETURNED}`,
+        error: `Too many studies to list; this route returns at most ${MAX_OPPORTUNITIES_RETURNED}`,
         maximumOpportunities: MAX_OPPORTUNITIES_RETURNED
       });
     }
@@ -1592,7 +1592,7 @@ router.get('/:id', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req:
     // Use mock data
     const opportunity = getMockOpportunity(id);
     if (!opportunity) {
-      throw new NotFoundError('Opportunity');
+      throw new NotFoundError('Study');
     }
 
     // Non-admin users can only see published opportunities
@@ -1625,7 +1625,7 @@ router.get('/:id', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req:
   const result = await pool.query(query, params);
 
   if (result.rows.length === 0) {
-    throw new NotFoundError('Opportunity');
+    throw new NotFoundError('Study');
   }
 
   // Non-admin users can only VIEW published opportunities, but a non-published
@@ -1756,7 +1756,7 @@ router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOp
   // request that quietly discards the tasks someone just wrote is the failure
   // mode this whole feature exists to remove.
   if (data.inline_study && data.type !== 'unmoderated') {
-    throw new ValidationError('Only unmoderated opportunities can carry a task list');
+    throw new ValidationError('Only unmoderated studies can carry a task list');
   }
 
   // The survey counterpart, with the mirror-image restriction. A recorded study
@@ -2097,13 +2097,13 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
     // Check if opportunity exists
     const existingOpportunity = getMockOpportunity(id);
     if (!existingOpportunity) {
-      throw new NotFoundError('Opportunity');
+      throw new NotFoundError('Study');
     }
     
     // Check ownership (superadmins can edit any)
     const isSuperadmin = req.user!.role === 'superadmin';
     if (!isSuperadmin && !isOpportunityOwner(existingOpportunity, req.user)) {
-      throw new ForbiddenError('Only the owner can edit this opportunity');
+      throw new ForbiddenError('Only the owner can edit this study');
     }
 
     // Moderated consent (#79): same gate and resolution as the database branch,
@@ -2130,7 +2130,7 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
     });
     
     if (!updatedOpportunity) {
-      throw new NotFoundError('Opportunity');
+      throw new NotFoundError('Study');
     }
     
     return res.json(updatedOpportunity);
@@ -2160,14 +2160,14 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
   );
   
   if (ownershipCheck.rows.length === 0) {
-    throw new NotFoundError('Opportunity');
+    throw new NotFoundError('Study');
   }
   
   // Check ownership (superadmins can edit any)
   const isOwner = isOpportunityOwner(ownershipCheck.rows[0], req.user);
   const isSuperadmin = req.user!.role === 'superadmin';
   if (!isSuperadmin && !isOwner) {
-    throw new ForbiddenError('Only the owner can edit this opportunity');
+    throw new ForbiddenError('Only the owner can edit this study');
   }
   
   // Get existing opportunity to check type when status is being changed
@@ -2180,7 +2180,7 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
   // Same delete-mid-request race the UPDATE below now handles: without this the
   // row access throws a TypeError and answers 500 instead of 404.
   if (existingOpp.rows.length === 0) {
-    throw new NotFoundError('Opportunity');
+    throw new NotFoundError('Study');
   }
 
   const existingType = data.type || existingOpp.rows[0].type;
@@ -2244,7 +2244,7 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
   // An inline study can only fill a gap, never replace a link. Rejected rather
   // than resolved by precedence, matching create.
   if (inlineStudyInput && existingType !== 'unmoderated') {
-    throw new ValidationError('Only unmoderated opportunities can carry a task list');
+    throw new ValidationError('Only unmoderated studies can carry a task list');
   }
 
   if (inlineSurveyInput && !QUESTION_CARRYING_TYPES.has(existingType)) {
@@ -2536,7 +2536,7 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
 
     if (linkedStudyId && (await studyIsSharedWithAnotherOpportunity(linkedStudyId))) {
       throw new ValidationError(
-        'This task list is also used by another opportunity, so editing it here would change what that opportunity serves its participants. Edit it in the Task Lists area, where everything using it is visible'
+        'This task list is also used by another study, so editing it here would change what that study serves its participants. Edit it in the Task Lists area, where everything using it is visible'
       );
     }
 
@@ -2654,7 +2654,7 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
 
     if (linkedStudyId && (await studyIsSharedWithAnotherOpportunity(linkedStudyId))) {
       throw new ValidationError(
-        'These questions are also used by another opportunity, so editing them here would change what that opportunity asks its participants. Edit them in the Task Lists area, where everything using them is visible'
+        'These questions are also used by another study, so editing them here would change what that study asks its participants. Edit them in the Task Lists area, where everything using them is visible'
       );
     }
 
@@ -2880,7 +2880,7 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
     // delete: otherwise the row access below threw outside it, leaving the
     // study behind.
     if (result.rowCount === 0) {
-      throw new NotFoundError('Opportunity');
+      throw new NotFoundError('Study');
     }
   } catch (error) {
     if (updatedStudyInPlace) {
@@ -2990,7 +2990,7 @@ router.get('/:id/recorded-study-brief', recordedStudyBriefLimiter, optionalAuth,
 
   const dbAvailable = await isDatabaseAvailable();
   if (!dbAvailable) {
-    throw new NotFoundError('Opportunity');
+    throw new NotFoundError('Study');
   }
 
   let query = `
@@ -3004,7 +3004,7 @@ router.get('/:id/recorded-study-brief', recordedStudyBriefLimiter, optionalAuth,
 
   const result = await pool.query(query, [id]);
   if (result.rows.length === 0) {
-    throw new NotFoundError('Opportunity');
+    throw new NotFoundError('Study');
   }
 
   const { type, firsthand_study_id: studyId } = result.rows[0];
@@ -3091,7 +3091,7 @@ async function loadMintableOpportunity(id: string): Promise<{
   );
 
   if (result.rows.length === 0) {
-    throw new NotFoundError('Opportunity');
+    throw new NotFoundError('Study');
   }
 
   const row = result.rows[0];
@@ -3154,14 +3154,14 @@ router.post(['/:id/recorded-study-session', '/:id/firsthand-handoff'], requireAu
       throw new NotFoundError('Recorded session');
     }
     if (loaded.row.status !== 'published') {
-      return res.status(403).json({ error: 'Opportunity is not published' });
+      return res.status(403).json({ error: 'Study is not published' });
     }
     studyId = loaded.row.firsthand_study_id;
     canonicalOpportunityId = loaded.canonicalOpportunityId;
   }
 
   if (!studyId) {
-    return res.status(400).json({ error: 'Opportunity has no recorded study linked' });
+    return res.status(400).json({ error: 'Study has no recorded study linked' });
   }
 
   // Re-checked HERE, not only where the link was made.
@@ -3280,7 +3280,7 @@ router.post('/:id/survey-session', requireAuth, participantSessionMintLimiter, p
     }
 
     if (row.status !== 'published') {
-      return res.status(403).json({ error: 'Opportunity is not published' });
+      return res.status(403).json({ error: 'Study is not published' });
     }
 
     studyId = row.firsthand_study_id;
@@ -3288,7 +3288,7 @@ router.post('/:id/survey-session', requireAuth, participantSessionMintLimiter, p
   }
 
   if (!studyId) {
-    return res.status(400).json({ error: 'Opportunity has no questions linked' });
+    return res.status(400).json({ error: 'Study has no questions linked' });
   }
 
   // Re-checked here for the same reason the recorded route re-checks: the
@@ -3409,12 +3409,12 @@ router.get('/:id/session-events', requireAdmin, asyncHandler(async (req: Request
   );
 
   if (opportunityResult.rows.length === 0) {
-    throw new NotFoundError('Opportunity');
+    throw new NotFoundError('Study');
   }
 
   const isSuperadmin = req.user!.role === 'superadmin';
   if (!isSuperadmin && !isOpportunityOwner(opportunityResult.rows[0], req.user)) {
-    throw new ForbiddenError('Only the opportunity owner can view session events');
+    throw new ForbiddenError('Only the study owner can view session events');
   }
 
   const result = await pool.query(
@@ -3611,11 +3611,11 @@ async function loadOpportunityResultsContext(
       found: Boolean(row)
     });
 
-    throw new ForbiddenError('Only the opportunity owner can view survey responses');
+    throw new ForbiddenError('Only the study owner can view survey responses');
   }
 
   if (!row) {
-    throw new NotFoundError('Opportunity');
+    throw new NotFoundError('Study');
   }
 
   if (!row.firsthand_study_id) {
@@ -3724,19 +3724,19 @@ router.delete('/:id', requireAdmin, opportunityWriteLimiter, asyncHandler(async 
     // Check if opportunity exists
     const existingOpportunity = getMockOpportunity(id);
     if (!existingOpportunity) {
-      throw new NotFoundError('Opportunity');
+      throw new NotFoundError('Study');
     }
     
     // Check ownership (superadmins can delete any)
     const isSuperadmin = req.user!.role === 'superadmin';
     if (!isSuperadmin && !isOpportunityOwner(existingOpportunity, req.user)) {
-      throw new ForbiddenError('Only the owner can delete this opportunity');
+      throw new ForbiddenError('Only the owner can delete this study');
     }
     
     // Delete the opportunity
     const deleted = deleteMockOpportunity(id);
     if (!deleted) {
-      throw new NotFoundError('Opportunity');
+      throw new NotFoundError('Study');
     }
     
     return res.status(204).send();
@@ -3751,14 +3751,14 @@ router.delete('/:id', requireAdmin, opportunityWriteLimiter, asyncHandler(async 
   );
   
   if (ownershipCheck.rows.length === 0) {
-    throw new NotFoundError('Opportunity');
+    throw new NotFoundError('Study');
   }
   
   // Check ownership (superadmins can delete any)
   const isOwner = isOpportunityOwner(ownershipCheck.rows[0], req.user);
   const isSuperadmin = req.user!.role === 'superadmin';
   if (!isSuperadmin && !isOwner) {
-    throw new ForbiddenError('Only the owner can delete this opportunity');
+    throw new ForbiddenError('Only the owner can delete this study');
   }
   
   await pool.query('DELETE FROM opportunities WHERE id = $1', [id]);
@@ -3777,13 +3777,13 @@ router.post('/:id/duplicate', requireAdmin, opportunityWriteLimiter, asyncHandle
     // Check if opportunity exists
     const existingOpportunity = getMockOpportunity(id);
     if (!existingOpportunity) {
-      throw new NotFoundError('Opportunity');
+      throw new NotFoundError('Study');
     }
 
     // Check ownership (superadmins can duplicate any)
     const isSuperadmin = req.user!.role === 'superadmin';
     if (!isSuperadmin && !isOpportunityOwner(existingOpportunity, req.user)) {
-      throw new ForbiddenError('Only the owner can duplicate this opportunity');
+      throw new ForbiddenError('Only the owner can duplicate this study');
     }
 
     // Create duplicate as draft
@@ -3827,19 +3827,19 @@ router.post('/:id/duplicate', requireAdmin, opportunityWriteLimiter, asyncHandle
   );
 
   if (ownershipCheck.rows.length === 0) {
-    throw new NotFoundError('Opportunity');
+    throw new NotFoundError('Study');
   }
 
   // Check ownership (superadmins can duplicate any)
   const isSuperadmin = req.user!.role === 'superadmin';
   if (!isSuperadmin && !isOpportunityOwner(ownershipCheck.rows[0], req.user)) {
-    throw new ForbiddenError('Only the owner can duplicate this opportunity');
+    throw new ForbiddenError('Only the owner can duplicate this study');
   }
 
   // Get the original opportunity
   const original = await pool.query('SELECT * FROM opportunities WHERE id = $1', [id]);
   if (original.rows.length === 0) {
-    throw new NotFoundError('Opportunity');
+    throw new NotFoundError('Study');
   }
 
   const opp = original.rows[0];
@@ -3907,19 +3907,19 @@ router.post('/:id/close-if-past', requireAdmin, asyncHandler(async (req: Request
   );
 
   if (opportunityCheck.rows.length === 0) {
-    throw new NotFoundError('Opportunity');
+    throw new NotFoundError('Study');
   }
 
   // Check ownership (superadmins can close any)
   const isOwner = isOpportunityOwner(opportunityCheck.rows[0], req.user);
   const isSuperadmin = req.user!.role === 'superadmin';
   if (!isSuperadmin && !isOwner) {
-    throw new ForbiddenError('Only the owner can close this opportunity');
+    throw new ForbiddenError('Only the owner can close this study');
   }
 
   await autoCloseOpportunityIfNeeded(opportunityId);
 
-  res.json({ message: 'Opportunity auto-close check completed' });
+  res.json({ message: 'Study auto-close check completed' });
 }));
 
 // GET /api/opportunities/:id/sessions - Get sessions for an opportunity
@@ -3942,14 +3942,14 @@ router.get('/:id/sessions', optionalAuth, withLiveRoleIfPresent, asyncHandler(as
       // Use mock data for development
       const opportunity = getMockOpportunity(opportunityId);
       if (!opportunity) {
-        return res.status(404).json({ error: 'Opportunity not found' });
+        return res.status(404).json({ error: 'Study not found' });
       }
       
       const isAdmin = isAdminRole(req.user?.role);
       
       // Non-admin users can only see published opportunities
       if (!isAdmin && opportunity.status !== 'published') {
-        return res.status(404).json({ error: 'Opportunity not found' });
+        return res.status(404).json({ error: 'Study not found' });
       }
       
       // Get mock sessions for this opportunity
@@ -3991,7 +3991,7 @@ router.get('/:id/sessions', optionalAuth, withLiveRoleIfPresent, asyncHandler(as
     `, [opportunityId]);
     
     if (opportunityCheck.rows.length === 0) {
-      return res.status(404).json({ error: 'Opportunity not found' });
+      return res.status(404).json({ error: 'Study not found' });
     }
     
     const opportunity = opportunityCheck.rows[0];
@@ -3999,7 +3999,7 @@ router.get('/:id/sessions', optionalAuth, withLiveRoleIfPresent, asyncHandler(as
     
     // Non-admin users can only see published opportunities
     if (!isAdmin && opportunity.status !== 'published') {
-      return res.status(404).json({ error: 'Opportunity not found' });
+      return res.status(404).json({ error: 'Study not found' });
     }
     
     // Build query for sessions with dynamic booked_count calculation
@@ -4083,13 +4083,13 @@ router.post('/:id/sessions', requireAdmin, asyncHandler(async (req: Request, res
       // Use mock data for development
       const opportunity = getMockOpportunity(opportunityId);
       if (!opportunity) {
-        return res.status(404).json({ error: 'Opportunity not found' });
+        return res.status(404).json({ error: 'Study not found' });
       }
       
       // Check ownership (superadmins can add sessions to any)
       const isSuperadmin = req.user!.role === 'superadmin';
       if (!isSuperadmin && !isOpportunityOwner(opportunity, req.user)) {
-        return res.status(403).json({ error: 'Only the owner can add sessions to this opportunity' });
+        return res.status(403).json({ error: 'Only the owner can add sessions to this study' });
       }
       
       // Validate all sessions
@@ -4116,14 +4116,14 @@ router.post('/:id/sessions', requireAdmin, asyncHandler(async (req: Request, res
     );
     
     if (opportunityCheck.rows.length === 0) {
-      return res.status(404).json({ error: 'Opportunity not found' });
+      return res.status(404).json({ error: 'Study not found' });
     }
     
     // Check ownership (superadmins can add sessions to any)
     const isOwner = isOpportunityOwner(opportunityCheck.rows[0], req.user);
     const isSuperadmin = req.user!.role === 'superadmin';
     if (!isSuperadmin && !isOwner) {
-      return res.status(403).json({ error: 'Only the owner can add sessions to this opportunity' });
+      return res.status(403).json({ error: 'Only the owner can add sessions to this study' });
     }
     
     // Validate all sessions
@@ -4244,13 +4244,13 @@ router.delete('/:id/sessions', requireAdmin, asyncHandler(async (req: Request, r
       // Use mock data for development
       const opportunity = getMockOpportunity(opportunityId);
       if (!opportunity) {
-        return res.status(404).json({ error: 'Opportunity not found' });
+        return res.status(404).json({ error: 'Study not found' });
       }
       
       // Check ownership (superadmins can delete sessions from any)
       const isSuperadmin = req.user!.role === 'superadmin';
       if (!isSuperadmin && !isOpportunityOwner(opportunity, req.user)) {
-        return res.status(403).json({ error: 'Only the owner can delete sessions from this opportunity' });
+        return res.status(403).json({ error: 'Only the owner can delete sessions from this study' });
       }
       
       // Get all sessions for this opportunity
@@ -4279,14 +4279,14 @@ router.delete('/:id/sessions', requireAdmin, asyncHandler(async (req: Request, r
     );
     
     if (opportunityCheck.rows.length === 0) {
-      return res.status(404).json({ error: 'Opportunity not found' });
+      return res.status(404).json({ error: 'Study not found' });
     }
     
     // Check ownership (superadmins can delete sessions from any)
     const isOwner = isOpportunityOwner(opportunityCheck.rows[0], req.user);
     const isSuperadmin = req.user!.role === 'superadmin';
     if (!isSuperadmin && !isOwner) {
-      return res.status(403).json({ error: 'Only the owner can delete sessions from this opportunity' });
+      return res.status(403).json({ error: 'Only the owner can delete sessions from this study' });
     }
     
     // Delete the sessions and their bookings ATOMICALLY, under a row lock.
@@ -4399,7 +4399,7 @@ router.post('/:id/click', optionalAuth, asyncHandler(async (req: Request, res: R
   );
 
   if (opportunityResult.rows.length === 0) {
-    throw new NotFoundError('Opportunity');
+    throw new NotFoundError('Study');
   }
 
   const opportunity = opportunityResult.rows[0];
@@ -4411,7 +4411,7 @@ router.post('/:id/click', optionalAuth, asyncHandler(async (req: Request, res: R
 
   // Only allow tracking for published opportunities
   if (opportunity.status !== 'published') {
-    throw new NotFoundError('Opportunity not published');
+    throw new NotFoundError('Study not published');
   }
 
   // Get user ID if authenticated, otherwise null
@@ -4506,7 +4506,7 @@ router.get('/:id/analytics', requireAdmin, asyncHandler(async (req: Request, res
   );
 
   if (opportunityResult.rows.length === 0) {
-    throw new NotFoundError('Opportunity');
+    throw new NotFoundError('Study');
   }
 
   const opportunity = opportunityResult.rows[0];
@@ -4514,7 +4514,7 @@ router.get('/:id/analytics', requireAdmin, asyncHandler(async (req: Request, res
   // Only owner or superadmin can view analytics
   const isSuperadmin = req.user!.role === 'superadmin';
   if (!isSuperadmin && !isOpportunityOwner(opportunity, req.user)) {
-    throw new ForbiddenError('Only the opportunity owner can view analytics');
+    throw new ForbiddenError('Only the study owner can view analytics');
   }
 
   // Overall totals (all-time), independent of the selected chart period
