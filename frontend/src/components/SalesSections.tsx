@@ -247,20 +247,26 @@ const LoopDiagram: React.FC = () => (
 
 const LoopSection: React.FC = () => (
   <section className="sales-section" data-section="loop">
-    <div className="sales-section-inner sales-loop">
-      <div className="sales-loop-figure">
-        <LoopDiagram />
-      </div>
-      <div className="sales-loop-copy">
-        <h2 className="sales-heading-l">One feedback loop for all of us</h2>
-        <p className="sales-body">
-          Someone has a question about a product. Cortex opens it to the colleagues who can answer it, they answer
-          in their own words, and the decision gets made on what people said rather than what someone assumed.
-        </p>
-        <p className="sales-body">
-          Then the loop closes. The people who answered hear what happened. That last step is what makes it
-          worth doing twice.
-        </p>
+    <div className="sales-section-inner">
+      {/* Kicker over the section - "See how it works" moved down from the hero
+          to label the block it was pointing at. Uses the base sales kicker so
+          it echoes the hero eyebrow's uppercase letterspacing. */}
+      <span className="sales-kicker sales-loop-kicker">See how it works</span>
+      <div className="sales-loop">
+        <div className="sales-loop-figure">
+          <LoopDiagram />
+        </div>
+        <div className="sales-loop-copy">
+          <h2 className="sales-heading-l">One feedback loop for all of us</h2>
+          <p className="sales-body">
+            Someone has a question about a product. Cortex opens it to the colleagues who can answer it, they answer
+            in their own words, and the decision gets made on what people said rather than what someone assumed.
+          </p>
+          <p className="sales-body">
+            Then the loop closes. The people who answered hear what happened. That last step is what makes it
+            worth doing twice.
+          </p>
+        </div>
       </div>
     </div>
   </section>

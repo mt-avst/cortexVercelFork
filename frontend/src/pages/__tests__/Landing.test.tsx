@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import Landing from '../Landing';
@@ -9,11 +9,13 @@ import { oidcLogin } from '../../api/client';
  * The first viewport of the signed-out landing page.
  *
  * The page renders only while signed out (Home.tsx), so its whole audience is
- * cold. For a long time the hero showed a lockup, the mood line "Collective
- * Intelligence" and a sign-in button, with everything a cold visitor needed
- * behind a nine-point "See how it works" tab. These tests pin the shape that
- * replaced it: a proposition that says what Cortex is, and the two doors, one
- * per reader, inside the hero and ahead of the narrative.
+ * cold. The hero used to carry two audience "doors" side by side, but signed
+ * out both routed to the same sign-in, so the choice had no payoff and the pair
+ * read as a terminal "pick one" that discouraged the scroll. The hero now shows
+ * a single primary way in; the audience split lives only in the closing doors at
+ * the foot of the narrative, after the pitch. These tests pin that shape: the
+ * proposition, one CTA, and nothing in the hero that forks or off-ramps the
+ * reader before they have read a word.
  *
  * Copy is pinned by LITERAL, not imported from the component, because an
  * expectation derived from the copy moves with it and cannot see it change.
@@ -37,20 +39,15 @@ const HERO_LINES = [
   'Cortex is where we find out.',
   'Where we ask the people who’ll use it.',
   'Where you say what you actually think.',
-  'Our collective intelligence',
+  'Cortex is our collective intelligence',
 ];
 
-/** Both hero doors, by their stable id. A literal pair, so a door lost fails here. */
-const OPENING_DOOR_IDS = ['access', 'take-part'] as const;
-
-/** The hero's door buttons: the ones that come before the narrative's first section. */
-const heroDoors = (container: HTMLElement): HTMLButtonElement[] => {
-  const firstNarrativeSection = container.querySelector('[data-section]');
-  expect(firstNarrativeSection).not.toBeNull();
-  return Array.from(container.querySelectorAll<HTMLButtonElement>('button[data-cta]')).filter(
-    (button) =>
-      (button.compareDocumentPosition(firstNarrativeSection as Element) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
-  );
+/** The hero stack - lockup, proposition and the single CTA. Scopes every
+ *  hero-only assertion so it cannot accidentally read the narrative below. */
+const hero = (container: HTMLElement): HTMLElement => {
+  const stack = container.querySelector<HTMLElement>('.landing-hero-stack');
+  expect(stack).not.toBeNull();
+  return stack!;
 };
 
 describe('Landing hero', () => {
@@ -80,86 +77,76 @@ describe('Landing hero', () => {
 
   it('keeps the tagline as the closing line, not the only line', () => {
     // "Collective Intelligence" on its own told a cold visitor nothing. It
-    // stays, but last, under lines that give it a reason.
+    // stays, but last, under lines that give it a reason - now named so it
+    // reads as a statement about Cortex rather than a mood.
     const { container } = render(<Landing />);
 
     const tagline = container.querySelector('.landing-tagline');
-    expect(tagline).toHaveTextContent('Our collective intelligence');
+    expect(tagline).toHaveTextContent('Cortex is our collective intelligence');
     expect(tagline?.previousElementSibling).toHaveTextContent('Cortex is where we find out.');
   });
 
-  it('does not bring back the scroll tab', () => {
-    // The tab hid the only content a cold visitor needed. It does not come
-    // back quietly.
-    const { container } = render(<Landing />);
-    const text = container.textContent ?? '';
-
-    expect(text).not.toContain('See how it works');
-    expect(text).not.toContain('New to Cortex?');
-    expect(container.querySelector('.hero-scroll-tab')).toBeNull();
-  });
-
-  it('CONTROL: the hero-door finder can tell a hero door from a closing door', () => {
+  it('offers a single primary way in, and routes it to the sign-in', () => {
     const { container } = render(<Landing />);
 
-    const allDoors = container.querySelectorAll('button[data-cta]');
-    // Two in the hero, two in the closing section.
-    expect(allDoors).toHaveLength(4);
-    expect(heroDoors(container)).toHaveLength(2);
-  });
+    // Exactly one call-to-action in the hero, and it is the "access" route.
+    const ctaBlock = hero(container).querySelector('.landing-cta-single');
+    expect(ctaBlock).not.toBeNull();
+    const buttons = ctaBlock!.querySelectorAll('button');
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]).toHaveAttribute('data-cta', 'access');
+    expect(buttons[0]).toHaveTextContent('Access Cortex');
 
-  it('puts both doors in the hero, one per reader, ahead of the narrative', () => {
-    const { container } = render(<Landing />);
-
-    const doors = heroDoors(container);
-    expect(doors.map((door) => door.textContent?.trim())).toEqual(['Run a study', 'Take part']);
-
-    // Each door names its reader, so a visitor can pick without reading the body.
-    const hero = container.querySelector('.landing-doors');
-    expect(hero?.textContent).toContain('The people building it');
-    expect(hero?.textContent).toContain('The people who’ll tell the truth about it');
-    // The proposition does the explaining, so the doors carry no body copy.
-    expect(hero?.querySelector('.sales-card-text')).toBeNull();
-  });
-
-  it('routes every hero door to the sign-in', () => {
-    // Each door, in turn. A fresh render per door, because the first click
-    // puts the sign-in in flight and disables the rest.
-    OPENING_DOOR_IDS.forEach((ctaId) => {
-      const { container, unmount } = render(<Landing />);
-      const door = container.querySelector<HTMLButtonElement>(`.landing-doors button[data-cta="${ctaId}"]`);
-      expect(door).not.toBeNull();
-
-      fireEvent.click(door!);
-      expect(oidcLogin).toHaveBeenCalledTimes(1);
-
-      vi.mocked(oidcLogin).mockClear();
-      unmount();
-    });
-  });
-
-  it('offers a quiet sign-in for the returning visitor', () => {
-    render(<Landing />);
-
-    fireEvent.click(screen.getByRole('button', { name: /Already using Cortex\? Sign in/i }));
+    fireEvent.click(buttons[0]);
     expect(oidcLogin).toHaveBeenCalledTimes(1);
   });
 
-  it('disables every route in once a sign-in is in flight', () => {
+  it('does not fork or off-ramp the reader in the hero', () => {
+    // The two-audience choice had no payoff signed out, the returning-user
+    // sign-in link was a third control firing the same action, and the old
+    // scroll tab hid content a cold visitor needed. None of them belong in the
+    // hero. The audience split now lives only in the closing doors below.
+    const { container } = render(<Landing />);
+    const heroText = hero(container).textContent ?? '';
+
+    expect(heroText).not.toContain('Run a study');
+    expect(heroText).not.toContain('Take part');
+    expect(heroText).not.toContain('Already using Cortex');
+    expect(heroText).not.toContain('See how it works');
+    expect(hero(container).querySelector('.landing-doors')).toBeNull();
+    expect(hero(container).querySelector('.landing-signin-link')).toBeNull();
+    expect(hero(container).querySelector('.landing-scroll-cue')).toBeNull();
+    expect(container.querySelector('.hero-scroll-tab')).toBeNull();
+  });
+
+  it('keeps the audience split below the fold, not in the hero', () => {
+    // Control for the assertion above: prove the split still exists on the page
+    // (the closing doors), so "not in the hero" means moved, not deleted.
     const { container } = render(<Landing />);
 
-    fireEvent.click(screen.getByRole('button', { name: /Already using Cortex\? Sign in/i }));
+    const allCtas = Array.from(container.querySelectorAll<HTMLButtonElement>('button[data-cta]'));
+    // One hero CTA (access) plus the two closing doors (access, take-part).
+    expect(allCtas.map((b) => b.getAttribute('data-cta')).sort()).toEqual([
+      'access',
+      'access',
+      'take-part',
+    ]);
+    // The take-part door is one of the closing doors, never the hero.
+    const takePart = container.querySelector('button[data-cta="take-part"]');
+    expect(hero(container).contains(takePart)).toBe(false);
+  });
 
-    const doors = Array.from(container.querySelectorAll<HTMLButtonElement>('button[data-cta]'));
-    expect(doors).toHaveLength(4);
-    doors.forEach((door) => {
-      expect(door).toBeDisabled();
-      // The click is answered where it landed: every route in says so.
-      expect(door).toHaveTextContent('Connecting...');
-      fireEvent.click(door);
-    });
-    // Four doors and the sign-in link.
-    expect(screen.getAllByRole('button', { name: /Connecting/i })).toHaveLength(5);
+  it('disables the hero CTA once a sign-in is in flight', () => {
+    const { container } = render(<Landing />);
+
+    const cta = hero(container).querySelector<HTMLButtonElement>('.landing-cta-single button')!;
+    fireEvent.click(cta);
+
+    // The click is answered where it landed.
+    expect(cta).toBeDisabled();
+    expect(cta).toHaveTextContent('Connecting...');
+    // A second click cannot fire a second sign-in.
+    fireEvent.click(cta);
     expect(oidcLogin).toHaveBeenCalledTimes(1);
   });
 });

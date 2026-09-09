@@ -66,6 +66,18 @@ describe('SalesSections', () => {
     expect(sections).not.toContain('social-proof');
   });
 
+  it('labels the loop section with the "See how it works" eyebrow', () => {
+    // The counterpart to Landing.test.tsx's "not in the hero" assertion: the
+    // label was moved here, not deleted. Deleting the eyebrow must fail a test.
+    const { container } = renderSections();
+
+    const loop = container.querySelector('[data-section="loop"]');
+    expect(loop).not.toBeNull();
+    const kicker = loop!.querySelector('.sales-loop-kicker');
+    expect(kicker).not.toBeNull();
+    expect(kicker).toHaveTextContent('See how it works');
+  });
+
   it('makes no claim the product cannot support', () => {
     const { container } = renderSections();
 
