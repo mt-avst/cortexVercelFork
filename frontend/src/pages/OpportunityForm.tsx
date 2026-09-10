@@ -1690,11 +1690,11 @@ const OpportunityForm: React.FC = () => {
           setSessions([]);
         }
       } catch (sessionError: unknown) {
-        const axiosError = sessionError as { response?: { data?: unknown; status?: number } };
+        const axiosError = sessionError as { response?: { status?: number } };
         logger.error('Error loading sessions', {
           error: sessionError instanceof Error ? sessionError : undefined,
           errorMessage: sessionError instanceof Error ? sessionError.message : String(sessionError),
-          response: axiosError.response?.data,
+          // #102: keep the status, not the raw server response body.
           status: axiosError.response?.status
         });
 
