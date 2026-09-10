@@ -3201,6 +3201,68 @@ body.admin-page .header .container {
   }
 }
 
+/* ============================================================
+   ROW 14 TAIL (#122) - Recent bookings reflows to cards on phone.
+   Same treatment as the Research Studies table above, applied via the
+   shared `.admin-cards-phone` marker rather than `.admin-data-table` so
+   it carries none of that table's fixed-layout column geometry. Below
+   768px each row becomes a card with its column name inline above the
+   value; the old `:nth-child` column-hide + sideways-scroll treatment
+   this table used to share is dropped below (it hid Status on a phone).
+   The Feedback table gets the same reflow, but from inside its own
+   scoped <style> in AdminFeedback.tsx: that block sets `td { padding:
+   16px !important }` in the document body, which an !important rule in
+   this head stylesheet cannot beat on source order.
+   ============================================================ */
+@media (max-width: 767.98px) {
+  .admin-dashboard table.admin-cards-phone,
+  .admin-dashboard table.admin-cards-phone tbody,
+  .admin-dashboard table.admin-cards-phone tr {
+    display: block;
+    width: 100%;
+  }
+
+  .admin-dashboard table.admin-cards-phone thead {
+    display: none;
+  }
+
+  .admin-dashboard table.admin-cards-phone tbody tr {
+    border: 1px solid var(--border-subtle-current);
+    border-radius: var(--radius-md);
+    background: var(--surface-glass-current);
+    padding: var(--spacing-2) var(--spacing-3);
+    margin-bottom: var(--spacing-3);
+  }
+
+  /* !important mirrors the studies table (.admin-data-table td above): the
+     older mobile rules still match this table by `table-hover` and are more
+     specific - `table.table-hover tbody td:nth-child(1)` (0,3,3) would clamp
+     the first "Date & time" cell to min-width:150px/max-width:40%, and
+     `table.table-hover tbody td` (0,2,3) would override the padding. */
+  .admin-dashboard table.admin-cards-phone td {
+    display: block !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    padding: 0.4rem 0 !important;
+    text-align: left !important;
+    border: 0;
+  }
+
+  /* Guarded on [data-label] so the "No recent bookings" empty-state cell,
+     which has no label, does not render an empty label line above it. */
+  .admin-dashboard table.admin-cards-phone td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 0.15rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+}
+
 .row-title {
   color: #FFFFFF;
   font-weight: 600;
@@ -3729,21 +3791,11 @@ body.theme-dark .admin-data-table td.col-date {
     min-width: 150px;
     max-width: 40%;
   }
-  /* Hide less critical columns. Scoped away from the Research Studies table
-     (.admin-data-table), which reflows to cards below 768px instead - without
-     :not() these fired at exactly 768.0px, one pixel above the card
-     breakpoint, hiding the studies columns while the table had not yet
-     reflowed. The Recent bookings table keeps this older treatment. */
-  .admin-dashboard table.table-hover:not(.admin-data-table) thead th:nth-child(4),
-  .admin-dashboard table.table-hover:not(.admin-data-table) tbody td:nth-child(4),
-  .admin-dashboard table.table-hover:not(.admin-data-table) thead th:nth-child(5),
-  .admin-dashboard table.table-hover:not(.admin-data-table) tbody td:nth-child(5),
-  .admin-dashboard table.table-hover:not(.admin-data-table) thead th:nth-child(6),
-  .admin-dashboard table.table-hover:not(.admin-data-table) tbody td:nth-child(6),
-  .admin-dashboard table.table-hover:not(.admin-data-table) thead th:nth-child(7),
-  .admin-dashboard table.table-hover:not(.admin-data-table) tbody td:nth-child(7) {
-    display: none;
-  }
+  /* The Research Studies table (.admin-data-table) and Recent bookings
+     (.admin-cards-phone) both reflow to cards below 768px, so there are no
+     longer any dashboard tables that hide columns by :nth-child here. The
+     old hide-columns-4-to-7 block was dropped with #122 - it was hiding the
+     Recent bookings Status column on a phone. */
   .admin-dashboard .table-responsive {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
@@ -3752,13 +3804,9 @@ body.theme-dark .admin-data-table td.col-date {
 
 /* Extra small screens - show only essential columns */
 @media (max-width: 576px) {
-  /* Not the studies table: it reflows to cards and must keep its Actions
-     column (nth-child(8)) reachable - hiding it here is what made the row
-     actions unreachable on a phone. */
-  .admin-dashboard table.table-hover:not(.admin-data-table) thead th:nth-child(8),
-  .admin-dashboard table.table-hover:not(.admin-data-table) tbody td:nth-child(8) {
-    display: none;
-  }
+  /* No dashboard table hides columns by :nth-child any more - both reflow to
+     cards below 768px (studies via .admin-data-table, Recent bookings via
+     .admin-cards-phone), so the old nth-child(8) hide was dropped with #122. */
   .admin-dashboard table.table-hover thead th,
   .admin-dashboard table.table-hover tbody td {
     padding: 10px 6px;

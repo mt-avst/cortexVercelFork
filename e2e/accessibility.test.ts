@@ -367,6 +367,117 @@ test.describe('Accessibility Tests', () => {
     expect(scan.violations).toEqual([]);
   });
 
+  // Audit #122. Tail of row 14. The Research Studies table moved to cards, but
+  // the Recent bookings and Feedback tables kept the older phone treatment -
+  // hide columns by :nth-child, then scroll sideways inside .table-responsive.
+  // Recent bookings HID its Status column below 768px outright. Both now reflow
+  // to cards like the studies table. jsdom (the vitest suite) applies no CSS
+  // and the scans above run at 1280px, so this is the only place the reflow can
+  // fail by name: it asserts the once-hidden Status cell is visible and within
+  // the viewport, the Feedback cells render, and neither tab scrolls sideways.
+  test('Recent bookings and Feedback tables reflow to cards on a 390px phone', async ({ page }) => {
+    await page.route('**/api/me', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ id: 'admin-1', name: 'Admin User', email: 'admin@example.com', role: 'researcher_admin' }),
+      });
+    });
+    await page.route('**/api/admin/dashboard', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            total_bookings: 3,
+            recent_bookings: [
+              {
+                id: 'bk-1',
+                opportunity_id: 'opp-1',
+                opportunity_title: 'Checkout usability test',
+                session_start: new Date('2026-09-15T09:30:00Z').toISOString(),
+                participant_name: 'Sam Participant',
+                participant_email: 'sam@example.com',
+                status: 'booked',
+                booked_at: new Date('2026-09-14T09:30:00Z').toISOString(),
+              },
+            ],
+          },
+        }),
+      });
+    });
+    await page.route('**/api/feedback', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: [
+            {
+              id: 'fb-1',
+              user_id: 'u1',
+              user_name: 'Sam Participant',
+              user_email: 'sam@example.com',
+              category: 'bug',
+              feedback: 'The book button did not respond on my phone.',
+              url: '/opportunities/opp-1',
+              user_agent: 'test',
+              created_at: new Date('2026-09-14T12:00:00Z').toISOString(),
+            },
+          ],
+          has_more: false,
+        }),
+      });
+    });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/admin');
+    await page.waitForLoadState('load');
+
+    // Bookings tab: the Status column (nth-child(4)) was hidden below 768px by
+    // the old rule. If the reflow regresses, the cell is display:none and this
+    // toBeVisible fails by name.
+    await page.getByRole('tab', { name: /Bookings/ }).click();
+    const statusCell = page.locator('.admin-cards-phone td.col-recent-status').first();
+    await expect(statusCell).toBeVisible();
+
+    const bookingMetrics = await page.evaluate(() => {
+      const de = document.documentElement;
+      const status = document.querySelector('.admin-cards-phone td.col-recent-status');
+      const session = document.querySelector('.admin-cards-phone td.col-recent-session');
+      const statusRect = status?.getBoundingClientRect();
+      return {
+        scrollW: de.scrollWidth,
+        clientW: de.clientWidth,
+        statusRight: statusRect ? statusRect.right : null,
+        statusWidth: statusRect ? statusRect.width : null,
+        sessionWidth: session ? session.getBoundingClientRect().width : null,
+      };
+    });
+    expect(bookingMetrics.scrollW).toBeLessThanOrEqual(bookingMetrics.clientW + 1);
+    expect(bookingMetrics.statusRight).not.toBeNull();
+    expect(bookingMetrics.statusRight as number).toBeLessThanOrEqual(bookingMetrics.clientW + 1);
+    // Every card cell spans the full card width. The first cell used to be
+    // clamped to the old `table-hover tbody td:nth-child(1)` min-width:150px/
+    // max-width:40% rule, which outranks the reflow unless the reflow's width
+    // rules carry !important (as the studies table's do). If that !important is
+    // dropped the first cell shrinks to 150px while the others stay full width,
+    // so assert the first cell matches the last rather than a fixed pixel size.
+    expect(bookingMetrics.sessionWidth).not.toBeNull();
+    expect(bookingMetrics.statusWidth).not.toBeNull();
+    expect(Math.abs((bookingMetrics.sessionWidth as number) - (bookingMetrics.statusWidth as number))).toBeLessThanOrEqual(1);
+
+    // Feedback tab.
+    await page.getByRole('tab', { name: /Feedback/ }).click();
+    const feedbackCell = page.locator('.feedback-table td[data-label="Feedback"]').first();
+    await expect(feedbackCell).toBeVisible();
+
+    const feedbackMetrics = await page.evaluate(() => {
+      const de = document.documentElement;
+      return { scrollW: de.scrollWidth, clientW: de.clientWidth };
+    });
+    expect(feedbackMetrics.scrollW).toBeLessThanOrEqual(feedbackMetrics.clientW + 1);
+  });
+
   // Audit #114. At 390px the participant study page forced the document wider
   // than the viewport twice over: the calendar grid (a full week of >=128px
   // columns ~= 968px, measured 1160px document) and, in the default table view,

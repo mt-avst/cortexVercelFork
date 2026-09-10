@@ -373,7 +373,55 @@ const AdminFeedback: React.FC = () => {
           .admin-feedback .feedback-pagination-text {
             color: var(--text-muted);
           }
-          
+
+          /* Phone: reflow to stacked cards, matching the admin dashboard tables
+             (audit row 14 / #122). Lives here rather than in _components.css
+             because the tbody td rule above sets padding:16px !important in the
+             document body, which an !important rule in the head stylesheet
+             cannot beat on source order. Below 768px each row is a card with
+             its column name inline above the value, so the table no longer
+             scrolls sideways inside .table-responsive. */
+          @media (max-width: 767.98px) {
+            .admin-feedback .table-responsive {
+              overflow-x: visible;
+            }
+            .admin-feedback .feedback-table,
+            .admin-feedback .feedback-table tbody,
+            .admin-feedback .feedback-table tr {
+              display: block;
+              width: 100%;
+            }
+            .admin-feedback .feedback-table thead {
+              display: none;
+            }
+            .admin-feedback .feedback-table tbody tr {
+              border: 1px solid var(--border-card) !important;
+              border-radius: 8px;
+              margin-bottom: 12px;
+              padding: 8px 12px;
+            }
+            .admin-feedback .feedback-table tbody td {
+              display: block;
+              width: auto;
+              padding: 6px 0 !important;
+              text-align: left !important;
+              border: 0 !important;
+            }
+            .admin-feedback .feedback-table tbody td[data-label]::before {
+              content: attr(data-label);
+              display: block;
+              margin-bottom: 0.15rem;
+              font-size: 0.7rem;
+              font-weight: 600;
+              letter-spacing: 0.05em;
+              text-transform: uppercase;
+              text-align: left;
+              color: var(--text-muted);
+            }
+            .admin-feedback .feedback-preview {
+              max-width: 100%;
+            }
+          }
         `}
       </style>
 
@@ -473,23 +521,23 @@ const AdminFeedback: React.FC = () => {
                     key={item.id}
                     onClick={() => openViewModal(index)}
                   >
-                    <td>
+                    <td data-label="Date">
                       <small className="date-text">
                         {formatDate(item.created_at)}
                       </small>
                     </td>
-                    <td>
+                    <td data-label="Category">
                       <span className={getCategoryBadgeClass(item.category)}>
                         {getCategoryLabel(item.category)}
                       </span>
                     </td>
-                    <td>
+                    <td data-label="User">
                       <div>
                         <strong>{item.user_name}</strong>
                         <div className="user-info">{item.user_email}</div>
                       </div>
                     </td>
-                    <td>
+                    <td data-label="Feedback">
                       <div className="feedback-preview">
                         <div className="feedback-preview-text">{preview}</div>
                         {hasMore && (
@@ -501,7 +549,7 @@ const AdminFeedback: React.FC = () => {
                       </div>
                     </td>
                     {isSuperadmin && (
-                      <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                      <td data-label="Actions" style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
                         <button
                           className="btn btn-outline-danger btn-sm"
                           onClick={(e) => {

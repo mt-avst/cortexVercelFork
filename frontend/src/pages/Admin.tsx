@@ -1089,7 +1089,7 @@ const Admin: React.FC = () => {
                     </button>
                   </div>
                   <div className="table-responsive">
-                    <table className="table table-hover mb-0">
+                    <table className="table table-hover mb-0 admin-cards-phone">
                       {/*
                         State the truncation (register #16), as a <caption> so a
                         screen reader meets it ON ENTERING the table rather than
@@ -1140,7 +1140,7 @@ const Admin: React.FC = () => {
                                 cannot wrap does not widen its column - it draws over the next one.
                                 The date and its time stay together, and the zone drops to a second
                                 line when tight. A time and its zone never split. */}
-                            <td className="admin-recent-session col-recent-session">
+                            <td className="admin-recent-session col-recent-session" data-label="Date & time">
                               {b.session_start ? (
                                 <>
                                   <span className="admin-recent-session-date">
@@ -1155,7 +1155,7 @@ const Admin: React.FC = () => {
                                 </>
                               ) : '—'}
                             </td>
-                            <td className="col-recent-study">
+                            <td className="col-recent-study" data-label="Study">
                               <button
                                 type="button"
                                 className="btn btn-link p-0 text-start text-decoration-none admin-recent-study-link"
@@ -1164,10 +1164,10 @@ const Admin: React.FC = () => {
                                 {b.opportunity_title}
                               </button>
                             </td>
-                            <td className="col-recent-participant">
+                            <td className="col-recent-participant" data-label="Participant">
                               <span title={b.participant_email}>{b.participant_name || b.participant_email || '—'}</span>
                             </td>
-                            <td className="col-recent-status">
+                            <td className="col-recent-status" data-label="Status">
                               <span className={`admin-status-pill ${b.status === 'booked' ? 'admin-status-pill--confirmed' : 'admin-status-pill--pending'}`}>
                                 {b.status === 'booked' ? 'Confirmed' : b.status === 'pending' ? 'Pending' : b.status}
                               </span>
