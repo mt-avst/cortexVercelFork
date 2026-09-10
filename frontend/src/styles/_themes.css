@@ -711,7 +711,7 @@ body.theme-light .lozenge-unmoderated {
 }
 
 body.theme-light .lozenge-survey {
-  color: #059669; /* emerald-600 */
+  color: #047857; /* emerald-700 - emerald-600 (#059669) was 3.42:1 on the tint, below WCAG AA (audit #121) */
   background-color: rgba(5, 150, 105, 0.1);
   border-color: rgba(5, 150, 105, 0.2);
 }
@@ -1815,7 +1815,7 @@ body.theme-light .badge--test {
 /* Success (Green) */
 body.theme-light .badge--survey {
   background: rgba(16, 185, 129, 0.1);
-  color: #059669;
+  color: #047857; /* emerald-700 for WCAG AA on the tint (audit #121) */
 }
 
 /* Neutral (Slate) */

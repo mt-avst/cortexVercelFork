@@ -13519,6 +13519,15 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
   color: var(--text-muted);
 }
 
+/* Audit #121: the draft study pill's 80% warning/ink text mix renders #9f6830
+   on its light warning fill = 3.84:1, below WCAG AA (4.5:1). Darken the text in
+   light theme only. The booking "pending" pill uses the same treatment but a
+   78% mix, which already clears AA, so it is deliberately left alone. Dark theme
+   is unaffected: there the mix is warning+white on a dark fill and passes. */
+body.theme-light .admin-study-status--draft {
+  color: #8a5a29; /* darker amber, 4.83:1 on the pill's #f4e7d9 fill */
+}
+
 /* --- Recruitment cell --------------------------------------------------- */
 .admin-recruitment {
   display: flex;
