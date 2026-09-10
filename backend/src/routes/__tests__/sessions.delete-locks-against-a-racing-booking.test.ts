@@ -77,12 +77,16 @@ let release: jest.Mock;
  * The transaction client. `bookedCount` is what the FOR UPDATE read returns;
  * `missing` makes that read find no row (the session vanished under the lock).
  */
-const clientAnswering = ({ bookedCount = 0, missing = false }: { bookedCount?: number; missing?: boolean } = {}) => {
+const clientAnswering = ({ bookedCount = 0, missing = false, lockTimeout = false }: { bookedCount?: number; missing?: boolean; lockTimeout?: boolean } = {}) => {
   clientStatements = [];
   const query = jest.fn(async (sql: unknown) => {
     const q = String(sql);
     clientStatements.push(q);
     if (/SELECT booked_count FROM sessions WHERE id = \$1\s+FOR UPDATE/i.test(q)) {
+      if (lockTimeout) {
+        // What Postgres raises when the FOR UPDATE waits past lock_timeout.
+        throw Object.assign(new Error('canceling statement due to lock timeout'), { code: '55P03' });
+      }
       return missing ? { rows: [] } : { rows: [{ booked_count: bookedCount }] };
     }
     if (/^\s*DELETE FROM sessions/i.test(q)) return { rows: [], rowCount: 1 };
@@ -126,6 +130,39 @@ describe('DELETE /api/sessions/:id - the delete is transactional and row-locked 
     expect(res.body.error).toBe('Cannot delete session with existing bookings');
     // The count was read under the lock, and NO delete followed.
     expect(matching(/SELECT booked_count FROM sessions WHERE id = \$1\s+FOR UPDATE/i)).toHaveLength(1);
+    expect(matching(/^\s*DELETE FROM sessions/)).toHaveLength(0);
+    expect(matching(/^\s*COMMIT/)).toHaveLength(0);
+    expect(matching(/^\s*ROLLBACK/)).toHaveLength(1);
+    expect(release).toHaveBeenCalledTimes(1);
+  });
+
+  // #116: the plain FOR UPDATE waits for a racing booking, but the wait is
+  // bounded by a lock_timeout so a lock held by a stuck transaction cannot hang
+  // the delete until the pool statement_timeout cancels it as an opaque 503.
+  it('bounds the FOR UPDATE wait with SET LOCAL lock_timeout = 3000, before the lock', async () => {
+    clientAnswering({ bookedCount: 0 });
+
+    await del().expect(204);
+
+    // The literal is pinned so a change to SESSION_DELETE_LOCK_TIMEOUT_MS is a
+    // deliberate edit that trips this, not a silent drift.
+    expect(matching(/^\s*SET LOCAL lock_timeout = 3000\s*$/)).toHaveLength(1);
+    // SET LOCAL only binds inside a transaction, and it must be set BEFORE the
+    // FOR UPDATE it is meant to bound.
+    const beginAt = clientStatements.findIndex((q) => /^\s*BEGIN/.test(q));
+    const timeoutAt = clientStatements.findIndex((q) => /SET LOCAL lock_timeout/.test(q));
+    const lockAt = clientStatements.findIndex((q) => /SELECT booked_count FROM sessions WHERE id = \$1\s+FOR UPDATE/i.test(q));
+    expect(beginAt).toBeGreaterThanOrEqual(0);
+    expect(timeoutAt).toBeGreaterThan(beginAt);
+    expect(lockAt).toBeGreaterThan(timeoutAt);
+  });
+
+  it('maps a lock_timeout (55P03) on the FOR UPDATE to a retryable 409, rolls back, deletes nothing', async () => {
+    clientAnswering({ lockTimeout: true });
+
+    const res = await del().expect(409);
+
+    expect(res.body.error).toBe('The session is busy while another change is in progress. Please try again.');
     expect(matching(/^\s*DELETE FROM sessions/)).toHaveLength(0);
     expect(matching(/^\s*COMMIT/)).toHaveLength(0);
     expect(matching(/^\s*ROLLBACK/)).toHaveLength(1);

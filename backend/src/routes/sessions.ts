@@ -568,6 +568,13 @@ router.patch('/:id', requireAdmin, asyncHandler(async (req: Request, res: Respon
     }
 }));
 
+// The delete waits for a racing booking to commit (plain FOR UPDATE, see below),
+// but a bounded wait: without a lock_timeout the wait is unbounded, so a lock held
+// by a stuck transaction would hang the delete until the pool statement_timeout
+// (~15s) cancelled it as an opaque 503. This bounds it well under that so
+// contention fails fast and distinctly as a retryable 409. cto/AdaptaLabs#116.
+const SESSION_DELETE_LOCK_TIMEOUT_MS = 3000;
+
 // DELETE /api/sessions/:id - Delete a session
 router.delete('/:id', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const { id: sessionId } = req.params;
@@ -627,6 +634,12 @@ router.delete('/:id', requireAdmin, asyncHandler(async (req: Request, res: Respo
   try {
     await client.query('BEGIN');
 
+    // Bound the FOR UPDATE wait below. SET LOCAL scopes it to this transaction,
+    // so it cannot leak to the next checkout of this pooled connection. A wait
+    // past this raises SQLSTATE 55P03 (lock_not_available), the same code the
+    // NOWAIT booking paths raise, which the error middleware maps to a 409.
+    await client.query(`SET LOCAL lock_timeout = ${SESSION_DELETE_LOCK_TIMEOUT_MS}`);
+
     const sessionCheck = await client.query(
       'SELECT booked_count FROM sessions WHERE id = $1 FOR UPDATE',
       [sessionId]
@@ -647,6 +660,16 @@ router.delete('/:id', requireAdmin, asyncHandler(async (req: Request, res: Respo
     // so they roll back a transaction that has written nothing - harmless - and
     // reach the error middleware unchanged.
     await client.query('ROLLBACK').catch(() => {});
+    // A lock_timeout on the FOR UPDATE above is a transient contention signal, not
+    // a server fault: surface it as a retryable 409 with a delete-specific message,
+    // matching the booking paths' own 55P03 handling, rather than the generic
+    // "Resource is currently locked" the DB-error mapper would otherwise produce.
+    if ((error as { code?: string }).code === '55P03') {
+      // 55P03 here is whatever writer held the session row lock past the timeout
+      // - a racing booking, cancel or reschedule - so the message names none in
+      // particular.
+      throw new ConflictError('The session is busy while another change is in progress. Please try again.');
+    }
     throw error;
   } finally {
     client.release();
