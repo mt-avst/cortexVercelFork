@@ -180,7 +180,11 @@ lint:
     - if: $CI_COMMIT_TAG
       when: never
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: '$CI_COMMIT_REF_NAME =~ $PROD_REF'
+    # No PROD_REF arm: main does not re-run the suite. The merge-train pipeline runs
+    # this exact tree before it becomes main (Settings -> Merge requests -> merge
+    # trains). SAFETY: only sound with merge trains ON - if trains are ever disabled,
+    # restore `- if: '$CI_COMMIT_REF_NAME =~ $PROD_REF'` here or main merges go unlinted.
+    # See docs/MERGE-TRAINS-ROLLOUT.md, Part C.
 
 # Tests. Until now this pipeline ran lint and nothing else, which is how the
 # whole e2e suite came to collect zero tests from the initial commit onwards
@@ -235,7 +239,11 @@ lint:
     - if: $CI_COMMIT_TAG
       when: never
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: '$CI_COMMIT_REF_NAME =~ $PROD_REF'
+    # No PROD_REF arm: main does not re-run the suite (test-backend, test-backend-db,
+    # test-frontend, typecheck, test-a11y, test-scripts). The merge-train pipeline runs
+    # this exact tree before it becomes main. SAFETY: only sound with merge trains ON -
+    # if trains are ever disabled, restore `- if: '$CI_COMMIT_REF_NAME =~ $PROD_REF'`
+    # here or main merges go untested. See docs/MERGE-TRAINS-ROLLOUT.md, Part C.
 
 test-backend:
   extends: .test-base
@@ -489,9 +497,12 @@ mutation-canary:
   # purpose: never scope the run below the full manifest instead - a
   # filtered run is structurally blind to a pre-existing entry the same diff
   # broke, which is how !267 reddened main, and why the runner refuses a
-  # filter flag (#53). On $PROD_REF the job stays unconditional: `changes`
-  # is only well-defined against an MR diff, and main gets the full check
-  # regardless.
+  # filter flag (#53). This job no longer runs on $PROD_REF: with merge trains
+  # on, the train pipeline runs this exact rule (the FULL manifest, whenever the
+  # diff touches a canaried path) against the precise tree that becomes main,
+  # before the merge - so the check the unconditional main run gave now happens
+  # pre-merge instead of post-merge. Restore a `- if: '$CI_COMMIT_REF_NAME =~
+  # $PROD_REF'` arm below if merge trains are ever turned off.
   rules:
     - if: $CI_COMMIT_TAG
       when: never
@@ -505,7 +516,12 @@ mutation-canary:
           - "package.json"
           - "package-lock.json"
           - ".gitlab-ci.yml"
-    - if: '$CI_COMMIT_REF_NAME =~ $PROD_REF'
+    # No PROD_REF arm: main does not re-run the canary. The merge-train pipeline runs
+    # the FULL manifest against this exact tree whenever the diff touches a canaried
+    # path (the changes: gate above is job-level, all-or-nothing - never a filtered
+    # run), so the coverage the unconditional main run gave is preserved before merge.
+    # SAFETY: only sound with merge trains ON - if trains are ever disabled, restore
+    # `- if: '$CI_COMMIT_REF_NAME =~ $PROD_REF'` here. See docs/MERGE-TRAINS-ROLLOUT.md.
   services:
     - name: registry.hub.docker.com/library/postgres:17-alpine
       alias: postgres
