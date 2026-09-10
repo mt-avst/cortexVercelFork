@@ -4053,7 +4053,7 @@ body.theme-dark .admin-data-table td.col-date {
   padding-top: 5vh;
   background-color: transparent;
   color: #E0E0E0;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-family-base);
   padding-left: 2rem;
   padding-right: 2rem;
   padding-bottom: 2rem;
@@ -5685,7 +5685,7 @@ body.theme-dark .legend-label-past {
 
 /* Eyebrow Label - Small uppercase text above main title */
 .eyebrow-label {
-  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--font-family-base);
   font-size: 0.875rem;
   font-weight: 600;
   letter-spacing: 0.1em;
@@ -5701,8 +5701,7 @@ body.theme-dark .legend-label-past {
 
 /* Cortex Home Title - Premium gradient with glow */
 .adaptalabs-home-title {
-  /* Use Inter font family to match landing page */
-  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--font-family-base);
   margin-bottom: 24px;
   font-size: clamp(2.75rem, 10vw, 4.5rem);
   font-weight: 800;
@@ -6475,7 +6474,7 @@ body.theme-light .atmospheric-orb-secondary {
    - Accent: ONLY for actionable metrics (Conversion Rate)
    ---------------------------------------------------------- */
 .cortex-stat-value {
-  font-family: 'Inter', var(--font-family-base);
+  font-family: var(--font-family-base);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' on, 'lnum' on;
   font-size: 2.5rem;
@@ -8453,7 +8452,7 @@ body:has(.cortex-landing) #root {
 
 /* Logo text beside beaker */
 .logo-text {
-  font-family: 'Clash Grotesk', 'Inter', sans-serif;
+  font-family: 'Clash Grotesk', var(--font-family-base);
   font-size: 2.5rem;
   font-weight: 600;
   letter-spacing: -0.02em;
@@ -8481,7 +8480,7 @@ body:has(.cortex-landing) #root {
 }
 
 .mad-headline {
-  font-family: 'Clash Grotesk', 'Inter', sans-serif;
+  font-family: 'Clash Grotesk', var(--font-family-base);
   font-size: clamp(2.5rem, 6vw, 4.5rem);
   font-weight: 700;
   line-height: 1.1;
@@ -8541,7 +8540,7 @@ body:has(.cortex-landing) #root {
 }
 
 .mad-subheadline {
-  font-family: 'Clash Grotesk', 'Inter', sans-serif;
+  font-family: 'Clash Grotesk', var(--font-family-base);
   font-size: clamp(1.5rem, 3vw, 2.25rem);
   font-weight: 500;
   color: rgba(255, 255, 255, 0.7);
@@ -8560,7 +8559,7 @@ body:has(.cortex-landing) #root {
 .blob-cta {
   position: relative;
   padding: 1.25rem 3rem;
-  font-family: 'Clash Grotesk', 'Inter', sans-serif;
+  font-family: 'Clash Grotesk', var(--font-family-base);
   font-size: 1.35rem;
   font-weight: 600;
   color: #FFFFFF;
@@ -8683,7 +8682,7 @@ body:has(.cortex-landing) #root {
 }
 
 .demo-label {
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-family-base);
   font-size: 0.875rem;
   color: rgba(255, 255, 255, 0.5);
   text-transform: uppercase;
@@ -8703,7 +8702,7 @@ body:has(.cortex-landing) #root {
   align-items: center;
   gap: 0.5rem;
   padding: 0.75rem 1.5rem;
-  font-family: 'Clash Grotesk', 'Inter', sans-serif;
+  font-family: 'Clash Grotesk', var(--font-family-base);
   font-size: 0.95rem;
   font-weight: 500;
   color: #FFFFFF;
@@ -8790,7 +8789,7 @@ body:has(.cortex-landing) #root {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-family-base);
   font-size: 0.8rem;
   color: rgba(255, 255, 255, 0.4);
   text-transform: uppercase;
