@@ -100,6 +100,22 @@ describe('brand identity is one system across themes (#12)', () => {
       expect(lightBlock).not.toMatch(/--font-family-base\s*:/);
       expect(lightBlock).not.toMatch(/--font-family-display\s*:/);
     });
+
+    it('no component rule hardcodes font-family: Inter, bypassing the token (#115)', () => {
+      // #12 rebound the token, but component rules still hardcoded
+      // `font-family: 'Inter'` (some as `'Clash Grotesk', 'Inter'`), so those
+      // surfaces rendered Inter in both themes regardless. #115 pointed them at
+      // var(--font-family-base). A new hardcoded Inter face fails here by name.
+      // Matches the quoted font in either quote style, so words like
+      // "Interview"/"Interactive" in comments or class names are not caught
+      // but `font-family: "Inter"` cannot slip past the single-quote form.
+      for (const name of ['_components.css', '_themes.css', '_base.css']) {
+        const offending = read(name)
+          .split('\n')
+          .filter((line) => /font-family\s*:[^;]*["']Inter["']/i.test(line));
+        expect(offending, `${name} must bind font-family to a token, not hardcode 'Inter'`).toEqual([]);
+      }
+    });
   });
 
   describe('one orange hue, tuned per theme only for contrast', () => {
