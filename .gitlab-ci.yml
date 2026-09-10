@@ -122,6 +122,35 @@ check-release-will-deploy:
 security_reports_gate:
   timeout: 5m
 
+# Take the advisory source scans off the deploy critical path.
+#
+# Measured on the main pipeline for a55160d (audit #114, 2026-09-10): the .pre
+# stage (lint + tests + the 4-shard mutation-canary) finished at 10:49, the
+# scans then ran in their own stage 10:49->10:55, and only then did the docker
+# build start at 10:55:39. gitlab-advanced-sast alone was ~6 min; the other
+# three finish in seconds. Every one of these is allow_failure - they are
+# advisory and cannot gate a deploy - so serialising the build behind them buys
+# nothing and costs ~6 min on every merge to main.
+#
+# Relocating them into .pre (needs: [] so they start immediately) overlaps them
+# with the mutation-canary, which is the .pre long pole at ~9 min, so the scans
+# finish inside that window and no longer sit between the tests and the build.
+# They still run, still report, still allow_failure - only their position moves.
+# docker-trivy is deliberately NOT here: it scans the built image and cannot run
+# before the build exists. Their rules (which refs they run on) are untouched.
+gitlab-advanced-sast:
+  stage: .pre
+  needs: []
+kics-iac-sast:
+  stage: .pre
+  needs: []
+gemnasium-dependency_scanning:
+  stage: .pre
+  needs: []
+secret_detection:
+  stage: .pre
+  needs: []
+
 # Lint. Nothing in this pipeline ran ESLint before, because ESLint was not
 # installed - the frontend/.eslintrc.js that existed was inert.
 #
