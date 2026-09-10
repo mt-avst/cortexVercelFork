@@ -12277,6 +12277,71 @@ body.theme-light .col-actions .dropdown-menu .dropdown-divider {
   background-color: var(--bg-app);
 }
 
+/* ------------------------------------------------------------
+   Phone containment (audit #114)
+   A full week of >=128px day columns is ~968px wide - far past a
+   ~390px phone, and the inline min-width floor means the columns will
+   not compress below a readable size. Rather than shrink them, the
+   calendar becomes its own horizontal scroll container on phone so the
+   page body stops overflowing (measured 1160px -> viewport width).
+   Desktop keeps the sticky-top, full-bleed header untouched.
+   ------------------------------------------------------------ */
+/* Desktop: the content row fills the panel (the day grid needs a definite
+   width to expand into - see the width:'100%' note in CalendarGrid.tsx). */
+.calendar-content-row {
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  .calendar-timeline {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+
+  /* Both scrolled rows are pinned to one shared content width (set as a CSS var
+     on .calendar-view from the day-grid floor) rather than max-content: that
+     gives the sticky gutter/spacer the full scroll range to pin across, AND
+     makes the two independent grids resolve to identical column widths so the
+     day headers stay aligned with the day columns. min-width:100% keeps them
+     filling the panel when a short week is narrower than the viewport. */
+  .calendar-content-row,
+  .calendar-sticky-header-row {
+    width: var(--cal-content-w);
+    min-width: 100%;
+  }
+
+  /* On desktop the header bleeds to the panel edges and sticks to the
+     viewport top; inside a horizontal scroller both fight the scroll, so
+     on phone it scrolls with the grid instead. */
+  .calendar-sticky-header-row {
+    position: static;
+    margin-left: 0;
+    margin-right: 0;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  /* Pin the header spacer to the left edge so the day headers stay
+     column-aligned with the day columns as the week scrolls. The time column
+     below it is already sticky-left inline (CalendarGrid.tsx), so it only needs
+     the opaque fill here; both need one or the scrolling columns show through
+     the transparent gutter. */
+  .calendar-header-time-spacer {
+    position: sticky;
+    left: 0;
+    z-index: 6;
+  }
+  body.theme-light .calendar-header-time-spacer,
+  body.theme-light .calendar-time-column {
+    background: #ffffff;
+  }
+  body.theme-dark .calendar-header-time-spacer,
+  body.theme-dark .calendar-time-column {
+    background: #0b0f19;
+  }
+}
+
 /* ============================================================
    SELECTION SUMMARY BAR
    Bottom bar showing selection count and actions

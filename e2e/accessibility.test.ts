@@ -315,6 +315,115 @@ test.describe('Accessibility Tests', () => {
     expect(scan.violations).toEqual([]);
   });
 
+  // Audit #114. At 390px the participant study page forced the document wider
+  // than the viewport twice over: the calendar grid (a full week of >=128px
+  // columns ~= 968px, measured 1160px document) and, in the default table view,
+  // the Available Sessions legend + controls row that would not wrap (~655px).
+  // jsdom applies no CSS and the scans above run at 1280px, so this is the only
+  // place the phone containment can fail by name. It asserts the document does
+  // not scroll sideways in EITHER view, and that the calendar is contained by
+  // its own horizontal scroll container rather than by squashing the columns.
+  test('Participant study page fits a 390px phone in both table and calendar view', async ({ page }) => {
+    // A week of sessions on distinct days so the calendar renders its full,
+    // widest grid - a single session would collapse to one column and hide the
+    // overflow this guards against.
+    const day = 24 * 60 * 60 * 1000;
+    const sessions = Array.from({ length: 7 }, (_, i) => ({
+      id: `session-${i + 1}`,
+      opportunity_id: 'opp-1',
+      start_time: new Date(Date.now() + (i + 1) * day + 17 * 60 * 60 * 1000).toISOString(),
+      end_time: new Date(Date.now() + (i + 1) * day + 17.5 * 60 * 60 * 1000).toISOString(),
+      capacity: 5,
+      booked_count: 0,
+    }));
+    const opportunity = {
+      id: 'opp-1',
+      type: 'test',
+      title: 'Phone Containment Study',
+      purpose_one_liner: 'Guards the 390px calendar containment',
+      status: 'published',
+      default_duration_minutes: 30,
+      sessions,
+    };
+    // One URL-aware handler for both the list (array) and the detail (object),
+    // registered after the beforeEach list mock so it wins. Both must carry the
+    // full week or the calendar collapses to one column.
+    await page.route('**/api/opportunities**', async (route) => {
+      const isDetail = /\/api\/opportunities\/opp-1(\?|$)/.test(route.request().url());
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(isDetail ? opportunity : [opportunity]),
+      });
+    });
+    // The calendar grid fetches these on mount; stub them so it renders with no
+    // backend (the a11y job has none) rather than erroring into an empty state.
+    await page.route('**/api/bookings/my/bookings', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ upcoming: [], past: [] }) }));
+    await page.route('**/api/calendar/connection-status', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ connected: false }) }));
+    await page.route('**/api/calendar/my-events**', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/opportunities/opp-1');
+    await page.waitForLoadState('load');
+
+    const docContained = () => page.evaluate(() => {
+      const de = document.documentElement;
+      return { scrollW: de.scrollWidth, clientW: de.clientWidth };
+    });
+
+    // Default (table) view - the legend + controls row must have wrapped. Wait
+    // on the panel, not the clock, so a slow shard cannot flake this gate.
+    await expect(page.getByRole('heading', { name: /available sessions/i })).toBeVisible();
+    const table = await docContained();
+    expect(table.scrollW).toBeLessThanOrEqual(table.clientW + 1);
+
+    // Calendar view - the grid must be contained by its own scroller.
+    await page.getByRole('button', { name: /switch to calendar view/i }).click();
+    await expect(page.locator('.calendar-timeline')).toBeVisible();
+    // The full week must render, or the containment is not actually exercised.
+    await expect(page.locator('.calendar-days-container .calendar-day-column')).toHaveCount(7);
+
+    const calendar = await page.evaluate(() => {
+      const de = document.documentElement;
+      const timeline = document.querySelector('.calendar-timeline') as HTMLElement;
+      // Scroll the week and measure header<->column alignment mid-week: the
+      // whole point of the shared --cal-content-w is that the two independent
+      // grids resolve to identical column widths and stay aligned. Containment
+      // can hold while alignment silently drifts, so it needs its own check.
+      timeline.scrollLeft = 300;
+      const headers = Array.from(document.querySelectorAll('.calendar-sticky-header-row .calendar-day-header-cell'));
+      const cols = Array.from(document.querySelectorAll('.calendar-days-container .calendar-day-column'));
+      let maxDelta = 0;
+      for (let i = 0; i < Math.min(headers.length, cols.length); i++) {
+        maxDelta = Math.max(maxDelta, Math.abs(headers[i].getBoundingClientRect().left - cols[i].getBoundingClientRect().left));
+      }
+      return {
+        scrollW: de.scrollWidth,
+        clientW: de.clientWidth,
+        timelineScrolls: timeline.scrollWidth > timeline.clientWidth + 1,
+        maxHeaderColumnDelta: Math.round(maxDelta),
+      };
+    });
+    // No horizontal document overflow - the 1160px-at-390px symptom.
+    expect(calendar.scrollW).toBeLessThanOrEqual(calendar.clientW + 1);
+    // Contained by scroll, not by squashing: the full-width week still overflows
+    // its own timeline container (so the columns keep their readable floor).
+    expect(calendar.timelineScrolls).toBe(true);
+    // Day headers stay column-aligned with day columns while scrolled - guards
+    // the shared-width mechanism against drift (a broken identity keeps the page
+    // contained and scrollable, so only this check catches it). The tolerance
+    // absorbs sub-pixel rounding accumulated across 7 fractional columns (~3px);
+    // a broken shared width sizes the text-filled header grid ~37px/column wider
+    // than the body, i.e. hundreds of px total, so 8px cleanly separates them.
+    expect(calendar.maxHeaderColumnDelta).toBeLessThanOrEqual(8);
+
+    const scan = await new AxeBuilder({ page }).analyze();
+    expect(scan.violations).toEqual([]);
+  });
+
   test('Forms should be accessible', async ({ page }) => {
     // Mock admin user for form access
     await page.route('**/api/me', async (route) => {
