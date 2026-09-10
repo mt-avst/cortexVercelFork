@@ -1010,8 +1010,12 @@ router.post('/:id/reschedule', requireAuth, asyncHandler(async (req: Request, re
     res.json({ message: 'Booking rescheduled successfully' });
 
   } catch (error) {
-    await client.query('ROLLBACK');
-    
+    // Guarded as at sessions.ts:278/564 (#67): a ROLLBACK that throws on a dead
+    // connection would replace the error that sent control here - masking the
+    // 55P03 lock timeout mapped just below, or any constraint violation, with an
+    // opaque connection error. A no-op on the live-connection path.
+    await client.query('ROLLBACK').catch(() => {});
+
     // Handle lock timeout specifically
     if ((error as any).code === '55P03') { // Lock not available
       throw new ConflictError('Session is being modified by another user. Please try again.');
