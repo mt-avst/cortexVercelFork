@@ -22,6 +22,7 @@ import PendingApprovals from '../components/PendingApprovals';
 import AdminFeedback from '../components/AdminFeedback';
 import ErrorState from '../components/ErrorState';
 import ConfirmationModal from '../components/ConfirmationModal';
+import { Dropdown, DropdownItem, DropdownDivider } from '../components/ui';
 import { Settings, ClipboardList, Users, Clock, List, History, MessageSquare, Calendar, Download, Clapperboard, Flag, ArrowRight, CalendarClock, CheckCircle } from 'lucide-react';
 
 import { formatStudyDate, formatClockTime, formatTimeZoneLabel } from '../utils/datetime';
@@ -55,7 +56,6 @@ const Admin: React.FC = () => {
     }, 300);
     return () => clearTimeout(timer);
   }, [searchQuery]);
-  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'opportunities' | 'approvals' | 'feedback' | 'bookings'>('opportunities');
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [sortField, setSortField] = useState<'title' | 'created_at' | 'type' | 'status'>('created_at');
@@ -261,21 +261,6 @@ const Admin: React.FC = () => {
     }
   }, [location.state, user, navigate, location.pathname, loadOpportunities]);
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      if (!target.closest('.dropdown')) {
-        closeDropdown();
-      }
-    };
-
-    if (openDropdownId) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [openDropdownId]);
-
   const handleDelete = (id: string, title: string) => {
     setDeleteConfirm({ show: true, opportunity: { id, title } });
   };
@@ -320,13 +305,6 @@ const Admin: React.FC = () => {
     }
   };
 
-  const toggleDropdown = (id: string) => {
-    setOpenDropdownId(openDropdownId === id ? null : id);
-  };
-
-  const closeDropdown = () => {
-    setOpenDropdownId(null);
-  };
 
   // Wait for initial auth check to complete before making redirect decisions
   // This ensures we don't redirect away if auth check is still in progress
@@ -950,94 +928,49 @@ const Admin: React.FC = () => {
                                   >
                                     {opportunity.status === 'draft' ? 'Edit' : 'View'}
                                   </button>
-                                                <div className="dropdown">
-                                                  <button
-                                                    className="btn btn-outline-secondary btn-sm admin-action-btn admin-action-btn-kebab"
-                                                    type="button"
-                                                    onClick={(e) => {
-                                                      e.preventDefault();
-                                                      e.stopPropagation();
-                                                      toggleDropdown(opportunity.id);
-                                                    }}
-                                                    onMouseDown={(e) => {
-                                                      e.stopPropagation();
-                                                    }}
-                                                    onKeyDown={(e) => {
-                                                      // Allow keyboard activation of the button
-                                                      e.stopPropagation();
-                                                    }}
-                                                    aria-expanded={openDropdownId === opportunity.id}
-                                                    aria-haspopup={true}
-                                                    aria-label={`Actions for ${opportunity.title}`}
-                                                  >
-                                                    <span aria-hidden="true">⋮</span>
-                                                  </button>
-                                  {openDropdownId === opportunity.id && (
-                                    <div 
-                                      className="dropdown-menu show admin-action-dropdown admin-action-dropdown-menu"
+                                <Dropdown
+                                  menu
+                                  align="end"
+                                  menuClassName="admin-action-dropdown admin-action-dropdown-menu"
+                                  trigger={
+                                    <button
+                                      className="btn btn-outline-secondary btn-sm admin-action-btn admin-action-btn-kebab"
+                                      type="button"
+                                      // The row is clickable; stop the kebab's own
+                                      // click reaching it (belt-and-braces beside the
+                                      // row's interactive-target guard).
                                       onClick={(e) => e.stopPropagation()}
+                                      onMouseDown={(e) => e.stopPropagation()}
+                                      aria-label={`Actions for ${opportunity.title}`}
                                     >
-                                      <button
-                                        className="dropdown-item"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          navigate(`/opportunities/${opportunity.id}`);
-                                          closeDropdown();
-                                        }}
-                                      >
-                                        View
-                                      </button>
-                                      <button
-                                        className="dropdown-item"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          navigate(`/admin/opportunities/${opportunity.id}/edit`);
-                                          closeDropdown();
-                                        }}
-                                      >
-                                        Edit
-                                      </button>
-                                      <button
-                                        className="dropdown-item"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleDuplicate(opportunity.id);
-                                          closeDropdown();
-                                        }}
-                                      >
-                                        Copy
-                                      </button>
-                                      {/* Analytics for EVERY study type. The page always renders
-                                          an Overview (views/clicks), and the moderated types (test,
-                                          interview) reach their booked-participant roster only
-                                          through here - gating this to poll/survey/unmoderated left
-                                          that roster unreachable. Audit rows a04-row-actions-menu,
-                                          a64-analytics-live-session-participants. */}
-                                      <div className="dropdown-divider" />
-                                      <button
-                                        className="dropdown-item"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          navigate(`/admin/opportunities/${opportunity.id}/analytics`);
-                                          closeDropdown();
-                                        }}
-                                      >
-                                        Analytics
-                                      </button>
-                                      <div className="dropdown-divider" />
-                                      <button
-                                        className="dropdown-item text-danger"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleDelete(opportunity.id, opportunity.title);
-                                          closeDropdown();
-                                        }}
-                                      >
-                                        Delete
-                                      </button>
-                                    </div>
-                                  )}
-                                </div>
+                                      <span aria-hidden="true">⋮</span>
+                                    </button>
+                                  }
+                                >
+                                  <DropdownItem onClick={() => navigate(`/opportunities/${opportunity.id}`)}>
+                                    View
+                                  </DropdownItem>
+                                  <DropdownItem onClick={() => navigate(`/admin/opportunities/${opportunity.id}/edit`)}>
+                                    Edit
+                                  </DropdownItem>
+                                  <DropdownItem onClick={() => handleDuplicate(opportunity.id)}>
+                                    Copy
+                                  </DropdownItem>
+                                  <DropdownDivider />
+                                  {/* Analytics for EVERY study type. The page always renders
+                                      an Overview (views/clicks), and the moderated types (test,
+                                      interview) reach their booked-participant roster only
+                                      through here - gating this to poll/survey/unmoderated left
+                                      that roster unreachable. Audit rows a04-row-actions-menu,
+                                      a64-analytics-live-session-participants. */}
+                                  <DropdownItem onClick={() => navigate(`/admin/opportunities/${opportunity.id}/analytics`)}>
+                                    Analytics
+                                  </DropdownItem>
+                                  <DropdownDivider />
+                                  <DropdownItem className="text-danger" onClick={() => handleDelete(opportunity.id, opportunity.title)}>
+                                    Delete
+                                  </DropdownItem>
+                                </Dropdown>
                                 </div>
                               </td>
                             </tr>

@@ -161,7 +161,8 @@ describe('Admin page', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Actions for Checkout usability test/i }));
 
-    expect(screen.getByRole('button', { name: 'Analytics' })).toBeInTheDocument();
+    // The row actions are now a real menu (#117): items carry role="menuitem".
+    expect(screen.getByRole('menuitem', { name: 'Analytics' })).toBeInTheDocument();
   });
 
   it('states the truncation when Recent bookings is capped below the total (register #16)', async () => {
