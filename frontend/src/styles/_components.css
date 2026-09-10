@@ -5613,6 +5613,13 @@ body.theme-dark .legend-label-past {
   padding: 4px 10px;
 }
 
+/* The shared Dropdown marks its trigger `.dropdown-toggle`, which paints a
+   caret via ::after. The kebab is a bare ⋮ glyph and wants none - suppress it
+   just for this trigger (#117). */
+.admin-action-btn-kebab.dropdown-toggle::after {
+  content: none;
+}
+
 /* Admin action dropdown positioning */
 .admin-action-dropdown-menu {
   position: absolute;
