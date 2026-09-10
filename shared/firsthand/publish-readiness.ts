@@ -49,7 +49,7 @@ export const PUBLISH_PROBLEM_MESSAGES: Record<PublishProblemCode, string> = {
   native_survey_study_required:
     "Add questions, or link an existing set of questions, before publishing",
   external_link_required:
-    "External link is required for published polls, surveys and one-question opportunities",
+    "External link is required for published polls, surveys and one-question studies",
   bookable_slot_required:
     "Add at least one upcoming time slot before publishing a live session or interview"
 };

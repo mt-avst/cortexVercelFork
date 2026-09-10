@@ -688,7 +688,7 @@ describe('Opportunities API', () => {
         .expect(400);
 
       expect(response.body.error).toBe(
-        'External link is required for published polls, surveys and one-question opportunities'
+        'External link is required for published polls, surveys and one-question studies'
       );
     });
 
@@ -751,7 +751,7 @@ describe('Opportunities API', () => {
         .expect(400);
 
       expect(response.body.error).toBe(
-        'External link is required for published polls, surveys and one-question opportunities'
+        'External link is required for published polls, surveys and one-question studies'
       );
     });
 
@@ -805,7 +805,7 @@ describe('Opportunities API', () => {
         .expect(400);
 
       expect(response.body.error).toBe(
-        'External link is required for published polls, surveys and one-question opportunities'
+        'External link is required for published polls, surveys and one-question studies'
       );
     });
 
@@ -1434,7 +1434,7 @@ describe('Opportunities API', () => {
             .expect(400);
 
           expect(response.body.error).toBe(
-            'External link is required for published polls, surveys and one-question opportunities'
+            'External link is required for published polls, surveys and one-question studies'
           );
         });
       });
@@ -4678,7 +4678,7 @@ describe('Opportunities API', () => {
         .expect(400);
 
       expect(response.body.error).toBe(
-        'External link is required for published polls, surveys and one-question opportunities'
+        'External link is required for published polls, surveys and one-question studies'
       );
     });
 

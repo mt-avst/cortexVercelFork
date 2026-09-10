@@ -166,13 +166,13 @@ router.post('/', requireAdmin, asyncHandler(async (req: Request, res: Response) 
     // Use mock data for development
     const opportunity = getMockOpportunity(opportunity_id);
     if (!opportunity) {
-      throw new NotFoundError('Opportunity');
+      throw new NotFoundError('Study');
     }
     
     // Check ownership (superadmins can add sessions to any)
     const isSuperadmin = req.user!.role === 'superadmin';
     if (!isSuperadmin && !isOpportunityOwner(opportunity, req.user)) {
-      throw new ForbiddenError('Only the owner can add sessions to this opportunity');
+      throw new ForbiddenError('Only the owner can add sessions to this study');
     }
     
     // Validate all sessions
@@ -199,14 +199,14 @@ router.post('/', requireAdmin, asyncHandler(async (req: Request, res: Response) 
   );
   
   if (opportunityCheck.rows.length === 0) {
-    throw new NotFoundError('Opportunity');
+    throw new NotFoundError('Study');
   }
   
   // Check ownership (superadmins can add sessions to any)
   const isOwner = isOpportunityOwner(opportunityCheck.rows[0], req.user);
   const isSuperadmin = req.user!.role === 'superadmin';
   if (!isSuperadmin && !isOwner) {
-    throw new ForbiddenError('Only the owner can add sessions to this opportunity');
+    throw new ForbiddenError('Only the owner can add sessions to this study');
   }
   
   // Validate all sessions

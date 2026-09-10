@@ -221,7 +221,7 @@ const ROUTES = [
     path: '/api/sessions',
     body: { opportunity_id: 'opp-1', sessions: [VALID_SESSION] },
     okStatus: 201,
-    refusal: 'Only the owner can add sessions to this opportunity',
+    refusal: 'Only the owner can add sessions to this study',
     write: /INSERT INTO sessions/,
     writeCount: 1,
     ownershipProbe: /SELECT owner_user_id FROM opportunities/,
