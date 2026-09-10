@@ -259,6 +259,58 @@ test.describe('Accessibility Tests', () => {
     expect(accessibilityScanResults.violations).toEqual([]);
   });
 
+  // Audit #121. The admin Research Studies table renders a type lozenge per
+  // study type and a status pill per lifecycle status. Several failed WCAG AA
+  // contrast, but the check above never caught it: the beforeEach study is type
+  // `test` + status `published`, whose badges happen to pass. This renders EVERY
+  // type and EVERY status so the color-contrast rule has teeth over the whole
+  // badge set - a future palette change that dips any badge below 4.5:1 fails
+  // here by name.
+  test('Admin study type and status badges meet WCAG AA contrast', async ({ page }) => {
+    await page.route('**/api/me', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ id: 'admin-1', name: 'Admin User', email: 'admin@example.com', role: 'researcher_admin' }),
+      });
+    });
+    await page.route('**/api/admin/dashboard', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: {} }) });
+    });
+
+    // One study per type, statuses cycled so all three lifecycle pills render.
+    const types = ['test', 'interview', 'poll', 'survey', 'question', 'unmoderated'];
+    const statuses = ['draft', 'published', 'closed'];
+    const studies = types.map((type, i) => ({
+      id: `opp-${i}`,
+      type,
+      title: `${type} study`,
+      purpose_one_liner: 'Badge contrast fixture',
+      status: statuses[i % statuses.length],
+      default_duration_minutes: 30,
+      sessions: [],
+    }));
+    await page.route('**/api/opportunities**', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(studies) });
+    });
+
+    await page.goto('/admin');
+    await page.waitForLoadState('load');
+    // Wait on the rendered badges, not the clock, so the scan cannot race an
+    // empty table.
+    await expect(page.locator('.admin-study-status').first()).toBeVisible();
+    await expect(page.locator('td.col-type .lozenge')).toHaveCount(types.length);
+
+    // Scope the scan to the studies table and assert specifically on contrast,
+    // so an unrelated admin a11y issue elsewhere cannot mask or be blamed for a
+    // badge regression.
+    const scan = await new AxeBuilder({ page })
+      .include('.admin-data-table')
+      .withRules(['color-contrast'])
+      .analyze();
+    expect(scan.violations).toEqual([]);
+  });
+
   // Audit row 14. At 390px the Research Studies table forced a ~530px document,
   // so the row-action kebab sat off the right edge, unreachable. The fix reflows
   // the table to cards below 768px. jsdom (the vitest suite) applies no CSS and
