@@ -1031,9 +1031,9 @@ const OpportunityDetail: React.FC = () => {
 
                   {/* Calendar Integration */}
                   <div className="mb-4">
-                    <div className="d-flex justify-content-between align-items-center mb-2">
+                    <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
                       {/* Header with inline hint */}
-                      <div className="d-flex align-items-center gap-2">
+                      <div className="d-flex align-items-center flex-wrap gap-2">
                         <h2 className="mb-0 h5">Available Sessions</h2>
                         {/* Inline Legend - the colour key and the view toggle
                             below only make sense when there is a grid to read;
@@ -1041,7 +1041,7 @@ const OpportunityDetail: React.FC = () => {
                         {hasUpcomingSessions && (
                           <>
                             <span className="calendar-hint-divider ms-2" aria-hidden="true">|</span>
-                            <div className="d-flex align-items-center gap-3" role="list" aria-label="Calendar legend">
+                            <div className="d-flex align-items-center flex-wrap gap-3" role="list" aria-label="Calendar legend">
                               {CALENDAR_LEGEND_ITEMS.map((item) => (
                                 <div key={item.label} className="d-flex align-items-center gap-1" role="listitem">
                                   <div

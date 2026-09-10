@@ -811,9 +811,19 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
   const legendItems = CALENDAR_LEGEND_ITEMS;
 
   return (
-    <div 
-      className="calendar-view calendar-living-interface calendar-hud" 
-      style={{ overflow: 'visible', position: 'relative' }}
+    <div
+      className="calendar-view calendar-living-interface calendar-hud"
+      style={{
+        overflow: 'visible',
+        position: 'relative',
+        // True width of the scrolled calendar content = time gutter (90) + its
+        // gap (24) + the day-grid floor. On phone both the header row and the
+        // content row are pinned to this one width so their independent grids
+        // resolve to identical column widths and stay aligned while scrolling
+        // (audit #114). Without a shared definite width, max-content sizes the
+        // text-filled header grid wider than the empty body grid and they drift.
+        ['--cal-content-w' as string]: `${dayGrid.minWidth + 90 + 24}px`,
+      }}
     >
       {/* Ambient Glow Background - Dark Mode Only (via CSS) */}
       <div className="calendar-ambient-glow" aria-hidden="true" />
@@ -899,24 +909,42 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
         </div>
       )}
 
-      {/* Calendar Timeline - Page scroll with viewport-sticky headers */}
-      <div className="calendar-timeline" style={{
-        position: 'relative',
-        overflow: 'visible'
-      }}>
-        {/* Viewport-Sticky Header Row */}
+      {/* Calendar Timeline - Page scroll with viewport-sticky headers.
+          On phone (<=768px) this becomes its own horizontal scroll container
+          (see _components.css) so a full week of >=128px columns can no longer
+          force the whole document wider than the viewport (audit #114). The
+          overflow is left to CSS rather than pinned inline here, because an
+          inline `overflow` would win over the phone media query. */}
+      <div
+        className="calendar-timeline"
+        style={{ position: 'relative' }}
+        // On phone this is a horizontal scroll container (audit #114); a
+        // scrollable region must be keyboard-reachable so it can be scrolled
+        // with the arrow keys, and named so assistive tech announces it. Native
+        // slots are non-focusable div[title]s, so without this axe flags
+        // scrollable-region-focusable. Harmless on desktop, where it does not
+        // scroll.
+        tabIndex={0}
+        role="group"
+        aria-label="Session calendar"
+      >
+        {/* Viewport-Sticky Header Row. position/top/z-index come from the
+            .calendar-sticky-header-row CSS class (sticky-top on desktop), NOT
+            inline, so the phone media query can override it to position:static
+            (audit #114) - an inline position would silently win and leave that
+            override dead. */}
         <div className="calendar-sticky-header-row" style={{
           display: 'flex',
           gap: '24px',
-          position: 'sticky',
-          top: 0,
-          zIndex: 100,
           paddingTop: '8px',
           paddingBottom: '12px',
           marginBottom: '0'
         }}>
-          {/* Empty space for time column alignment */}
-          <div style={{ minWidth: '90px', width: '90px' }} />
+          {/* Empty space for time column alignment. Pins to the left on phone
+              (calendar-header-time-spacer, see _components.css) so the day
+              headers stay column-aligned with the sticky time gutter below when
+              the grid is scrolled horizontally (audit #114). */}
+          <div className="calendar-header-time-spacer" style={{ minWidth: '90px', width: '90px' }} />
           
           {/* Day Headers */}
           <div style={{
@@ -985,11 +1013,13 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
           </div>
         </div>
 
-        {/* Calendar Content */}
-        <div style={{ 
+        {/* Calendar Content. Width is class-driven (calendar-content-row): 100%
+            on desktop, but max-content on phone so the sticky time gutter has
+            the full scrolled width to pin across rather than being clamped to a
+            viewport-width box that scrolls away with the grid (audit #114). */}
+        <div className="calendar-content-row" style={{
           display: 'flex',
-          gap: '24px',
-          width: '100%'
+          gap: '24px'
         }}>
           {/* Time Column (Left) */}
           <motion.div 
