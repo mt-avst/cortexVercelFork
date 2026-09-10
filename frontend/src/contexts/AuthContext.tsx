@@ -70,12 +70,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         (window as any).__setInitialAuthCheck(true);
       }
       
-      // Debug: Check cookies before making request
-      logger.log('AuthProvider: Current cookies:', document.cookie);
       logger.log('AuthProvider: Making API call to:', `${getApiBaseUrl()}/api/me`);
-      
+
       const userData = await getMe();
-      logger.log('AuthProvider: User data received:', userData);
+      // #102: log only that a user resolved, never the user object itself (PII)
+      // or document.cookie - a dev log is still a log, and an error-reporting
+      // SDK would capture these.
+      logger.log('AuthProvider: User data received', { hasUser: Boolean(userData) });
       setUser(userData);
     } catch (error: unknown) {
       logger.log('AuthProvider: Auth error caught:', error);
