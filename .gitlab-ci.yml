@@ -119,6 +119,56 @@ check-release-will-deploy:
       when: never
     - if: '$CI_COMMIT_REF_NAME =~ $PROD_REF'
 
+# The guard for Part C. main no longer runs lint/test-*/typecheck/mutation-canary
+# (see those jobs' rules and docs/MERGE-TRAINS-ROLLOUT.md): the safety of that rests
+# entirely on merge trains being ENABLED, so the merge-train pipeline tests each
+# commit against the exact tree that becomes main before it lands. Turn trains off and
+# main silently stops being tested - no red pipeline, no named failing test, just
+# quiet missing coverage, which the repo's own doctrine calls the worst kind. This job
+# makes that condition fail BY NAME: it reads the project's merge_trains_enabled
+# setting and goes red when it is false. If it fires, re-enable merge trains OR revert
+# the Part C change to restore the `- if: '$CI_COMMIT_REF_NAME =~ $PROD_REF'` test arms.
+#
+# It runs on main (its real job) AND on every MR/train pipeline as a live self-check:
+# a broken token or API path then reddens an MR rather than surprising main. GIT_TOKEN
+# is the api-scoped token get-gitlab-token mints (the one semantic-release pushes tags
+# with), delivered here as a dotenv artifact. Distinguishes "trains off" from "could
+# not read the setting" so a green run always means the setting was actually checked.
+merge-trains-enabled-guard:
+  stage: .pre
+  image: registry.hub.docker.com/library/alpine:3.20
+  needs:
+    - job: get-gitlab-token
+      artifacts: true
+  before_script:
+    - apk add --no-cache curl jq
+  script:
+    - |
+      resp=$(curl -sS --fail-with-body \
+        --header "PRIVATE-TOKEN: ${GIT_TOKEN}" \
+        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}") || {
+          echo "FATAL: could not read project settings to verify merge_trains_enabled."
+          echo "The merge-trains guard could not run its check (curl/API/token failure),"
+          echo "so it fails closed rather than passing blind. Fix the token/API access."
+          exit 1
+        }
+      enabled=$(printf '%s' "$resp" | jq -r '.merge_trains_enabled')
+      echo "merge_trains_enabled=${enabled}"
+      if [ "${enabled}" != "true" ]; then
+        echo "FATAL: merge trains are DISABLED, but .gitlab-ci.yml assumes they are on."
+        echo "main no longer runs lint/test-*/typecheck/mutation-canary (Part C), on the"
+        echo "premise that the merge-train pipeline tested this commit before it landed."
+        echo "With trains off, main is untested. Re-enable merge trains, or revert Part C"
+        echo "to restore the '- if: \$CI_COMMIT_REF_NAME =~ \$PROD_REF' test arms."
+        echo "See docs/MERGE-TRAINS-ROLLOUT.md."
+        exit 1
+      fi
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: '$CI_COMMIT_REF_NAME =~ $PROD_REF'
+
 security_reports_gate:
   timeout: 5m
 
@@ -180,7 +230,11 @@ lint:
     - if: $CI_COMMIT_TAG
       when: never
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: '$CI_COMMIT_REF_NAME =~ $PROD_REF'
+    # No PROD_REF arm: main does not re-run the suite. The merge-train pipeline runs
+    # this exact tree before it becomes main (Settings -> Merge requests -> merge
+    # trains). SAFETY: only sound with merge trains ON - if trains are ever disabled,
+    # restore `- if: '$CI_COMMIT_REF_NAME =~ $PROD_REF'` here or main merges go unlinted.
+    # See docs/MERGE-TRAINS-ROLLOUT.md, Part C.
 
 # Tests. Until now this pipeline ran lint and nothing else, which is how the
 # whole e2e suite came to collect zero tests from the initial commit onwards
@@ -235,7 +289,11 @@ lint:
     - if: $CI_COMMIT_TAG
       when: never
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: '$CI_COMMIT_REF_NAME =~ $PROD_REF'
+    # No PROD_REF arm: main does not re-run the suite (test-backend, test-backend-db,
+    # test-frontend, typecheck, test-a11y, test-scripts). The merge-train pipeline runs
+    # this exact tree before it becomes main. SAFETY: only sound with merge trains ON -
+    # if trains are ever disabled, restore `- if: '$CI_COMMIT_REF_NAME =~ $PROD_REF'`
+    # here or main merges go untested. See docs/MERGE-TRAINS-ROLLOUT.md, Part C.
 
 test-backend:
   extends: .test-base
@@ -489,9 +547,12 @@ mutation-canary:
   # purpose: never scope the run below the full manifest instead - a
   # filtered run is structurally blind to a pre-existing entry the same diff
   # broke, which is how !267 reddened main, and why the runner refuses a
-  # filter flag (#53). On $PROD_REF the job stays unconditional: `changes`
-  # is only well-defined against an MR diff, and main gets the full check
-  # regardless.
+  # filter flag (#53). This job no longer runs on $PROD_REF: with merge trains
+  # on, the train pipeline runs this exact rule (the FULL manifest, whenever the
+  # diff touches a canaried path) against the precise tree that becomes main,
+  # before the merge - so the check the unconditional main run gave now happens
+  # pre-merge instead of post-merge. Restore a `- if: '$CI_COMMIT_REF_NAME =~
+  # $PROD_REF'` arm below if merge trains are ever turned off.
   rules:
     - if: $CI_COMMIT_TAG
       when: never
@@ -505,7 +566,14 @@ mutation-canary:
           - "package.json"
           - "package-lock.json"
           - ".gitlab-ci.yml"
-    - if: '$CI_COMMIT_REF_NAME =~ $PROD_REF'
+    # No PROD_REF arm: main does not re-run the canary. For a TRAIN-MERGED commit the
+    # merge-train pipeline runs the FULL manifest against this exact tree whenever the
+    # diff touches a canaried path (the changes: gate above is job-level, all-or-nothing
+    # - never a filtered run), so the coverage the unconditional main run gave is
+    # preserved pre-merge. SAFETY: sound only with merge trains ON and no non-train route
+    # to main (direct push, bypass-merge) - see docs/MERGE-TRAINS-ROLLOUT.md, "Residual
+    # bypass routes". If trains are ever disabled, restore a
+    # `- if: '$CI_COMMIT_REF_NAME =~ $PROD_REF'` arm here.
   services:
     - name: registry.hub.docker.com/library/postgres:17-alpine
       alias: postgres
