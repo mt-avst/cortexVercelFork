@@ -421,8 +421,12 @@ router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request,
     });
 
   } catch (error) {
-    await client.query('ROLLBACK');
-    
+    // Guarded (#67/#123): a ROLLBACK that throws on a dead connection must not
+    // replace the error that sent control here - masking the 55P03 lock timeout
+    // mapped to a retryable 409 just below with an opaque connection error. A
+    // no-op while the connection is alive. Matches the reschedule site above.
+    await client.query('ROLLBACK').catch(() => {});
+
     // Log the specific error for debugging
     interface DatabaseError extends Error {
       code?: string;
@@ -723,7 +727,12 @@ router.post('/:id/cancel', requireAuth, withLiveRole, asyncHandler(async (req: R
     res.json({ message: 'Booking cancelled successfully' });
 
   } catch (error) {
-    await client.query('ROLLBACK');
+    // Guarded (#67/#123): a ROLLBACK that throws on a dead connection must not
+    // replace the error that sent control here - masking a mappable database
+    // error (e.g. a 55P03 lock timeout, a 409) with an opaque connection error.
+    // A no-op while the connection is alive. Matches sessions.ts and the
+    // reschedule site above; validation-path ROLLBACKs are left bare on purpose.
+    await client.query('ROLLBACK').catch(() => {});
     throw error;
   } finally {
     client.release();
@@ -1578,7 +1587,12 @@ router.post('/sessions/:id/complete', requireAuth, asyncHandler(async (req: Requ
     });
 
   } catch (error) {
-    await client.query('ROLLBACK');
+    // Guarded (#67/#123): a ROLLBACK that throws on a dead connection must not
+    // replace the error that sent control here - masking a mappable database
+    // error (e.g. a 55P03 lock timeout, a 409) with an opaque connection error.
+    // A no-op while the connection is alive. Matches sessions.ts and the
+    // reschedule site above; validation-path ROLLBACKs are left bare on purpose.
+    await client.query('ROLLBACK').catch(() => {});
     throw error;
   } finally {
     client.release();
@@ -1720,7 +1734,12 @@ router.post('/:bookingId/approve', requireAuth, asyncHandler(async (req: Request
     });
 
   } catch (error) {
-    await client.query('ROLLBACK');
+    // Guarded (#67/#123): a ROLLBACK that throws on a dead connection must not
+    // replace the error that sent control here - masking a mappable database
+    // error (e.g. a 55P03 lock timeout, a 409) with an opaque connection error.
+    // A no-op while the connection is alive. Matches sessions.ts and the
+    // reschedule site above; validation-path ROLLBACKs are left bare on purpose.
+    await client.query('ROLLBACK').catch(() => {});
     throw error;
   } finally {
     client.release();
@@ -1790,7 +1809,12 @@ router.post('/:bookingId/reject', requireAuth, asyncHandler(async (req: Request,
     });
 
   } catch (error) {
-    await client.query('ROLLBACK');
+    // Guarded (#67/#123): a ROLLBACK that throws on a dead connection must not
+    // replace the error that sent control here - masking a mappable database
+    // error (e.g. a 55P03 lock timeout, a 409) with an opaque connection error.
+    // A no-op while the connection is alive. Matches sessions.ts and the
+    // reschedule site above; validation-path ROLLBACKs are left bare on purpose.
+    await client.query('ROLLBACK').catch(() => {});
     throw error;
   } finally {
     client.release();
