@@ -2406,5 +2406,16 @@
     "runner": "jest",
     "spec": "src/routes/__tests__/opportunities.test.ts",
     "test": "does not treat a still-in-progress session as completed"
+  },
+  {
+    "id": "completion-trace-scoped-to-the-participant",
+    "why": "cto/AdaptaLabs#119, the scoping half of audit row 10. `WHERE participant_id = $1` on `findParticipantCompletionsForOpportunitiesPostgres` is the IDOR filter on the completion trace: it is what stops caller A being told they completed a study that caller B completed. Nothing sees it removed - the route tests in `opportunities.test.ts` mock this repository, so the predicate is only ever evaluated by a database. The named real-Postgres test seeds A and B across a shared opportunity and makes B's `completed` session the NEWEST row, so a dropped filter does not merely widen the result: `DISTINCT ON (opportunity_id) ... created_at DESC` picks B's row and A's read returns `completed` with B's completed_at. The mutation keeps `$1` referenced (`AND $1::text IS NOT NULL`, always true here) rather than the bare `participant_id = participant_id` tautology on purpose - orphaning `$1` makes Postgres answer `42P18 could not determine data type of parameter $1` before the scope is ever evaluated, which reds the suite for the wrong reason and the harness grades that KILLED. Keeping it referenced makes the query run and fail on the row it gets back. Proven by mutation before entry - the named test kills it on the status not the load; the control test reddens too, as expected, since B's now-unscoped read returns two rows.",
+    "file": "backend/src/firsthand/runtime-repository-postgres.ts",
+    "anchor": "        WHERE participant_id = $1",
+    "mutation": "        WHERE participant_id = participant_id AND $1::text IS NOT NULL",
+    "runner": "vitest",
+    "spec": "src/firsthand/runtime-participant-completion-scope-postgres.test.ts",
+    "test": "scopes each participant's completions to their own sessions",
+    "needsDatabase": true
   }
 ]

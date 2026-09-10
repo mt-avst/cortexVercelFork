@@ -5431,6 +5431,66 @@ describe('Opportunities API', () => {
   unauthenticatedApp.use('/api/opportunities', opportunitiesRouter);
   unauthenticatedApp.use(errorHandler);
 
+  // The completion trace is attached only inside `req.user ? ...` on both the
+  // list and the detail read. The signed-in cases live in the row-10 describe
+  // above; these cover the signed-out branch, so a future refactor to
+  // `req.user?.id` - which would key the query on `undefined` rather than skip
+  // it - fails red here rather than quietly running an unscoped read for a
+  // logged-out caller. (#119)
+  describe('participant completion trace when signed out (audit row 10 / #119)', () => {
+    const anonNativeSurveyRow = {
+      id: 'op-anon',
+      type: 'survey',
+      delivery_mode: 'native',
+      title: 'How was it',
+      purpose_one_liner: 'A quick survey',
+      default_duration_minutes: 30,
+      status: 'published',
+      owner_user_id: 'someone-else',
+      firsthand_study_id: 'study-anon',
+      external_link_optional: null,
+      created_at: new Date('2026-09-01T10:00:00.000Z'),
+      updated_at: new Date('2026-09-01T10:00:00.000Z'),
+      start_date: null,
+      end_date: null,
+      owner_name: 'Owner',
+      owner_email: 'owner@example.com'
+    };
+
+    it('attaches no completion to a native survey detail read for a signed-out caller, and never reaches the runtime', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [anonNativeSurveyRow] });
+
+      const response = await request(listening(unauthenticatedApp))
+        .get('/api/opportunities/op-anon')
+        .expect(200);
+
+      // A logged-out caller has no participant identity to scope the read to, so
+      // the trace must be absent - not `{ completed: false }`, which would claim
+      // the read ran and found nothing.
+      expect(response.body.completion).toBeUndefined();
+      expect(mockFindParticipantCompletions).not.toHaveBeenCalled();
+    });
+
+    it('never reaches the runtime for the listing when signed out, so the trace is only the un-read default', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [anonNativeSurveyRow] });
+
+      const response = await request(listening(unauthenticatedApp))
+        .get('/api/opportunities')
+        .expect(200);
+
+      const survey = response.body.find((o: { id: string }) => o.id === 'op-anon');
+      expect(survey).toBeDefined();
+      // The listing attaches the not-completed default to every native survey
+      // (an empty-map miss), signed in or out - so `completion` being present
+      // here is not a leak. The invariant that matters, and the one a
+      // `req.user?.id` refactor would break, is that no participant-scoped read
+      // was issued for a caller with no identity: the completion can only ever
+      // be the default, never a real row.
+      expect(survey.completion).toEqual({ completed: false, completedAt: null });
+      expect(mockFindParticipantCompletions).not.toHaveBeenCalled();
+    });
+  });
+
   describe('POST /api/opportunities/:id/recorded-study-session', () => {
     it('mints an in-process session and returns a same-origin URL', async () => {
       process.env.FRONTEND_URL = 'https://cortex.example.com';
