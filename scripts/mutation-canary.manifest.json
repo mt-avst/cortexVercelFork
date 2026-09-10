@@ -598,8 +598,8 @@
     "id": "sessions-create-consults-opportunity-ownership",
     "why": "POST /api/sessions is the THIRD handler with this predicate and the same 403 wording, in a different router from the other two. Same neutering, same result: 919 of 919. It is pinned separately because a reader fixing `opportunities.ts` has no reason to open `sessions.ts`, and the shared wording is what makes the duplicate easy to miss. Unlike POST /api/bookings/:id/cancel, this family DOES carry a superadmin bypass; the spec pins that in both directions so the asymmetry between the two families can only change on purpose.",
     "file": "backend/src/routes/sessions.ts",
-    "anchor": "  const isOwner = isOpportunityOwner(opportunityCheck.rows[0], req.user);\n  const isSuperadmin = req.user!.role === 'superadmin';\n  if (!isSuperadmin && !isOwner) {\n    throw new ForbiddenError('Only the owner can add sessions to this opportunity');",
-    "mutation": "  const isOwner = true;\n  const isSuperadmin = req.user!.role === 'superadmin';\n  if (!isSuperadmin && !isOwner) {\n    throw new ForbiddenError('Only the owner can add sessions to this opportunity');",
+    "anchor": "  const isOwner = isOpportunityOwner(opportunityCheck.rows[0], req.user);\n  const isSuperadmin = req.user!.role === 'superadmin';\n  if (!isSuperadmin && !isOwner) {\n    throw new ForbiddenError('Only the owner can add sessions to this study');",
+    "mutation": "  const isOwner = true;\n  const isSuperadmin = req.user!.role === 'superadmin';\n  if (!isSuperadmin && !isOwner) {\n    throw new ForbiddenError('Only the owner can add sessions to this study');",
     "runner": "jest",
     "spec": "src/routes/__tests__/sessions.write-ownership.test.ts",
     "test": "writes nothing at all for a non-owning admin on POST /api/sessions"
