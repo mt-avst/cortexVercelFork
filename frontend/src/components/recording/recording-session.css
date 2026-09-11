@@ -419,8 +419,7 @@
   flex: none;
   width: 26px;
   height: 26px;
-  border: 1.5px solid var(--ink);
-  border-radius: 50%;
+  color: var(--accent);
 }
 
 .fh-recording .journey-brand-name b {

@@ -6,6 +6,7 @@ import LoadingSpinner from './LoadingSpinner';
 import ConfirmationModal from './ConfirmationModal';
 import { requestAdminAccess } from '../api/client';
 import { Dropdown, DropdownItem, DropdownDivider, DropdownHeader } from './ui';
+import CortexMark from './CortexMark';
 import {
   UserCircle,
   Sun,
@@ -269,11 +270,8 @@ const Header: React.FC = memo(() => {
       <div className="container">
         <div className="header-content">
           <Link to={logoLink} className="logo" aria-label="Cortex home">
-            <img
-              src="/images/adaptalogo.png"
-              alt="Cortex Logo"
-              className="logo-image"
-            />
+            <CortexMark className="logo-mark" />
+            <span className="logo-word">Cortex</span>
           </Link>
 
           <nav className="nav" aria-label="Main navigation">
