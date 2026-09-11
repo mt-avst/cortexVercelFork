@@ -10,6 +10,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { getOpportunityAnalytics, getOpportunity, getOpportunitySessionEvents, getOpportunitySurveyResults, getOpportunityBookings, updateBookingResearcherNotes, opportunitySurveyResultsCsvUrl, type OpportunityAnalytics, type AnalyticsPeriod } from '../api/client';
 import { SurveyResults, type SurveyResultsData } from '../components/survey/SurveyResults';
 import { getActionMeaning } from '../utils/opportunityUtils';
+import { buildAnalyticsChartData } from '../utils/analyticsChart';
 import { QUESTION_CARRYING_TYPES } from '@shared/firsthand/delivery';
 import { Opportunity, SessionEvent, OpportunityBookingRow } from '../api/types';
 import ErrorState from '../components/ErrorState';
@@ -359,33 +360,18 @@ const OpportunityAnalyticsPage: React.FC = () => {
     });
   };
 
-  // Generate chart data with all days in period (including zeros)
-  const getChartData = () => {
-    if (!analytics?.clicks_by_day || !Array.isArray(analytics.clicks_by_day)) return [];
-    
-    const data: Array<{ label: string; value: number; views: number; actions: number }> = [];
-    const today = new Date();
-    const clicksMap = new Map(analytics.clicks_by_day.map(d => [d.date, { count: d.count, views: d.views || 0, actions: d.actions || 0 }]));
-    
-    for (let i = selectedPeriod - 1; i >= 0; i--) {
-      const date = new Date(today);
-      date.setDate(date.getDate() - i);
-      const dateStr = date.toISOString().split('T')[0];
-      const label = date.toLocaleDateString('en-GB', { 
-        day: 'numeric', 
-        month: 'short' 
-      });
-      const dayData = clicksMap.get(dateStr) || { count: 0, views: 0, actions: 0 };
-      data.push({
-        label,
-        value: dayData.count,
-        views: dayData.views,
-        actions: dayData.actions
-      });
-    }
-    
-    return data;
-  };
+  // Every day in the period, zero-filled, keyed and labelled in the analytics
+  // zone so each entry lines up with the backend's clicks_by_day dates. See
+  // utils/analyticsChart.ts for why the axis must not be cut in UTC here.
+  //
+  // ponytail: this draws `period` calendar days, but the backend counts a
+  //   rolling period*24h window spanning period+1 in-zone dates, so a click on
+  //   the oldest boundary day is summed into the header total yet has no bar to
+  //   land in (a flat chart under a positive "Total: N")
+  //   -> cto/AdaptaLabs#124, real fix is the endpoint returning the zero-filled
+  //   series so header == sum of bars by construction
+  const getChartData = () =>
+    buildAnalyticsChartData(analytics?.clicks_by_day, selectedPeriod, analytics?.time_zone || undefined);
 
   // Get views-only chart data
   const getViewsChartData = () => {
@@ -852,9 +838,11 @@ const OpportunityAnalyticsPage: React.FC = () => {
                 <span className="cortex-chart-subtitle">Total: {analytics?.period_views_total ?? 0} ({selectedPeriod}d)</span>
               </div>
               <div className="cortex-chart-container">
-                {viewsChartData.length > 0 && viewsChartData.some(d => d.value > 0) ? (
-                  <BarChart 
-                    data={viewsChartData} 
+                {/* Gated on the same total the subtitle prints, so the chart can
+                    never read "No views recorded" under "Total: 3". */}
+                {(analytics?.period_views_total ?? 0) > 0 ? (
+                  <BarChart
+                    data={viewsChartData}
                     height={180}
                     barColor="var(--color-analytics-blue)"
                     showValues={selectedPeriod <= 14}
@@ -874,9 +862,9 @@ const OpportunityAnalyticsPage: React.FC = () => {
                 <span className="cortex-chart-subtitle">Total: {analytics?.period_actions_total ?? 0} ({selectedPeriod}d)</span>
               </div>
               <div className="cortex-chart-container">
-                {actionsChartData.length > 0 && actionsChartData.some(d => d.value > 0) ? (
-                  <BarChart 
-                    data={actionsChartData} 
+                {(analytics?.period_actions_total ?? 0) > 0 ? (
+                  <BarChart
+                    data={actionsChartData}
                     height={180}
                     barColor="var(--color-analytics-green)"
                     showValues={selectedPeriod <= 14}
@@ -897,9 +885,9 @@ const OpportunityAnalyticsPage: React.FC = () => {
               <span className="cortex-chart-subtitle">Avg: {analytics?.avg_clicks_per_day ?? 0}/day</span>
             </div>
             <div className="cortex-chart-container" style={{ minHeight: '220px' }}>
-              {chartData.length > 0 && chartData.some(d => d.value > 0) ? (
-                <BarChart 
-                  data={chartData.map(d => ({ label: d.label, value: d.value }))} 
+              {(analytics?.period_clicks_total ?? 0) > 0 ? (
+                <BarChart
+                  data={chartData.map(d => ({ label: d.label, value: d.value }))}
                   height={220}
                   barColor="var(--color-analytics-orange)"
                   showValues={selectedPeriod <= 30}
