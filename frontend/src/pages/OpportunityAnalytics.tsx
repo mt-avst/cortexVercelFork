@@ -363,6 +363,13 @@ const OpportunityAnalyticsPage: React.FC = () => {
   // Every day in the period, zero-filled, keyed and labelled in the analytics
   // zone so each entry lines up with the backend's clicks_by_day dates. See
   // utils/analyticsChart.ts for why the axis must not be cut in UTC here.
+  //
+  // ponytail: this draws `period` calendar days, but the backend counts a
+  //   rolling period*24h window spanning period+1 in-zone dates, so a click on
+  //   the oldest boundary day is summed into the header total yet has no bar to
+  //   land in (a flat chart under a positive "Total: N")
+  //   -> cto/AdaptaLabs#124, real fix is the endpoint returning the zero-filled
+  //   series so header == sum of bars by construction
   const getChartData = () =>
     buildAnalyticsChartData(analytics?.clicks_by_day, selectedPeriod, analytics?.time_zone || undefined);
 

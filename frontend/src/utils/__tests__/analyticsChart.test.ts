@@ -41,4 +41,14 @@ describe('buildAnalyticsChartData - zone of the day axis', () => {
     expect(buildAnalyticsChartData(undefined, 30, 'Europe/London', now)).toEqual([]);
     expect(buildAnalyticsChartData(null, 30, 'Europe/London', now)).toEqual([]);
   });
+
+  // A 30-day window whose span crosses the BST->GMT change (last Sunday of
+  // October, 2026-10-25). The UTC-midnight anchor plus whole-UTC-day steps must
+  // still produce 30 consecutive calendar days - no duplicate and no skip on the
+  // transition day. A naive local-time -24h walk would repeat or drop one here.
+  it('walks 30 distinct consecutive days across a DST transition', () => {
+    const acrossDst = buildAnalyticsChartData([], 30, 'Europe/London', new Date('2026-11-01T12:00:00Z'));
+    expect(acrossDst).toHaveLength(30);
+    expect(new Set(acrossDst.map((d) => d.label)).size).toBe(30);
+  });
 });

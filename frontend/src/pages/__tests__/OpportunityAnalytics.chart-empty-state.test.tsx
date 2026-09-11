@@ -5,12 +5,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import OpportunityAnalytics from '../OpportunityAnalytics';
 import { getOpportunityAnalytics, getOpportunity, getOpportunitySessionEvents } from '../../api/client';
 
-// DA-20: the analytics page printed "Total: 3 (30d)" in a chart header and
-// "No views recorded" in the body of the same chart, and "Unique: 0" beside a
-// positive action count. The header total and the empty state read from two
-// different places and disagreed. These pin that the empty state is now driven
-// by the same period total the header prints, so the two cannot contradict -
-// whatever the daily breakdown happens to line up with.
+// DA-20: the analytics page printed "Total: 3 (30d)" in a chart header and the
+// empty-state message "No views recorded" in the body of the SAME chart. The
+// message and the total read from two different places and disagreed. These pin
+// that the empty-state TEXT is now driven by the same period total the header
+// prints, so the false "No X recorded" can no longer appear under a positive
+// total - the chart is shown instead.
+//
+// Scope, said out loud: this guarantees the empty-state TEXT never contradicts
+// the header, not that the drawn bars sum to it. The bars are built from
+// clicks_by_day over `period` calendar days while the header total counts a
+// rolling period*24h window spanning period+1 dates, so a click on the oldest
+// boundary day is totalled but undrawn (a flat chart, not false text). That
+// residual is cto/AdaptaLabs#124, fixed backend-side; it is out of scope here.
 
 const base = {
   clicks_total: 3,
@@ -102,12 +109,16 @@ beforeEach(() => {
   } as never);
 });
 
-describe('chart empty state cannot contradict its own total', () => {
-  it('does not say "No views recorded" while the header says Total: 3', async () => {
+describe('empty-state text cannot appear under a positive header total', () => {
+  it('shows the chart, not "No views recorded", while the header says Total: 3', async () => {
     const { container } = renderPage();
     const text = await settled(container);
     expect(text).toContain('Total: 3 (30d)');
     expect(text).not.toContain('No views recorded');
+    // Positively assert the chart rendered rather than nothing: BarChart gives
+    // every bar a `title="<label>: <n> clicks"`. Absence-only assertions would
+    // still pass if the truthy branch regressed to rendering an empty node.
+    expect(container.querySelector('[title$="clicks"]')).not.toBeNull();
   });
 
   it('does not say "No actions recorded" while the header shows a positive total', async () => {
