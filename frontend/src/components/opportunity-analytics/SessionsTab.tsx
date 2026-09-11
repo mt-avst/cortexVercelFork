@@ -16,11 +16,17 @@ export const EVENT_TYPE_BADGE: Record<string, string> = {
   session_failed: ''
 };
 
+// Derived from the shared contract (shared/types/index.ts -> SessionEvent),
+// not redeclared here - a fifth event type added there widens this type too,
+// so STATUS_RANK below (typed on it) fails to compile instead of silently
+// ranking the new value as unknown.
+export type SessionEventType = SessionEvent['event_type'];
+
 export interface SessionRow {
   sessionId: string;
   participantName: string | null;
   participantEmail: string | null;
-  latestEventType: string;
+  latestEventType: SessionEventType;
   latestOccurredAt: string;
 }
 
@@ -58,8 +64,13 @@ type SortDirection = 'asc' | 'desc';
  * a plain alphabetical sort would put "Abandoned" ahead of "Started" for no
  * reason a researcher would recognise. In-progress first, then the outcomes
  * from best to worst.
+ *
+ * Typed as Record<SessionEventType, number>, not Record<string, number>: if a
+ * fifth event type is ever added to SessionEvent['event_type'] (shared/types/
+ * index.ts), this object literal stops satisfying the type and TypeScript
+ * refuses to compile until a rank is added here too - no silent rank-99 drift.
  */
-const STATUS_RANK: Record<string, number> = {
+const STATUS_RANK: Record<SessionEventType, number> = {
   session_started: 0,
   session_completed: 1,
   session_abandoned: 2,

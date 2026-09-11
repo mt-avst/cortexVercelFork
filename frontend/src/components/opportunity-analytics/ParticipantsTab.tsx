@@ -87,8 +87,14 @@ type SortDirection = 'asc' | 'desc';
  * booking is made, then (for a moderated session) awaits the researcher's
  * review, then lands on an outcome; cancellation can happen at any point but
  * sorts last, as the exception rather than the norm.
+ *
+ * There is no shared union type to pin this against the way SessionsTab pins
+ * STATUS_RANK on SessionEvent['event_type'] - bookingStatusLabel's return
+ * value is a derived string, not a declared type. Exported so a test can
+ * assert every label bookingStatusLabel can return has an entry here; that
+ * test is the drift guard this map has instead of a compiler one.
  */
-const BOOKING_STATUS_RANK: Record<string, number> = {
+export const BOOKING_STATUS_RANK: Record<string, number> = {
   Booked: 0,
   'Awaiting approval': 1,
   Completed: 2,

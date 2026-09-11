@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
-import ParticipantsTab, { bookingStatusLabel } from '../ParticipantsTab';
+import ParticipantsTab, { bookingStatusLabel, BOOKING_STATUS_RANK } from '../ParticipantsTab';
 import { buildArtifactsController } from './artifactsControllerStub';
 import { OpportunityBookingRow, ResearcherNotesResponse } from '../../../api/types';
 
@@ -433,6 +433,32 @@ describe('ParticipantsTab column sorting (DA-23)', () => {
     expect(screen.getByRole('columnheader', { name: 'Participant' })).toHaveAttribute(
       'aria-sort',
       'descending'
+    );
+  });
+});
+
+describe('BOOKING_STATUS_RANK drift guard (DA-23)', () => {
+  // Every label bookingStatusLabel can actually produce, driven THROUGH the
+  // function itself rather than a second hardcoded string list - a rename in
+  // bookingStatusLabel fails this test by name too, not just an added label.
+  // There is no shared union type to pin this against the way SessionsTab
+  // pins STATUS_RANK on SessionEvent['event_type']; this test is the
+  // equivalent guard for a derived string with no declared type.
+  it.each([
+    [{ status: 'cancelled', completion_status: 'pending' }, 'Cancelled'],
+    [{ status: 'booked', completion_status: 'completed' }, 'Awaiting approval'],
+    [{ status: 'booked', completion_status: 'approved' }, 'Completed'],
+    [{ status: 'booked', completion_status: 'rejected' }, 'Rejected'],
+    [{ status: 'booked', completion_status: 'pending' }, 'Booked']
+  ])('has a numeric BOOKING_STATUS_RANK entry for the %j label', (booking, expectedLabel) => {
+    const label = bookingStatusLabel(booking);
+    expect(label).toBe(expectedLabel);
+    expect(typeof BOOKING_STATUS_RANK[label]).toBe('number');
+  });
+
+  it('has exactly the five ranks bookingStatusLabel can produce - no fewer, no stale extras', () => {
+    expect(Object.keys(BOOKING_STATUS_RANK).sort()).toEqual(
+      ['Awaiting approval', 'Booked', 'Cancelled', 'Completed', 'Rejected']
     );
   });
 });
