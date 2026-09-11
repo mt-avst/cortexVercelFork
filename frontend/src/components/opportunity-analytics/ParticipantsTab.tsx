@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { OpportunityBookingRow, ResearcherNotesResponse } from '../../api/types';
 import { VALIDATION } from '@shared/constants';
 import BookingArtifactsSection from './BookingArtifactsSection';
@@ -79,6 +79,39 @@ const formatDateTime = (iso: string): string =>
     minute: '2-digit'
   });
 
+type ParticipantSortField = 'participant' | 'status';
+type SortDirection = 'asc' | 'desc';
+
+/**
+ * A booking's place in its own lifecycle, not the raw label string - a
+ * booking is made, then (for a moderated session) awaits the researcher's
+ * review, then lands on an outcome; cancellation can happen at any point but
+ * sorts last, as the exception rather than the norm.
+ */
+const BOOKING_STATUS_RANK: Record<string, number> = {
+  Booked: 0,
+  'Awaiting approval': 1,
+  Completed: 2,
+  Rejected: 3,
+  Cancelled: 4
+};
+
+function compareBookings(
+  left: OpportunityBookingRow,
+  right: OpportunityBookingRow,
+  field: ParticipantSortField
+): number {
+  if (field === 'participant') {
+    const leftName = left.participant_name ?? 'Unknown participant';
+    const rightName = right.participant_name ?? 'Unknown participant';
+    return leftName.localeCompare(rightName);
+  }
+
+  const leftRank = BOOKING_STATUS_RANK[bookingStatusLabel(left)] ?? 99;
+  const rightRank = BOOKING_STATUS_RANK[bookingStatusLabel(right)] ?? 99;
+  return leftRank - rightRank;
+}
+
 const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
   bookings,
   loading,
@@ -101,6 +134,32 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
   // which is a double-submit on a field two people may now be writing.
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
   const [saveErrors, setSaveErrors] = useState<Record<string, string>>({});
+  // No column is sorted until the researcher clicks one - `null` preserves
+  // today's default, which is just the roster order the page hands down.
+  const [sortField, setSortField] = useState<ParticipantSortField | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+
+  const handleSort = (field: ParticipantSortField) => {
+    if (field === sortField) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const ariaSortFor = (field: ParticipantSortField): 'ascending' | 'descending' | 'none' =>
+    sortField === field ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none';
+
+  const sortedBookings = useMemo(() => {
+    if (!sortField) {
+      return bookings;
+    }
+    return [...bookings].sort((left, right) => {
+      const comparison = compareBookings(left, right, sortField);
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [bookings, sortField, sortDirection]);
 
   // A NEW ROSTER WINS OVER LOCAL STATE. `saved` exists to cover the window
   // between a save landing and the next fetch; keeping it past that fetch
@@ -203,15 +262,35 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--cortex-border, rgba(255,255,255,0.08))' }}>
-                <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>Participant</th>
+                <th
+                  style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}
+                  aria-sort={ariaSortFor('participant')}
+                >
+                  <button type="button" className="admin-th-sort" onClick={() => handleSort('participant')}>
+                    Participant
+                    <span className="admin-th-sort-caret" aria-hidden="true">
+                      {sortField === 'participant' ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}
+                    </span>
+                  </button>
+                </th>
                 <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>Session</th>
-                <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>Status</th>
+                <th
+                  style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}
+                  aria-sort={ariaSortFor('status')}
+                >
+                  <button type="button" className="admin-th-sort" onClick={() => handleSort('status')}>
+                    Status
+                    <span className="admin-th-sort-caret" aria-hidden="true">
+                      {sortField === 'status' ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}
+                    </span>
+                  </button>
+                </th>
                 <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500, width: '45%' }}>Researcher notes</th>
                 <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>Artefacts</th>
               </tr>
             </thead>
             <tbody>
-              {bookings.map((booking) => {
+              {sortedBookings.map((booking) => {
                 const stored = storedNotes(booking);
                 const draft = drafts[booking.id];
                 const value = draft ?? stored;
