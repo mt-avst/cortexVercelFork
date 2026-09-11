@@ -71,6 +71,18 @@
   font-weight: 500;
 }
 
+/* BK-3: Booked - the participant's own slot, matching .calendar-slot-booked's
+   brand-orange outline (never the solid fill reserved for an active
+   confirmation). Checked before .slot-chip-full in the chip map so a slot the
+   participant booked never collapses into the generic Full chip. */
+.slot-chip-booked {
+  background: rgba(197, 78, 18, 0.10);
+  border: 1px solid var(--accent-fill-text-safe);
+  color: var(--accent-fill-text-safe);
+  cursor: default;
+  font-weight: 700;
+}
+
 .slot-chip:disabled {
   cursor: not-allowed;
   opacity: 0.6;
@@ -91,4 +103,10 @@ body.theme-dark .slot-chip-full {
   background: #1f2937;
   border: 1px solid #4b5563;
   color: #9ca3af;
+}
+
+body.theme-dark .slot-chip-booked {
+  background: rgba(255, 122, 51, 0.14);
+  border: 1px solid #fb923c; /* orange-400 */
+  color: #fdba74; /* orange-300 */
 }
