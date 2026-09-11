@@ -1985,6 +1985,21 @@ body.landing-page .header .text-muted,
   color: rgba(255, 255, 255, 0.6) !important;
 }
 
+/* CB-26: the landing header sits on a fixed dark hero band regardless of the
+   light/dark theme (mirrors the unconditional white logo-word and translucent
+   button treatment above), so the quiet signed-out toggle gets the same
+   translucent-white treatment here rather than the theme-token colours below. */
+body.landing-page .header .header-theme-toggle--quiet,
+.landing-page .header .header-theme-toggle--quiet {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+body.landing-page .header .header-theme-toggle--quiet:hover,
+.landing-page .header .header-theme-toggle--quiet:hover {
+  color: #FFFFFF;
+  background: rgba(255, 255, 255, 0.1);
+}
+
 .header .container {
   overflow: visible;
 }
@@ -2090,6 +2105,36 @@ body.landing-page .header .logo-word,
 
 .momentum-btn-secondary:focus-visible,
 .header .btn-outline-secondary:focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-outline-offset);
+}
+
+/* CB-26: signed-out theme toggle. On the signed-out header this is the only
+   control at all (every other header item is gated behind `user`), so the
+   full outlined button used everywhere else read as the page's loudest CTA.
+   Quiet, icon-only, low-emphasis chrome instead - no border, no heavy
+   padding - while staying keyboard-focusable with a visible focus ring.
+   Rendered only on the `!user` branch in Header.tsx; the signed-in toggle
+   keeps using `.btn.btn-outline-secondary` unchanged. */
+.header-theme-toggle--quiet {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-2);
+  background: transparent;
+  border: none;
+  border-radius: var(--button-radius);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-button);
+}
+
+.header-theme-toggle--quiet:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.header-theme-toggle--quiet:focus-visible {
   outline: var(--focus-outline);
   outline-offset: var(--focus-outline-offset);
 }

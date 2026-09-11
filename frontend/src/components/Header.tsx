@@ -277,15 +277,35 @@ const Header: React.FC = memo(() => {
           <nav className="nav" aria-label="Main navigation">
             {/* Desktop toolbar - hidden below 768px */}
             <div className="header-actions header-actions--desktop">
-              <button
-                onClick={toggleTheme}
-                className="btn btn-outline-secondary"
-                aria-label={themeToggleAria}
-                title={themeToggleAria}
-              >
-                {themeIcon}
-                <span className="d-none d-md-inline ms-1">{themeToggleLabel}</span>
-              </button>
+              {user ? (
+                <button
+                  onClick={toggleTheme}
+                  className="btn btn-outline-secondary"
+                  aria-label={themeToggleAria}
+                  title={themeToggleAria}
+                >
+                  {themeIcon}
+                  <span className="d-none d-md-inline ms-1">{themeToggleLabel}</span>
+                </button>
+              ) : (
+                /* CB-26: on the signed-out header this is the ONLY control (every
+                   other header item is gated behind `user`), so the outlined
+                   button + text label read as the page's loudest CTA. Demoted to
+                   a quiet icon-only control here, scoped on the `!user` branch
+                   rather than a `body.landing-page` selector: Header renders
+                   globally (App.tsx mounts it once, outside the route switch),
+                   so a signed-out visitor can land on any public route, not only
+                   Landing, and the demotion should follow auth state everywhere
+                   it applies. Signed-in appearance above is untouched. */
+                <button
+                  onClick={toggleTheme}
+                  className="header-theme-toggle--quiet"
+                  aria-label={themeToggleAria}
+                  title={themeToggleAria}
+                >
+                  {themeIcon}
+                </button>
+              )}
 
               {loading && initialAuthCheck ? (
                 <LoadingSpinner size="small" text="Loading..." />
@@ -330,7 +350,7 @@ const Header: React.FC = memo(() => {
               ) : (
                 <button
                   onClick={toggleTheme}
-                  className="btn btn-outline-secondary"
+                  className="header-theme-toggle--quiet"
                   aria-label={themeToggleAria}
                   title={themeToggleAria}
                 >

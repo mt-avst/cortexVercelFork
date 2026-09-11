@@ -55,7 +55,7 @@ describe('Header Component', () => {
   });
 
   it('should render the theme toggle for signed-out visitors', () => {
-    const { getByText } = render(
+    const { getAllByRole } = render(
       <BrowserRouter>
         <Header />
       </BrowserRouter>
@@ -63,7 +63,9 @@ describe('Header Component', () => {
 
     // Signed-out users get no nav actions - login lives on the landing page.
     // The theme toggle is the one control present regardless of auth state.
-    expect(getByText('Dark Mode')).toBeInTheDocument();
+    expect(
+      getAllByRole('button', { name: 'Switch to dark mode' }).length
+    ).toBeGreaterThan(0);
   });
 
   it('should have proper structure', () => {
@@ -76,6 +78,50 @@ describe('Header Component', () => {
     const header = container.querySelector('header');
     expect(header).toBeInTheDocument();
     expect(header).toHaveClass('header');
+  });
+});
+
+/**
+ * CB-26: on the signed-out header the theme toggle is the ONLY control (every
+ * other header item is gated behind `user`), so a full outlined button with a
+ * text label read as the page's loudest control. Signed out, it demotes to a
+ * quiet icon-only control - no outlined-button chrome, no visible text label -
+ * while keeping a descriptive `aria-label`. Signed in, the toggle is one of
+ * several controls and its appearance is unchanged.
+ *
+ * Desktop assertions are scoped to `.header-actions--desktop`: jsdom applies
+ * no CSS, so the mobile branch's own (already icon-only) toggle is also in the
+ * DOM and would otherwise make an unscoped query ambiguous.
+ */
+describe('Signed-out theme toggle demotion (CB-26)', () => {
+  const renderDesktopToggle = (role: string | null) => {
+    auth.user = role ? { name: 'A Person', role } : null;
+    const { container } = render(
+      <BrowserRouter>
+        <Header />
+      </BrowserRouter>
+    );
+    const desktop = container.querySelector('.header-actions--desktop') as HTMLElement;
+    return within(desktop).getByRole('button', { name: 'Switch to dark mode' });
+  };
+
+  it('renders icon-only, with no visible text label, when signed out', () => {
+    const toggle = renderDesktopToggle(null);
+
+    expect(toggle).not.toHaveTextContent('Dark Mode');
+    expect(toggle).not.toHaveTextContent('Light Mode');
+    // Still keyboard-accessible with a clear accessible name.
+    expect(toggle).toHaveAccessibleName('Switch to dark mode');
+    // Dropped the outlined-button chrome - it must not read as the page's CTA.
+    expect(toggle).not.toHaveClass('btn-outline-secondary');
+  });
+
+  it('keeps the labelled outlined toggle unchanged when signed in (control)', () => {
+    const toggle = renderDesktopToggle('employee');
+
+    expect(toggle).toHaveTextContent('Dark Mode');
+    expect(toggle).toHaveAccessibleName('Switch to dark mode');
+    expect(toggle).toHaveClass('btn-outline-secondary');
   });
 });
 
