@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Session, CalendarEvent } from '../api/types';
 import { getMyCalendarEvents, getCalendarConnectionStatus, getMyBookings } from '../api/client';
 import { logger } from '../utils/logger';
+import { sharedZoneOffset } from '../utils/datetime';
 import { Info, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from 'framer-motion';
 
@@ -810,6 +811,14 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
   // Use exported legend items
   const legendItems = CALENDAR_LEGEND_ITEMS;
 
+  // BK-4: the grid draws every time in the reader's OWN zone (formatTime uses
+  // getHours()), and it said so nowhere — the table view labels each row, but a
+  // bare grid time is how a participant once booked "an hour out". Name the zone
+  // once, but only with an offset the whole view actually shares: on a week that
+  // straddles a daylight-saving change the rows carry two offsets, so we print
+  // the prose alone rather than stamp a wrong "(GMT-4)" over a GMT-5 row.
+  const zoneOffset = sharedZoneOffset(sessions.map((s) => s.start_time));
+
   return (
     <div
       className="calendar-view calendar-living-interface calendar-hud"
@@ -847,6 +856,12 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
           ))}
         </div>
       )}
+
+      {/* Zone caption — rendered whether or not the legend is (BK-4). The offset
+          is appended only when the whole view shares one (see sharedZoneOffset). */}
+      <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '0 0 12px' }}>
+        Times shown in your time zone{zoneOffset ? ` (${zoneOffset})` : ''}
+      </p>
 
       {/*
         Week navigation (#112). Only rendered once there is more than one
