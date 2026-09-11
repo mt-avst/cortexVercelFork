@@ -259,6 +259,32 @@ describe('Admin page', () => {
     expect(vi.mocked(getOpportunities)).toHaveBeenCalledTimes(1);
   });
 
+  it('names the collateral destroyed by a study delete (DA-24)', async () => {
+    // The confirm dialog used to say only "cannot be undone" - true but silent
+    // on WHAT else the DB cascade takes with it. It must now spell out the
+    // real collateral (sessions/bookings, recordings/transcripts, analytics),
+    // while still asking the original question and offering the original button.
+    renderAdmin();
+    await screen.findByText('Checkout usability test');
+
+    fireEvent.click(screen.getByRole('button', { name: /Actions for Checkout usability test/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
+
+    // Control: the dialog still asks its original question and still offers
+    // its original confirm button - this test must not pass by replacing them.
+    expect(
+      screen.getByText(/Are you sure you want to delete "Checkout usability test"/)
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Yes, Delete' })).toBeInTheDocument();
+
+    // The collateral itself: bookings/sessions, recordings/transcripts and
+    // analytics data all cascade-delete with the opportunity row (verified
+    // against backend/src/db/migrate.ts's ON DELETE CASCADE chain).
+    expect(screen.getByText(/sessions and any bookings/i)).toBeInTheDocument();
+    expect(screen.getByText(/recordings and transcripts/i)).toBeInTheDocument();
+    expect(screen.getByText(/analytics/i)).toBeInTheDocument();
+  });
+
   it('redirects a non-admin user to the home route', () => {
     // A generic role that is neither researcher_admin nor superadmin is gated out
     // (Admin.tsx:235) and redirected to "/".
