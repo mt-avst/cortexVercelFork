@@ -722,13 +722,17 @@ export function ParticipantSessionFlow({
               <section className="journey-rail-sec">
                 <h4>Journey</h4>
                 {FLOW_SECTION_LABELS.map((label, index) => {
+                  const railStatus = getSectionStatus(index, phase);
                   const isTicked =
-                    getSectionStatus(index, phase) === "done" ||
-                    (index === 5 && phase === "completed");
+                    railStatus === "done" || (index === 5 && phase === "completed");
+                  const isCurrent = railStatus === "current";
 
                   return (
                     <div
-                      className={`journey-vitem${isTicked ? " journey-vitem--done" : ""}`}
+                      aria-current={isCurrent ? "step" : undefined}
+                      className={`journey-vitem${isTicked ? " journey-vitem--done" : ""}${
+                        isCurrent ? " journey-vitem--current" : ""
+                      }`}
                       key={label}
                     >
                       <span aria-hidden="true" className="journey-vtick">

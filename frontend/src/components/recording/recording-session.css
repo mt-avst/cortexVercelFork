@@ -1232,6 +1232,16 @@
   color: var(--j-ink-3);
 }
 
+.fh-recording .journey-vitem--current {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.fh-recording .journey-vitem--current .journey-vtick {
+  border-color: var(--ink);
+  border-width: 2px;
+}
+
 .fh-recording .journey-vtick {
   flex: none;
   width: 16px;
