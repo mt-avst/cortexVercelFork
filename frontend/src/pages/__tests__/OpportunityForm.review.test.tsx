@@ -965,6 +965,43 @@ describe('a save that half-worked is not announced as a success', () => {
   });
 });
 
+describe('the review-step preview is not offered on a bookable type (WZ-16)', () => {
+  /*
+   * `authoringKind` is only ever 'survey' or 'recorded', and stays null for
+   * the bookable pair - so `buildActivePreview` falls through to a
+   * 'no-content' blocked preview ("There is nothing to preview yet...") for a
+   * test or interview. Offering the button here is a broken affordance: the
+   * Review step is the one place both shapes always pass through, since
+   * Review is the last step on every path.
+   */
+  it.each(['test', 'interview'])(
+    'hides Preview participant experience on Review for a %s',
+    (type) => {
+      renderCreate();
+      fillBasics(type);
+      walkForward();
+
+      expect(currentStepName()).toMatch(/Review/);
+      expect(
+        screen.queryByRole('button', { name: /Preview participant experience/i })
+      ).not.toBeInTheDocument();
+    }
+  );
+
+  it('still offers it on Review for a non-bookable type, which is the control', () => {
+    // Proves the query above can see the button at all: without this arm, the
+    // assertions could pass because nothing on Review ever renders it.
+    renderCreate();
+    fillBasics('poll');
+    walkForward();
+
+    expect(currentStepName()).toMatch(/Review/);
+    expect(
+      screen.getByRole('button', { name: /Preview participant experience/i })
+    ).toBeInTheDocument();
+  });
+});
+
 describe('the step that is not a StepActions row still names where it goes', () => {
   it('offers Continue: Consent on Session Management', () => {
     /*

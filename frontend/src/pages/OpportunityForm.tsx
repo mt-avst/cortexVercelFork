@@ -5454,8 +5454,17 @@ const OpportunityForm: React.FC = () => {
                         summary and the action row for the reason C3 gave: an
                         author checks their answers, looks at what the
                         participant will see, and then commits - in that order.
+
+                        Not offered on the bookable pair (WZ-16): `authoringKind`
+                        is only ever 'survey' or 'recorded' and is null for
+                        `test`/`interview`, so `buildActivePreview` falls through
+                        to a 'no-content' blocked preview for them. Review is the
+                        last step on every shape, so without this gate a bookable
+                        study reached a Preview button that could never work.
                       */}
-                      <PreviewParticipantButton onClick={() => openPreview()} />
+                      {formData.type !== 'test' && formData.type !== 'interview' && (
+                        <PreviewParticipantButton onClick={() => openPreview()} />
+                      )}
 
                       <StepActions
                         isEdit={isEdit}
