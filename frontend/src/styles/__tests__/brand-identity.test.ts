@@ -116,6 +116,22 @@ describe('brand identity is one system across themes (#12)', () => {
         expect(offending, `${name} must bind font-family to a token, not hardcode 'Inter'`).toEqual([]);
       }
     });
+
+    it('the display face binds to headings in BOTH themes, not gated on body.theme-light (#12)', () => {
+      // The residual after the token rebind: the generic heading rule still hung
+      // off `body.theme-light h1/h2/h3`, so dark-theme headings fell back to
+      // Manrope. Bind Fraunces to the elements, not the theme. A re-gate fails here.
+      const base = read('_base.css');
+      expect(
+        base,
+        'no generic heading font-family rule may be gated on body.theme-light',
+      ).not.toMatch(/body\.theme-light\s+\.?h[1-6]\b/);
+      const headingBlock = blockFor(base, 'h1, .h1, h2, .h2, h3, .h3');
+      expect(
+        valueOf(headingBlock, 'font-family'),
+        'the unconditional heading rule must carry the display face',
+      ).toMatch(/--font-family-display/);
+    });
   });
 
   describe('one orange hue, tuned per theme only for contrast', () => {
