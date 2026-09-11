@@ -171,13 +171,10 @@ body.theme-light .App::after {
   background-size: 100% 100%, 100% 100%, 100% 100%, 28px 28px;
 }
 
-/* FirstHand: Fraunces for display hierarchy; body uses Manrope via --font-family-base in theme */
-body.theme-light h1,
-body.theme-light .h1,
-body.theme-light h2,
-body.theme-light .h2,
-body.theme-light h3,
-body.theme-light .h3 {
+/* Fraunces for display hierarchy in BOTH themes; body copy uses Manrope via
+   --font-family-base. Bound to the elements, not to a theme (audit row 12):
+   gating this on body.theme-light dropped dark-theme headings back to Manrope. */
+h1, .h1, h2, .h2, h3, .h3 {
   font-family: var(--font-family-display, 'Fraunces', Georgia, 'Times New Roman', serif);
   font-optical-sizing: auto;
 }
