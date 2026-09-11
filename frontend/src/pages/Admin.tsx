@@ -1129,6 +1129,22 @@ const Admin: React.FC = () => {
         variant="danger"
         onConfirm={confirmDelete}
         onCancel={cancelDelete}
+        // DA-24: the "cannot be undone" line above never said what else it
+        // takes with it. The backend hard-deletes the opportunity row and the
+        // database's ON DELETE CASCADE chain (backend/src/db/migrate.ts)
+        // takes its sessions, its bookings on those sessions, and the
+        // recordings/transcripts attached to those bookings, plus its click
+        // and lifecycle analytics rows. Only that chain is named here -
+        // FirstHand's native poll/survey answers live in a separate database
+        // with no enforced FK to this row, so they are NOT destroyed by this
+        // delete and must not be listed as if they were.
+        renderCustomContent={() => (
+          <p className="mb-0 mt-3 confirmation-modal-collateral" style={{ fontSize: '0.9rem' }}>
+            This will also permanently delete its scheduled sessions and any
+            bookings against them, the recordings and transcripts attached to
+            those bookings, and the analytics data recorded for this study.
+          </p>
+        )}
       />
       </div>
     </div>

@@ -160,7 +160,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = memo(({
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-title"
-      aria-describedby="modal-message"
+      aria-describedby={renderCustomContent ? 'modal-message modal-custom-content' : 'modal-message'}
       tabIndex={-1}
       style={{ 
         backgroundColor: 'rgba(0, 0, 0, 0.7)',
@@ -189,7 +189,9 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = memo(({
           </div>
           <div className="modal-body confirmation-modal-body" style={modalBodyStyle}>
             <p className="mb-0 confirmation-modal-message" id="modal-message" style={messageStyle}>{message}</p>
-            {renderCustomContent && renderCustomContent()}
+            {renderCustomContent && (
+              <div id="modal-custom-content">{renderCustomContent()}</div>
+            )}
           </div>
           <div className="modal-footer border-0 confirmation-modal-footer" style={modalFooterStyle}>
             <button 
