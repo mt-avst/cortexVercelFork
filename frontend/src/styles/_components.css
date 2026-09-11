@@ -1985,20 +1985,20 @@ body.landing-page .header .text-muted,
   color: rgba(255, 255, 255, 0.6) !important;
 }
 
-/* CB-26: the landing header sits on a fixed dark hero band regardless of the
-   light/dark theme (mirrors the unconditional white logo-word and translucent
-   button treatment above), so the quiet signed-out toggle gets the same
-   translucent-white treatment here rather than the theme-token colours below. */
-body.landing-page .header .header-theme-toggle--quiet,
-.landing-page .header .header-theme-toggle--quiet {
-  color: rgba(255, 255, 255, 0.6);
-}
-
-body.landing-page .header .header-theme-toggle--quiet:hover,
-.landing-page .header .header-theme-toggle--quiet:hover {
-  color: #FFFFFF;
-  background: rgba(255, 255, 255, 0.1);
-}
+/* CB-26 correction: unlike the logo-word/text-muted overrides above, the
+   landing hero is NOT a fixed dark band - it follows the theme (near-black in
+   dark, cream/white in light; see `.landing-page-wrapper` in this file), and
+   `.header` itself always paints an opaque `var(--bg-app)` (dark: #0A091A,
+   light: #f7f2ea), which is what this toggle actually sits on. A flat
+   translucent-white override was tuned for the dark case only and made the
+   icon disappear on the light landing. No landing override needed: the base
+   `.header-theme-toggle--quiet` rule below already uses `var(--text-muted)`,
+   which resolves per theme (dark: #94A3B8 ~7.7:1 on #0A091A; light: #5f6b7a
+   ~4.9:1 on #f7f2ea) - both comfortably above the 3:1 UI-component minimum,
+   and close enough to the old dark treatment (~7.4:1) that dark is unchanged
+   in practice. Hover/focus below (`--text-primary`, `--bg-hover`,
+   `--focus-outline`) are the same tokens the signed-in `.btn-outline-secondary`
+   already relies on in this header, so they are proven theme-safe here too. */
 
 .header .container {
   overflow: visible;
