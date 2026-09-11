@@ -7,6 +7,7 @@ import {
   formatTimeRange,
   formatTimeZoneLabel,
   formatDateTime,
+  sharedZoneOffset,
 } from '../datetime';
 
 // A fixed instant, expressed in a fixed zone, so these assert on formatting
@@ -115,5 +116,36 @@ describe('formatDateTime', () => {
 
   it('returns null rather than a half-built string when the value is unusable', () => {
     expect(formatDateTime('nonsense', LONDON)).toBeNull();
+  });
+});
+
+describe('sharedZoneOffset', () => {
+  // 10:00 New York on either side of the 2026-11-01 fall-back: the 31st is EDT
+  // (GMT-4), the 1st is EST (GMT-5). Instants expressed in UTC so the zone is
+  // the explicit argument, not wherever the test runs.
+  const OCT31_10AM_NY = '2026-10-31T14:00:00.000Z';
+  const NOV01_10AM_NY = '2026-11-01T15:00:00.000Z';
+
+  it('returns the shared offset when every instant lands on it', () => {
+    expect(sharedZoneOffset(['2026-10-30T14:00:00.000Z', OCT31_10AM_NY], NEW_YORK)).toBe('GMT-4');
+  });
+
+  it('returns null when the range straddles a daylight-saving change', () => {
+    // The whole point: naming one offset over the pair would be wrong for half
+    // the rows, so the caption falls back to prose with no offset.
+    expect(sharedZoneOffset([OCT31_10AM_NY, NOV01_10AM_NY], NEW_YORK)).toBeNull();
+  });
+
+  it('names the offset of a single instant', () => {
+    expect(sharedZoneOffset([INSTANT], LONDON)).toBe('GMT+1');
+  });
+
+  it('ignores unreadable instants when the readable ones agree', () => {
+    expect(sharedZoneOffset([INSTANT, 'nonsense', null], LONDON)).toBe('GMT+1');
+  });
+
+  it('returns null for an empty or wholly unreadable list', () => {
+    expect(sharedZoneOffset([], LONDON)).toBeNull();
+    expect(sharedZoneOffset(['nonsense', undefined], LONDON)).toBeNull();
   });
 });
