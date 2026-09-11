@@ -79,7 +79,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       logger.log('AuthProvider: User data received', { hasUser: Boolean(userData) });
       setUser(userData);
     } catch (error: unknown) {
-      logger.log('AuthProvider: Auth error caught:', error);
+      // #102: do not log the raw error object - an AxiosError carries
+      // config.data (the request body) and config.headers (the CSRF token),
+      // which an error-reporting SDK would capture. The structured
+      // logger.error below records name/message/stack safely instead.
       // Don't set error for 401 - that's expected when not logged in
       if (error && typeof error === 'object' && 'response' in error) {
         const axiosError = error as { response?: { status?: number } };
