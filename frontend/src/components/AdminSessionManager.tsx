@@ -95,6 +95,22 @@ interface CalendarViewProps {
    * priority in the overlap prune (cto/AdaptaLabs#89).
    */
   protectedSlotKeys: ReadonlySet<string>;
+  /**
+   * Which presentation to draw the same pickable slots in:
+   * - 'table' - day-grouped selectable chips, the DEFAULT picker (Mav & Petra
+   *   asked for the table to lead and the calendar to be optional)
+   * - 'calendar' - the time-axis grid, kept as the optional power view
+   *
+   * Both layouts share every selection helper below, so a slot behaves
+   * identically whichever one is on screen.
+   */
+  layout?: 'calendar' | 'table';
+  /**
+   * Whether the surrounding step is read-only (saving in flight, or an edit
+   * still loading). The table picker disables its chips and select-all while it
+   * holds; the grid took this from its parent implicitly and never needed it.
+   */
+  disabled?: boolean;
 }
 
 /**
@@ -366,7 +382,9 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   endDate,
   excludeWeekends,
   sessions,
-  protectedSlotKeys
+  protectedSlotKeys,
+  layout = 'calendar',
+  disabled = false
 }) => {
   /**
    * Slots whose label has already failed to render and been reported.
@@ -1253,6 +1271,213 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     );
   };
 
+  /**
+   * The reader's own zone as a short label ("BST", "GMT+1"), stated once per
+   * day header. This answers the "I booked an hour out" complaint on the
+   * authoring side: the participant table already carries the zone, and so must
+   * the surface the slots are chosen in.
+   */
+  const zoneLabel = (dateString: string): string => {
+    try {
+      const parts = new Intl.DateTimeFormat(undefined, { timeZoneName: 'short' })
+        .formatToParts(new Date(dateString));
+      return parts.find(p => p.type === 'timeZoneName')?.value ?? '';
+    } catch {
+      return '';
+    }
+  };
+
+  /**
+   * The table layout: the same pickable slots as the grid, drawn as day-grouped
+   * chips instead of a time axis. This is the default picker (Mav & Petra: table
+   * first, calendar optional). Every chip is a real control whose accessible
+   * name carries date, time, zone and state, and each day offers a select-all -
+   * the four things the grid could not give a keyboard or screen-reader user.
+   */
+  const renderTableLayout = () => {
+    if (!durationMinutes) {
+      return (
+        <div className="alert alert-info mb-0" role="alert">
+          <Info size={18} className="me-2" />
+          Choose a timeslot duration above to see slots you can offer.
+        </div>
+      );
+    }
+
+    // Only days that carry at least one pickable slot, in date order. A week-ish
+    // study is a handful of days, so the whole range is drawn without paging.
+    // ponytail: table draws the whole date range unpaginated, one describeSlot
+    //   per slot -> paginate or virtualise if a researcher ever sets a range of
+    //   many weeks (taste/scale ceiling; the calendar view stays paged).
+    const dayRows = allDays
+      .map(day => {
+        const key = day.toDateString();
+        const slots = pruneOverlaps(allSlotsByDate[key] || [], protectedSlotKeys)
+          .slice()
+          .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+        return { key, day, decorated: slots.map(slot => ({ slot, status: describeSlot(slot) })) };
+      })
+      .filter(row => row.decorated.length > 0);
+
+    if (dayRows.length === 0) {
+      return (
+        <div className="alert alert-info mb-0" role="alert">
+          <Info size={18} className="me-2" />
+          No slots in this date range. Widen the range or include weekends above.
+        </div>
+      );
+    }
+
+    return (
+      <div className="admin-slot-picker">
+        <style>{`
+          .admin-slot-picker .slot-day-group { margin-bottom: 1.25rem; }
+          .admin-slot-picker .slot-day-head {
+            display: flex; align-items: baseline; justify-content: space-between;
+            gap: .75rem; flex-wrap: wrap; margin-bottom: .5rem;
+            padding-bottom: .35rem; border-bottom: 1px solid var(--border-card);
+          }
+          .admin-slot-picker .slot-day-name { font-weight: 600; color: var(--text-primary); }
+          .admin-slot-picker .slot-day-zone { color: var(--text-muted); font-weight: 400; font-size: var(--font-size-metadata); }
+          .admin-slot-picker .slot-day-selectall {
+            background: none; border: none; color: var(--brand-orange-700, #C2410C);
+            font-size: var(--font-size-metadata); font-weight: 600; cursor: pointer; padding: 2px 4px;
+          }
+          .admin-slot-picker .slot-day-selectall:disabled { color: var(--text-muted); cursor: default; }
+          .admin-slot-picker .slot-chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+          .admin-slot-picker .admin-chip {
+            display: inline-flex; align-items: center; gap: .3rem;
+            border: 1px solid var(--border-card); border-radius: 999px;
+            padding: .3rem .7rem; font-size: var(--font-size-metadata); font-weight: 500;
+            background: transparent; color: var(--text-primary); cursor: pointer;
+            transition: background-color .12s ease, border-color .12s ease;
+          }
+          .admin-slot-picker button.admin-chip:not(.admin-chip-selected):not(.admin-chip-created):hover:not(:disabled) { background: var(--bg-card); }
+          .admin-slot-picker .admin-chip-selected {
+            background: var(--brand-orange-700, #C2410C); border-color: var(--brand-orange-700, #C2410C); color: #fff;
+          }
+          .admin-slot-picker .admin-chip-created { border-color: var(--brand-orange-700, #C2410C); }
+          .admin-slot-picker .admin-chip-blocked {
+            color: var(--text-muted); background: var(--bg-card); cursor: not-allowed; opacity: .75;
+          }
+          .admin-slot-picker .admin-chip-past { color: var(--text-muted); cursor: not-allowed; opacity: .55; text-decoration: line-through; }
+          .admin-slot-picker .admin-chip:focus-visible { outline: 2px solid var(--brand-orange-700, #C2410C); outline-offset: 2px; }
+        `}</style>
+
+        {dayRows.map(({ key, day, decorated }) => {
+          const zone = zoneLabel(decorated[0].slot.start);
+          const dayName = formatDate(day.toISOString());
+          // Actionable = a slot the researcher could newly select or has selected
+          // (not an existing session, not blocked, not past). Drives select-all.
+          const actionable = decorated.filter(
+            d => !d.status.isBlocked && !d.status.isPast && !d.status.session && !d.status.isConfirmed
+          );
+          const notYetSelected = actionable.filter(d => !d.status.isSelected);
+          const allSelected = actionable.length > 0 && notYetSelected.length === 0;
+
+          return (
+            <div className="slot-day-group" key={key}>
+              <div className="slot-day-head">
+                <span className="slot-day-name">
+                  {dayName}
+                  {zone && <span className="slot-day-zone"> · times {zone}</span>}
+                </span>
+                <button
+                  type="button"
+                  className="slot-day-selectall"
+                  disabled={disabled || actionable.length === 0}
+                  onClick={() => {
+                    if (allSelected) {
+                      actionable.forEach(d => onSlotDeselect(d.slot));
+                    } else {
+                      notYetSelected.forEach(d => onSlotSelect(d.slot));
+                    }
+                  }}
+                >
+                  {allSelected ? 'Clear day' : `Select all (${notYetSelected.length})`}
+                </button>
+              </div>
+              <div className="slot-chips" role="group" aria-label={`Slots on ${dayName}`}>
+                {decorated.map(({ slot, status }) => {
+                  const label = slotTimeLabel(slot) ?? formatTime(slot.start);
+                  const title = slotTooltip(slot, status);
+                  const aria = `${dayName}, ${title}${zone ? `, ${zone}` : ''}`;
+
+                  // Blocked or past: not the researcher's to act on. A static,
+                  // named chip that still states why in its accessible name.
+                  if (status.isBlocked || status.isPast) {
+                    return (
+                      <span
+                        key={slotKeyOf(slot)}
+                        className={`admin-chip ${status.isPast ? 'admin-chip-past' : 'admin-chip-blocked'}`}
+                        title={title}
+                        aria-label={aria}
+                      >
+                        <Lock size={12} aria-hidden="true" />
+                        {label}
+                      </span>
+                    );
+                  }
+
+                  // An existing session (already created) is managed in the list
+                  // beneath, which is the single place a session is removed - with
+                  // its booked-count guard. So here it is a non-interactive
+                  // "created" chip, not a togglable one whose click would delete
+                  // it: that avoided a second, non-destructive-looking delete
+                  // affordance for the same session. (A booked one is blocked
+                  // above.)
+                  if (status.session) {
+                    return (
+                      <span
+                        key={slotKeyOf(slot)}
+                        className="admin-chip admin-chip-created"
+                        title={title}
+                        aria-label={aria}
+                      >
+                        <CheckSquare size={12} aria-hidden="true" />
+                        {label}
+                      </span>
+                    );
+                  }
+
+                  // Free, selected, or a pending confirmed slot (no DB session
+                  // yet) - all togglable here. aria-pressed matches the grid
+                  // (isSelected || isConfirmed), so a confirmed chip reads "on".
+                  const isOn = status.isSelected || status.isConfirmed;
+                  const chipClass = status.isSelected
+                    ? 'admin-chip admin-chip-selected'
+                    : status.isConfirmed
+                      ? 'admin-chip admin-chip-created'
+                      : 'admin-chip';
+
+                  return (
+                    <button
+                      key={slotKeyOf(slot)}
+                      type="button"
+                      className={chipClass}
+                      aria-pressed={isOn}
+                      disabled={disabled}
+                      title={title}
+                      aria-label={aria}
+                      onClick={() => clickSlot(slot, status)}
+                    >
+                      {isOn && <CheckSquare size={12} aria-hidden="true" />}
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  if (layout === 'table') {
+    return renderTableLayout();
+  }
+
   return (
     <div className="calendar-view calendar-container-clipped">
       <div className="row">
@@ -1311,7 +1536,13 @@ const ListView: React.FC<{
   onAddSlots: () => void;
   disabled: boolean;
   loading: boolean;
-}> = ({ sessions, isTemporary, onRemove, onAddSlots, disabled, loading }) => {
+  /**
+   * True when the list sits BENEATH the table picker (its default home now),
+   * where adding slots is done inline above it - so its own "Add slots" button
+   * and its zero-sessions prompt are redundant and hidden.
+   */
+  embedded?: boolean;
+}> = ({ sessions, isTemporary, onRemove, onAddSlots, disabled, loading, embedded = false }) => {
   // A NEW array before sorting - the prop is owned by the parent, and sorting
   // it in place would be a mutation of shared state (coding-style).
   const orderedSessions = [...sessions].sort(
@@ -1384,9 +1615,9 @@ const ListView: React.FC<{
                 Remaining: {sessions.reduce((sum, s) => sum + s.remaining, 0)}
               </small>
             )}
-            {/* The one place the calendar grid is reached from the list. Named
-                for what it does, not for the view it opens. */}
-            {sessions.length > 0 && (
+            {/* Reaches the calendar grid from the list. Hidden when embedded
+                beneath the table picker, where slots are added inline above. */}
+            {!embedded && sessions.length > 0 && (
               <button
                 type="button"
                 className="btn btn-outline-primary btn-sm"
@@ -2086,6 +2317,22 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
     currentPage,
     daysPerPage,
   ]);
+
+  /**
+   * What the TABLE layout draws: the whole range at once, no pagination. The
+   * counter reports this instead of `drawnSlots.length` in table view, because
+   * the table is not paged - reporting the grid's on-screen page there read
+   * "20 slots available" beside a table showing every day (review finding).
+   */
+  const tableSlotCount = React.useMemo(() => {
+    const inRange = new Set(
+      daysInRange(startDate, endDate, excludeWeekends).map(d => d.toDateString())
+    );
+    return slotsToDraw(displaySlots, durationMinutes, protectedSlotKeys).filter(slot => {
+      const when = new Date(slot.start);
+      return !Number.isNaN(when.getTime()) && inRange.has(when.toDateString());
+    }).length;
+  }, [displaySlots, durationMinutes, protectedSlotKeys, startDate, endDate, excludeWeekends]);
 
   const handleAddManualSlot = useCallback(() => {
     setManualError('');
@@ -2839,12 +3086,11 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
 
       <div className="calendar-mode">
 
-          {/* The calendar's own controls - date range, duration, manual entry -
-              belong to the grid, so they only appear with it (row 6). In the
-              list view they were noise stacked above a read-only table; the
-              list reaches the grid through its own "Add slots" button instead. */}
-          {viewMode === 'grid' && (
-            <>
+          {/* The picker's own controls - date range, duration, manual entry -
+              drive the slots BOTH layouts draw, so they show for the table (the
+              default picker now) and the calendar alike. The table used to be a
+              read-only list, which is why these were once gated to the grid. */}
+          <>
           {/* Calendar Controls */}
           <div className="calendar-control-panel">
             <div className="control-panel-row">
@@ -2859,7 +3105,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                   value={toDateInputValue(startDate)}
                   // The server refuses a session that starts in the past (#90),
                   // so the picker must not offer a past day (#101). Intra-day
-                  // past times are greyed in the grid below; this bounds the day.
+                  // past times are greyed in the picker below; this bounds the day.
                   min={toDateInputValue(new Date())}
                   onChange={(e) => {
                     const [year, month, day] = e.target.value.split('-');
@@ -2919,29 +3165,34 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                   <option value="60">60 minutes</option>
                 </select>
               </div>
-              <div className="form-field-compact-xs">
-                <label className="form-label-compact">
-                  Days/Page
-                </label>
-                <select
-                  className="form-control form-control-sm"
-                  value={daysPerPage}
-                  onChange={(e) => {
-                    setDaysPerPage(parseInt(e.target.value));
-                    setCurrentPage(0); // Reset to first page
-                  }}
-                  disabled={disabled}
-                >
-                  <option value={3}>3</option>
-                  <option value={5}>5</option>
-                  <option value={7}>7</option>
-                  <option value={9}>9</option>
-                  <option value={10}>10</option>
-                  <option value={14}>14</option>
-                  <option value={21}>21</option>
-                  <option value={30}>30</option>
-                </select>
-              </div>
+              {/* Days/Page paginates the CALENDAR only - the table draws the
+                  whole range - so it is hidden in table view, where it did
+                  nothing (review finding). */}
+              {viewMode === 'grid' && (
+                <div className="form-field-compact-xs">
+                  <label className="form-label-compact">
+                    Days/Page
+                  </label>
+                  <select
+                    className="form-control form-control-sm"
+                    value={daysPerPage}
+                    onChange={(e) => {
+                      setDaysPerPage(parseInt(e.target.value));
+                      setCurrentPage(0); // Reset to first page
+                    }}
+                    disabled={disabled}
+                  >
+                    <option value={3}>3</option>
+                    <option value={5}>5</option>
+                    <option value={7}>7</option>
+                    <option value={9}>9</option>
+                    <option value={10}>10</option>
+                    <option value={14}>14</option>
+                    <option value={21}>21</option>
+                    <option value={30}>30</option>
+                  </select>
+                </div>
+              )}
               <div className="form-field-compact d-flex align-items-center pt-4">
                 <div className="form-check">
                   <input
@@ -2959,7 +3210,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
               </div>
               <div className="control-panel-end">
                 <small className="control-panel-counter">
-                  {drawnSlots.length} slots available
+                  {viewMode === 'grid' ? drawnSlots.length : tableSlotCount} slots available
                 </small>
               </div>
             </div>
@@ -3029,8 +3280,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
               </div>
             )}
           </div>
-            </>
-          )}
+          </>
 
           {/* View Switcher */}
           <div className="control-panel-subtle mb-2">
@@ -3116,6 +3366,8 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                   )}
                   <CalendarView
                     key={`calendar-${startDate.toISOString()}-${endDate.toISOString()}-${sessions.length}`}
+                    layout="calendar"
+                    disabled={disabled}
                     events={calendarEvents}
                     availableSlots={displaySlots}
                     protectedSlotKeys={protectedSlotKeys}
@@ -3134,15 +3386,46 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                   />
                 </div>
               ) : (
-                <ListView
-                  key={`list-${sessions.length}`}
-                  sessions={sessions}
-                  isTemporary={isTemporary}
-                  onRemove={handleRemoveSession}
-                  onAddSlots={() => setViewMode('grid')}
-                  disabled={disabled}
-                  loading={loading}
-                />
+                <>
+                  {/* Table is the default picker: slots are chosen from the
+                      day-grouped chips here, so the researcher never has to
+                      switch to the calendar to select. Existing sessions are
+                      managed in the list beneath it. */}
+                  <CalendarView
+                    key={`slot-table-${startDate.toISOString()}-${endDate.toISOString()}-${sessions.length}`}
+                    layout="table"
+                    disabled={disabled}
+                    events={calendarEvents}
+                    availableSlots={displaySlots}
+                    protectedSlotKeys={protectedSlotKeys}
+                    selectedSlots={selectedSlots}
+                    confirmedSlots={confirmedSlots}
+                    onSlotSelect={handleSlotSelect}
+                    onSlotDeselect={handleSlotDeselect}
+                    durationMinutes={durationMinutes}
+                    currentPage={currentPage}
+                    onPageChange={handlePageChange}
+                    daysPerPage={daysPerPage}
+                    startDate={startDate}
+                    endDate={endDate}
+                    excludeWeekends={excludeWeekends}
+                    sessions={sessions}
+                  />
+                  {sessions.length > 0 && (
+                    <div className="mt-4">
+                      <ListView
+                        key={`list-${sessions.length}`}
+                        sessions={sessions}
+                        isTemporary={isTemporary}
+                        onRemove={handleRemoveSession}
+                        onAddSlots={() => setViewMode('grid')}
+                        disabled={disabled}
+                        loading={loading}
+                        embedded
+                      />
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
