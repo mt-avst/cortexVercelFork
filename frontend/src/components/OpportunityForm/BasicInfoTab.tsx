@@ -137,7 +137,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                 required
               >
                 <option value="" disabled>Please select research study type</option>
-                <option value="interview" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>💼 Interview - Research interview session</option>
+                <option value="interview" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>Interview - Research interview session</option>
                 {/* The gloss after the dash may say anything useful; the NAME
                     must be the one every other surface uses. This form used to
                     say "User Test" and "Unmoderated Testing" while the dashboard
@@ -145,11 +145,11 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                     them "Usability test" and "Recorded study" - three names for
                     one thing, so a researcher and a participant could not talk
                     about the same study without translating. */}
-                <option value="poll" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>📊 Quick poll - Quick opinion gathering</option>
-                <option value="question" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>❓ One question - Single question session</option>
-                <option value="survey" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>📋 Survey - Detailed feedback collection</option>
-                <option value="test" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>🧪 Live session - Usability test you moderate, at a booked time</option>
-                <option value="unmoderated" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>🖥️ Recorded session - Usability test the participant runs alone, recorded in the browser</option>
+                <option value="poll" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>Quick poll - Quick opinion gathering</option>
+                <option value="question" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>One question - Single question session</option>
+                <option value="survey" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>Survey - Detailed feedback collection</option>
+                <option value="test" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>Live session - Usability test you moderate, at a booked time</option>
+                <option value="unmoderated" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>Recorded session - Usability test the participant runs alone, recorded in the browser</option>
               </select>
                 {validationErrors.type && (
                 <FieldError id="type-error">{validationErrors.type}</FieldError>

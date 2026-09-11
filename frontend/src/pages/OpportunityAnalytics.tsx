@@ -1,4 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Eye, MousePointerClick, TrendingUp, Users,
+  BarChart3, CalendarDays, History, Activity,
+  Clock, Calendar, LineChart, Zap
+} from 'lucide-react';
 import { useNavigate, useParams, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -114,7 +119,7 @@ const StatCard: React.FC<{
   title: string;
   value: string | number;
   subtitle?: string;
-  icon?: string;
+  icon?: React.ReactNode;
   accent?: boolean;
   trend?: number;
 }> = ({ title, value, subtitle, icon, accent = false, trend }) => (
@@ -714,7 +719,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
             <div className="cortex-analytics-card">
               <div className="cortex-analytics-card-header">
                 <h6 className="cortex-analytics-card-title">Study Views</h6>
-                <span className="cortex-analytics-card-icon">👁️</span>
+                <span className="cortex-analytics-card-icon"><Eye size={18} aria-hidden="true" /></span>
               </div>
               <div className="cortex-analytics-card-content">
                 <p className="cortex-stat-subtitle" style={{ marginBottom: '8px' }}>Users who viewed details</p>
@@ -733,7 +738,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
             <div className="cortex-analytics-card">
               <div className="cortex-analytics-card-header">
                 <h6 className="cortex-analytics-card-title">Actions Taken</h6>
-                <span className="cortex-analytics-card-icon">🎯</span>
+                <span className="cortex-analytics-card-icon"><MousePointerClick size={18} aria-hidden="true" /></span>
               </div>
               <div className="cortex-analytics-card-content">
                 {/* What an action IS depends on the type. This said "Clicked
@@ -757,7 +762,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
             <div className="cortex-analytics-card">
               <div className="cortex-analytics-card-header">
                 <h6 className="cortex-analytics-card-title">Conversion Rate</h6>
-                <span className="cortex-analytics-card-icon">📈</span>
+                <span className="cortex-analytics-card-icon"><TrendingUp size={18} aria-hidden="true" /></span>
               </div>
               <div className="cortex-analytics-card-content">
                 {/* Left as "Actions" deliberately. The line under it reads
@@ -795,7 +800,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
             <div className="cortex-analytics-card">
               <div className="cortex-analytics-card-header">
                 <h6 className="cortex-analytics-card-title">Unique Users</h6>
-                <span className="cortex-analytics-card-icon">👤</span>
+                <span className="cortex-analytics-card-icon"><Users size={18} aria-hidden="true" /></span>
               </div>
               <div className="cortex-analytics-card-content">
                 <p className="cortex-stat-subtitle" style={{ marginBottom: '8px' }}>Distinct visitors</p>
@@ -812,25 +817,25 @@ const OpportunityAnalyticsPage: React.FC = () => {
               title="Total Interactions" 
               value={analytics?.clicks_total ?? 0}
               subtitle="Views + Actions"
-              icon="📊"
+              icon={<BarChart3 size={18} aria-hidden="true" />}
             />
             <StatCard 
               title="Last 7 Days" 
               value={analytics?.clicks_7d ?? 0}
               subtitle={weekChange === null ? 'no previous week to compare' : `${weekChange >= 0 ? '+' : ''}${weekChange}% vs prev week`}
               trend={analytics?.week_over_week_change ?? 0}
-              icon="📅"
+              icon={<CalendarDays size={18} aria-hidden="true" />}
             />
             <StatCard 
               title="Last 24 Hours" 
               value={analytics?.clicks_24h ?? 0}
-              icon="⚡"
+              icon={<History size={18} aria-hidden="true" />}
             />
             <StatCard 
               title="Avg Daily" 
               value={analytics?.avg_clicks_per_day ?? 0}
               subtitle="Clicks per day"
-              icon="📈"
+              icon={<Activity size={18} aria-hidden="true" />}
             />
           </div>
 
@@ -912,7 +917,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
             {/* Hourly Distribution - Span 2 */}
             <div className="cortex-analytics-card span-2">
               <div className="cortex-chart-header">
-                <h6 className="cortex-chart-title">⏱️ Clicks by Hour</h6>
+                <h6 className="cortex-chart-title"><Clock size={14} aria-hidden="true" />Clicks by Hour</h6>
                 {analytics?.peak_hour && (
                   <span className="cortex-badge cortex-badge--peak">
                     Peak: {analytics.peak_hour.hour_label}
@@ -938,7 +943,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
             {/* Day of Week Distribution - Span 2 */}
             <div className="cortex-analytics-card span-2">
               <div className="cortex-chart-header">
-                <h6 className="cortex-chart-title">📅 Clicks by Day of Week</h6>
+                <h6 className="cortex-chart-title"><Calendar size={14} aria-hidden="true" />Clicks by Day of Week</h6>
                 {analytics?.clicks_by_weekday && analytics.clicks_by_weekday.length > 0 && (
                   <span className="cortex-badge cortex-badge--best">
                     Best: {analytics.clicks_by_weekday.reduce((max, d) => d.count > max.count ? d : max, analytics.clicks_by_weekday[0]).weekday}
@@ -966,7 +971,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
           <div className="cortex-analytics-grid">
             {/* Timeline Info - Span 2 */}
             <div className="cortex-analytics-card span-2">
-              <h6 className="cortex-chart-title" style={{ marginBottom: '16px' }}>📌 Timeline</h6>
+              <h6 className="cortex-chart-title" style={{ marginBottom: '16px' }}><LineChart size={14} aria-hidden="true" />Timeline</h6>
               <div className="d-flex flex-column gap-3">
                 <div className="d-flex justify-content-between">
                   <span className="cortex-stat-subtitle">Created:</span>
@@ -1003,7 +1008,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
 
             {/* Performance Summary - Span 2 */}
             <div className="cortex-analytics-card span-2">
-              <h6 className="cortex-chart-title" style={{ marginBottom: '16px' }}>⚡ Performance Summary</h6>
+              <h6 className="cortex-chart-title" style={{ marginBottom: '16px' }}><Zap size={14} aria-hidden="true" />Performance Summary</h6>
               <div className="d-flex flex-column gap-3">
                 <div className="d-flex justify-content-between align-items-center">
                   <span className="cortex-stat-subtitle">Average Daily Clicks:</span>
