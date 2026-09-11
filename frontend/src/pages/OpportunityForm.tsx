@@ -5454,8 +5454,22 @@ const OpportunityForm: React.FC = () => {
                         summary and the action row for the reason C3 gave: an
                         author checks their answers, looks at what the
                         participant will see, and then commits - in that order.
+
+                        Gated on `authoringKind` rather than on `formData.type`
+                        (WZ-16): `buildActivePreview` yields a 'no-content'
+                        blocked preview - "There is nothing to preview yet..." -
+                        whenever `authoringKind` is null, and that is not only
+                        the bookable pair. `delivery_mode` defaults to
+                        'external', and every external-delivery question-carrier
+                        (poll, survey, question) gets an `externalLink` tab
+                        instead of `questions`, so `authoringKind` is null for
+                        them too. Review is the last step on every shape, so
+                        without this gate any of those reached a Preview button
+                        that could never work.
                       */}
-                      <PreviewParticipantButton onClick={() => openPreview()} />
+                      {authoringKind && (
+                        <PreviewParticipantButton onClick={() => openPreview()} />
+                      )}
 
                       <StepActions
                         isEdit={isEdit}
