@@ -67,10 +67,11 @@ AdaptaLabs is an internal platform for researchers to post opportunities and for
   - Interview
   - One question
 
-### Searching Opportunities
+### Using the Type Filters
 
-- Use the **search box** to search by title or description
-- Search is case-insensitive
+- The type filters are chips above the list, not a search box; there is no free-text search on the home page.
+- Click a chip to show only that study type, and click **All** to return to the full list.
+- A line above the list tells you how many studies are showing and which type is currently selected.
 
 ### Viewing Opportunity Details
 
@@ -261,7 +262,7 @@ A session you declined or left part-way through shows as **Abandoned**.
 ### I Can't See Any Opportunities
 
 - Check if filters are applied
-- Try clearing the search box
+- Select the **All** chip to clear the type filter
 - Refresh the page
 - Contact support if the issue persists
 
