@@ -104,17 +104,20 @@ beforeEach(() => {
 });
 
 describe('Row 6 defect 5 - the list is the default view and shows existing sessions first', () => {
-  it('opens on the session list, not the calendar grid', async () => {
+  it('opens on the Table picker with the existing-sessions list, not the calendar grid', async () => {
     renderManager({
       sessions: [sessionRow('s1', '2026-08-18T18:00:00.000Z', '2026-08-18T19:00:00.000Z')] as never,
     });
     await settle();
 
-    // The list is on screen at rest...
+    // The Table view is the default: its slot picker (the per-day "Select all"
+    // is table-only) sits above the existing-sessions list - not the calendar.
+    expect(await screen.findByRole('button', { name: /^Select all/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Existing Sessions' })).toBeInTheDocument();
-    // ...and the grid's own controls are NOT, because they belong to the grid.
-    expect(screen.queryByLabelText('Start Date')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Add a slot: date')).not.toBeInTheDocument();
+    // The Table is a PICKER now, so the slot controls it needs are on screen at
+    // rest. They used to be gated to the calendar, when the Table was read-only.
+    expect(screen.getByLabelText('Start Date')).toBeInTheDocument();
+    expect(screen.getByLabelText('Add a slot: date')).toBeInTheDocument();
   });
 
   it('lists a session that falls OUTSIDE the grid window (which never drew it at rest)', async () => {
@@ -130,16 +133,18 @@ describe('Row 6 defect 5 - the list is the default view and shows existing sessi
     expect(within(table).getByRole('button', { name: /Remove session on/i })).toBeInTheDocument();
   });
 
-  it('offers an empty state that leads to the calendar when there are no sessions', async () => {
+  it('opens straight into the picker when there are no sessions, not a dead-end list', async () => {
     renderManager({ sessions: [] });
     await settle();
 
-    expect(screen.getByText('No sessions yet')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /Add slots/i }));
-    await settle();
-
-    // Add slots opened the calendar: its controls are present now.
-    expect(await screen.findByLabelText('Start Date')).toBeInTheDocument();
+    // Zero sessions: the Table opens directly on the picker, so slots are chosen
+    // here with no detour. The old "No sessions yet -> Add slots -> calendar"
+    // dead-end is gone (Mav & Petra: pick from the table, not the calendar).
+    expect(screen.queryByText('No sessions yet')).not.toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /^Select all/i })).toBeInTheDocument();
+    // A pickable slot is a real, named button, and the picker's controls are up.
+    expect(screen.getByRole('button', { name: /available time slot/i })).toBeInTheDocument();
+    expect(screen.getByLabelText('Start Date')).toBeInTheDocument();
   });
 });
 
