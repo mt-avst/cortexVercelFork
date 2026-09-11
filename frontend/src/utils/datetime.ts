@@ -127,3 +127,28 @@ export const formatDateTime = (
 /** The reader's own zone, for labelling a column of times once rather than per row. */
 export const readerTimeZoneLabel = (at: string | Date = new Date()): string | null =>
   formatTimeZoneLabel(at);
+
+/**
+ * One offset label for a set of instants, but ONLY if they all share it.
+ *
+ * For a surface that draws many times under a SINGLE zone caption (the booking
+ * grid) rather than labelling each row. Returns the shared offset (e.g. `GMT+1`)
+ * when every readable instant lands on the same offset in `timeZone`, and `null`
+ * when they do not - which happens when the range straddles a daylight-saving
+ * transition. A caption must then name no offset rather than a wrong one: the
+ * grid draws each row in its own true offset, so a single "GMT-4" printed over a
+ * row that is really GMT-5 is the "booked an hour out" error wearing a label.
+ * `null` also covers the empty / all-unreadable case, where there is nothing to
+ * name. `timeZone` defaults to the reader's own zone.
+ */
+export const sharedZoneOffset = (
+  instants: ReadonlyArray<string | Date | null | undefined>,
+  timeZone?: string
+): string | null => {
+  const offsets = new Set(
+    instants
+      .map((instant) => formatTimeZoneLabel(instant, timeZone))
+      .filter((label): label is string => label !== null)
+  );
+  return offsets.size === 1 ? [...offsets][0] : null;
+};
