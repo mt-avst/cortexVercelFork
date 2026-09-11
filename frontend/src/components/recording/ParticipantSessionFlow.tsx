@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 
+import CortexMark from "../CortexMark";
 import type { SessionPayload } from "@shared/firsthand/contract";
 import {
   assessDeviceSupport,
@@ -421,7 +422,7 @@ export function ParticipantSessionFlow({
       <div className="journey-app">
         <nav aria-label="Session" className="journey-nav">
           <div className="journey-brand">
-            <span aria-hidden="true" className="journey-brand-logo" />
+            <CortexMark className="journey-brand-logo" />
             <span className="journey-brand-name">
               <b>Recorded session</b>
               <small>participant view</small>
