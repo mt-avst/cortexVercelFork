@@ -6483,7 +6483,13 @@ body.theme-light .atmospheric-orb-secondary {
 .cortex-analytics-card-icon i,
 .cortex-analytics-card-icon span {
   color: inherit !important;
-  fill: currentColor !important;
+}
+
+/* lucide line icons are stroked, not filled - keep the fill off so the icon
+   reads as an outline in the neutral slate, not a solid blob */
+.cortex-analytics-card-icon svg {
+  fill: none !important;
+  stroke: currentColor;
 }
 
 /* Interactive "waking up" effect - icons brighten on card hover */
@@ -6613,6 +6619,14 @@ body.theme-light .atmospheric-orb-secondary {
   letter-spacing: -0.01em;
   color: var(--color-text-main);
   margin: 0;
+}
+
+/* lucide icon prefixing a chart title - align to the text and keep line-drawn */
+.cortex-chart-title svg {
+  vertical-align: -0.15em;
+  margin-right: 6px;
+  fill: none;
+  stroke: currentColor;
 }
 
 .cortex-chart-subtitle {
