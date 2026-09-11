@@ -200,8 +200,8 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
         aria-describedby={statusError ? 'status-error status-help' : 'status-help'}
         aria-invalid={statusError ? 'true' : 'false'}
       >
-        <option value="draft">📝 Draft - Not visible to users</option>
-        <option value="published">🌐 Published - Visible to users</option>
+        <option value="draft">Draft - Not visible to users</option>
+        <option value="published">Published - Visible to users</option>
       </select>
       {statusError && <FieldError id="status-error">{statusError}</FieldError>}
     </div>
