@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { getOpportunity, bookSession, trackOpportunityClick, getMyCalendarEvents, getRecordedStudyBrief, startRecordedStudySession, startSurveySession } from '../api/client';
+import { getOpportunity, bookSession, trackOpportunityClick, getMyCalendarEvents, getMyBookings, getRecordedStudyBrief, startRecordedStudySession, startSurveySession } from '../api/client';
 import type { RecordedStudyBrief } from '@shared/types';
 import { formatStudyDate, formatTimeRange, formatTimeZoneLabel, formatClockTime, formatDateTime } from '../utils/datetime';
 import './booking-slot-list.css';
@@ -235,6 +235,14 @@ const OpportunityDetail: React.FC = () => {
   const [viewMode, setViewMode] = useState<'table' | 'calendar'>('table');
   const [userCalendarEvents, setUserCalendarEvents] = useState<CalendarEvent[]>([]);
   const [loadingCalendar, setLoadingCalendar] = useState(false);
+  // BK-3: which of this opportunity's sessions the participant has already
+  // booked, so the table view's slot chips can show "Booked" instead of
+  // collapsing into the generic "Full" chip a booked-out slot also matches.
+  // Sourced independently of CalendarGrid's own bookedSlots (it fetches the
+  // same getMyBookings() internally) rather than lifting state into a shared
+  // prop - CalendarGrid's fetch is fully self-contained and untouched here,
+  // so this stays a low-risk addition instead of a cross-component refactor.
+  const [bookedSlots, setBookedSlots] = useState<Set<string>>(new Set());
   // Table view booking confirmation state
   const [confirmBooking, setConfirmBooking] = useState<{ show: boolean; session: Session | null }>({ show: false, session: null });
   // The consent gate (#79 step 1b): which session is waiting on the
@@ -441,6 +449,45 @@ const OpportunityDetail: React.FC = () => {
     };
 
     loadCalendarEvents();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [opportunity?.sessions]);
+
+  // BK-3: load the participant's own bookings for this opportunity's sessions,
+  // mirroring CalendarGrid's loadUserBookings effect so the table view's
+  // "Booked" chip agrees with the calendar view's "Your booking" slot.
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadBookedSlots = async () => {
+      const sessions = opportunity?.sessions;
+      if (!sessions || sessions.length === 0) {
+        if (isMounted) setBookedSlots(new Set());
+        return;
+      }
+
+      try {
+        const bookings = await getMyBookings();
+        const allBookings = [...bookings.upcoming, ...bookings.past];
+        const sessionIds = new Set(sessions.map(s => s.id));
+
+        const bookedSessionIds = allBookings
+          .filter(booking => booking.status === 'booked' && sessionIds.has(booking.session_id))
+          .map(booking => booking.session_id);
+
+        if (isMounted) setBookedSlots(new Set(bookedSessionIds));
+      } catch (error: unknown) {
+        logger.error('Failed to load participant bookings for table view', {
+          component: 'OpportunityDetail',
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
+        if (isMounted) setBookedSlots(new Set());
+      }
+    };
+
+    loadBookedSlots();
 
     return () => {
       isMounted = false;
@@ -1246,6 +1293,24 @@ const OpportunityDetail: React.FC = () => {
                                             const startStr = formatClockTime(startDate);
                                             const rangeStr = `${formatTimeRange(startDate, endDate)} ${formatTimeZoneLabel(startDate)}`;
                                             const isLoading = bookingLoading === session.id;
+                                            const isBooked = bookedSlots.has(session.id);
+
+                                            // BK-3: checked before the full check, exactly as
+                                            // CalendarGrid does - a slot the participant already
+                                            // booked is full for everyone else, but it must never
+                                            // collapse into the generic "Full" chip for them.
+                                            if (isBooked) {
+                                              return (
+                                                <span
+                                                  key={session.id}
+                                                  className="slot-chip slot-chip-booked"
+                                                  title={`Your booking: ${rangeStr}`}
+                                                  aria-label={`${rangeStr} — your booking`}
+                                                >
+                                                  {startStr} · Booked
+                                                </span>
+                                              );
+                                            }
 
                                             if (session.remaining <= 0) {
                                               return (
