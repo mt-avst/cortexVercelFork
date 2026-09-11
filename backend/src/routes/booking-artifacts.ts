@@ -797,6 +797,10 @@ router.get(
     //   (a socket-abort assertion is flaky in supertest). Independent of the
     //   ETag tripwire cto/AdaptaLabs#99 retired above: this streams from the
     //   finalized key either way, tripwire or not.
+    //   -> add the abort test the day this stream/cleanup block is next
+    //      touched, or sooner if leaked S3 streams or socket handles surface
+    //      in prod; a Playwright or raw-http client can abort mid-stream
+    //      where supertest cannot.
     res.on('close', () => {
       nodeStream.destroy();
     });
