@@ -4929,6 +4929,30 @@ const OpportunityForm: React.FC = () => {
                 a screen-reader user is owed the same information the sighted
                 one has.
               */}
+              {/*
+                WZ-14: which of the two save models is in force.
+
+                The form has always had two behaviours - a draft autosaves, a
+                published study only saves on the Save button - and told the
+                author about neither. This sits in the same slot the
+                save-state line above occupies, driven off `autosaveApplies`
+                itself rather than a second read of `status`, so the copy
+                cannot drift from the behaviour it describes.
+
+                Terse and factual rather than a warning: on a draft it is one
+                short line explaining why the state above says what it says;
+                on a published study it stands in for that line entirely,
+                since there is no autosave state to report.
+              */}
+              <div
+                className="px-4 pt-2 small text-body-secondary"
+                data-testid="save-model-note"
+              >
+                {autosaveApplies
+                  ? 'Draft changes save automatically as you work.'
+                  : 'This published study is not saved automatically - use Save changes to keep your edits.'}
+              </div>
+
               {autosaveApplies && saveStateMessage(saveState, formatSavedAt) && (
                 <div
                   className={`d-flex align-items-center gap-2 px-4 py-2 small ${
