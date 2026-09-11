@@ -292,10 +292,10 @@ const Feedback: React.FC = () => {
                       onChange={(e) => setCategory(e.target.value as typeof category)}
                       required
                     >
-                      <option value="bug">🐛 Bug Report</option>
-                      <option value="feature">💡 Feature Request</option>
-                      <option value="question">❓ Question</option>
-                      <option value="other">💬 Other Feedback</option>
+                      <option value="bug">Bug Report</option>
+                      <option value="feature">Feature Request</option>
+                      <option value="question">Question</option>
+                      <option value="other">Other Feedback</option>
                     </select>
                   </div>
 
