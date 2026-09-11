@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -270,19 +270,48 @@ describe('Admin page', () => {
     fireEvent.click(screen.getByRole('button', { name: /Actions for Checkout usability test/i }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
 
+    // Scoped to the dialog: a document-wide /analytics/i would also match the
+    // row menu's "Analytics" item if the menu ever stayed mounted alongside
+    // the dialog.
+    const dialog = within(screen.getByRole('dialog'));
+
     // Control: the dialog still asks its original question and still offers
     // its original confirm button - this test must not pass by replacing them.
     expect(
-      screen.getByText(/Are you sure you want to delete "Checkout usability test"/)
+      dialog.getByText(/Are you sure you want to delete "Checkout usability test"/)
     ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Yes, Delete' })).toBeInTheDocument();
+    expect(dialog.getByRole('button', { name: 'Yes, Delete' })).toBeInTheDocument();
 
     // The collateral itself: bookings/sessions, recordings/transcripts and
     // analytics data all cascade-delete with the opportunity row (verified
     // against backend/src/db/migrate.ts's ON DELETE CASCADE chain).
-    expect(screen.getByText(/sessions and any bookings/i)).toBeInTheDocument();
-    expect(screen.getByText(/recordings and transcripts/i)).toBeInTheDocument();
-    expect(screen.getByText(/analytics/i)).toBeInTheDocument();
+    expect(dialog.getByText(/sessions and any bookings/i)).toBeInTheDocument();
+    expect(dialog.getByText(/recordings and transcripts/i)).toBeInTheDocument();
+    expect(dialog.getByText(/analytics/i)).toBeInTheDocument();
+  });
+
+  it('announces the delete-dialog collateral to assistive tech via aria-describedby (DA-24 a11y)', async () => {
+    // A screen-reader user hears aria-labelledby (the title) and
+    // aria-describedby (the description) on dialog focus - NOT everything
+    // rendered inside it. The collateral list is only actually announced if
+    // its container's id is included in aria-describedby. This fails BY NAME
+    // if that wiring regresses, rather than silently degrading to an
+    // unannounced paragraph a sighted reviewer would never notice missing.
+    renderAdmin();
+    await screen.findByText('Checkout usability test');
+
+    fireEvent.click(screen.getByRole('button', { name: /Actions for Checkout usability test/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
+
+    const dialogEl = screen.getByRole('dialog');
+    const describedBy = dialogEl.getAttribute('aria-describedby') ?? '';
+    const describedIds = describedBy.split(/\s+/).filter(Boolean);
+
+    expect(describedIds).toContain('modal-custom-content');
+
+    const customContentEl = document.getElementById('modal-custom-content');
+    expect(customContentEl).not.toBeNull();
+    expect(customContentEl).toHaveTextContent(/recordings and transcripts/i);
   });
 
   it('redirects a non-admin user to the home route', () => {
