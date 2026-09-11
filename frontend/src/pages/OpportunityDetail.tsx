@@ -926,70 +926,81 @@ const OpportunityDetail: React.FC = () => {
                 />
               </div>
 
-              {/* Right Column: Data Box (30%) - Technical Specs */}
-              <div className="mission-data-box">
-                <div className="mission-data-grid">
-                  {/* Product - only show for non-question types */}
-                  {opportunity.type !== 'question' && opportunity.product_optional && (
-                    <div className="mission-data-item">
-                      <span className="mission-data-label">PRODUCT</span>
-                      <span className="mission-data-value">{opportunity.product_optional}</span>
-                    </div>
-                  )}
+              {/* Right Column: Data Box (30%) - Technical Specs.
 
-                  {/* Duration. For bookable types it comes from the opportunity,
-                      which asks for it. For a recorded study it comes from the
-                      STUDY, and only when a researcher actually set one - the
-                      authoring form now has the field, and leaving it empty
-                      stores null. It was suppressed entirely for unmoderated
-                      until that field existed, because the opportunity's
-                      default_duration_minutes is NOT NULL DEFAULT 30 and
-                      printing it above a consent CTA stated a figure nobody
-                      chose. */}
-                  {(opportunity.type === 'test' || opportunity.type === 'interview') && (
-                    <div className="mission-data-item">
-                      <span className="mission-data-label">DURATION</span>
-                      <span className="mission-data-value">{opportunity.default_duration_minutes} min</span>
-                    </div>
-                  )}
-                  {opportunity.type === 'unmoderated' &&
-                    recordedStudyBrief?.estimated_duration_minutes != null && (
-                      <div className="mission-data-item">
-                        <span className="mission-data-label">DURATION</span>
-                        <span className="mission-data-value">
-                          {recordedStudyBrief.estimated_duration_minutes} min
-                        </span>
-                      </div>
-                    )}
+                  Every row here is conditional, and a native survey, poll or
+                  one-question study with no product and no eligibility narrowing
+                  suppresses all of them - which still shipped the box, its
+                  border and its padding wrapped around nothing (DT-6). Each
+                  row's condition is now named once and the box is rendered only
+                  when at least one is true; when it is not, the flex:6 content
+                  column takes the full width on its own. */}
+              {(() => {
+                const showProduct = opportunity.type !== 'question' && Boolean(opportunity.product_optional);
+                // Duration for bookable types comes from the opportunity (which
+                // asks for it); for a recorded study it comes from the STUDY, and
+                // only when a researcher set one - default_duration_minutes is
+                // NOT NULL DEFAULT 30, so printing it above a consent CTA would
+                // state a figure nobody chose.
+                const showBookableDuration = opportunity.type === 'test' || opportunity.type === 'interview';
+                const showRecordedDuration = opportunity.type === 'unmoderated' && recordedStudyBrief?.estimated_duration_minutes != null;
+                // Task COUNT only (never the prompts - reading them up front turns
+                // the recording into a rehearsed performance), recorded only.
+                const showTasks = opportunity.type === 'unmoderated' && Boolean(recordedStudyBrief);
+                // Participants only when eligibility actually narrows. "Any" was
+                // printed on every unrestricted study; the rule lives in
+                // getEligibilityNote so the browse row and this page cannot answer
+                // the same question two different ways.
+                const showParticipants = Boolean(eligibilityNote);
 
-                  {/* Task count - recorded studies only, and only once known.
-                      The COUNT, never the prompts: reading the tasks up front
-                      turns the recording into a rehearsed performance. */}
-                  {opportunity.type === 'unmoderated' && recordedStudyBrief && (
-                    <div className="mission-data-item">
-                      <span className="mission-data-label">TASKS</span>
-                      <span className="mission-data-value">
-                        {recordedStudyBrief.task_count}
-                      </span>
-                    </div>
-                  )}
+                if (!(showProduct || showBookableDuration || showRecordedDuration || showTasks || showParticipants)) {
+                  return null;
+                }
 
-                  {/* Participants - only when eligibility actually narrows.
-                      This printed "Any" on every study that had not restricted
-                      itself, including recorded studies, which need a Cortex
-                      account and refuse external participants outright. The
-                      panel already hides PRODUCT, DURATION and TASKS when they
-                      carry nothing; this is the same rule, and the rule lives
-                      in getEligibilityNote so the browse row and this page
-                      cannot answer the same question two different ways. */}
-                  {eligibilityNote && (
-                    <div className="mission-data-item">
-                      <span className="mission-data-label">PARTICIPANTS</span>
-                      <span className="mission-data-value">{eligibilityNote}</span>
+                return (
+                  <div className="mission-data-box">
+                    <div className="mission-data-grid">
+                      {showProduct && (
+                        <div className="mission-data-item">
+                          <span className="mission-data-label">PRODUCT</span>
+                          <span className="mission-data-value">{opportunity.product_optional}</span>
+                        </div>
+                      )}
+
+                      {showBookableDuration && (
+                        <div className="mission-data-item">
+                          <span className="mission-data-label">DURATION</span>
+                          <span className="mission-data-value">{opportunity.default_duration_minutes} min</span>
+                        </div>
+                      )}
+                      {showRecordedDuration && (
+                        <div className="mission-data-item">
+                          <span className="mission-data-label">DURATION</span>
+                          <span className="mission-data-value">
+                            {recordedStudyBrief?.estimated_duration_minutes} min
+                          </span>
+                        </div>
+                      )}
+
+                      {showTasks && (
+                        <div className="mission-data-item">
+                          <span className="mission-data-label">TASKS</span>
+                          <span className="mission-data-value">
+                            {recordedStudyBrief?.task_count}
+                          </span>
+                        </div>
+                      )}
+
+                      {showParticipants && (
+                        <div className="mission-data-item">
+                          <span className="mission-data-label">PARTICIPANTS</span>
+                          <span className="mission-data-value">{eligibilityNote}</span>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
