@@ -2017,6 +2017,7 @@ body.landing-page .header .text-muted,
   text-decoration: none;
   display: flex;
   align-items: center;
+  gap: 10px;
 }
 
 .logo:hover {
@@ -2028,6 +2029,32 @@ body.landing-page .header .text-muted,
   height: 36px;
   width: auto;
   object-fit: contain;
+}
+
+/* Cortex lockup: Beaded C mark in brand orange + Fraunces wordmark in ink.
+   The mark inherits currentColor, so the orange is set here, not baked in. */
+.logo-mark {
+  height: 30px;
+  width: 30px;
+  flex: none;
+  color: var(--brand-orange-500);
+}
+
+.logo-word {
+  font-family: var(--font-family-display);
+  font-weight: 600;
+  font-size: 1.6rem;
+  letter-spacing: -0.015em;
+  line-height: 1;
+  color: var(--text-primary);
+}
+
+/* On the dark signed-out landing the header sits on a dark ground, so the
+   ink wordmark flips to white (mirrors the landing's button treatment). */
+body:has(.cortex-landing) .header .logo-word,
+body.landing-page .header .logo-word,
+.landing-page .header .logo-word {
+  color: #ffffff;
 }
 
 .user-greeting {
@@ -8459,7 +8486,7 @@ body:has(.cortex-landing) #root {
 
 /* Logo text beside beaker */
 .logo-text {
-  font-family: 'Clash Grotesk', var(--font-family-base);
+  font-family: var(--font-family-base);
   font-size: 2.5rem;
   font-weight: 600;
   letter-spacing: -0.02em;
@@ -8487,7 +8514,7 @@ body:has(.cortex-landing) #root {
 }
 
 .mad-headline {
-  font-family: 'Clash Grotesk', var(--font-family-base);
+  font-family: var(--font-family-base);
   font-size: clamp(2.5rem, 6vw, 4.5rem);
   font-weight: 700;
   line-height: 1.1;
@@ -8547,7 +8574,7 @@ body:has(.cortex-landing) #root {
 }
 
 .mad-subheadline {
-  font-family: 'Clash Grotesk', var(--font-family-base);
+  font-family: var(--font-family-base);
   font-size: clamp(1.5rem, 3vw, 2.25rem);
   font-weight: 500;
   color: rgba(255, 255, 255, 0.7);
@@ -8566,7 +8593,7 @@ body:has(.cortex-landing) #root {
 .blob-cta {
   position: relative;
   padding: 1.25rem 3rem;
-  font-family: 'Clash Grotesk', var(--font-family-base);
+  font-family: var(--font-family-base);
   font-size: 1.35rem;
   font-weight: 600;
   color: #FFFFFF;
@@ -8709,7 +8736,7 @@ body:has(.cortex-landing) #root {
   align-items: center;
   gap: 0.5rem;
   padding: 0.75rem 1.5rem;
-  font-family: 'Clash Grotesk', var(--font-family-base);
+  font-family: var(--font-family-base);
   font-size: 0.95rem;
   font-weight: 500;
   color: #FFFFFF;

@@ -42,13 +42,16 @@ describe('Header Component', () => {
     expect(container.firstChild).toBeInTheDocument();
   });
 
-  it('should render logo', () => {
-    const { getByAltText } = render(
+  it('should render the Cortex mark + wordmark lockup', () => {
+    const { getByRole, getByText } = render(
       <BrowserRouter>
         <Header />
       </BrowserRouter>
     );
-    expect(getByAltText('Cortex Logo')).toBeInTheDocument();
+    // The lockup is the mark (decorative SVG) plus the Fraunces "Cortex"
+    // wordmark, inside the home link - replacing the old adaptalogo PNG.
+    expect(getByRole('link', { name: 'Cortex home' })).toBeInTheDocument();
+    expect(getByText('Cortex')).toBeInTheDocument();
   });
 
   it('should render the theme toggle for signed-out visitors', () => {
