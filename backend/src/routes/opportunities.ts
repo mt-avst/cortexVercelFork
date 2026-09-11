@@ -4517,11 +4517,34 @@ router.get('/:id/analytics', requireAdmin, asyncHandler(async (req: Request, res
     throw new ForbiddenError('Only the study owner can view analytics');
   }
 
-  // Overall totals (all-time), independent of the selected chart period
+  // Overall totals (all-time), independent of the selected chart period.
+  //
+  // Distinct visitors count by the best identity we hold, not by user_id alone.
+  // Click tracking is enabled for published poll/survey/unmoderated studies,
+  // which a signed-OUT visitor can reach, and those clicks record user_id NULL
+  // (see the INSERT above). COUNT(DISTINCT user_id) drops every NULL, so a study
+  // with eight anonymous actions reported "Unique: 0" beside them - a number
+  // that read as broken (DA-20). COALESCE to ip_hash, the privacy-hashed
+  // per-visitor identity the row already carries, so an anonymous visitor still
+  // counts once and "Distinct visitors" means what the card says.
+  //
+  // It is an estimate, and honestly so on several counts: a visit with neither
+  // a user_id nor an ip_hash (no client IP, or SESSION_SECRET unset) is still
+  // uncounted; one person seen signed-in on one visit and signed-out on another
+  // counts twice; and a SESSION_SECRET rotation re-buckets every returning
+  // anonymous visitor. All beat a flat, misleading 0.
+  //
+  // ponytail: the biggest ceiling is the proxy. ip_hash = sha256(req.ip + secret),
+  //   and behind trust proxy:1 with multiple hops req.ip is the INGRESS, not the
+  //   visitor (see per-user-rate-limit.ts / runtime-work-class.ts), so anonymous
+  //   visitors share ONE ip_hash and the anonymous distinct count collapses
+  //   toward 1. Signed-in visitors are unaffected (counted by user_id)
+  //   -> cto/AdaptaLabs#125, real fix is a per-visitor client nonce recorded on
+  //   the click, which survives the proxy and a secret rotation
   const overallResult = await pool.query(
     `SELECT
       COUNT(*)::int AS total,
-      COUNT(DISTINCT user_id)::int AS unique_users,
+      COUNT(DISTINCT COALESCE(user_id::text, ip_hash))::int AS unique_users,
       COUNT(*) FILTER (WHERE clicked_at >= NOW() - INTERVAL '24 hours')::int AS count_24h,
       COUNT(*) FILTER (WHERE clicked_at >= NOW() - INTERVAL '7 days')::int AS count_7d,
       MIN(clicked_at) AS first_click,
@@ -4537,7 +4560,8 @@ router.get('/:id/analytics', requireAdmin, asyncHandler(async (req: Request, res
     `SELECT
       click_type,
       COUNT(*)::int AS total,
-      COUNT(DISTINCT user_id)::int AS unique_count,
+      -- Distinct visitors by best-held identity; see the overall query above.
+      COUNT(DISTINCT COALESCE(user_id::text, ip_hash))::int AS unique_count,
       COUNT(*) FILTER (WHERE clicked_at >= NOW() - INTERVAL '24 hours')::int AS count_24h,
       COUNT(*) FILTER (WHERE clicked_at >= NOW() - INTERVAL '7 days')::int AS count_7d
      FROM opportunity_clicks
