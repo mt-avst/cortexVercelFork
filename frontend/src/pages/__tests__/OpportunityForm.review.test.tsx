@@ -965,6 +965,63 @@ describe('a save that half-worked is not announced as a success', () => {
   });
 });
 
+describe('the review-step preview is offered only where a preview can render (WZ-16)', () => {
+  /*
+   * Gated on `authoringKind`, not on `formData.type`. `buildActivePreview`
+   * falls through to a 'no-content' blocked preview ("There is nothing to
+   * preview yet...") whenever `authoringKind` is null, and null is not only
+   * the bookable pair: `delivery_mode` defaults to 'external', and every
+   * external-delivery question-carrier (poll, survey, question) gets an
+   * `externalLink` tab instead of `questions` - so a type-based gate that only
+   * named test/interview left the DEFAULT poll/survey/question reaching the
+   * exact broken button WZ-16 was meant to remove. Review is the one step
+   * every shape passes through, since it is the last step on every path.
+   */
+  it.each(['test', 'interview', 'poll', 'survey', 'question'])(
+    'hides Preview participant experience on Review for a %s (default external delivery)',
+    (type) => {
+      renderCreate();
+      fillBasics(type);
+      walkForward();
+
+      expect(currentStepName()).toMatch(/Review/);
+      expect(
+        screen.queryByRole('button', { name: /Preview participant experience/i })
+      ).not.toBeInTheDocument();
+    }
+  );
+
+  it('still offers it on Review for a recorded (unmoderated) study, which is the control', () => {
+    // `unmoderated` always carries a `taskList` tab regardless of delivery
+    // mode - there is no external twin of it - so this proves the query above
+    // can see the button at all: without this arm, every assertion could pass
+    // because nothing on Review ever renders it.
+    renderCreate();
+    fillBasics('unmoderated');
+    walkForward();
+
+    expect(currentStepName()).toMatch(/Review/);
+    expect(
+      screen.getByRole('button', { name: /Preview participant experience/i })
+    ).toBeInTheDocument();
+  });
+
+  it('also offers it on Review for a native-delivery survey, the other authoring kind', () => {
+    // The twin of the case above: `authoringKind` is 'survey' here rather than
+    // 'recorded', so this proves the gate is on the derived kind rather than
+    // on `unmoderated` specifically.
+    renderCreate();
+    fillBasics('survey');
+    fireEvent.click(screen.getByLabelText(/In Cortex/i));
+    walkForward();
+
+    expect(currentStepName()).toMatch(/Review/);
+    expect(
+      screen.getByRole('button', { name: /Preview participant experience/i })
+    ).toBeInTheDocument();
+  });
+});
+
 describe('the step that is not a StepActions row still names where it goes', () => {
   it('offers Continue: Consent on Session Management', () => {
     /*
