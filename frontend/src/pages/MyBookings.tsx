@@ -6,7 +6,6 @@ import { useNavigate } from 'react-router-dom';
 import { getMyBookings, cancelBooking, getMySessionEvents } from '../api/client';
 import { BookingWithDetails, MySessionEvent } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
-import { useTheme } from '../contexts/ThemeContext';
 import { logger } from '../utils/logger';
 import { getParticipantFacingType } from '../utils/opportunityUtils';
 import {
@@ -16,7 +15,6 @@ import {
   formatDateTime,
 } from '../utils/datetime';
 import ConfirmationModal from '../components/ConfirmationModal';
-import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import { Button, Card, CardHeader, CardBody, CardFooter, CardTitle, Alert, Spinner } from '../components/ui';
 import { ArrowLeft, RefreshCw, ExternalLink, CalendarX, Monitor } from 'lucide-react';
 import { isPublishableExternalLink } from '@shared/firsthand/url-safety';
@@ -24,8 +22,6 @@ import { isPublishableExternalLink } from '@shared/firsthand/url-safety';
 const MyBookings: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { theme } = useTheme();
-  const isDark = theme === 'dark';
   const [bookings, setBookings] = useState<{ upcoming: BookingWithDetails[]; past: BookingWithDetails[] }>({ upcoming: [], past: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -249,9 +245,6 @@ const MyBookings: React.FC = () => {
 
   return (
     <div className="admin-page-bg my-bookings-page">
-      {/* Theme-aware Background: Dark Mode gets neural particles on black */}
-      {isDark && <SlowNeuralBackground />}
-      
       <div className="container-fluid my-bookings-container">
         {/* Page Header */}
         <header className="my-bookings-header">

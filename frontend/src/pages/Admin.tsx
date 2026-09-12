@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { useTheme } from '../contexts/ThemeContext';
-import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import { getOpportunities, deleteOpportunity, duplicateOpportunity, getDashboardStats, DashboardStats, exportBookingsCsv, getPendingApprovals, getFeedback } from '../api/client';
 import { Opportunity } from '../api/types';
 import { getTypeBadgeClass, getTimeRemainingUntil } from '../utils/opportunityUtils';
@@ -28,8 +26,6 @@ import { Settings, ClipboardList, Users, Clock, List, History, MessageSquare, Ca
 import { formatStudyDate, formatClockTime, formatTimeZoneLabel } from '../utils/datetime';
 const Admin: React.FC = () => {
   const { user, loading, initialAuthCheck } = useAuth();
-  const { theme } = useTheme();
-  const isDark = theme === 'dark';
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -325,9 +321,6 @@ const Admin: React.FC = () => {
 
   return (
     <div className="admin-page-bg">
-      {/* Theme-aware Background: Dark Mode gets neural particles */}
-      {isDark && <SlowNeuralBackground />}
-      
       <div className="container-fluid admin-page-container admin-page-fullheight admin-container-wide">
         <div className="row admin-dashboard">
         <div className="col-12 admin-content-wrapper">

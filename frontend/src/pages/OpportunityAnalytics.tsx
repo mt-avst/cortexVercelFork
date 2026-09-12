@@ -6,7 +6,6 @@ import {
 } from 'lucide-react';
 import { useNavigate, useParams, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { useTheme } from '../contexts/ThemeContext';
 import { getOpportunityAnalytics, getOpportunity, getOpportunitySessionEvents, getOpportunitySurveyResults, getOpportunityBookings, updateBookingResearcherNotes, opportunitySurveyResultsCsvUrl, type OpportunityAnalytics, type AnalyticsPeriod } from '../api/client';
 import { SurveyResults, type SurveyResultsData } from '../components/survey/SurveyResults';
 import { getActionMeaning } from '../utils/opportunityUtils';
@@ -15,7 +14,6 @@ import { computeBarChartAxis } from '../utils/barChartAxis';
 import { QUESTION_CARRYING_TYPES } from '@shared/firsthand/delivery';
 import { Opportunity, SessionEvent, OpportunityBookingRow } from '../api/types';
 import ErrorState from '../components/ErrorState';
-import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import SessionsTab from '../components/opportunity-analytics/SessionsTab';
 import ParticipantsTab from '../components/opportunity-analytics/ParticipantsTab';
 import { useBookingArtifacts } from '../components/opportunity-analytics/useBookingArtifacts';
@@ -208,9 +206,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const { user, loading } = useAuth();
-  const { theme } = useTheme();
-  const isDark = theme === 'dark';
-  
+
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
   const [analytics, setAnalytics] = useState<OpportunityAnalytics | null>(null);
   const [loadingOpportunity, setLoadingOpportunity] = useState(true);
@@ -568,9 +564,6 @@ const OpportunityAnalyticsPage: React.FC = () => {
 
   return (
     <div className="analytics-page-wrapper" style={{ position: 'relative', minHeight: '100vh' }}>
-      {/* Theme-aware Background: Dark Mode gets neural particles on black */}
-      {isDark && <SlowNeuralBackground />}
-      
       <div className="container-fluid py-4 analytics-container">
       {/* Back Button - Above header */}
       <button

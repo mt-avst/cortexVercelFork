@@ -11,7 +11,6 @@ import { useTheme } from '../contexts/ThemeContext';
 import useDocumentTitle from '../hooks/useDocumentTitle';
 import CalendarGrid, { CALENDAR_LEGEND_ITEMS } from '../components/CalendarGrid';
 import ConfirmationModal from '../components/ConfirmationModal';
-import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import ShareOpportunityLink from '../components/ShareOpportunityLink';
 import { RecordedStudyExpectations } from '../components/RecordedStudyExpectations';
 import { getParticipantFacingType, getEligibilityNote, getTypeBadgeClass, getCardHoverColor } from '../utils/opportunityUtils';
@@ -828,9 +827,6 @@ const OpportunityDetail: React.FC = () => {
 
   return (
     <div className="container-fluid py-4 opportunity-detail-page mission-control">
-      {/* Living Neural Background - Dark Mode Only */}
-      {isDark && <SlowNeuralBackground />}
-
       <section className="container mt-4" aria-label="Study details" style={{ position: 'relative', zIndex: 1 }}>
         <div className="row">
           <div className="col-12">
