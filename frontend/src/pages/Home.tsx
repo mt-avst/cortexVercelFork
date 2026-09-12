@@ -3,14 +3,12 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { getOpportunities } from '../api/client';
 import { Opportunity } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
-import { useTheme } from '../contexts/ThemeContext';
 import { filterOpportunitiesForPresentationListing, getParticipantFacingType, sortByClosingSoonest } from '../utils/opportunityUtils';
 import { logger } from '../utils/logger';
 import Landing from './Landing';
 import ErrorState from '../components/ErrorState';
 import StudyFilters from '../components/StudyFilters';
 import { OpportunityRow } from '../components/OpportunityRow';
-import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import { CheckCircle, Inbox, Filter } from 'lucide-react';
 
 
@@ -21,8 +19,6 @@ import { CheckCircle, Inbox, Filter } from 'lucide-react';
 const Home: React.FC = memo(() => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { theme } = useTheme();
-  const isDark = theme === 'dark';
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
@@ -175,12 +171,6 @@ const Home: React.FC = memo(() => {
       {/* Cortex Section */}
       {user && (
         <div className="study-listing-page">
-          {/* Theme-aware Background:
-              - Light Mode: Clean Lab - just CSS grid, no particles (distraction-free)
-              - Dark Mode: Neural Deep - ambient full-screen particles (dimmed & slow)
-          */}
-          {isDark && <SlowNeuralBackground />}
-          
           <div className="container mt-4" style={{ position: 'relative', zIndex: 10 }}>
             <div className="row" style={{ marginBottom: 'var(--spacing-section)' }}>
               <div className="col-12">

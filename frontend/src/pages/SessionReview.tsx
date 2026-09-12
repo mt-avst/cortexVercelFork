@@ -1,11 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { useTheme } from '../contexts/ThemeContext';
 import { getSessionOutputs, getOpportunitySessionEvents } from '../api/client';
 import { FirstHandSessionOutputs } from '../api/types';
 import ErrorState from '../components/ErrorState';
-import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import SessionSummaryCard from '../components/session-review/SessionSummaryCard';
 import ResponsesSection from '../components/session-review/ResponsesSection';
 import TranscriptSection from '../components/session-review/TranscriptSection';
@@ -31,8 +29,6 @@ const SessionReviewPage: React.FC = () => {
   const location = useLocation();
   const { id, sessionId } = useParams<{ id: string; sessionId: string }>();
   const { user, loading } = useAuth();
-  const { theme } = useTheme();
-  const isDark = theme === 'dark';
 
   const [outputs, setOutputs] = useState<FirstHandSessionOutputs | null>(null);
   const [loadingOutputs, setLoadingOutputs] = useState(true);
@@ -146,8 +142,6 @@ const SessionReviewPage: React.FC = () => {
 
   return (
     <div className="analytics-page-wrapper" style={{ position: 'relative', minHeight: '100vh' }}>
-      {isDark && <SlowNeuralBackground />}
-
       <div className="container-fluid py-4 analytics-container">
         <button
           className="btn btn-outline-secondary btn-sm"

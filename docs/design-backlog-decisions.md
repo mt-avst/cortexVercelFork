@@ -62,3 +62,31 @@ Behaviour: at the welcome phase, when local flow state is empty (fresh device or
 - **security-auditor (Opus, participant session surface):** clean — no CRITICAL/HIGH/MEDIUM. The read is a safe GET scoped to the token owner by the unchanged `[requireAuth, bindParticipantSession]` guard; the status string is never rendered; fetch fails safe to null; no prototype-pollution, SSRF, or info-disclosure sink.
 
 **Reversible follow-up:** increment-2 — auto-resume / answer rehydration and the interruption-reset rule — as a separate, backend-aware MR.
+
+---
+
+## CB-31 — stop the ambient neural background from cluttering signed-in working surfaces
+
+**Decision: remove the `SlowNeuralBackground` mount from all nine signed-in pages and delete the dead CSS-based neural effect. Do NOT add a centralised mount, and leave the signed-out Landing's own background untouched.**
+
+The backlog item (and the original handoff plan) was framed as "centralise the neural bg in AppChromeLayout, show ONLY on the signed-out Landing + auth screen, remove the 9 signed-in mounts". Reading the actual code corrected that premise:
+- The signed-out **Landing already renders its own, *different* background component** — `OrganicNeuralBackground` (Landing.tsx), not `SlowNeuralBackground`. The brand flourish the plan wanted "on the signed-out Landing" is already there and correct. Nothing to centralise to achieve it.
+- The nine `SlowNeuralBackground` mounts are all on **signed-in working surfaces** (Admin, Gamification, Home's signed-in listing, MyBookings, OpportunityAnalytics, OpportunityDetail, OpportunityForm, SessionReview, Settings) — exactly the "visual noise behind dense working data" the review flagged.
+- There is **no in-app auth screen** to put a background on: sign-in is an OIDC redirect (`AuthContext.login()` → `window.location`), not an SPA route.
+
+So the product-correct change is simply to **remove the particle background from the signed-in surfaces** (they go clean) and leave the signed-out Landing flourish alone. Adding a centralised mount to `AppChromeLayout` would either re-introduce the noise on signed-in pages or duplicate Landing's flourish — both wrong — so it was deliberately NOT done.
+
+**On "retokenise hex → --brand-orange-500":** moot and deliberately skipped. `SlowNeuralBackground` is a three.js/WebGL canvas with a hardcoded ember palette (not a CSS-token surface), and it no longer renders anywhere after this change; retokenising an unmounted canvas is pointless. Landing's `OrganicNeuralBackground` (also WebGL, live, signed-out) was left entirely untouched — churning a live surface's palette for token-consistency is the wrong trade, and a `var()` cannot feed a WebGL colour anyway.
+
+**Scope held deliberately small for a live beta:**
+- Removed the 9 mounts + their now-unused `isDark`/`theme`/`useTheme` (kept in OpportunityDetail, where `isDark` still drives a `btn-close` variant).
+- Deleted the fully-orphaned CSS-based neural effect (`.neural-particle-field`, `.neural-node`, `.neural-connection`, the `.nn-*`/`.nc-*` animation-delay helpers, and `@keyframes node-pulse`/`connection-pulse`) — confirmed zero usage anywhere in `frontend/src`. These were an older CSS effect unrelated to the WebGL component.
+- **Did NOT delete `SlowNeuralBackground.tsx` itself**, nor the 45 test files that mock it. The component is now unused, but deleting it forces rewriting 45 test mocks (several sharing grouped stub comments) — a wide, mechanical churn that belongs in its own hygiene MR, not mixed into a live-beta visual change. Recorded here as the reversible follow-up.
+
+**Gates:** pure deletion (10 files, 117 deletions, no added content). typecheck clean; full frontend vitest green; root `npm run lint` (the CI gate) clean on all nine pages. code-reviewer (Opus, high): clean, no CRITICAL/HIGH — it verified the removals leave no dangling `isDark`/`theme`/`useTheme`, the kept OpportunityDetail `isDark` is genuinely used, the CSS deletion hit only dead rules, `three` stays needed (kept component + Landing both import it), and the lower-z-index fixed canvas could not have been load-bearing for content stacking. The a11y check is the CI `test-a11y` (Playwright + axe) blocking job on the MR — removing a decorative full-viewport canvas cannot introduce a new violation, and the armed merge waits on that job.
+
+**Reversible follow-up (one hygiene MR):** delete the now-unused `SlowNeuralBackground.tsx` and the ~45 test mocks of it; sweep the remaining `.slow-neural-background` / `.slow-neural-background canvas` CSS that belonged to it; and simplify `frontend/src/styles/_themes.css:936` — its `body.theme-dark .admin-page-bg > :not(.slow-neural-background)` selector now has a dead exclusion clause and a stale comment (harmless today: the rule still applies `position: relative; z-index: 1` to the remaining content children correctly). Kept out of this MR to stay deletion-only and tightly scoped on a live beta.
+
+---
+
+*Design-backlog (D) tier CLOSED: DT-7, DT-8 (!422), RS-10 increment-1 (!423), CB-31 (this MR). Increment-2 of RS-10 (auto-resume / rehydration) remains the one tracked forward item.*
