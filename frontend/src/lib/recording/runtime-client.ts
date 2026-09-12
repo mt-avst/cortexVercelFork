@@ -115,6 +115,55 @@ async function postRuntimeJson(
   return response;
 }
 
+/**
+ * Reads the participant's own runtime snapshot and returns its `sessionStatus`,
+ * or null on ANY failure - a non-ok response, a network error, a body that is
+ * not the shape we expect, or a missing field. This is a passive read used only
+ * to decide whether to show an informational prompt, so it must never throw into
+ * the participant flow: failing safe to null simply means "no prompt". A GET
+ * carries the participant's session cookie (credentials: include) but no CSRF
+ * header, matching the read-only contract of the endpoint.
+ *
+ * The GET /:token/runtime snapshot is a serialised RuntimeSessionRecord whose
+ * status field is camelCase `sessionStatus` on the wire (the postgres mapper
+ * emits camelCase and express.json does not transform it) - NOT the DB column's
+ * snake_case `session_status`. The direct parse test pins that key by name.
+ *
+ * Note: hitting this endpoint may seed a fresh row for a brand-new session,
+ * which returns an early status (created / link_opened). hasUnfinishedServerProgress
+ * correctly yields no prompt for those.
+ */
+export async function fetchLatestRuntimeStatus(
+  token: string
+): Promise<string | null> {
+  try {
+    // Deliberately attempt-agnostic: omitting ?attempt makes the backend return
+    // the LATEST attempt's snapshot (seedRuntimeSession -> latest-for-logical-id),
+    // which is exactly what "does this participant have progress anywhere?" needs.
+    // Higher attempts on this device only arrive via forceReset, which suppresses
+    // the prompt, so there is no attempt to scope to here.
+    const response = await fetch(
+      buildAttemptScopedUrl(token, "runtime"),
+      {
+        method: "GET",
+        credentials: "include"
+      }
+    );
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = (await response.json()) as { sessionStatus?: unknown };
+
+    return typeof data?.sessionStatus === "string"
+      ? data.sessionStatus
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function sendRuntimeEvent(
   token: string,
   input: {

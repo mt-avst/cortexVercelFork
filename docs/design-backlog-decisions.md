@@ -43,3 +43,22 @@ The backlog recommended A (a shared component migrating all three). I built the 
 So the "one pattern" (host + "you're leaving Cortex", reusing `describeTarget`; `ExternalHandoff` re-validates the URL with `isPublishableExternalLink` itself — a security-review LOW — and preserves `target="_blank"`/`rel="noopener noreferrer"`) covers every detail-page external hand-off; B and C are left disclosing as they already do, marked to adopt the component when those surfaces are next touched.
 
 **Reversible follow-up:** migrate B and C to `ExternalHandoff` when the recording flow / bookings are next worked on.
+
+---
+
+## RS-10 — resume or restart when a session was started elsewhere (increment-1 only)
+
+**Decision: ship increment-1 only — an informational, restart-only prompt when the server holds mid-flight progress a fresh local device knows nothing about. No auto-resume, no answer rehydration, no backend or contract change.**
+
+The backlog item is "let a participant resume an interrupted session". Full resume (rehydrating answers / recording state onto a new device) is a larger, riskier capability touching a live participant surface mid-beta. I split it: increment-1 closes the immediate harm — a participant who started on one device and opens the link on another silently starts over with no explanation — by making that situation *non-silent*. Increment-2 (auto-resume / rehydration, and the interruption-reset rule in `getInterruptedRunRecovery`) is deliberately deferred and untouched here.
+
+Behaviour: at the welcome phase, when local flow state is empty (fresh device or cleared storage) and the visit is not a `forceReset`, read the participant's own latest runtime snapshot. If its `sessionStatus` is one of the five mid-flight states (consent_accepted, setup_in_progress, ready_to_start, recording_in_progress, uploading), show a dismissible banner: "You have an unfinished session … continuing will start a fresh attempt." The pre-progress (created, link_opened) and terminal (completed, abandoned, failed) states show nothing.
+
+**Frontend-only, by design.** The existing `GET /:token/runtime` already returns the latest snapshot; increment-1 only adds a passive read of it. No migration, no new field, no route — the smallest reversible change that satisfies the need on a live beta.
+
+**Corrected during the hard gates (this is why un-gated subagent output was not trusted):**
+- The first cut read the snapshot's status as snake_case `session_status`. The wire key is camelCase `sessionStatus` (the postgres mapper emits camelCase, express.json does not transform it). Left unfixed, the banner could *never* fire — a silent no-op, the exact failure mode this feature removes. Fixed and pinned by a direct parse test with a snake_case null-control (reverting the key fails the test by name).
+- **code-reviewer (Opus, high):** no CRITICAL/HIGH. One MEDIUM fixed — six sibling ParticipantSessionFlow suites spread the real module and clear storage, so the new effect made them hit real network I/O, green only by the accident of a relative base URL throwing; each now stubs `fetchLatestRuntimeStatus`. Three LOWs actioned: documented the deliberately attempt-agnostic read; added a `ponytail:` comment naming the hand-mirrored lifecycle set (an 11th backend state fails safe to no-prompt); and moved the banner into an always-mounted `role="status"` live region so a screen reader announces it when it appears.
+- **security-auditor (Opus, participant session surface):** clean — no CRITICAL/HIGH/MEDIUM. The read is a safe GET scoped to the token owner by the unchanged `[requireAuth, bindParticipantSession]` guard; the status string is never rendered; fetch fails safe to null; no prototype-pollution, SSRF, or info-disclosure sink.
+
+**Reversible follow-up:** increment-2 — auto-resume / answer rehydration and the interruption-reset rule — as a separate, backend-aware MR.
