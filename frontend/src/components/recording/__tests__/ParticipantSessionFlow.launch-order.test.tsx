@@ -112,7 +112,10 @@ vi.mock("../../../lib/recording/device-support", () => ({
 
 vi.mock("../../../lib/recording/runtime-client", () => ({
   sendRuntimeEvent: vi.fn().mockResolvedValue(undefined),
-  saveParticipantResponse: vi.fn().mockResolvedValue(undefined)
+  saveParticipantResponse: vi.fn().mockResolvedValue(undefined),
+  // Empty local storage in these tests makes the RS-10 status effect fire;
+  // resolve to null so it is a no-op here (no unfinished-session prompt).
+  fetchLatestRuntimeStatus: vi.fn().mockResolvedValue(null)
 }));
 
 // The runner is exercised by its own suite; stubbing it keeps these tests on
