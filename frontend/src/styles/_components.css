@@ -8334,17 +8334,6 @@ body:has(.cortex-landing) #root {
   background: transparent;
 }
 
-/* Neural Particle Field Canvas */
-.neural-particle-field {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 1;
-  pointer-events: none;
-}
-
 /* Cinematic Gradient Overlays */
 .cinematic-overlay {
   position: fixed;
@@ -8505,42 +8494,6 @@ body:has(.cortex-landing) #root {
     transform: translateY(-120px) scale(0.5);
     opacity: 0;
   }
-}
-
-/* Neural network animations */
-.neural-node {
-  animation: node-pulse 2s ease-in-out infinite;
-}
-
-.nn-1 { animation-delay: 0s; }
-.nn-2 { animation-delay: 0.3s; }
-.nn-3 { animation-delay: 0.6s; }
-.nn-4 { animation-delay: 0.9s; }
-.nn-5 { animation-delay: 1.2s; }
-.nn-6 { animation-delay: 1.5s; }
-.nn-7 { animation-delay: 1.8s; }
-
-@keyframes node-pulse {
-  0%, 100% { opacity: 0.8; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.2); }
-}
-
-.neural-connection {
-  animation: connection-pulse 3s ease-in-out infinite;
-}
-
-.nc-1 { animation-delay: 0s; }
-.nc-2 { animation-delay: 0.4s; }
-.nc-3 { animation-delay: 0.8s; }
-.nc-4 { animation-delay: 1.2s; }
-.nc-5 { animation-delay: 1.6s; }
-.nc-6 { animation-delay: 2s; }
-.nc-7 { animation-delay: 2.4s; }
-.nc-8 { animation-delay: 2.8s; }
-
-@keyframes connection-pulse {
-  0%, 100% { opacity: 0.4; stroke-width: 1; }
-  50% { opacity: 0.8; stroke-width: 2; }
 }
 
 /* Logo text beside beaker */
@@ -9015,16 +8968,10 @@ body:has(.cortex-landing) #root {
 
 /* Reduced motion preference */
 @media (prefers-reduced-motion: reduce) {
-  .neural-particle-field {
-    display: none;
-  }
-
   .gradient-orb,
   .blob-bg,
   .blob-glow,
   .bubble,
-  .neural-node,
-  .neural-connection,
   .headline-cyan,
   .headline-red,
   .beaker-ambient-glow,

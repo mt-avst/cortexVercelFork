@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate, useParams, useMatch, Navigate } from 'react-router-dom';
 
 import { useAuth } from '../contexts/AuthContext';
-import { useTheme } from '../contexts/ThemeContext';
 import { useOptionalNavigationGuard } from '../contexts/NavigationGuardContext';
 import { createOpportunity, updateOpportunity, deleteOpportunity, getOpportunity, getSessions } from '../api/client';
 import { getFirstHandStudy, wasRateLimited } from '../api/firsthand-studies';
@@ -93,7 +92,6 @@ import {
 import type { FirstHandStudyWithSteps } from '../api/firsthand-studies';
 import { logger } from '../utils/logger';
 import AdminSessionManager from '../components/AdminSessionManager';
-import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import { BasicInfoTab, ConsentStep, ContentDetailsTab, ErrorSummary, ExternalLinkTab, FirstHandStudyTab, ReviewStep, StepActions, StepNav, SurveyQuestionsTab } from '../components/OpportunityForm';
 import ConfirmationModal from '../components/ConfirmationModal';
 import { RATING_SCALE_BOUNDS } from '@shared/firsthand/contract';
@@ -644,11 +642,9 @@ const OpportunityForm: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const { user, loading } = useAuth();
-  const { theme } = useTheme();
   // Optional: the form registers an unsaved-work guard for the Header's links,
   // but is also rendered without a provider in tests, where this is a no-op.
   const { registerGuard } = useOptionalNavigationGuard();
-  const isDark = theme === 'dark';
   const isEdit = Boolean(id);
 
   const [formData, setFormData] = useState({
@@ -4780,9 +4776,6 @@ const OpportunityForm: React.FC = () => {
         hidden={isPreviewing}
         style={isPreviewing ? { display: 'none' } : undefined}
       >
-      {/* Theme-aware Background: Dark Mode gets neural particles */}
-      {isDark && <SlowNeuralBackground />}
-
       <div className="container-fluid py-4 opportunity-form min-h-100vh">
         <div className="row justify-content-center">
           <div className="col-12 col-xl-10">
