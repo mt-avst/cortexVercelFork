@@ -147,7 +147,7 @@ describe("answers cannot be rewritten after the session finishes", () => {
       const repository = await import("./runtime-repository-postgres");
 
       await expect(
-        repository.applyRuntimeMutationPostgres(payload(), answer)
+        repository.applyRuntimeMutation(payload(), answer)
       ).rejects.toMatchObject({ statusCode: 409 });
     }
   );
@@ -157,7 +157,7 @@ describe("answers cannot be rewritten after the session finishes", () => {
     const repository = await import("./runtime-repository-postgres");
 
     await expect(
-      repository.applyRuntimeMutationPostgres(payload(), answer)
+      repository.applyRuntimeMutation(payload(), answer)
     ).rejects.toThrow();
 
     // The DELETE is the whole reason this guard exists: it is what would have
@@ -172,7 +172,7 @@ describe("answers cannot be rewritten after the session finishes", () => {
     const { statements } = wire("consent_accepted");
     const repository = await import("./runtime-repository-postgres");
 
-    await repository.applyRuntimeMutationPostgres(payload(), answer);
+    await repository.applyRuntimeMutation(payload(), answer);
 
     expect(wrote(statements)).toBe(true);
     expect(statements).toContain("COMMIT");
@@ -187,7 +187,7 @@ describe("answers cannot be rewritten after the session finishes", () => {
     const { statements } = wire("uploading");
     const repository = await import("./runtime-repository-postgres");
 
-    await repository.applyRuntimeMutationPostgres(payload(), answer);
+    await repository.applyRuntimeMutation(payload(), answer);
 
     expect(wrote(statements)).toBe(true);
   });
@@ -203,7 +203,7 @@ describe("answers cannot be rewritten after the session finishes", () => {
       const { statements } = wire("completed");
       const repository = await import("./runtime-repository-postgres");
 
-      await repository.applyRuntimeMutationPostgres(payload(), {
+      await repository.applyRuntimeMutation(payload(), {
         type: "event",
         eventType: eventType as "session_completed"
       });

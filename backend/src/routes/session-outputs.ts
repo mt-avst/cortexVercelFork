@@ -14,7 +14,7 @@ import {
   getRuntimeAsset,
   getRuntimeSession,
   listRuntimeSessionAttempts
-} from '../firsthand/runtime-repository';
+} from '../firsthand/runtime-repository-postgres';
 import {
   buildSessionOutputs,
   isPlayableMimeType,

@@ -27,7 +27,7 @@ jest.mock('../../firsthand/session-create', () => ({
 
 // The create route builds a study from an inline payload. Mocked so these tests
 // stay on the app pool and never reach the FirstHand runtime pool.
-jest.mock('../../firsthand/runtime-repository', () => ({
+jest.mock('../../firsthand/runtime-repository-postgres', () => ({
   // Defaults to "this participant has no session yet", which is the common
   // case. Tests that care about resuming or refusing queue their own.
   findParticipantSessionForOpportunity: jest.fn(async () => null),
@@ -201,7 +201,7 @@ import { createSession } from '../../firsthand/session-create';
 import {
   findParticipantCompletionsForOpportunities,
   findParticipantSessionForOpportunity
-} from '../../firsthand/runtime-repository';
+} from '../../firsthand/runtime-repository-postgres';
 import { claimStudyIfUnowned, countStudyTasks, createStudy, deleteStudyUnchecked, getStudyById, isStudiesPersistenceConfigured, updateStudy } from '../../firsthand/studies-repository';
 import { listResponsesForOpportunity, studyHasResponses } from '../../firsthand/survey-results-repository';
 import { toCsvParticipantRow } from '../../firsthand/survey-csv';

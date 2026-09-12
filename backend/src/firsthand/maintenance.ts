@@ -1,7 +1,7 @@
 import {
   processPendingRecordingUploadCleanup,
   processQueuedTranscriptJobs
-} from './runtime-repository';
+} from './runtime-repository-postgres';
 import { logger } from '../utils/logger';
 
 // Folds FirstHand's maintenance cron into Cortex. FirstHand ran a daily job

@@ -160,7 +160,7 @@ describe.skipIf(skipDbTests)("attaching an answer, against a real Postgres", () 
   it("stores an answer attached to the question that is still there", async () => {
     const repository = await importRepository();
 
-    await repository.applyRuntimeMutationPostgres(payload(), answerTo(LIVE_STEP_ID, 5));
+    await repository.applyRuntimeMutation(payload(), answerTo(LIVE_STEP_ID, 5));
 
     expect(await storedResponses()).toEqual([
       expect.objectContaining({
@@ -182,12 +182,12 @@ describe.skipIf(skipDbTests)("attaching an answer, against a real Postgres", () 
     // refusal aborts the transaction around the WHOLE session write, so the
     // participant loses every answer they have given, not just this one.
     const repository = await importRepository();
-    await repository.applyRuntimeMutationPostgres(payload(), answerTo(LIVE_STEP_ID, 5));
+    await repository.applyRuntimeMutation(payload(), answerTo(LIVE_STEP_ID, 5));
 
     await removeDoomedStep();
 
     await expect(
-      repository.applyRuntimeMutationPostgres(payload(), answerTo(DOOMED_STEP_ID, 3))
+      repository.applyRuntimeMutation(payload(), answerTo(DOOMED_STEP_ID, 3))
     ).resolves.toBeTruthy();
 
     const rows = await storedResponses();
@@ -213,7 +213,7 @@ describe.skipIf(skipDbTests)("attaching an answer, against a real Postgres", () 
     // and reading the row back. Were the foreign key CASCADE, this row would
     // simply be gone.
     const repository = await importRepository();
-    await repository.applyRuntimeMutationPostgres(payload(), answerTo(DOOMED_STEP_ID, 4));
+    await repository.applyRuntimeMutation(payload(), answerTo(DOOMED_STEP_ID, 4));
 
     await removeDoomedStep();
 
@@ -255,7 +255,7 @@ describe.skipIf(skipDbTests)("attaching an answer, against a real Postgres", () 
     await removeDoomedStep();
 
     const repository = await importRepository();
-    await repository.applyRuntimeMutationPostgres(payload(), answerTo(DOOMED_STEP_ID, 3));
+    await repository.applyRuntimeMutation(payload(), answerTo(DOOMED_STEP_ID, 3));
 
     // Detached, and detached means BOTH columns null - the only shape 0015's
     // CHECK permits, and the only one that keeps this answer out of the other
@@ -285,10 +285,10 @@ describe.skipIf(skipDbTests)("attaching an answer, against a real Postgres", () 
     // `step_id IS NOT NULL` filter on that delete, an unrelated answer to a
     // later question would take the detached row with it.
     const repository = await importRepository();
-    await repository.applyRuntimeMutationPostgres(payload(), answerTo(DOOMED_STEP_ID, 4));
+    await repository.applyRuntimeMutation(payload(), answerTo(DOOMED_STEP_ID, 4));
     await removeDoomedStep();
 
-    await repository.applyRuntimeMutationPostgres(payload(), answerTo(LIVE_STEP_ID, 2));
+    await repository.applyRuntimeMutation(payload(), answerTo(LIVE_STEP_ID, 2));
 
     expect(await storedResponses()).toHaveLength(2);
     expect(await storedResponses()).toContainEqual(

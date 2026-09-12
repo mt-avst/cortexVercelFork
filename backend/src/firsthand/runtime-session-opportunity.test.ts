@@ -168,7 +168,7 @@ describe("runtime session rows carry their opportunity", () => {
     const { inserts } = wire();
     const repository = await import("./runtime-repository-postgres");
 
-    await repository.seedRuntimeSessionPostgres(payloadWith("opp-77"));
+    await repository.seedRuntimeSession(payloadWith("opp-77"));
 
     expect(inserts).toHaveLength(1);
 
@@ -186,7 +186,7 @@ describe("runtime session rows carry their opportunity", () => {
     const { inserts } = wire();
     const repository = await import("./runtime-repository-postgres");
 
-    await repository.seedRuntimeSessionPostgres(payloadWith("opp-77"));
+    await repository.seedRuntimeSession(payloadWith("opp-77"));
 
     const index = columnIndex(inserts[0].sql, "opportunity_id");
     expect(inserts[0].params[index]).not.toBe("ref-external");
@@ -201,7 +201,7 @@ describe("runtime session rows carry their opportunity", () => {
     const { inserts } = wire();
     const repository = await import("./runtime-repository-postgres");
 
-    await repository.seedRuntimeSessionPostgres(payloadWith());
+    await repository.seedRuntimeSession(payloadWith());
 
     const index = columnIndex(inserts[0].sql, "opportunity_id");
 

@@ -142,7 +142,7 @@ import type { StudyStep } from '../../shared/firsthand/contract';
 import { runtimeMutationSchema } from '../src/firsthand/runtime-records';
 import { createSession } from '../src/firsthand/session-create';
 import { loadParticipantSession } from '../src/firsthand/session-store';
-import { applyRuntimeMutation } from '../src/firsthand/runtime-repository';
+import { applyRuntimeMutation } from '../src/firsthand/runtime-repository-postgres';
 import { createStudy, getStudyById } from '../src/firsthand/studies-repository';
 import { CSV_PARTICIPANT_BATCH } from '../src/firsthand/survey-results-repository';
 import { SURVEY_CSV_DRAIN_TIMEOUT_MS } from '../src/firsthand/survey-csv-response';

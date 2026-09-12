@@ -18,7 +18,7 @@ jest.mock('../../utils/database', () => ({
   isDatabaseAvailable: jest.fn()
 }));
 
-jest.mock('../../firsthand/runtime-repository', () => ({
+jest.mock('../../firsthand/runtime-repository-postgres', () => ({
   getRuntimeSession: jest.fn(),
   listRuntimeSessionAttempts: jest.fn(),
   getRuntimeAsset: jest.fn()
@@ -35,7 +35,7 @@ import {
   getRuntimeSession,
   listRuntimeSessionAttempts,
   getRuntimeAsset
-} from '../../firsthand/runtime-repository';
+} from '../../firsthand/runtime-repository-postgres';
 import { createRecordingAssetResponse } from '../../firsthand/object-storage';
 import { errorHandler } from '../../utils/errorHandler';
 
