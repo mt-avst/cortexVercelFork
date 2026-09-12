@@ -34,7 +34,6 @@ vi.mock('../../contexts/ThemeContext', () => ({
   useTheme: () => ({ theme: 'light' }),
 }));
 
-vi.mock('../../components/SlowNeuralBackground', () => ({ default: () => null }));
 vi.mock('../../components/AdminSessionManager', () => ({ default: () => null }));
 
 vi.mock('../../api/client', () => ({

@@ -932,8 +932,8 @@ body.theme-dark .admin-page-bg {
   position: relative;
 }
 
-/* Ensure admin content sits above the fixed z-index:0 neural canvas */
-body.theme-dark .admin-page-bg > :not(.slow-neural-background) {
+/* Admin content establishes its own stacking context above the page background */
+body.theme-dark .admin-page-bg > * {
   position: relative;
   z-index: 1;
 }

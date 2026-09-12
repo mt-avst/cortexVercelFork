@@ -39,7 +39,6 @@ vi.mock('../../contexts/AuthContext', () => ({
   })
 }));
 vi.mock('../../contexts/ThemeContext', () => ({ useTheme: () => ({ theme: 'light' }) }));
-vi.mock('../../components/SlowNeuralBackground', () => ({ default: () => null }));
 
 /*
  * The session step is stubbed, but NOT to `null`. Its forward control is the

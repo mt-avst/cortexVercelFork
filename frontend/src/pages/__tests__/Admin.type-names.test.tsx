@@ -26,7 +26,6 @@ const auth = vi.hoisted(() => ({
 
 vi.mock('../../contexts/AuthContext', () => ({ useAuth: () => auth.value }));
 vi.mock('../../contexts/ThemeContext', () => ({ useTheme: () => ({ theme: 'light' }) }));
-vi.mock('../../components/SlowNeuralBackground', () => ({ default: () => null }));
 vi.mock('../../components/PendingApprovals', () => ({ default: () => null }));
 vi.mock('../../components/AdminFeedback', () => ({ default: () => null }));
 

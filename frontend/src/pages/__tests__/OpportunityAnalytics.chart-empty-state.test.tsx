@@ -76,7 +76,6 @@ vi.mock('../../contexts/AuthContext', () => ({
   }),
 }));
 vi.mock('../../contexts/ThemeContext', () => ({ useTheme: () => ({ theme: 'light' }) }));
-vi.mock('../../components/SlowNeuralBackground', () => ({ default: () => null }));
 
 vi.mock('../../api/client', () => ({
   getOpportunityAnalytics: vi.fn(),

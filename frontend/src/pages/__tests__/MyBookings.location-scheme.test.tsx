@@ -44,7 +44,6 @@ vi.mock('../../contexts/AuthContext', () => ({
   useAuth: () => ({ user: { id: 'u1', role: 'employee', name: 'E' }, loading: false })
 }));
 vi.mock('../../contexts/ThemeContext', () => ({ useTheme: () => ({ theme: 'light' }) }));
-vi.mock('../../components/SlowNeuralBackground', () => ({ default: () => null }));
 vi.mock('../../api/client', () => ({
   getMyBookings: vi.fn(),
   cancelBooking: vi.fn(),

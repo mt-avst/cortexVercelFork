@@ -22,7 +22,6 @@ vi.mock('../../contexts/AuthContext', () => {
   return { useAuth: () => ({ user, loading: false }) };
 });
 vi.mock('../../contexts/ThemeContext', () => ({ useTheme: () => ({ theme: 'light' }) }));
-vi.mock('../../components/SlowNeuralBackground', () => ({ default: () => null }));
 // The review body is not under test here; stub the sections so a minimal
 // outputs object is enough and the nav is what renders.
 vi.mock('../../components/session-review/SessionSummaryCard', () => ({ default: () => <div data-testid="summary" /> }));
