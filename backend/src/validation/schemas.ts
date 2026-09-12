@@ -13,28 +13,6 @@ import type { Opportunity } from '../../../shared/types';
 
 // Base schemas
 export const UUIDSchema = z.string().uuid();
-export const EmailSchema = z.string().email();
-export const NonEmptyStringSchema = z.string().min(1);
-
-// User schemas
-export const UserSchema = z.object({
-  id: UUIDSchema,
-  name: NonEmptyStringSchema,
-  email: EmailSchema,
-  business_unit: z.string().optional(),
-  role_title: z.string().optional(),
-  role: z.enum(['employee', 'researcher_admin', 'superadmin']),
-  created_at: z.string().datetime(),
-});
-
-export const SessionUserSchema = z.object({
-  id: UUIDSchema,
-  name: NonEmptyStringSchema,
-  email: EmailSchema,
-  business_unit: z.string().optional(),
-  role_title: z.string().optional(),
-  role: z.enum(['employee', 'researcher_admin', 'superadmin']),
-});
 
 // Opportunity schemas
 export const OpportunityTypeSchema = z.enum(['test', 'poll', 'survey', 'question', 'interview', 'unmoderated']);
@@ -231,31 +209,6 @@ export const UpdateOpportunitySchema = z.object({
   end_date: z.string().datetime().optional().nullable(),
 });
 
-export const OpportunitySchema = z.object({
-  id: UUIDSchema,
-  type: OpportunityTypeSchema,
-  title: NonEmptyStringSchema,
-  purpose_one_liner: NonEmptyStringSchema,
-  description_optional: z.string().optional(),
-  product_optional: z.string().optional(),
-  meeting_location_optional: z.string().optional(),
-  default_duration_minutes: z.number().int().min(5).max(240),
-  status: OpportunityStatusSchema,
-  owner_user_id: UUIDSchema,
-  // Pointed at the guarded field even though nothing reads this schema today.
-  // It is NAMED as if it were the canonical opportunity shape, so the next route
-  // that reaches for it would otherwise get no scheme check and no `.url()`
-  // either.
-  external_link_optional: externalLinkSchema.optional(),
-  delivery_mode: DeliveryModeSchema.optional(),
-  participant_type_required: ParticipantTypeSchema.optional(),
-  participant_type_specific_details: z.string().optional(),
-  start_date: z.string().datetime().optional().nullable(),
-  end_date: z.string().datetime().optional().nullable(),
-  created_at: z.string().datetime(),
-  updated_at: z.string().datetime(),
-});
-
 // Session schemas
 export const CreateSessionSchema = z.object({
   start_time: z.string().datetime(),
@@ -274,37 +227,6 @@ export const CreateSessionSchema = z.object({
 export const CreateSessionsSchema = z.object({
   opportunity_id: UUIDSchema,
   sessions: z.array(CreateSessionSchema).min(1, "At least one session is required"),
-});
-
-export const UpdateSessionSchema = z.object({
-  start_time: z.string().datetime().optional(),
-  end_time: z.string().datetime().optional(),
-  capacity: z.number().int().min(SESSION_CAPACITY.MIN).max(SESSION_CAPACITY.MAX).optional(),
-  location_or_meet_link_optional: meetingLocationSchema.optional(),
-}).refine(
-  (data) => {
-    if (data.start_time && data.end_time) {
-      return new Date(data.end_time) > new Date(data.start_time);
-    }
-    return true;
-  },
-  {
-    message: "End time must be after start time",
-    path: ["end_time"],
-  }
-);
-
-export const SessionSchema = z.object({
-  id: UUIDSchema,
-  opportunity_id: UUIDSchema,
-  start_time: z.string().datetime(),
-  end_time: z.string().datetime(),
-  capacity: z.number().int().min(SESSION_CAPACITY.MIN).max(SESSION_CAPACITY.MAX),
-  booked_count: z.number().int().min(0),
-  location_or_meet_link_optional: meetingLocationSchema.optional(),
-  created_at: z.string().datetime(),
-  updated_at: z.string().datetime(),
-  remaining: z.number().int().optional(),
 });
 
 /**
@@ -486,47 +408,6 @@ export const validateNewSessionData = (data: CreateSessionRequest): string[] => 
 
   return errors;
 };
-
-// Booking schemas
-export const BookingStatusSchema = z.enum(['booked', 'cancelled']);
-
-export const BookingSchema = z.object({
-  id: UUIDSchema,
-  user_id: UUIDSchema,
-  session_id: UUIDSchema,
-  status: BookingStatusSchema,
-  gcal_event_id: z.string().optional(),
-  cancelled_at: z.string().datetime().optional(),
-  created_at: z.string().datetime(),
-  updated_at: z.string().datetime(),
-});
-
-export const RescheduleBookingSchema = z.object({
-  target_session_id: UUIDSchema,
-});
-
-// Query parameter schemas
-export const OpportunityQuerySchema = z.object({
-  type: z.string().optional().transform(val => val === '' ? undefined : val).pipe(OpportunityTypeSchema.optional()),
-  q: z.string().optional().transform(val => val === '' ? undefined : val),
-  status: z.string().optional().transform(val => val === '' ? undefined : val).pipe(OpportunityStatusSchema.optional()),
-});
-
-export const SessionQuerySchema = z.object({
-  from: z.string().datetime().optional(),
-  include_past: z.string().transform(val => val === 'true').optional(),
-});
-
-// Response schemas
-export const ErrorResponseSchema = z.object({
-  error: NonEmptyStringSchema,
-  details: z.array(z.string()).optional(),
-});
-
-export const SuccessResponseSchema = z.object({
-  success: z.boolean(),
-  message: z.string().optional(),
-});
 
 // Validation middleware helper
 export const validateRequest = <T>(schema: z.ZodSchema<T>) => {

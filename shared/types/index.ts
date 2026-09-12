@@ -432,39 +432,6 @@ export class NetworkError extends AppError {
 }
 
 // ============================================================================
-// API RESPONSE TYPES
-// ============================================================================
-
-export interface SuccessResponse {
-  success: boolean;
-  message?: string;
-}
-
-// ============================================================================
-// TYPE GUARDS
-// ============================================================================
-
-export const isUser = (obj: any): obj is User => {
-  return obj && typeof obj.id === 'string' && typeof obj.name === 'string' && typeof obj.email === 'string';
-};
-
-export const isSessionUser = (obj: any): obj is SessionUser => {
-  return obj && typeof obj.id === 'string' && typeof obj.name === 'string' && typeof obj.email === 'string';
-};
-
-export const isOpportunity = (obj: any): obj is Opportunity => {
-  return obj && typeof obj.id === 'string' && typeof obj.title === 'string' && typeof obj.purpose_one_liner === 'string';
-};
-
-export const isSession = (obj: any): obj is Session => {
-  return obj && typeof obj.id === 'string' && typeof obj.opportunity_id === 'string' && typeof obj.start_time === 'string';
-};
-
-export const isBooking = (obj: any): obj is Booking => {
-  return obj && typeof obj.id === 'string' && typeof obj.user_id === 'string' && typeof obj.session_id === 'string';
-};
-
-// ============================================================================
 // FORM TYPES
 // ============================================================================
 
@@ -551,13 +518,6 @@ export interface FirstHandStudy {
   authored_step_count?: number;
   created_at?: string;
   updated_at?: string;
-}
-
-export interface SessionFormData {
-  start_time: string;
-  end_time: string;
-  capacity: number;
-  location_or_meet_link_optional?: string;
 }
 
 // ============================================================================
@@ -762,7 +722,3 @@ export interface BookingArtifactPresignResponse {
 // ============================================================================
 
 export type OpportunityType = 'test' | 'poll' | 'survey' | 'question' | 'interview' | 'unmoderated';
-export type OpportunityStatus = 'draft' | 'published' | 'closed';
-export type ParticipantType = 'any' | 'internal' | 'external' | 'specific';
-export type UserRole = 'employee' | 'researcher_admin' | 'superadmin';
-export type BookingStatus = 'booked' | 'cancelled';
