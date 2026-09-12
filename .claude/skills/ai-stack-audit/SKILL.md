@@ -8,8 +8,9 @@ description: >-
   produces a MEASURED inventory, audits it for integrity, drift, staleness,
   security, context cost and dead weight, then renders a single shareable
   artifact - a way-of-working pipeline diagram (from the workflow rules), a
-  layered stack map and a severity-coded audit panel. The diagram is core,
-  not a bonus - visualise AND audit.
+  layered stack map and a severity-coded audit panel - plus a downloadable
+  "setup card" (a single SVG image) to share the stack in Slack or a doc.
+  The diagram is core, not a bonus - visualise AND audit.
   TRIGGER when the user asks to "map / visualise / diagram my AI stack",
   "audit my Claude Code setup", "what loads every session", "review my
   ~/.claude", "is my config drifting", "what's my context cost", or runs
@@ -66,7 +67,16 @@ Copy `references/stack-map.html` as the starting point and populate it entirely 
 - The **way-of-working pipeline** is a REQUIRED part of the map whenever the stack encodes a workflow (a development-workflow, testing or code-review rule - the usual case). Derive its stages from those rules and draw it as an inline SVG; the template ships a worked pipeline to adapt, not to copy blindly. This is the *visualise* half of the skill - do not skip it because a similar diagram exists elsewhere, because the audit alone looks sufficient, or to save time. Omit it ONLY for a bare setup with no workflow rules at all, and say so explicitly in the page.
 - Load `artifact-design` before writing the page and follow it; keep the treatment the template sets. Then publish with the Artifact tool and hand back the link.
 
-### 4. Report (optional)
+### 4. Shareable card (downloadable image)
+
+Produce a single image the user can save and share - the point of this step is a **downloadable file**, not another page. Fill `references/setup-card.svg` from the inventory: a 1200x630 card with the stack name, the six headline counts (rules, agents, skills, MCP, memory facts, tokens/session), the pipeline strip, and a one-line audit headline coloured by worst severity (the card's own header comment lists the placeholders and dot colours). Then:
+
+- Write it to a `.svg` file and hand it over - `SendUserFile` where the harness has it, otherwise write it into the working directory and give the path. SVG needs no rendering tools, so this always works.
+- If an SVG-to-PNG converter is on the machine (`rsvg-convert`, `magick`, or macOS `qlmanage` then crop to 1200x630), also emit a PNG - it previews inline in Slack, where an SVG shows only as a file. The PNG is a bonus, never a blocker.
+
+Keep the card single-theme (dark) and system-font only, so it renders identically on any machine.
+
+### 5. Report (optional)
 
 If the user wants something to paste into an issue or a doc, also write a short markdown findings report: the summary counts, then findings grouped by severity with evidence and fix. Offer it - do not force it.
 
