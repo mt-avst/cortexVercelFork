@@ -8,7 +8,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { startTestPostgres, type TestPostgres } from "../__tests__/helpers/postgres-instance";
 
 /**
- * The participant scope on `findParticipantCompletionsForOpportunitiesPostgres`,
+ * The participant scope on `findParticipantCompletionsForOpportunities`,
  * against a real Postgres.
  *
  * `WHERE participant_id = $1` is the IDOR filter on the completion trace: it is
@@ -175,7 +175,7 @@ describe.skipIf(skipDbTests)(
       await seedTwoParticipants();
       const repository = await importRepository();
 
-      const forA = await repository.findParticipantCompletionsForOpportunitiesPostgres({
+      const forA = await repository.findParticipantCompletionsForOpportunities({
         participantId: PARTICIPANT_A,
         opportunityIds: [OPP_SHARED, OPP_A_ONLY]
       });
@@ -214,7 +214,7 @@ describe.skipIf(skipDbTests)(
       await seedTwoParticipants();
       const repository = await importRepository();
 
-      const forB = await repository.findParticipantCompletionsForOpportunitiesPostgres({
+      const forB = await repository.findParticipantCompletionsForOpportunities({
         participantId: PARTICIPANT_B,
         opportunityIds: [OPP_SHARED, OPP_A_ONLY]
       });

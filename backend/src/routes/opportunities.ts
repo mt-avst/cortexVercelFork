@@ -26,7 +26,7 @@ import { createSession } from '../firsthand/session-create';
 import {
   findParticipantCompletionsForOpportunities,
   findParticipantSessionForOpportunity
-} from '../firsthand/runtime-repository';
+} from '../firsthand/runtime-repository-postgres';
 import { isAnsweredRuntimeStatus } from '../firsthand/state-model';
 import {
   listResponsesForOpportunity,
