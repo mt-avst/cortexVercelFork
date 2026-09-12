@@ -19,6 +19,7 @@ import { logger } from '../utils/logger';
 import { runsNativeSurvey } from '@shared/firsthand/delivery';
 import { bookingConsentText } from '@shared/firsthand/consent-templates';
 import { isPublishableExternalLink } from '@shared/firsthand/url-safety';
+import { ExternalHandoff, ExternalDestinationNote } from '../components/ExternalHandoff';
 import { RefreshCw, CheckCircle, CalendarCheck, Info, LayoutGrid, Table2, ExternalLink } from 'lucide-react';
 
 // Helper function to render poll description with checkbox indicators
@@ -212,6 +213,16 @@ const OpportunityDetail: React.FC = () => {
   const externalLinkIsUsable = isPublishableExternalLink(
     opportunity?.external_link_optional
   );
+
+  // The poll/survey/study CTA below is one button serving three destinations:
+  // a native in-app run, a recorded study, or a window.open hand-off to an
+  // external form. Only the last leaves Cortex, and DT-8 discloses the
+  // destination on every external hand-off - so the "leaving Cortex" note is
+  // shown for exactly that case (not for the two in-app ones).
+  const isExternalButtonHandoff =
+    !isNativeSurvey &&
+    !(opportunity?.type === 'unmoderated' && opportunity?.firsthand_study_id) &&
+    externalLinkIsUsable;
 
   const hasStartablePath = Boolean(
     opportunity?.type === 'unmoderated' || isNativeSurvey
@@ -993,6 +1004,22 @@ const OpportunityDetail: React.FC = () => {
                 // state a figure nobody chose.
                 const showBookableDuration = opportunity.type === 'test' || opportunity.type === 'interview';
                 const showRecordedDuration = opportunity.type === 'unmoderated' && recordedStudyBrief?.estimated_duration_minutes != null;
+                // DT-7: a poll, survey or single question that Cortex RUNS
+                // (native delivery, SurveyRunner) carried no time expectation
+                // at all. An HONEST QUALITATIVE one - never the untouched
+                // default 30, never an invented precise figure - so every type
+                // says roughly how long taking part takes. Gated on
+                // isNativeSurvey, NOT on type: an EXTERNAL poll/survey hands off
+                // to a third-party form Cortex never sees, so claiming "A few
+                // minutes" about it would be exactly the figure-nobody-chose
+                // this rule exists to avoid. A poll or single question is one
+                // interaction; a survey is a few.
+                const nativeDurationExpectation = !isNativeSurvey
+                  ? null
+                  : opportunity.type === 'survey'
+                  ? 'A few minutes'
+                  : 'Under a minute';
+                const showNativeExpectation = nativeDurationExpectation !== null;
                 // Task COUNT only (never the prompts - reading them up front turns
                 // the recording into a rehearsed performance), recorded only.
                 const showTasks = opportunity.type === 'unmoderated' && Boolean(recordedStudyBrief);
@@ -1002,7 +1029,7 @@ const OpportunityDetail: React.FC = () => {
                 // the same question two different ways.
                 const showParticipants = Boolean(eligibilityNote);
 
-                if (!(showProduct || showBookableDuration || showRecordedDuration || showTasks || showParticipants)) {
+                if (!(showProduct || showBookableDuration || showRecordedDuration || showNativeExpectation || showTasks || showParticipants)) {
                   return null;
                 }
 
@@ -1028,6 +1055,12 @@ const OpportunityDetail: React.FC = () => {
                           <span className="mission-data-value">
                             {recordedStudyBrief?.estimated_duration_minutes} min
                           </span>
+                        </div>
+                      )}
+                      {showNativeExpectation && (
+                        <div className="mission-data-item">
+                          <span className="mission-data-label">DURATION</span>
+                          <span className="mission-data-value">{nativeDurationExpectation}</span>
                         </div>
                       )}
 
@@ -1469,6 +1502,7 @@ const OpportunityDetail: React.FC = () => {
                           </div>
                         </div>
                       ) : opportunity.type === 'poll' || opportunity.type === 'survey' || opportunity.type === 'unmoderated' || isNativeSurvey ? (
+                        <>
                         <button
                           className="btn btn-primary w-100 mission-cta-btn"
                           onClick={async () => {
@@ -1579,19 +1613,23 @@ const OpportunityDetail: React.FC = () => {
                             ? 'Start recorded study'
                             : 'Open Study'}
                         </button>
-                      ) : externalLinkIsUsable ? (
-                        <a
-                          href={opportunity.external_link_optional}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="btn btn-primary w-100 mission-cta-btn"
-                          aria-label={opportunity.type === 'question' ? 'Answer question in new tab' : 'Participate in new tab'}
-                          onClick={async () => {
-                            // Track click for questions too if desired (though M6 spec only mentions poll/survey)
-                          }}
-                        >
-                          {opportunity.type === 'question' ? 'Answer Question' : 'Participate'}
-                        </a>
+                        {/* DT-8: the same destination disclosure the question
+                            hand-off carries, for the window.open external poll /
+                            survey / study path (the common external case). */}
+                        {isExternalButtonHandoff && opportunity.external_link_optional && (
+                          <ExternalDestinationNote url={opportunity.external_link_optional} />
+                        )}
+                        </>
+                      ) : externalLinkIsUsable && opportunity.external_link_optional ? (
+                        // DT-8: one hand-off pattern that names where the click
+                        // goes. This button used to say only "Participate" and
+                        // never showed the host - the destination is disclosed
+                        // here the way the recording task page and the bookings
+                        // meeting link already disclose theirs.
+                        <ExternalHandoff
+                          url={opportunity.external_link_optional}
+                          actionLabel={opportunity.type === 'question' ? 'Answer Question' : 'Participate'}
+                        />
                       ) : (
                         /*
                           No anchor at all when the stored link is not a web
