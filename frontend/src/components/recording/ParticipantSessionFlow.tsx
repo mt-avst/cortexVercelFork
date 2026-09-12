@@ -16,6 +16,7 @@ import {
   clearParticipantSessionStorage,
   getFlowStorageKey,
   getInterruptedRunRecovery,
+  hasUnfinishedServerProgress,
   migratePersistedPhase,
   type FlowPhase
 } from "../../lib/recording/session-local-state";
@@ -28,6 +29,7 @@ import { useTaskWindow, type TaskWindowStatus } from "../../lib/recording/task-w
 import { useTaskPip } from "../../lib/recording/task-pip";
 import {
   type DirectRecordingUploadMode,
+  fetchLatestRuntimeStatus,
   sendRuntimeEvent
 } from "../../lib/recording/runtime-client";
 import {
@@ -128,6 +130,14 @@ export function ParticipantSessionFlow({
   const [completionSummary, setCompletionSummary] =
     useState<CompletionSummary | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
+  // Whether hydration found NO saved local flow state. Only then is it worth
+  // asking the server whether this participant has progress somewhere else -
+  // an empty local device is exactly the "started on another device / cleared
+  // storage" case increment-1 exists to make non-silent.
+  const [localSessionEmpty, setLocalSessionEmpty] = useState(false);
+  // True once the server confirms mid-flight progress exists for a participant
+  // whose local device is empty. Drives the welcome-phase informational banner.
+  const [unfinishedServerSession, setUnfinishedServerSession] = useState(false);
   const [deviceSnapshot, setDeviceSnapshot] = useState<DeviceSnapshot | null>(
     null
   );
@@ -161,11 +171,20 @@ export function ParticipantSessionFlow({
           // arrival at setup, so a stale persisted result would be wrong.
           setPhase(migratePersistedPhase(parsed.phase));
         }
+
+        // Local flow state was found, so there is nothing to reconcile against
+        // the server - this device already knows where the participant is.
+        setLocalSessionEmpty(false);
       } else {
         clearParticipantSessionStorage(window.localStorage, token, "runner", attemptNumber);
+        // No saved flow: a fresh or cleared device. Worth asking the server
+        // whether progress exists elsewhere (unless this is a forceReset, which
+        // deliberately starts over and must not surface the prompt).
+        setLocalSessionEmpty(!forceReset);
       }
     } catch {
       clearParticipantSessionStorage(window.localStorage, token, "all", attemptNumber);
+      setLocalSessionEmpty(false);
     } finally {
       setIsHydrated(true);
     }
@@ -189,6 +208,35 @@ export function ParticipantSessionFlow({
     // recording chunks are gone, so there is nothing left to upload.
     window.localStorage.setItem(storageKey, JSON.stringify({ phase }));
   }, [isHydrated, phase, storageKey]);
+
+  useEffect(() => {
+    // Kept as its OWN effect, deliberately not folded into hydration: this is a
+    // passive, informational read of the server's snapshot. A participant with
+    // empty local state (a fresh device, or cleared storage) may already have
+    // mid-flight progress the server holds. Increment-1 makes that non-silent
+    // by surfacing a restart-only prompt - it does NOT auto-resume or rehydrate
+    // answers (that is increment-2). forceReset starts over on purpose, so it
+    // never triggers the prompt.
+    if (!isHydrated || !localSessionEmpty || forceReset) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void fetchLatestRuntimeStatus(token).then((status) => {
+      if (cancelled || status === null) {
+        return;
+      }
+
+      if (hasUnfinishedServerProgress(status)) {
+        setUnfinishedServerSession(true);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isHydrated, localSessionEmpty, forceReset, token]);
 
   useEffect(() => {
     if (!isHydrated) {
@@ -462,6 +510,36 @@ export function ParticipantSessionFlow({
                   }}
                   status={getSectionStatus(0, phase)}
                 >
+                  {/* Live region is mounted ALWAYS so a screen reader announces
+                      the banner when it later appears; some SRs skip a region
+                      added already-populated. The visible .journey-alert styling
+                      lives on the inner node, so the region is invisible when
+                      empty. role="status" (polite) suits an informational,
+                      non-blocking prompt. */}
+                  <div role="status" aria-live="polite">
+                    {phase === "welcome" && unfinishedServerSession ? (
+                      <div className="journey-alert">
+                        <strong>
+                          You have an unfinished session for this study
+                        </strong>
+                        <p>
+                          It looks like you started this study on another device
+                          or browser. Your earlier progress can&rsquo;t be picked
+                          up here yet, so continuing will start a fresh attempt.
+                        </p>
+                        <div className="journey-actions journey-actions--secondary">
+                          <button
+                            className="button secondary"
+                            onClick={() => setUnfinishedServerSession(false)}
+                            type="button"
+                          >
+                            Got it
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+
                   <WelcomeStage
                     deviceSupport={assessDeviceSupport(deviceSnapshot)}
                     duration={duration}

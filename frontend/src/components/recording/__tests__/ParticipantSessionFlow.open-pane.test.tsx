@@ -109,7 +109,9 @@ vi.mock("../../../lib/recording/device-support", () => ({
 vi.mock("../../../lib/recording/runtime-client", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   sendRuntimeEvent: vi.fn().mockResolvedValue(undefined),
-  saveParticipantResponse: vi.fn().mockResolvedValue(undefined)
+  saveParticipantResponse: vi.fn().mockResolvedValue(undefined),
+  // RS-10 status effect fires when local storage is empty; stub to a no-op.
+  fetchLatestRuntimeStatus: vi.fn().mockResolvedValue(null)
 }));
 
 function payload(): SessionPayload {

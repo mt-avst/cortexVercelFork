@@ -5,6 +5,7 @@ import {
   getFlowStorageKey,
   getInterruptedRunRecovery,
   getRunnerStorageKey,
+  hasUnfinishedServerProgress,
   migratePersistedPhase,
   type FlowPhase
 } from "./session-local-state";
@@ -138,5 +139,43 @@ describe("session local state helpers", () => {
   it("falls back to welcome for unknown persisted phases", () => {
     expect(migratePersistedPhase("finished")).toBe("welcome");
     expect(migratePersistedPhase("")).toBe("welcome");
+  });
+});
+
+describe("hasUnfinishedServerProgress", () => {
+  // Every lifecycle state from backend/src/firsthand/state-model.ts is pinned
+  // here by name: if the mid-flight set widens or narrows, one of these fails
+  // by name rather than the behaviour drifting silently.
+  const midFlight = [
+    "consent_accepted",
+    "setup_in_progress",
+    "ready_to_start",
+    "recording_in_progress",
+    "uploading"
+  ] as const;
+
+  const notMidFlight = [
+    "created",
+    "link_opened",
+    "completed",
+    "abandoned",
+    "failed"
+  ] as const;
+
+  for (const status of midFlight) {
+    it(`treats ${status} as unfinished progress`, () => {
+      expect(hasUnfinishedServerProgress(status)).toBe(true);
+    });
+  }
+
+  for (const status of notMidFlight) {
+    it(`does not treat ${status} as unfinished progress`, () => {
+      expect(hasUnfinishedServerProgress(status)).toBe(false);
+    });
+  }
+
+  it("fails safe to false for an unrecognised status", () => {
+    expect(hasUnfinishedServerProgress("something_else")).toBe(false);
+    expect(hasUnfinishedServerProgress("")).toBe(false);
   });
 });
