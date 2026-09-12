@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
-import ParticipantsTab, { bookingStatusLabel } from '../ParticipantsTab';
+import ParticipantsTab, { bookingStatusLabel, BOOKING_STATUS_RANK } from '../ParticipantsTab';
 import { buildArtifactsController } from './artifactsControllerStub';
 import { OpportunityBookingRow, ResearcherNotesResponse } from '../../../api/types';
 
@@ -358,5 +358,107 @@ describe('ParticipantsTab', () => {
     renderTab([buildBooking({ researcher_notes: 'x'.repeat(20001) })]);
 
     expect(screen.getByText('1 characters over the 20000 limit')).toBeInTheDocument();
+  });
+});
+
+describe('ParticipantsTab column sorting (DA-23)', () => {
+  // Deliberately picked so the prop order, name order and status-rank order
+  // all disagree - a test that reuses one ordering for two sort modes
+  // cannot tell them apart.
+  const threeBookings = (): OpportunityBookingRow[] => [
+    buildBooking({ id: 'b-zoe', participant_name: 'Zoe', status: 'booked', completion_status: 'pending' }),
+    buildBooking({ id: 'b-amy', participant_name: 'Amy', status: 'cancelled', completion_status: 'pending' }),
+    buildBooking({ id: 'b-mike', participant_name: 'Mike', status: 'booked', completion_status: 'completed' })
+  ];
+
+  const rowOrder = (): string[] =>
+    screen
+      .getAllByRole('row')
+      .slice(1)
+      .map((row) => row.textContent ?? '');
+
+  const namesIn = (rows: string[], names: string[]): string[] =>
+    rows.map((rowText) => names.find((name) => rowText.includes(name)) ?? '');
+
+  it('CONTROL: defaults to the roster order handed down by the page, unclicked', () => {
+    renderTab(threeBookings());
+
+    expect(namesIn(rowOrder(), ['Zoe', 'Amy', 'Mike'])).toEqual(['Zoe', 'Amy', 'Mike']);
+    expect(screen.getByRole('columnheader', { name: 'Status' })).toHaveAttribute('aria-sort', 'none');
+    expect(screen.getByRole('columnheader', { name: 'Participant' })).toHaveAttribute(
+      'aria-sort',
+      'none'
+    );
+  });
+
+  it('sorts by Status rank ascending on first click, descending on second', async () => {
+    const user = userEvent.setup();
+    renderTab(threeBookings());
+
+    const statusHeader = screen.getByRole('button', { name: 'Status' });
+    await user.click(statusHeader);
+
+    // Booked(0) < Awaiting approval(1) < Cancelled(4)
+    expect(namesIn(rowOrder(), ['Zoe', 'Amy', 'Mike'])).toEqual(['Zoe', 'Mike', 'Amy']);
+    expect(screen.getByRole('columnheader', { name: 'Status' })).toHaveAttribute(
+      'aria-sort',
+      'ascending'
+    );
+
+    await user.click(statusHeader);
+
+    expect(namesIn(rowOrder(), ['Zoe', 'Amy', 'Mike'])).toEqual(['Amy', 'Mike', 'Zoe']);
+    expect(screen.getByRole('columnheader', { name: 'Status' })).toHaveAttribute(
+      'aria-sort',
+      'descending'
+    );
+  });
+
+  it('sorts by Participant name ascending on first click, descending on second', async () => {
+    const user = userEvent.setup();
+    renderTab(threeBookings());
+
+    const participantHeader = screen.getByRole('button', { name: 'Participant' });
+    await user.click(participantHeader);
+
+    expect(namesIn(rowOrder(), ['Zoe', 'Amy', 'Mike'])).toEqual(['Amy', 'Mike', 'Zoe']);
+    expect(screen.getByRole('columnheader', { name: 'Participant' })).toHaveAttribute(
+      'aria-sort',
+      'ascending'
+    );
+
+    await user.click(participantHeader);
+
+    expect(namesIn(rowOrder(), ['Zoe', 'Amy', 'Mike'])).toEqual(['Zoe', 'Mike', 'Amy']);
+    expect(screen.getByRole('columnheader', { name: 'Participant' })).toHaveAttribute(
+      'aria-sort',
+      'descending'
+    );
+  });
+});
+
+describe('BOOKING_STATUS_RANK drift guard (DA-23)', () => {
+  // Every label bookingStatusLabel can actually produce, driven THROUGH the
+  // function itself rather than a second hardcoded string list - a rename in
+  // bookingStatusLabel fails this test by name too, not just an added label.
+  // There is no shared union type to pin this against the way SessionsTab
+  // pins STATUS_RANK on SessionEvent['event_type']; this test is the
+  // equivalent guard for a derived string with no declared type.
+  it.each([
+    [{ status: 'cancelled', completion_status: 'pending' }, 'Cancelled'],
+    [{ status: 'booked', completion_status: 'completed' }, 'Awaiting approval'],
+    [{ status: 'booked', completion_status: 'approved' }, 'Completed'],
+    [{ status: 'booked', completion_status: 'rejected' }, 'Rejected'],
+    [{ status: 'booked', completion_status: 'pending' }, 'Booked']
+  ])('has a numeric BOOKING_STATUS_RANK entry for the %j label', (booking, expectedLabel) => {
+    const label = bookingStatusLabel(booking);
+    expect(label).toBe(expectedLabel);
+    expect(typeof BOOKING_STATUS_RANK[label]).toBe('number');
+  });
+
+  it('has exactly the five ranks bookingStatusLabel can produce - no fewer, no stale extras', () => {
+    expect(Object.keys(BOOKING_STATUS_RANK).sort()).toEqual(
+      ['Awaiting approval', 'Booked', 'Cancelled', 'Completed', 'Rejected']
+    );
   });
 });
