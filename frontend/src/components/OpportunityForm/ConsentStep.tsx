@@ -38,7 +38,7 @@ export interface ConsentSelection {
   templateVersion: number | null;
 }
 
-export interface ConsentStepProps {
+interface ConsentStepProps {
   /** Revalidate the consent field on blur, by the same rules a save runs. */
   onBlur?: () => void;
   /** Which template family applies. Decided by the study, never by this step. */

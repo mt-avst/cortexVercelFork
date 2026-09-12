@@ -37,7 +37,7 @@ export interface AuthoredItem {
   is_required?: boolean;
 }
 
-export interface QuestionListProps<T extends AuthoredItem> {
+interface QuestionListProps<T extends AuthoredItem> {
   items: WithClientId<T>[];
   onChange: (next: WithClientId<T>[]) => void;
   validationErrors: Record<string, string>;

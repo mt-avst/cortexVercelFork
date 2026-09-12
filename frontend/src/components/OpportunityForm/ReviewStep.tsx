@@ -7,7 +7,7 @@ import ShareOpportunityLink from '../ShareOpportunityLink';
 import type { User } from '@shared/types';
 import './review-step.css';
 
-export interface ReviewStepProps {
+interface ReviewStepProps {
   sections: ReviewSection[];
   /**
    * The identity that leads the screen (WZ-17): the study's title and the

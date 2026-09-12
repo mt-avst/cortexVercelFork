@@ -45,7 +45,7 @@ import type { Response } from 'express';
  */
 export type SocketWriteTimeoutReason = 'export_deadline' | 'drain_timeout';
 
-export interface BoundedSocketWriteOptions {
+interface BoundedSocketWriteOptions {
   res: Response;
   /**
    * The caller's whole-export budget, as a closure over its own start time
