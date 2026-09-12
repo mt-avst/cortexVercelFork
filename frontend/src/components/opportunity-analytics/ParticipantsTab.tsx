@@ -27,7 +27,7 @@ const MAX_NOTES_CHARS = VALIDATION.MAX_RESEARCHER_NOTES_CHARS;
  * ("Save note" enabled) is the honest rendering of "not stored yet".
  */
 
-export interface ParticipantsTabProps {
+interface ParticipantsTabProps {
   bookings: OpportunityBookingRow[];
   loading: boolean;
   error: string;

@@ -35,7 +35,7 @@ export const CLOSING_DOORS: ReadonlyArray<Door> = [
   },
 ];
 
-export interface DoorCardProps {
+interface DoorCardProps {
   door: Door;
   onAccessCortex: () => void;
   isLoading: boolean;

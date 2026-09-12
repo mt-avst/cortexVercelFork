@@ -88,7 +88,7 @@ import type { Request, Response } from 'express';
  * open it and no pod has to remember anything. See `sealEnvelope` below for what
  * is sealed and why it is sealed rather than merely signed.
  */
-export interface OAuthStateGuardOptions {
+interface OAuthStateGuardOptions {
   /**
    * Cookie the nonce is bound to, WITHOUT the `__Host-` prefix. MUST be
    * distinct per flow.
