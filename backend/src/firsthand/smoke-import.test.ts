@@ -10,8 +10,8 @@ import { describe, expect, it } from "vitest";
 // vercel import, or initialised a client at module scope, importing would throw
 // and this suite would fail.
 describe("firsthand domain layer backend smoke-import", () => {
-  it("loads the repository facade and its transitive tree without env or mocks", async () => {
-    const repo = await import("./runtime-repository");
+  it("loads the runtime repository and its transitive tree without env or mocks", async () => {
+    const repo = await import("./runtime-repository-postgres");
     expect(typeof repo.seedRuntimeSession).toBe("function");
     expect(typeof repo.getRuntimeSession).toBe("function");
     expect(typeof repo.saveUploadedRecordingAsset).toBe("function");
@@ -20,7 +20,7 @@ describe("firsthand domain layer backend smoke-import", () => {
 
   it("loads the postgres repository, studies repository and database modules", async () => {
     const pg = await import("./runtime-repository-postgres");
-    expect(typeof pg.seedRuntimeSessionPostgres).toBe("function");
+    expect(typeof pg.seedRuntimeSession).toBe("function");
 
     const studies = await import("./studies-repository");
     expect(studies).toBeTypeOf("object");

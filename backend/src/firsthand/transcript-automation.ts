@@ -1,7 +1,7 @@
 import {
   processTranscriptGeneration,
   queueTranscriptGeneration
-} from "./runtime-repository";
+} from "./runtime-repository-postgres";
 
 // Ported from FirstHand's src/lib/transcript-automation.ts (the `server-only`
 // import is dropped per H10). Kicks the prototype transcript generator after a

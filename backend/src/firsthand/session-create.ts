@@ -5,7 +5,7 @@ import {
   type SessionPayload
 } from '../../../shared/firsthand/contract';
 import { getStudyById, isStudiesPersistenceConfigured } from './studies-repository';
-import { seedRuntimeSession } from './runtime-repository';
+import { seedRuntimeSession } from './runtime-repository-postgres';
 import { logger } from '../utils/logger';
 
 // In-process session creation (Phase B, step B3b). This is the internalised

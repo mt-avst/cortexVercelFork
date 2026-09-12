@@ -14,7 +14,7 @@ vi.mock('./studies-repository', () => ({
   isStudiesPersistenceConfigured: isStudiesPersistenceConfiguredMock,
 }));
 
-vi.mock('./runtime-repository', () => ({
+vi.mock('./runtime-repository-postgres', () => ({
   seedRuntimeSession: seedRuntimeSessionMock,
 }));
 
