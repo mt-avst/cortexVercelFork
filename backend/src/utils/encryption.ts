@@ -176,11 +176,3 @@ export function decryptAuto(encryptedData: string): string {
   }
   return decrypt(encryptedData);
 }
-
-/**
- * Generate a secure random encryption key (for initial setup).
- * Returns a 64-character hex string suitable for ENCRYPTION_KEY env var.
- */
-export function generateEncryptionKey(): string {
-  return crypto.randomBytes(KEY_LENGTH).toString('hex');
-}

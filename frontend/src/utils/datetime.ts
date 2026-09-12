@@ -124,10 +124,6 @@ export const formatDateTime = (
   return zone ? `${date}, ${time} ${zone}` : `${date}, ${time}`;
 };
 
-/** The reader's own zone, for labelling a column of times once rather than per row. */
-export const readerTimeZoneLabel = (at: string | Date = new Date()): string | null =>
-  formatTimeZoneLabel(at);
-
 /**
  * One offset label for a set of instants, but ONLY if they all share it.
  *

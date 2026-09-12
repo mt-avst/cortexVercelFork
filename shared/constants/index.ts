@@ -49,22 +49,6 @@ export const API_CONFIG = {
   RETRY_DELAY_MS: 1000,
 } as const;
 
-/**
- * HTTP status codes
- */
-export const HTTP_STATUS = {
-  OK: 200,
-  CREATED: 201,
-  BAD_REQUEST: 400,
-  UNAUTHORIZED: 401,
-  FORBIDDEN: 403,
-  NOT_FOUND: 404,
-  CONFLICT: 409,
-  TIMEOUT: 408,
-  INTERNAL_SERVER_ERROR: 500,
-  SERVICE_UNAVAILABLE: 503,
-} as const;
-
 // ============================================================================
 // VALIDATION CONSTANTS
 // ============================================================================
@@ -182,22 +166,6 @@ export const SECURITY_CONFIG = {
 } as const;
 
 // ============================================================================
-// PAGINATION CONSTANTS
-// ============================================================================
-
-/**
- * Pagination configuration
- */
-export const PAGINATION = {
-  /** Default page size */
-  DEFAULT_PAGE_SIZE: 20,
-  /** Maximum page size */
-  MAX_PAGE_SIZE: 100,
-  /** Minimum page size */
-  MIN_PAGE_SIZE: 1,
-} as const;
-
-// ============================================================================
 // SESSION CONSTANTS
 // ============================================================================
 
@@ -244,33 +212,11 @@ export const ENVIRONMENT = {
 } as const;
 
 // ============================================================================
-// USER ROLES AND PERMISSIONS
+// OPPORTUNITY TYPES
 // ============================================================================
 
 /**
- * User roles and permissions
- */
-export const USER_ROLES = {
-  EMPLOYEE: 'employee',
-  RESEARCHER_ADMIN: 'researcher_admin',
-  SUPERADMIN: 'superadmin',
-} as const;
-
-export const PERMISSIONS = {
-  CREATE_OPPORTUNITY: 'create_opportunity',
-  EDIT_OPPORTUNITY: 'edit_opportunity',
-  DELETE_OPPORTUNITY: 'delete_opportunity',
-  VIEW_ALL_OPPORTUNITIES: 'view_all_opportunities',
-  MANAGE_SESSIONS: 'manage_sessions',
-  VIEW_ANALYTICS: 'view_analytics',
-} as const;
-
-// ============================================================================
-// OPPORTUNITY TYPES AND STATUSES
-// ============================================================================
-
-/**
- * Opportunity types and statuses
+ * Opportunity types
  */
 export const OPPORTUNITY_TYPES = {
   TEST: 'test',
@@ -279,29 +225,4 @@ export const OPPORTUNITY_TYPES = {
   QUESTION: 'question',
   INTERVIEW: 'interview',
   UNMODERATED: 'unmoderated',
-} as const;
-
-export const OPPORTUNITY_STATUSES = {
-  DRAFT: 'draft',
-  PUBLISHED: 'published',
-  CLOSED: 'closed',
-} as const;
-
-export const PARTICIPANT_TYPES = {
-  ANY: 'any',
-  INTERNAL: 'internal',
-  EXTERNAL: 'external',
-  SPECIFIC: 'specific',
-} as const;
-
-// ============================================================================
-// BOOKING STATUSES
-// ============================================================================
-
-/**
- * Booking statuses
- */
-export const BOOKING_STATUSES = {
-  BOOKED: 'booked',
-  CANCELLED: 'cancelled',
 } as const;

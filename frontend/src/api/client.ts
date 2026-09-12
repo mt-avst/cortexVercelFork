@@ -6,7 +6,7 @@ import { logger } from '../utils/logger';
 import { getVisitorNonce } from '../utils/visitorNonce';
 import { authNavigation, isAdminRoute, isProductionEnvironment, redirectTo, AUTH_ENDPOINTS } from '../utils/navigation';
 
-import { User, Opportunity, CreateOpportunityRequest, UpdateOpportunityRequest, Session, CreateSessionRequest, UpdateSessionRequest, Booking, UserBookings, RescheduleBookingRequest, CalendarEvent, AvailabilityResponse, ConflictCheckResponse, AdminRequest, OpportunityBookingRow, ResearcherNotesResponse } from './types';
+import { User, Opportunity, CreateOpportunityRequest, UpdateOpportunityRequest, Session, CreateSessionRequest, Booking, UserBookings, RescheduleBookingRequest, CalendarEvent, AvailabilityResponse, AdminRequest, OpportunityBookingRow, ResearcherNotesResponse } from './types';
 
 /**
  * Primary API client for all frontend API requests
@@ -353,17 +353,8 @@ export const createSessions = async (opportunityId: string, data: CreateSessionR
   return response.data;
 };
 
-export const updateSession = async (sessionId: string, data: UpdateSessionRequest): Promise<Session> => {
-  const response = await api.patch(`/sessions/${sessionId}`, data);
-  return response.data;
-};
-
 export const deleteSession = async (sessionId: string): Promise<void> => {
   await api.delete(`/sessions/${sessionId}`);
-};
-
-export const closeOpportunityIfPast = async (opportunityId: string): Promise<void> => {
-  await api.post(`/opportunities/${opportunityId}/close-if-past`);
 };
 
 export const deleteAllSessions = async (opportunityId: string): Promise<{ message: string; deleted_count: number }> => {
@@ -400,12 +391,6 @@ export const rescheduleBooking = async (bookingId: string, data: RescheduleBooki
 
 export const getMyBookings = async (): Promise<UserBookings> => {
   const response = await api.get('/bookings/my/bookings');
-  return response.data;
-};
-
-// Session completion API functions
-export const completeSession = async (sessionId: string): Promise<{ message: string; status: string; awaitingApproval: boolean }> => {
-  const response = await api.post(`/bookings/sessions/${sessionId}/complete`);
   return response.data;
 };
 
@@ -546,19 +531,6 @@ export const getAvailability = async (
   return response.data;
 };
 
-export const checkConflicts = async (
-  timeSlots: Array<{ start_time: string; end_time: string }>,
-  calendarId?: string,
-  opportunityId?: string
-): Promise<ConflictCheckResponse> => {
-  const response = await api.post('/calendar/check-conflicts', {
-    time_slots: timeSlots,
-    calendar_id: calendarId,
-    opportunity_id: opportunityId
-  });
-  return response.data;
-};
-
 // User Calendar API functions
 /**
  * Get user's calendar events for a date range
@@ -601,13 +573,6 @@ export const getCalendarConnectionStatus = async (): Promise<{
  * above, and for the same reason.
  */
 export const calendarConnectUrl = (): string => `${getApiBaseUrl()}/api/calendar/auth/connect`;
-
-/**
- * Disconnect user's calendar
- */
-export const disconnectCalendar = async (): Promise<void> => {
-  await api.delete('/calendar/disconnect');
-};
 
 // Click tracking API functions (M6)
 /**
@@ -835,23 +800,6 @@ export const submitFeedback = async (data: {
   url: string;
 }): Promise<{ success: boolean }> => {
   const response = await api.post('/feedback', data);
-  return response.data;
-};
-
-/**
- * Platform Stats for Homepage KPIs
- */
-export interface PlatformStats {
-  activeStudies: number;
-  participantsRegistered: number;
-  rewardsDistributed: number;
-}
-
-/**
- * Get platform-wide statistics for homepage KPI display
- */
-export const getPlatformStats = async (): Promise<PlatformStats> => {
-  const response = await api.get('/stats/platform');
   return response.data;
 };
 
