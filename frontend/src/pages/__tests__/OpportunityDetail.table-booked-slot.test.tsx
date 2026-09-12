@@ -55,7 +55,6 @@ vi.mock('../../contexts/AuthContext', () => ({
   useAuth: () => ({ user: { id: 'u1', role: 'employee', name: 'E' }, loading: false, initialAuthCheck: true }),
 }));
 vi.mock('../../contexts/ThemeContext', () => ({ useTheme: () => ({ theme: 'light' }) }));
-vi.mock('../../components/SlowNeuralBackground', () => ({ default: () => null }));
 
 // Table view is the default, so CalendarGrid never mounts here - it is
 // stubbed only so importing it does not pull in framer-motion machinery.

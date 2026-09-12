@@ -17,7 +17,6 @@ vi.mock('../../contexts/ThemeContext', () => ({
   useTheme: () => ({ theme: 'light', isDarkMode: false }),
 }));
 
-vi.mock('../../components/SlowNeuralBackground', () => ({ default: () => null }));
 /**
  * Reports the backward- and forward-navigation props it was handed, so the
  * page's wiring can be asserted here while the control's own rendering is

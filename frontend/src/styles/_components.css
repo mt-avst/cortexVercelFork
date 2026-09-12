@@ -9173,13 +9173,7 @@ body.theme-light .mission-data-value {
   /* Calendar lives inside this glass panel */
 }
 
-/* SlowNeuralBackground: allow clicks to pass through to page content */
-.slow-neural-background,
-.slow-neural-background canvas {
-  pointer-events: none !important;
-}
-
-/* HIDE ambient glow artifacts - SlowNeuralBackground provides the bg */
+/* HIDE ambient glow artifacts on the scheduler panel */
 .mission-scheduler .calendar-ambient-glow,
 .mission-scheduler .calendar-ambient-glow-secondary {
   display: none !important;
