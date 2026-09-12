@@ -15,7 +15,7 @@ import cookieParser from 'cookie-parser';
 jest.mock('../../firsthand/session-store', () => ({
   loadParticipantSession: jest.fn()
 }));
-jest.mock('../../firsthand/runtime-repository', () => ({
+jest.mock('../../firsthand/runtime-repository-postgres', () => ({
   seedRuntimeSession: jest.fn(),
   getRuntimeSession: jest.fn(),
   applyRuntimeMutation: jest.fn(),
@@ -52,7 +52,7 @@ import {
   saveUploadedRecordingAsset,
   registerPendingRecordingUpload,
   resolvePendingRecordingUpload
-} from '../../firsthand/runtime-repository';
+} from '../../firsthand/runtime-repository-postgres';
 import { storeRecordingObject, deleteStoredObject } from '../../firsthand/object-storage';
 import {
   createPresignedRecordingUploadUrl,

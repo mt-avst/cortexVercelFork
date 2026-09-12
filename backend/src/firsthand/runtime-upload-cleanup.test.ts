@@ -82,7 +82,7 @@ vi.mock("../utils/logger", () => ({
   logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() }
 }));
 
-import { processPendingRecordingUploadCleanupPostgres } from "./runtime-repository-postgres";
+import { processPendingRecordingUploadCleanup } from "./runtime-repository-postgres";
 
 describe("the stale-upload reaper", () => {
   beforeEach(() => {
@@ -91,7 +91,7 @@ describe("the stale-upload reaper", () => {
   });
 
   it("returns the connection before it starts talking to S3", async () => {
-    const result = await processPendingRecordingUploadCleanupPostgres(10);
+    const result = await processPendingRecordingUploadCleanup(10);
 
     expect(result).toMatchObject({ idle: false, processedCount: 2, deletedCount: 2 });
 
@@ -108,13 +108,13 @@ describe("the stale-upload reaper", () => {
   });
 
   it("takes exactly one checkout, however many objects it deletes", async () => {
-    await processPendingRecordingUploadCleanupPostgres(10);
+    await processPendingRecordingUploadCleanup(10);
 
     expect(events.filter((event) => event === "checkout:start")).toHaveLength(1);
   });
 
   it("deletes the rows before the objects, never the other way round", async () => {
-    await processPendingRecordingUploadCleanupPostgres(10);
+    await processPendingRecordingUploadCleanup(10);
 
     // The safe order. An S3 delete that fails leaves an orphaned object and no
     // row, which costs storage; the other order risks destroying a live

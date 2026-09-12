@@ -20,7 +20,7 @@ import {
   resolvePendingRecordingUpload,
   saveUploadedRecordingAsset,
   seedRuntimeSession
-} from '../firsthand/runtime-repository';
+} from '../firsthand/runtime-repository-postgres';
 import { deleteStoredObject, storeRecordingObject } from '../firsthand/object-storage';
 import {
   createPresignedRecordingUploadUrl,

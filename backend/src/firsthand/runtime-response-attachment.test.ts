@@ -169,7 +169,7 @@ describe("attaching a participant's answer to a step", () => {
     const { calls } = wire();
     const repository = await import("./runtime-repository-postgres");
 
-    await repository.applyRuntimeMutationPostgres(payload(), answer);
+    await repository.applyRuntimeMutation(payload(), answer);
 
     return calls;
   };

@@ -102,7 +102,7 @@ type PendingRecordingUploadRow = {
   valid_until: Date | string;
 };
 
-export async function seedRuntimeSessionPostgres(payload: SessionPayload) {
+export async function seedRuntimeSession(payload: SessionPayload) {
   return withRuntimeDatabaseClient(async (client) => {
     await client.query("BEGIN");
 
@@ -127,7 +127,7 @@ export async function seedRuntimeSessionPostgres(payload: SessionPayload) {
   });
 }
 
-export async function createFreshRuntimeAttemptPostgres(payload: SessionPayload) {
+export async function createFreshRuntimeAttempt(payload: SessionPayload) {
   return withRuntimeDatabaseClient(async (client) => {
     await client.query("BEGIN");
 
@@ -189,7 +189,7 @@ function refuseAnswerToFinishedSession(
   throw new ConflictError("This session has finished and its answers can no longer be changed.");
 }
 
-export async function applyRuntimeMutationPostgres(
+export async function applyRuntimeMutation(
   payload: SessionPayload,
   mutation: RuntimeMutation,
   input?: {
@@ -233,7 +233,7 @@ export async function applyRuntimeMutationPostgres(
   });
 }
 
-export async function resetRuntimeSessionPostgres(payload: SessionPayload) {
+export async function resetRuntimeSession(payload: SessionPayload) {
   const { cleanupTargets, session } = await withRuntimeDatabaseClient(
     async (client) => {
       await client.query("BEGIN");
@@ -314,7 +314,7 @@ export async function resetRuntimeSessionPostgres(payload: SessionPayload) {
  * case is answered here rather than filtered out: the route needs to tell the
  * two apart.
  */
-export async function findParticipantSessionForOpportunityPostgres(input: {
+export async function findParticipantSessionForOpportunity(input: {
   opportunityId: string;
   participantId: string;
 }): Promise<{ token: string; sessionStatus: string } | null> {
@@ -351,7 +351,7 @@ export async function findParticipantSessionForOpportunityPostgres(input: {
  * `DISTINCT ON (opportunity_id) ... ORDER BY created_at DESC` keeps the latest
  * attempt per opportunity, matching `findParticipantSessionForOpportunity`.
  */
-export async function findParticipantCompletionsForOpportunitiesPostgres(input: {
+export async function findParticipantCompletionsForOpportunities(input: {
   participantId: string;
   opportunityIds: readonly string[];
 }): Promise<
@@ -386,7 +386,7 @@ export async function findParticipantCompletionsForOpportunitiesPostgres(input: 
   });
 }
 
-export async function getRuntimeSessionPostgres(
+export async function getRuntimeSession(
   sessionId: string,
   input?: {
     attemptNumber?: number;
@@ -397,13 +397,13 @@ export async function getRuntimeSessionPostgres(
   );
 }
 
-export async function listRuntimeSessionAttemptsPostgres(logicalSessionId: string) {
+export async function listRuntimeSessionAttempts(logicalSessionId: string) {
   return withRuntimeDatabaseClient((client) =>
     listRuntimeSessionAttemptsByLogicalSessionId(client, logicalSessionId)
   );
 }
 
-export async function listRuntimeSessionsForStudyPostgres(input: {
+export async function listRuntimeSessionsForStudy(input: {
   studyId: string;
   sessionStatus?: RuntimeSessionRecord["sessionStatus"] | "all";
   transcriptStatus?: RuntimeSessionRecord["transcriptStatus"] | "all";
@@ -453,7 +453,7 @@ export async function listRuntimeSessionsForStudyPostgres(input: {
   });
 }
 
-export async function getRuntimeAssetPostgres(
+async function getRuntimeAssetDirect(
   sessionId: string,
   assetId: string
 ): Promise<RecordingAssetRecord | null> {
@@ -477,7 +477,44 @@ export async function getRuntimeAssetPostgres(
   });
 }
 
-export async function saveUploadedRecordingAssetPostgres(input: {
+export async function getRuntimeAsset(
+  sessionId: string,
+  assetId: string
+): Promise<RecordingAssetRecord | null> {
+  const direct = await getRuntimeAssetDirect(sessionId, assetId);
+
+  return direct ?? findAssetAcrossAttempts(sessionId, assetId);
+}
+
+// Attempt 1's own sessionId is also the logical session id, so resolving that id lands on
+// the latest attempt and an older attempt's recording looks missing. Reviewers can open any
+// attempt, so search the whole attempt history before reporting the asset as gone. The
+// caller's signature binds the assetId and the search never leaves this logical session, so
+// this widens reach across attempts of one session only.
+async function findAssetAcrossAttempts(
+  sessionId: string,
+  assetId: string
+): Promise<RecordingAssetRecord | null> {
+  const session = await getRuntimeSession(sessionId);
+
+  if (!session) {
+    return null;
+  }
+
+  const attempts = await listRuntimeSessionAttempts(session.logicalSessionId);
+
+  for (const attempt of attempts) {
+    const asset = attempt.assets.find((item) => item.id === assetId);
+
+    if (asset) {
+      return asset;
+    }
+  }
+
+  return null;
+}
+
+export async function saveUploadedRecordingAsset(input: {
   payload: SessionPayload;
   attemptNumber?: number;
   sessionId?: string;
@@ -551,7 +588,7 @@ export async function saveUploadedRecordingAssetPostgres(input: {
   });
 }
 
-export async function registerPendingRecordingUploadPostgres(
+export async function registerPendingRecordingUpload(
   payload: SessionPayload,
   input: {
     attemptNumber?: number;
@@ -633,7 +670,7 @@ export async function registerPendingRecordingUploadPostgres(
   });
 }
 
-export async function resolvePendingRecordingUploadPostgres(input: {
+export async function resolvePendingRecordingUpload(input: {
   relativePath: string;
   storageProvider: PendingRecordingUploadRecord["storageProvider"];
 }) {
@@ -661,7 +698,7 @@ export async function resolvePendingRecordingUploadPostgres(input: {
   });
 }
 
-export async function queueTranscriptGenerationPostgres(sessionId: string) {
+export async function queueTranscriptGeneration(sessionId: string) {
   return withRuntimeDatabaseClient(async (client) => {
     await client.query("BEGIN");
 
@@ -702,7 +739,7 @@ export async function queueTranscriptGenerationPostgres(sessionId: string) {
   });
 }
 
-export async function processTranscriptGenerationPostgres(sessionId: string) {
+export async function processTranscriptGeneration(sessionId: string) {
   const claimedSession = await claimTranscriptSessionPostgres({
     sessionId
   });
@@ -714,7 +751,7 @@ export async function processTranscriptGenerationPostgres(sessionId: string) {
   return completeClaimedTranscriptSessionPostgres(claimedSession);
 }
 
-export async function processQueuedTranscriptJobsPostgres(limit: number) {
+export async function processQueuedTranscriptJobs(limit: number) {
   const safeLimit = normalizeTranscriptProcessingLimit(limit);
   const processedSessionIds: string[] = [];
 
@@ -880,7 +917,7 @@ async function completeClaimedTranscriptSessionPostgres(
  * object costs storage. The other order risks deleting a live participant's
  * recording and keeping the row that says it exists.
  */
-export async function processPendingRecordingUploadCleanupPostgres(limit: number) {
+export async function processPendingRecordingUploadCleanup(limit: number) {
   const safeLimit = normalizeTranscriptProcessingLimit(limit);
 
   const pendingUploads = await withRuntimeDatabaseClient(async (client) => {
@@ -1657,7 +1694,7 @@ type CallbackOutboxRow = {
   attempts: number;
 };
 
-export async function enqueueCallbackDeliveryPostgres(
+export async function enqueueCallbackDelivery(
   input: EnqueueCallbackDeliveryInput
 ) {
   const attempts = input.attempts ?? 1;
@@ -1685,7 +1722,7 @@ export async function enqueueCallbackDeliveryPostgres(
   });
 }
 
-export async function processDueCallbackDeliveriesPostgres(limit: number) {
+export async function processDueCallbackDeliveries(limit: number) {
   const summary = createEmptyCallbackDeliverySummary();
   const secret = getIntegrationSharedSecret();
 
