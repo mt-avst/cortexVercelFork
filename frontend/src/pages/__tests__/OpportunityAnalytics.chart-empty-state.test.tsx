@@ -5,28 +5,44 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import OpportunityAnalytics from '../OpportunityAnalytics';
 import { getOpportunityAnalytics, getOpportunity, getOpportunitySessionEvents } from '../../api/client';
 
-// DA-20: the analytics page printed "Total: 3 (30d)" in a chart header and the
-// empty-state message "No views recorded" in the body of the SAME chart. The
-// message and the total read from two different places and disagreed. These pin
-// that the empty-state TEXT is now driven by the same period total the header
-// prints, so the false "No X recorded" can no longer appear under a positive
-// total - the chart is shown instead.
+// DA-22 (closing cto/AdaptaLabs#124): each period chart header now sums the
+// PLOTTED series - the same zero-filled `period` calendar days the bars are
+// drawn from - rather than the backend's period_*_total. The backend counts a
+// rolling period*24h window spanning period+1 in-zone dates, so a click on the
+// oldest boundary day was totalled into the header yet had no bar to sit in: a
+// flat chart under a positive "Total: N". Summing the drawn days makes
+// header == bars by construction, and the empty state is gated on that same
+// sum, so header and body can no longer disagree in either direction.
 //
-// Scope, said out loud: this guarantees the empty-state TEXT never contradicts
-// the header, not that the drawn bars sum to it. The bars are built from
-// clicks_by_day over `period` calendar days while the header total counts a
-// rolling period*24h window spanning period+1 dates, so a click on the oldest
-// boundary day is totalled but undrawn (a flat chart, not false text). That
-// residual is cto/AdaptaLabs#124, fixed backend-side; it is out of scope here.
+// DA-20 had gated the empty TEXT on period_*_total so the false "No X recorded"
+// could not sit under a positive total; the residual it left (a positive total
+// over undrawn boundary-day clicks) is what this now closes.
+
+// clicks_by_day is keyed by the same in-zone date arithmetic
+// buildAnalyticsChartData uses to build the axis, so a row lands on (or misses)
+// a bar deterministically regardless of when the suite runs.
+const ZONE = 'Europe/London';
+const anchorKey = new Intl.DateTimeFormat('en-CA', {
+  timeZone: ZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+}).format(new Date());
+const anchor = new Date(`${anchorKey}T00:00:00Z`);
+const dayAgo = (n: number): string => {
+  const d = new Date(anchor);
+  d.setUTCDate(d.getUTCDate() - n);
+  return d.toISOString().split('T')[0];
+};
 
 const base = {
-  clicks_total: 3,
+  clicks_total: 0,
   clicks_24h: 0,
   clicks_7d: 0,
   unique_users: 0,
-  avg_clicks_per_day: 0.1,
+  avg_clicks_per_day: 0,
   week_over_week_change: null,
-  views_total: 3,
+  views_total: 0,
   views_24h: 0,
   views_7d: 0,
   unique_viewers: 0,
@@ -40,17 +56,16 @@ const base = {
   opportunity_created: '2026-08-10T11:14:48.034Z',
   peak_day: null,
   peak_hour: null,
-  // Dated outside any recent window on purpose: the daily breakdown lines up
-  // with nothing, which is exactly the state that used to force the empty
-  // message under a non-zero header total.
-  clicks_by_day: [{ date: '2020-01-01', count: 3, views: 3, actions: 0 }],
+  clicks_by_day: [] as Array<{ date: string; count: number; views: number; actions: number }>,
   clicks_by_hour: Array.from({ length: 24 }, (_, hour) => ({ hour, count: 0 })),
   clicks_by_weekday: [] as Array<{ weekday: string; weekday_num: number; count: number }>,
   period: 30,
-  period_clicks_total: 3,
-  period_views_total: 3,
-  period_actions_total: 0,
-  time_zone: 'Europe/London',
+  // Deliberately larger than the in-window bars sum below: the header must NOT
+  // read these any more.
+  period_clicks_total: 99,
+  period_views_total: 99,
+  period_actions_total: 99,
+  time_zone: ZONE,
 };
 
 vi.mock('../../contexts/AuthContext', () => ({
@@ -84,14 +99,16 @@ const load = (overrides: Record<string, unknown> = {}) => {
   vi.mocked(getOpportunityAnalytics).mockResolvedValue({ ...base, ...overrides } as never);
 };
 
+const TITLE = 'A study whose clicks land on known days';
+
 // Interpolated sentences span several text nodes; waiting on the title
 // guarantees the page has left its spinner before we read it.
 const settled = async (container: HTMLElement): Promise<string> => {
-  const loaded = () => container.textContent?.includes('A study with clicks but no recent day');
+  const loaded = () => container.textContent?.includes(TITLE);
   for (let i = 0; i < 150 && !loaded(); i++) {
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
-  expect(container.textContent).toContain('A study with clicks but no recent day');
+  expect(container.textContent).toContain(TITLE);
   return container.textContent ?? '';
 };
 
@@ -103,51 +120,106 @@ beforeEach(() => {
   vi.mocked(getOpportunity).mockResolvedValue({
     id: 'opp-1',
     type: 'survey',
-    title: 'A study with clicks but no recent day',
+    title: TITLE,
     status: 'published',
     firsthand_study_id: null,
   } as never);
 });
 
-describe('empty-state text cannot appear under a positive header total', () => {
-  it('shows the chart, not "No views recorded", while the header says Total: 3', async () => {
-    const { container } = renderPage();
-    const text = await settled(container);
-    expect(text).toContain('Total: 3 (30d)');
-    expect(text).not.toContain('No views recorded');
-    // Positively assert the chart rendered rather than nothing: BarChart gives
-    // every bar a `title="<label>: <n> clicks"`. Absence-only assertions would
-    // still pass if the truthy branch regressed to rendering an empty node.
-    expect(container.querySelector('[title$="clicks"]')).not.toBeNull();
-  });
-
-  it('does not say "No actions recorded" while the header shows a positive total', async () => {
-    load({ period_actions_total: 5, actions_total: 5 });
-    const { container } = renderPage();
-    const text = await settled(container);
-    expect(text).not.toContain('No actions recorded');
-  });
-
-  it('does not say "No interactions recorded" while the combined total is positive', async () => {
-    const { container } = renderPage();
-    const text = await settled(container);
-    expect(text).not.toContain('No interactions recorded in this period');
-  });
-});
-
-describe('the empty state still appears when it is the truth', () => {
-  it('shows every empty message when the period genuinely has no data', async () => {
+describe('a chart header sums the bars it draws, not the rolling backend total', () => {
+  it('quotes the in-window bar sum and excludes an undrawn boundary day (#124)', async () => {
+    // Two days of data inside the 30-day window plus one 45 days ago, which the
+    // backend rolling total (period_*_total: 99) would count but the chart does
+    // not draw. The header must read the in-window sum: 2 views, 1 action.
     load({
-      period_clicks_total: 0,
-      period_views_total: 0,
-      period_actions_total: 0,
-      views_total: 0,
-      actions_total: 0,
-      clicks_total: 0,
-      clicks_by_day: [],
+      clicks_by_day: [
+        { date: dayAgo(2), count: 3, views: 2, actions: 1 },
+        { date: dayAgo(5), count: 0, views: 0, actions: 0 },
+        { date: dayAgo(45), count: 5, views: 5, actions: 0 },
+      ],
     });
     const { container } = renderPage();
     const text = await settled(container);
+
+    expect(text).toContain('Total: 2 (30d)'); // views inside the window
+    expect(text).toContain('Total: 1 (30d)'); // actions inside the window
+    // The rolling backend totals must not surface anywhere.
+    expect(text).not.toContain('Total: 99');
+    // Combined avg = 3 drawn clicks / 30 days.
+    expect(text).toContain('Avg: 0.1/day');
+    // The chart actually rendered rather than an empty node: BarChart titles
+    // every bar "<label>: <n> clicks".
+    expect(container.querySelector('[title$="clicks"]')).not.toBeNull();
+    expect(text).not.toContain('No views recorded');
+    expect(text).not.toContain('No actions recorded');
+  });
+});
+
+describe('the snapshot tile and the chart header show ONE figure for a metric', () => {
+  it('renders the Study Views bento tile equal to the chart header total', async () => {
+    // A CONSISTENT backend response, the way the real endpoint now returns it:
+    // the calendar-aligned tile total (views_total) equals the sum of the
+    // in-window daily series the chart draws. period_views_total stays 99 (the
+    // base fixture's trap), so a header that regressed to reading it would show
+    // "Total: 99" and diverge from the tile.
+    load({
+      clicks_by_day: [
+        { date: dayAgo(2), count: 3, views: 2, actions: 1 },
+        { date: dayAgo(4), count: 1, views: 1, actions: 0 },
+      ],
+      views_total: 3,
+      actions_total: 1,
+      clicks_total: 4,
+    });
+    const { container } = renderPage();
+    await settled(container);
+
+    // The bento tile: the card whose title is exactly "Study Views" (the chart
+    // card's title carries the "(30d)" suffix).
+    const tileCard = Array.from(container.querySelectorAll('.cortex-analytics-card')).find(
+      (card) => card.querySelector('.cortex-analytics-card-title')?.textContent === 'Study Views'
+    );
+    const tileValue = tileCard?.querySelector('.cortex-stat-value')?.textContent?.trim();
+
+    // The chart header, derived independently from the drawn bars.
+    const chartCard = Array.from(container.querySelectorAll('.cortex-analytics-card')).find((card) =>
+      card.querySelector('.cortex-chart-title')?.textContent?.startsWith('Study Views')
+    );
+    const headerTotal = chartCard
+      ?.querySelector('.cortex-chart-subtitle')
+      ?.textContent?.match(/Total: (\d+)/)?.[1];
+
+    // Two independent derivations (backend tile SQL vs frontend sum of the
+    // series) must agree on one render, or the page shows two "Study Views"
+    // numbers - the DA-20/#124 bug class in a new spot.
+    expect(tileValue).toBe('3');
+    expect(headerTotal).toBe(tileValue);
+  });
+});
+
+describe('the empty state appears exactly when the drawn series is empty', () => {
+  it('shows Total: 0 and the empty message when every click is outside the window', async () => {
+    // A real, positive rolling total (99) but nothing drawable: the study has
+    // no activity in the last 30 days, so "No X recorded" is now the truth.
+    load({
+      clicks_by_day: [{ date: dayAgo(400), count: 18, views: 9, actions: 9 }],
+    });
+    const { container } = renderPage();
+    const text = await settled(container);
+
+    expect(text).toContain('Total: 0 (30d)');
+    expect(text).toContain('No views recorded');
+    expect(text).toContain('No actions recorded');
+    expect(text).toContain('No interactions recorded in this period');
+    // No bar rendered, because the truthy branch is not taken.
+    expect(container.querySelector('[title$="clicks"]')).toBeNull();
+  });
+
+  it('shows every empty message when there is genuinely no data at all', async () => {
+    load({ clicks_by_day: [] });
+    const { container } = renderPage();
+    const text = await settled(container);
+
     expect(text).toContain('No views recorded');
     expect(text).toContain('No actions recorded');
     expect(text).toContain('No interactions recorded in this period');

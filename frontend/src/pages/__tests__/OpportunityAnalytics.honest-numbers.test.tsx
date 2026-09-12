@@ -159,7 +159,30 @@ const settled = async (container: HTMLElement): Promise<string> => {
 
 describe('chart totals', () => {
   it('quotes the selected period, not a fixed seven days', async () => {
-    load({ period: 30, period_views_total: 9, views_7d: 2 });
+    // DA-22: the header sums the drawn `period` days, so the fixture puts nine
+    // views on a day inside the 30-day window (keyed the way
+    // buildAnalyticsChartData keys its axis, so the row lands on a bar whenever
+    // the suite runs). The regression that mattered - a total pinned to seven
+    // days beside a 30-day chart - would still read "Total: 2 (7d)".
+    const zone = 'Europe/London';
+    const anchorKey = new Intl.DateTimeFormat('en-CA', {
+      timeZone: zone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+    const anchor = new Date(`${anchorKey}T00:00:00Z`);
+    const twoDaysAgo = new Date(anchor);
+    twoDaysAgo.setUTCDate(twoDaysAgo.getUTCDate() - 2);
+    const inWindow = twoDaysAgo.toISOString().split('T')[0];
+
+    load({
+      period: 30,
+      period_views_total: 9,
+      views_7d: 2,
+      time_zone: zone,
+      clicks_by_day: [{ date: inWindow, count: 9, views: 9, actions: 0 }],
+    });
     const { container } = renderPage();
 
     const text = await settled(container);

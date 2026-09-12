@@ -11,6 +11,7 @@ import { getOpportunityAnalytics, getOpportunity, getOpportunitySessionEvents, g
 import { SurveyResults, type SurveyResultsData } from '../components/survey/SurveyResults';
 import { getActionMeaning } from '../utils/opportunityUtils';
 import { buildAnalyticsChartData } from '../utils/analyticsChart';
+import { computeBarChartAxis } from '../utils/barChartAxis';
 import { QUESTION_CARRYING_TYPES } from '@shared/firsthand/delivery';
 import { Opportunity, SessionEvent, OpportunityBookingRow } from '../api/types';
 import ErrorState from '../components/ErrorState';
@@ -19,6 +20,9 @@ import SessionsTab from '../components/opportunity-analytics/SessionsTab';
 import ParticipantsTab from '../components/opportunity-analytics/ParticipantsTab';
 import { useBookingArtifacts } from '../components/opportunity-analytics/useBookingArtifacts';
 import { ArrowLeft, Info } from 'lucide-react';
+
+// Width reserved for the y-axis value labels, left of the plot area.
+const BAR_CHART_Y_AXIS_WIDTH = 30;
 
 // Cortex Bar Chart component - pure CSS, no dependencies
 // Supports CSS variables for theming
@@ -29,82 +33,136 @@ const BarChart: React.FC<{
   barColor?: string;
   showValues?: boolean;
 }> = ({ data, maxValue, height = 200, barColor = 'var(--color-analytics-orange)', showValues = true }) => {
-  const max = maxValue || Math.max(...data.map(d => d.value), 1);
+  const rawMax = maxValue || Math.max(...data.map(d => d.value), 1);
+  // Bars and gridlines share ONE scale: a rounded ceiling with a few even
+  // ticks, so a bar sits at a readable fraction of a stated axis rather than
+  // only relative to its tallest neighbour.
+  const { niceMax, ticks } = computeBarChartAxis(rawMax);
   // Reserve space for value labels at top
   const topPadding = showValues ? 24 : 8;
   const bottomPadding = data.length > 14 ? 55 : 25;
   const availableHeight = height - topPadding - bottomPadding;
-  
+
+  // Distance from the top of the plot area to where a value sits on the scale.
+  // A value-v bar's top and the tick for v resolve to the same y, so bars meet
+  // their gridlines exactly.
+  const yForValue = (value: number) => topPadding + (1 - value / niceMax) * availableHeight;
+
   return (
-    <div style={{ 
-      height: `${height}px`, 
-      display: 'flex', 
-      alignItems: 'flex-end', 
-      gap: '2px', 
-      padding: `${topPadding}px 4px ${bottomPadding}px`,
-      position: 'relative'
-    }}>
-      {data.map((item, index) => {
-        const barHeight = max > 0 ? (item.value / max) * availableHeight : 0;
-        return (
-          <div 
-            key={index} 
-            style={{ 
-              flex: 1, 
-              display: 'flex', 
-              flexDirection: 'column', 
-              alignItems: 'center',
-              minWidth: 0,
-              position: 'relative'
+    <div style={{ display: 'flex', height: `${height}px`, width: '100%' }}>
+      {/* Y axis - tick values aligned to the gridlines. Decorative: the bars
+          carry the same numbers as labels and hover titles. */}
+      <div aria-hidden="true" style={{ position: 'relative', width: `${BAR_CHART_Y_AXIS_WIDTH}px`, flexShrink: 0 }}>
+        {ticks.map((tick) => (
+          <span
+            key={tick}
+            style={{
+              position: 'absolute',
+              right: '6px',
+              top: `${yForValue(tick)}px`,
+              transform: 'translateY(-50%)',
+              fontSize: '0.6rem',
+              fontVariantNumeric: 'tabular-nums',
+              color: 'var(--text-muted)',
+              lineHeight: 1
             }}
           >
-            {showValues && item.value > 0 && (
-              <span style={{ 
-                fontSize: '0.65rem', 
-                fontVariantNumeric: 'tabular-nums',
-                color: 'var(--text-muted)', 
-                marginBottom: '4px',
-                whiteSpace: 'nowrap',
-                position: 'absolute',
-                top: `-${topPadding - 4}px`
-              }}>
-                {item.value}
-              </span>
-            )}
-            <div
-              style={{
-                width: '100%',
-                maxWidth: '40px',
-                height: `${barHeight}px`,
-                backgroundColor: barColor,
-                borderRadius: '3px 3px 0 0',
-                transition: 'height 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
-                minHeight: item.value > 0 ? '4px' : '0',
-                opacity: item.value > 0 ? 1 : 0.3
-              }}
-              title={`${item.label}: ${item.value} clicks`}
-            />
-            <span style={{ 
-              fontSize: '0.6rem', 
-              fontVariantNumeric: 'tabular-nums',
-              color: 'var(--text-muted)', 
-              marginTop: '4px',
-              writingMode: data.length > 14 ? 'vertical-rl' : 'horizontal-tb',
-              textOrientation: 'mixed',
-              transform: data.length > 14 ? 'rotate(180deg)' : 'none',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              maxWidth: '100%',
-              height: data.length > 14 ? '50px' : 'auto',
+            {tick}
+          </span>
+        ))}
+      </div>
+
+      {/* Plot area - gridlines sit behind the bars, the baseline (tick 0) reads
+          a touch stronger than the gridlines above it. */}
+      <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+        {ticks.map((tick) => (
+          <div
+            key={tick}
+            aria-hidden="true"
+            style={{
               position: 'absolute',
-              bottom: `-${bottomPadding - 4}px`
-            }}>
-              {item.label}
-            </span>
-          </div>
-        );
-      })}
+              left: 0,
+              right: 0,
+              top: `${yForValue(tick)}px`,
+              borderTop: tick === 0
+                ? '1px solid var(--border-strong-current, var(--border-subtle-current))'
+                : '1px dashed var(--border-subtle-current)',
+              opacity: tick === 0 ? 0.9 : 0.55
+            }}
+          />
+        ))}
+
+        <div style={{
+          height: `${height}px`,
+          display: 'flex',
+          alignItems: 'flex-end',
+          gap: '2px',
+          padding: `${topPadding}px 4px ${bottomPadding}px`,
+          position: 'relative'
+        }}>
+          {data.map((item, index) => {
+            const barHeight = niceMax > 0 ? (item.value / niceMax) * availableHeight : 0;
+            return (
+              <div
+                key={index}
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  minWidth: 0,
+                  position: 'relative'
+                }}
+              >
+                {showValues && item.value > 0 && (
+                  <span style={{
+                    fontSize: '0.65rem',
+                    fontVariantNumeric: 'tabular-nums',
+                    color: 'var(--text-muted)',
+                    marginBottom: '4px',
+                    whiteSpace: 'nowrap',
+                    position: 'absolute',
+                    top: `-${topPadding - 4}px`
+                  }}>
+                    {item.value}
+                  </span>
+                )}
+                <div
+                  style={{
+                    width: '100%',
+                    maxWidth: '40px',
+                    height: `${barHeight}px`,
+                    backgroundColor: barColor,
+                    borderRadius: '3px 3px 0 0',
+                    transition: 'height 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
+                    minHeight: item.value > 0 ? '4px' : '0',
+                    opacity: item.value > 0 ? 1 : 0.3
+                  }}
+                  title={`${item.label}: ${item.value} clicks`}
+                />
+                <span style={{
+                  fontSize: '0.6rem',
+                  fontVariantNumeric: 'tabular-nums',
+                  color: 'var(--text-muted)',
+                  marginTop: '4px',
+                  writingMode: data.length > 14 ? 'vertical-rl' : 'horizontal-tb',
+                  textOrientation: 'mixed',
+                  transform: data.length > 14 ? 'rotate(180deg)' : 'none',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  maxWidth: '100%',
+                  height: data.length > 14 ? '50px' : 'auto',
+                  position: 'absolute',
+                  bottom: `-${bottomPadding - 4}px`
+                }}>
+                  {item.label}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 };
@@ -364,12 +422,14 @@ const OpportunityAnalyticsPage: React.FC = () => {
   // zone so each entry lines up with the backend's clicks_by_day dates. See
   // utils/analyticsChart.ts for why the axis must not be cut in UTC here.
   //
-  // ponytail: this draws `period` calendar days, but the backend counts a
-  //   rolling period*24h window spanning period+1 in-zone dates, so a click on
-  //   the oldest boundary day is summed into the header total yet has no bar to
-  //   land in (a flat chart under a positive "Total: N")
-  //   -> cto/AdaptaLabs#124, real fix is the endpoint returning the zero-filled
-  //   series so header == sum of bars by construction
+  // The chart headers below sum THIS series rather than the backend's
+  // period_*_total (#124). The backend counts a rolling period*24h window that
+  // spans period+1 in-zone dates, so a click on the oldest boundary day landed
+  // in the header total with no bar to sit in - a flat chart under a positive
+  // "Total: N". Summing the plotted days makes header == bars by construction:
+  // the boundary-day click is outside the drawn `period` calendar days and so
+  // is counted by neither. period_*_total stays on the wire but no longer feeds
+  // any header here.
   const getChartData = () =>
     buildAnalyticsChartData(analytics?.clicks_by_day, selectedPeriod, analytics?.time_zone || undefined);
 
@@ -464,6 +524,16 @@ const OpportunityAnalyticsPage: React.FC = () => {
   const actionsChartData = getActionsChartData();
   const hourlyData = getHourlyData();
   const weekdayData = getWeekdayData();
+
+  // Totals DERIVED from the plotted series (see getChartData's note on #124):
+  // each chart header reads exactly the sum of the bars beneath it, and each
+  // empty state is gated on that same sum, so a chart can never read "No views
+  // recorded" under a positive total or vice versa.
+  const viewsSeriesTotal = viewsChartData.reduce((sum, day) => sum + day.value, 0);
+  const actionsSeriesTotal = actionsChartData.reduce((sum, day) => sum + day.value, 0);
+  const clicksSeriesTotal = chartData.reduce((sum, day) => sum + day.value, 0);
+  const avgClicksPerDay =
+    selectedPeriod > 0 ? Math.round((clicksSeriesTotal / selectedPeriod) * 10) / 10 : 0;
 
   // Null means the previous week had nothing, so there is no percentage change
   // to state. `?? 0` here would have been the same lie in a different place.
@@ -699,6 +769,14 @@ const OpportunityAnalyticsPage: React.FC = () => {
         </div>
       ) : analytics ? (
         <>
+          {/* The tiles follow the period selector now (DA-19), so say so once:
+              a "Study Views" of 6 over the last 7 days should not read as an
+              all-time figure. Cards that carry their own 24h/7d window are
+              exempted in the same breath. */}
+          <p className="cortex-stat-subtitle" style={{ marginBottom: '12px' }}>
+            Totals reflect the selected period ({selectedPeriod} days). Cards marked 24h or 7d show their own window.
+          </p>
+
           {/* Primary Stats - Cortex Bento Grid */}
           <div className="cortex-analytics-grid" style={{ marginBottom: '24px' }}>
             {/* Views Card - NEUTRAL color (no inline color) */}
@@ -835,12 +913,12 @@ const OpportunityAnalyticsPage: React.FC = () => {
                     chart carried a 7-day number - and at 7d they agreed by
                     coincidence, which is exactly when nobody notices. */}
                 <h5 className="cortex-chart-title">Study Views ({selectedPeriod}d)</h5>
-                <span className="cortex-chart-subtitle">Total: {analytics?.period_views_total ?? 0} ({selectedPeriod}d)</span>
+                <span className="cortex-chart-subtitle">Total: {viewsSeriesTotal} ({selectedPeriod}d)</span>
               </div>
               <div className="cortex-chart-container">
                 {/* Gated on the same total the subtitle prints, so the chart can
                     never read "No views recorded" under "Total: 3". */}
-                {(analytics?.period_views_total ?? 0) > 0 ? (
+                {viewsSeriesTotal > 0 ? (
                   <BarChart
                     data={viewsChartData}
                     height={180}
@@ -859,10 +937,10 @@ const OpportunityAnalyticsPage: React.FC = () => {
             <div className="cortex-analytics-card span-2">
               <div className="cortex-chart-header">
                 <h5 className="cortex-chart-title">Actions Taken ({selectedPeriod}d)</h5>
-                <span className="cortex-chart-subtitle">Total: {analytics?.period_actions_total ?? 0} ({selectedPeriod}d)</span>
+                <span className="cortex-chart-subtitle">Total: {actionsSeriesTotal} ({selectedPeriod}d)</span>
               </div>
               <div className="cortex-chart-container">
-                {(analytics?.period_actions_total ?? 0) > 0 ? (
+                {actionsSeriesTotal > 0 ? (
                   <BarChart
                     data={actionsChartData}
                     height={180}
@@ -882,10 +960,10 @@ const OpportunityAnalyticsPage: React.FC = () => {
           <div className="cortex-analytics-card" style={{ marginBottom: '24px' }}>
             <div className="cortex-chart-header">
               <h5 className="cortex-chart-title">Total Interactions Over Time ({selectedPeriod} days)</h5>
-              <span className="cortex-chart-subtitle">Avg: {analytics?.avg_clicks_per_day ?? 0}/day</span>
+              <span className="cortex-chart-subtitle">Avg: {avgClicksPerDay}/day</span>
             </div>
             <div className="cortex-chart-container" style={{ minHeight: '220px' }}>
-              {(analytics?.period_clicks_total ?? 0) > 0 ? (
+              {clicksSeriesTotal > 0 ? (
                 <BarChart
                   data={chartData.map(d => ({ label: d.label, value: d.value }))}
                   height={220}
