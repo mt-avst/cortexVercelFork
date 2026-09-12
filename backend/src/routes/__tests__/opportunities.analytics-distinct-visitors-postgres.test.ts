@@ -186,4 +186,65 @@ describe.skipIf(skipDbTests)("study analytics counts distinct visitors, not just
     expect(body.unique_actors).toBeGreaterThan(0);
     expect(body.unique_actors).toBeLessThan(body.actions_total);
   });
+
+  /**
+   * #125: the first-party visitor_nonce counts anonymous visitors distinctly
+   * even when they share ONE ip_hash - the exact proxy collapse where every
+   * anonymous click records the ingress address. This fixture is built so the
+   * nonce and the ip_hash disagree: five anonymous actions, ALL carrying the
+   * same ip_hash, but three distinct nonces (one repeated) plus one no-nonce
+   * click that falls back to ip_hash.
+   *
+   *   COALESCE(user_id, visitor_nonce, ip_hash) -> {n1, n2, n3, ingress} = 4
+   *   the #125-less COALESCE(user_id, ip_hash)   -> {ingress}            = 1
+   *
+   * So a revert that drops visitor_nonce from the COALESCE turns 4 into 1 and
+   * this fails by name - it is its own null control. One request, no loop, so a
+   * regression is a wrong number rather than a hang.
+   */
+  it("counts anonymous visitors by their nonce when the proxy collapses ip_hash to one value", async () => {
+    const adminId = crypto.randomUUID();
+    await pool.query(
+      `INSERT INTO users (id, name, email, role)
+       VALUES ($1, 'Owner Admin', 'owner-admin@example.com', 'superadmin')`,
+      [adminId]
+    );
+    const oppResult = await pool.query(
+      `INSERT INTO opportunities (type, title, purpose_one_liner, status, owner_user_id)
+       VALUES ('survey', 'Anonymous traffic behind one proxy hop',
+               'Distinct-visitor counting by client nonce (#125)', 'published', $1)
+       RETURNING id`,
+      [adminId]
+    );
+    const opportunityId = oppResult.rows[0].id as string;
+
+    const ingress = hash("ingress"); // every anonymous click shares this ip_hash
+    // [visitor_nonce, ip_hash]; all actions, all anonymous (user_id null).
+    const anonActions: Array<[string | null, string]> = [
+      ["nonce-aaaa1111", ingress],
+      ["nonce-aaaa1111", ingress], // same visitor returning -> still one
+      ["nonce-bbbb2222", ingress],
+      ["nonce-cccc3333", ingress],
+      [null, ingress], // a nonce-less client -> falls back to ip_hash
+    ];
+    for (const [nonce, ipHash] of anonActions) {
+      await pool.query(
+        `INSERT INTO opportunity_clicks (opportunity_id, user_id, click_type, ip_hash, visitor_nonce)
+         VALUES ($1, NULL, 'action', $2, $3)`,
+        [opportunityId, ipHash, nonce]
+      );
+    }
+
+    const { body } = await request(listening(app))
+      .get(`/api/opportunities/${opportunityId}/analytics`)
+      .set("x-test-user-id", adminId)
+      .set("x-test-user-role", "superadmin")
+      .expect(200);
+
+    expect(body.actions_total).toBe(5); // COUNT(*) unchanged
+    // Three distinct nonces + the ip_hash-fallback bucket = 4. Without #125 in
+    // the COALESCE this collapses to 1 (all share `ingress`).
+    expect(body.unique_actors).toBe(4);
+    expect(body.unique_users).toBe(4);
+  });
 });
