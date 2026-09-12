@@ -277,15 +277,44 @@ const Header: React.FC = memo(() => {
           <nav className="nav" aria-label="Main navigation">
             {/* Desktop toolbar - hidden below 768px */}
             <div className="header-actions header-actions--desktop">
-              <button
-                onClick={toggleTheme}
-                className="btn btn-outline-secondary"
-                aria-label={themeToggleAria}
-                title={themeToggleAria}
-              >
-                {themeIcon}
-                <span className="d-none d-md-inline ms-1">{themeToggleLabel}</span>
-              </button>
+              {!user && initialAuthCheck ? (
+                /* CB-26: on the signed-out header this is the ONLY control (every
+                   other header item is gated behind `user`), so the outlined
+                   button + text label read as the page's loudest CTA. Demoted to
+                   a quiet icon-only control here, scoped on confirmed-signed-out
+                   (`!user && initialAuthCheck`) rather than `!user` alone: on a
+                   cold load `user` starts null before `initialAuthCheck` flips
+                   true, so gating on `!user` alone showed the quiet toggle to a
+                   user who was about to resolve as signed-in, then popped to the
+                   wider outlined button once `/api/me` returned - a layout shift
+                   on every cold load. Gating on the resolved signal instead means
+                   a signed-in user (the beta majority, since the all-admin switch
+                   lifts every signed-in employee) sees the stable outlined button
+                   from first paint; only a genuinely signed-out visitor gets the
+                   one transition, once auth resolves. Header renders globally
+                   (App.tsx mounts it once, outside the route switch), so a
+                   signed-out visitor can land on any public route, not only
+                   Landing, and the demotion should follow auth state everywhere
+                   it applies. Signed-in appearance below is untouched. */
+                <button
+                  onClick={toggleTheme}
+                  className="header-theme-toggle--quiet"
+                  aria-label={themeToggleAria}
+                  title={themeToggleAria}
+                >
+                  {themeIcon}
+                </button>
+              ) : (
+                <button
+                  onClick={toggleTheme}
+                  className="btn btn-outline-secondary"
+                  aria-label={themeToggleAria}
+                  title={themeToggleAria}
+                >
+                  {themeIcon}
+                  <span className="d-none d-md-inline ms-1">{themeToggleLabel}</span>
+                </button>
+              )}
 
               {loading && initialAuthCheck ? (
                 <LoadingSpinner size="small" text="Loading..." />
@@ -328,9 +357,16 @@ const Header: React.FC = memo(() => {
                   {profileMenuItems()}
                 </Dropdown>
               ) : (
+                // CB-26: this branch already implies `!user` (the `user ?` check
+                // above caught the signed-in case), so the only extra gate needed
+                // is `initialAuthCheck` - same confirmed-signed-out condition as
+                // the desktop toggle above, for the same cold-load layout-shift
+                // reason: before it resolves, defaulting to the outlined style
+                // matches what a signed-in visitor (the beta majority) already
+                // sees on desktop, instead of popping between two icon styles.
                 <button
                   onClick={toggleTheme}
-                  className="btn btn-outline-secondary"
+                  className={initialAuthCheck ? 'header-theme-toggle--quiet' : 'btn btn-outline-secondary'}
                   aria-label={themeToggleAria}
                   title={themeToggleAria}
                 >

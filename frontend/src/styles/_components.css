@@ -1985,6 +1985,21 @@ body.landing-page .header .text-muted,
   color: rgba(255, 255, 255, 0.6) !important;
 }
 
+/* CB-26 correction: unlike the logo-word/text-muted overrides above, the
+   landing hero is NOT a fixed dark band - it follows the theme (near-black in
+   dark, cream/white in light; see `.landing-page-wrapper` in this file), and
+   `.header` itself always paints an opaque `var(--bg-app)` (dark: #0A091A,
+   light: #f7f2ea), which is what this toggle actually sits on. A flat
+   translucent-white override was tuned for the dark case only and made the
+   icon disappear on the light landing. No landing override needed: the base
+   `.header-theme-toggle--quiet` rule below already uses `var(--text-muted)`,
+   which resolves per theme (dark: #94A3B8 ~7.7:1 on #0A091A; light: #5f6b7a
+   ~4.9:1 on #f7f2ea) - both comfortably above the 3:1 UI-component minimum,
+   and close enough to the old dark treatment (~7.4:1) that dark is unchanged
+   in practice. Hover/focus below (`--text-primary`, `--bg-hover`,
+   `--focus-outline`) are the same tokens the signed-in `.btn-outline-secondary`
+   already relies on in this header, so they are proven theme-safe here too. */
+
 .header .container {
   overflow: visible;
 }
@@ -2090,6 +2105,36 @@ body.landing-page .header .logo-word,
 
 .momentum-btn-secondary:focus-visible,
 .header .btn-outline-secondary:focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-outline-offset);
+}
+
+/* CB-26: signed-out theme toggle. On the signed-out header this is the only
+   control at all (every other header item is gated behind `user`), so the
+   full outlined button used everywhere else read as the page's loudest CTA.
+   Quiet, icon-only, low-emphasis chrome instead - no border, no heavy
+   padding - while staying keyboard-focusable with a visible focus ring.
+   Rendered only on the `!user` branch in Header.tsx; the signed-in toggle
+   keeps using `.btn.btn-outline-secondary` unchanged. */
+.header-theme-toggle--quiet {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-2);
+  background: transparent;
+  border: none;
+  border-radius: var(--button-radius);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-button);
+}
+
+.header-theme-toggle--quiet:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.header-theme-toggle--quiet:focus-visible {
   outline: var(--focus-outline);
   outline-offset: var(--focus-outline-offset);
 }
