@@ -1,0 +1,146 @@
+<!--
+  ai-stack-audit full-report SVG template - the whole report as one downloadable vector image.
+  This is the SVG twin of stack-map.html: same sections, same numbers, single dark theme,
+  system fonts only (renders identically anywhere, no web-font fetch).
+
+  HOW TO FILL
+  - Replace every {{PLACEHOLDER}} from the discovery inventory + surviving findings.
+  - SVG is FIXED-LAYOUT: text does not wrap and rows sit at fixed y. If your content needs
+    a different number of audit rows or tool lines than the slots below, shift the y of every
+    following element by the row height (audit rows are 64 apart) and grow the viewBox/frame
+    height to match. Treat this file as a worked exemplar to adapt, not a rigid mail-merge.
+  - Pill colours: resolved #6dbb82 · low #9aa6a8 · medium #cbb051 · high #e2953f · critical #e5675a
+  - Keep it neutral: no real stack unless you are filling it for a specific run.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1500" width="1200" height="1500" role="img" aria-label="{{TITLE}} - full stack report: map, pipeline, audit and tools">
+  <defs>
+    <marker id="rA" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#8c8373"/></marker>
+    <marker id="rO" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#ff6a33"/></marker>
+    <style>
+      .disp{font-family:Georgia,"Times New Roman",serif}
+      .mono{font-family:ui-monospace,Menlo,"DejaVu Sans Mono",monospace}
+      .sans{font-family:system-ui,-apple-system,Arial,sans-serif}
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="1500" fill="#16150f"/>
+  <rect x="16" y="16" width="1168" height="1468" rx="18" fill="#1b1a12" stroke="#3b382c" stroke-width="1.5"/>
+
+  <!-- HEADER -->
+  <text x="60" y="66" class="mono" font-size="14" letter-spacing="3" fill="#ff8a5c">CLAUDE CODE  ·  MAP + AUDIT</text>
+  <text x="58" y="120" class="disp" font-size="46" font-weight="600" fill="#efe9dd">{{TITLE}}</text>
+  <text x="60" y="158" class="sans" font-size="15.5" fill="#c0b7a6">{{LEDE_LINE_1}}</text>
+  <text x="60" y="182" class="sans" font-size="15.5" fill="#c0b7a6">{{LEDE_LINE_2}}</text>
+  <text x="60" y="206" class="sans" font-size="15.5" fill="#c0b7a6">{{LEDE_LINE_3}}</text>
+
+  <!-- STAT TILES -->
+  <g>
+    <g><rect x="60"  y="238" width="166" height="94" rx="12" fill="#201e16" stroke="#3b382c"/><text x="76" y="296" class="disp" font-size="36" font-weight="600" fill="#efe9dd">{{RULES}}</text><text x="76" y="317" class="mono" font-size="11.5" letter-spacing="1" fill="#8c8373">RULES</text></g>
+    <g><rect x="242" y="238" width="166" height="94" rx="12" fill="#201e16" stroke="#3b382c"/><text x="258" y="296" class="disp" font-size="36" font-weight="600" fill="#efe9dd">{{AGENTS}}</text><text x="258" y="317" class="mono" font-size="11.5" letter-spacing="1" fill="#8c8373">AGENTS</text></g>
+    <g><rect x="424" y="238" width="166" height="94" rx="12" fill="#201e16" stroke="#3b382c"/><text x="440" y="296" class="disp" font-size="36" font-weight="600" fill="#efe9dd">{{SKILLS}}</text><text x="440" y="317" class="mono" font-size="11.5" letter-spacing="1" fill="#8c8373">SKILLS</text></g>
+    <g><rect x="606" y="238" width="166" height="94" rx="12" fill="#201e16" stroke="#3b382c"/><text x="622" y="296" class="disp" font-size="36" font-weight="600" fill="#efe9dd">{{MCP}}</text><text x="622" y="317" class="mono" font-size="11.5" letter-spacing="1" fill="#8c8373">MCP SERVERS</text></g>
+    <g><rect x="788" y="238" width="166" height="94" rx="12" fill="#201e16" stroke="#3b382c"/><text x="804" y="296" class="disp" font-size="36" font-weight="600" fill="#efe9dd">{{MEMORY}}</text><text x="804" y="317" class="mono" font-size="11.5" letter-spacing="1" fill="#8c8373">MEMORY FACTS</text></g>
+    <g><rect x="970" y="238" width="170" height="94" rx="12" fill="#201e16" stroke="#4a3a2a"/><text x="986" y="296" class="disp" font-size="36" font-weight="600" fill="#ff8a5c">{{TOKENS}}</text><text x="986" y="317" class="mono" font-size="11.5" letter-spacing="1" fill="#8c8373">TOKENS / SESSION</text></g>
+  </g>
+
+  <!-- SECTION 01 LOAD STACK -->
+  <line x1="60" y1="376" x2="1140" y2="376" stroke="#efe9dd" stroke-width="1.5" opacity=".85"/>
+  <text x="60" y="404" class="mono" font-size="13" fill="#ff8a5c">01</text>
+  <text x="92" y="406" class="disp" font-size="23" font-weight="500" fill="#efe9dd">What loads before you type</text>
+  <text x="1140" y="404" class="mono" font-size="12" fill="#8c8373" text-anchor="end">measured · always-on in orange</text>
+  <g class="sans">
+    <rect x="60" y="428" width="1080" height="52" rx="10" fill="#201e16" stroke="#3b382c"/>
+    <rect x="60" y="428" width="150" height="52" rx="10" fill="#29261c" stroke="#3b382c"/>
+    <text x="76" y="459" font-size="13.5" font-weight="600" fill="#efe9dd">Bootstrap</text>
+    <text x="228" y="452" class="mono" font-size="12.5" fill="#ff8a5c">{{BOOTSTRAP_HOT}}</text>
+    <text x="228" y="470" class="mono" font-size="12" fill="#8c8373">{{BOOTSTRAP_REST}}</text>
+    <rect x="60" y="490" width="1080" height="52" rx="10" fill="#201e16" stroke="#3b382c"/>
+    <rect x="60" y="490" width="150" height="52" rx="10" fill="#29261c" stroke="#3b382c"/>
+    <text x="76" y="521" font-size="13.5" font-weight="600" fill="#efe9dd">Memory</text>
+    <text x="228" y="514" class="mono" font-size="12.5" fill="#ff8a5c">{{MEMORY_HOT}}</text>
+    <text x="228" y="532" class="mono" font-size="12" fill="#8c8373">{{MEMORY_REST}}</text>
+    <rect x="60" y="552" width="1080" height="52" rx="10" fill="#201e16" stroke="#3b382c"/>
+    <rect x="60" y="552" width="150" height="52" rx="10" fill="#29261c" stroke="#3b382c"/>
+    <text x="76" y="583" font-size="13.5" font-weight="600" fill="#efe9dd">Rules</text>
+    <text x="228" y="576" class="mono" font-size="12.5" fill="#c0b7a6">{{RULES_TOP}}</text>
+    <text x="228" y="594" class="mono" font-size="12" fill="#8c8373">{{RULES_REST}}</text>
+  </g>
+
+  <!-- SECTION 02 PIPELINE (neutral skeleton - re-derive stages from the stack's workflow rules) -->
+  <line x1="60" y1="640" x2="1140" y2="640" stroke="#efe9dd" stroke-width="1.5" opacity=".85"/>
+  <text x="60" y="668" class="mono" font-size="13" fill="#ff8a5c">02</text>
+  <text x="92" y="670" class="disp" font-size="23" font-weight="500" fill="#efe9dd">How a task moves</text>
+  <text x="1140" y="668" class="mono" font-size="12" fill="#8c8373" text-anchor="end">from the workflow rules</text>
+  <g>
+    <g class="sans" font-size="14" fill="#efe9dd" text-anchor="middle">
+      <rect x="60"   y="704" width="128" height="42" rx="8" fill="none" stroke="#8c8373" stroke-width="1.3"/><text x="124" y="730">Boot</text>
+      <rect x="218"  y="704" width="128" height="42" rx="8" fill="none" stroke="#8c8373" stroke-width="1.3"/><text x="282" y="730">Research</text>
+      <rect x="376"  y="704" width="128" height="42" rx="8" fill="none" stroke="#8c8373" stroke-width="1.3"/><text x="440" y="730">Plan</text>
+      <rect x="534"  y="704" width="128" height="42" rx="8" fill="none" stroke="#8c8373" stroke-width="1.3"/><text x="598" y="730">Build</text>
+      <rect x="692"  y="704" width="128" height="42" rx="8" fill="none" stroke="#ff6a33" stroke-width="1.8"/><text x="756" y="730" fill="#ff8a5c">Review</text>
+      <rect x="850"  y="704" width="128" height="42" rx="8" fill="none" stroke="#8c8373" stroke-width="1.3"/><text x="914" y="730">Ship</text>
+      <rect x="1008" y="704" width="128" height="42" rx="8" fill="none" stroke="#8c8373" stroke-width="1.3"/><text x="1072" y="730">Memory</text>
+    </g>
+    <g fill="none">
+      <line x1="188" y1="725" x2="216" y2="725" stroke="#8c8373" stroke-width="1.4" marker-end="url(#rA)"/>
+      <line x1="346" y1="725" x2="374" y2="725" stroke="#8c8373" stroke-width="1.4" marker-end="url(#rA)"/>
+      <line x1="504" y1="725" x2="532" y2="725" stroke="#8c8373" stroke-width="1.4" marker-end="url(#rA)"/>
+      <line x1="662" y1="725" x2="690" y2="725" stroke="#8c8373" stroke-width="1.4" marker-end="url(#rA)"/>
+      <line x1="820" y1="725" x2="848" y2="725" stroke="#ff6a33" stroke-width="1.6" marker-end="url(#rO)"/>
+      <line x1="978" y1="725" x2="1006" y2="725" stroke="#8c8373" stroke-width="1.4" marker-end="url(#rA)"/>
+    </g>
+    <path d="M712 746 C 690 776, 600 776, 590 747" fill="none" stroke="#ff6a33" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#rO)"/>
+    <text x="651" y="792" class="mono" font-size="11" fill="#ff8a5c" text-anchor="middle">findings → back to build</text>
+    <text x="60" y="826" class="sans" font-size="13" fill="#8c8373">{{PIPELINE_CAPTION}}</text>
+  </g>
+
+  <!-- SECTION 03 AUDIT (3 slots; add/remove rows and shift later y by 64 each) -->
+  <line x1="60" y1="862" x2="1140" y2="862" stroke="#efe9dd" stroke-width="1.5" opacity=".85"/>
+  <text x="60" y="890" class="mono" font-size="13" fill="#ff8a5c">03</text>
+  <text x="92" y="892" class="disp" font-size="23" font-weight="500" fill="#efe9dd">Audit</text>
+  <text x="1140" y="890" class="mono" font-size="12" fill="#8c8373" text-anchor="end">findings verified</text>
+  <g class="sans">
+    <rect x="60" y="914" width="1080" height="56" rx="10" fill="#201e16" stroke="#3b382c"/>
+    <rect x="76" y="932" width="76" height="20" rx="10" fill="{{F1_HEX}}"/><text x="114" y="946" class="mono" font-size="10" letter-spacing="1" fill="#16150f" text-anchor="middle">{{F1_PILL}}</text>
+    <text x="170" y="940" class="mono" font-size="11" fill="#8c8373">{{F1_CATEGORY}}</text>
+    <text x="170" y="958" font-size="13.5" fill="#efe9dd">{{F1_TEXT}}</text>
+    <rect x="60" y="978" width="1080" height="56" rx="10" fill="#201e16" stroke="#3b382c"/>
+    <rect x="76" y="996" width="76" height="20" rx="10" fill="{{F2_HEX}}"/><text x="114" y="1010" class="mono" font-size="10" letter-spacing="1" fill="#16150f" text-anchor="middle">{{F2_PILL}}</text>
+    <text x="170" y="1004" class="mono" font-size="11" fill="#8c8373">{{F2_CATEGORY}}</text>
+    <text x="170" y="1022" font-size="13.5" fill="#efe9dd">{{F2_TEXT}}</text>
+    <rect x="60" y="1042" width="1080" height="56" rx="10" fill="#201e16" stroke="#3b382c"/>
+    <rect x="76" y="1060" width="76" height="20" rx="10" fill="{{F3_HEX}}"/><text x="114" y="1074" class="mono" font-size="10" letter-spacing="1" fill="#16150f" text-anchor="middle">{{F3_PILL}}</text>
+    <text x="170" y="1068" class="mono" font-size="11" fill="#8c8373">{{F3_CATEGORY}}</text>
+    <text x="170" y="1086" font-size="13.5" fill="#efe9dd">{{F3_TEXT}}</text>
+    <text x="60" y="1128" class="mono" font-size="12" fill="#6dbb82">✓ also checked, clear:</text>
+    <text x="228" y="1128" class="mono" font-size="12" fill="#8c8373">{{CHECKED_CLEAR}}</text>
+  </g>
+
+  <!-- SECTION 04 TOOLS -->
+  <line x1="60" y1="1164" x2="1140" y2="1164" stroke="#efe9dd" stroke-width="1.5" opacity=".85"/>
+  <text x="60" y="1192" class="mono" font-size="13" fill="#ff8a5c">04</text>
+  <text x="92" y="1194" class="disp" font-size="23" font-weight="500" fill="#efe9dd">What it reaches for</text>
+  <text x="1140" y="1192" class="mono" font-size="12" fill="#8c8373" text-anchor="end">read from disk</text>
+  <g class="sans">
+    <rect x="60" y="1216" width="346" height="210" rx="12" fill="#201e16" stroke="#3b382c"/>
+    <text x="80" y="1244" class="mono" font-size="12" letter-spacing="1" fill="#ff8a5c">AGENTS · {{AGENTS}}</text>
+    <text x="80" y="1274" font-size="13" fill="#c0b7a6">{{AGENTS_L1}}</text>
+    <text x="80" y="1298" font-size="13" fill="#c0b7a6">{{AGENTS_L2}}</text>
+    <text x="80" y="1322" font-size="13" fill="#c0b7a6">{{AGENTS_L3}}</text>
+    <text x="80" y="1352" font-size="13" fill="#8c8373">{{AGENTS_L4}}</text>
+    <rect x="427" y="1216" width="346" height="210" rx="12" fill="#201e16" stroke="#3b382c"/>
+    <text x="447" y="1244" class="mono" font-size="12" letter-spacing="1" fill="#ff8a5c">SKILLS · {{SKILLS}}</text>
+    <text x="447" y="1274" font-size="13" fill="#c0b7a6">{{SKILLS_L1}}</text>
+    <text x="447" y="1298" font-size="13" fill="#c0b7a6">{{SKILLS_L2}}</text>
+    <text x="447" y="1322" font-size="13" fill="#c0b7a6">{{SKILLS_L3}}</text>
+    <text x="447" y="1352" font-size="13" fill="#8c8373">{{SKILLS_L4}}</text>
+    <rect x="794" y="1216" width="346" height="210" rx="12" fill="#201e16" stroke="#3b382c"/>
+    <text x="814" y="1244" class="mono" font-size="12" letter-spacing="1" fill="#ff8a5c">MCP SERVERS · {{MCP}}</text>
+    <text x="814" y="1274" font-size="13" fill="#c0b7a6">{{MCP_L1}}</text>
+    <text x="814" y="1298" font-size="13" fill="#c0b7a6">{{MCP_L2}}</text>
+    <text x="814" y="1322" font-size="13" fill="#c0b7a6">{{MCP_L3}}</text>
+    <text x="814" y="1352" font-size="13" fill="#8c8373">{{MCP_L4}}</text>
+  </g>
+
+  <text x="60" y="1456" class="mono" font-size="12" fill="#6b6456">generated by ai-stack-audit  ·  measured from ~/.claude + project  ·  {{DATE}}</text>
+</svg>
