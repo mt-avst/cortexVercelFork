@@ -106,10 +106,3 @@ export const getAuthUrl = (path: string) => {
   const baseUrl = getAuthBaseUrl();
   return baseUrl ? `${baseUrl}${path}` : path;
 };
-
-// Helper function to get full API URL
-export const getApiUrl = (path: string) => {
-  // Use dynamic calculation instead of frozen API_CONFIG
-  const baseUrl = getApiBaseUrl();
-  return baseUrl ? `${baseUrl}${path}` : path;
-};

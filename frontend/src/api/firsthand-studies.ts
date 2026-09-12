@@ -76,10 +76,6 @@ export const updateFirstHandStudy = async (
   return response.data;
 };
 
-export const deleteFirstHandStudy = async (studyId: string): Promise<void> => {
-  await api.delete(`/firsthand/studies/${encodeURIComponent(studyId)}`);
-};
-
 /**
  * Whether a failed request was refused by a rate limiter rather than lost.
  *

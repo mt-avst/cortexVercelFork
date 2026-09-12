@@ -253,29 +253,6 @@ export const useErrorHandler = () => {
   return { handleError, handleApiError };
 };
 
-// Async error wrapper for React components
-export const withErrorHandling = <T extends any[]>(
-  fn: (...args: T) => Promise<any>,
-  context?: string
-) => {
-  return async (...args: T) => {
-    try {
-      return await fn(...args);
-    } catch (error) {
-      logger.error(`Error in ${context || 'async operation'}`, {
-        error: error instanceof Error ? error : undefined,
-        errorDetails: error instanceof Error ? {
-          name: error.name,
-          message: error.message,
-          stack: error.stack,
-        } : { message: String(error) },
-        requestId: logger.getRequestId() || undefined,
-      });
-      throw error;
-    }
-  };
-};
-
 // Validation helpers
 export const validateRequired = (value: any, fieldName: string): void => {
   if (value === undefined || value === null || value === '') {
