@@ -156,7 +156,7 @@ export const DEFAULT_STATEMENT_TIMEOUT_MS = 15_000;
  */
 export const RESULTS_STATEMENT_TIMEOUT_MS = 120_000;
 
-export type RuntimeCheckoutOptions = {
+type RuntimeCheckoutOptions = {
   /**
    * Override the per-statement bound for this checkout. Only for work known to
    * be long AND known to be worth waiting for - see
