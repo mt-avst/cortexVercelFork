@@ -29,8 +29,10 @@ AdaptaLabs is an internal platform for researchers to post opportunities and for
 ### Accessing AdaptaLabs
 
 1. Navigate to the AdaptaLabs website
-2. You can browse opportunities without logging in
-3. To book a session, you'll need to sign in
+2. Sign in with your company Google account to see the studies available to take part in
+3. Book a session on any study that has open slots
+
+A direct link to a specific study will open without signing in, but you'll need to sign in to book.
 
 ### Signing In
 
@@ -344,7 +346,9 @@ No separate account is needed. Sign in with your company Google account (SSO).
 
 ### Can I Browse Without Signing In?
 
-Yes! You can browse all opportunities without signing in. You only need to sign in to book sessions.
+No.
+Signing in is what shows you the studies available to take part in.
+A direct link to a specific study will still open without signing in, but browsing what's on offer and booking a session both need you signed in.
 
 ### How Many Sessions Can I Book?
 
