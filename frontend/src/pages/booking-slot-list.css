@@ -83,6 +83,19 @@
   font-weight: 700;
 }
 
+/* BK-2: Clash - a slot that overlaps the participant's own diary. Shown, not
+   hidden, and not bookable; amber to match the calendar view's
+   .calendar-slot-conflict so the two views name the same state the same way.
+   Text is amber-800 (not the calendar's amber-600 label) so the small chip
+   label clears the 4.5:1 contrast minimum on the tinted background. */
+.slot-chip-conflict {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #92400e;
+  cursor: not-allowed;
+  font-weight: 500;
+}
+
 .slot-chip:disabled {
   cursor: not-allowed;
   opacity: 0.6;
@@ -109,4 +122,11 @@ body.theme-dark .slot-chip-booked {
   background: rgba(255, 122, 51, 0.14);
   border: 1px solid #fb923c; /* orange-400 */
   color: #fdba74; /* orange-300 */
+}
+
+/* Dark: bright yellow glow, matching body.theme-dark .calendar-slot-conflict. */
+body.theme-dark .slot-chip-conflict {
+  background: rgba(234, 179, 8, 0.12);
+  border: 1px solid #facc15; /* yellow-400 */
+  color: #fef08a; /* yellow-200 */
 }
