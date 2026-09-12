@@ -89,4 +89,22 @@ So the product-correct change is simply to **remove the particle background from
 
 ---
 
-*Design-backlog (D) tier CLOSED: DT-7, DT-8 (!422), RS-10 increment-1 (!423), CB-31 (this MR). Increment-2 of RS-10 (auto-resume / rehydration) remains the one tracked forward item.*
+## RS-10 increment-2 — closed at increment-1; full resume tracked as #127, not built during the beta
+
+**Decision: do not build increment-2 during the internal beta. Close RS-10 at increment-1 and track the remaining capability as #127. No code change — this entry is the rationale.**
+
+Asked to "finish RS-10 and get it out of the way", the honest engineering answer was that increment-2 is not a tidy close-out but a large, risky, live-beta build with no safe small slice — so the responsible close is a documented decision plus a tracked ticket, not a speculative rewrite of a live participant surface.
+
+**What increment-1 already settled.** The actual harm — a participant starting a recorded session on one device and silently starting over on another — is gone: increment-1 (!423) shows a non-silent restart-only "unfinished session" prompt. And native survey answers already resume on the **same device**: `StudyRunner` persists responses to `localStorage` and rehydrates on reload (it even tells the participant "your answers are still saved").
+
+**Why true auto-resume / rehydration has no safe increment (the evidence):**
+- **Recording cannot resume at all today, on any device.** A recorded session's media exists **only as in-memory chunks** until upload lands — `frontend/src/lib/recording/session-recorder.ts:78` says exactly this, and `chunksRef` is a `useRef<BlobPart[]>`. After any reload `recordingStatus` resets to `not_started` and the chunks are gone, which is precisely why `getInterruptedRunRecovery` forces a restart with "nothing was saved". Capture is therefore **device-local *and* memory-local**: cross-device resume is physically impossible, and even same-device resume of a recording needs the chunks persisted to IndexedDB plus a resumable chunked upload — a capture-pipeline rewrite with video-quota and cleanup risk. Mid-capture resume stays impossible regardless (MediaRecorder yields one blob).
+- **Cross-device survey resume needs a new backend contract.** Answers are **local-only until submit** (`StudyRunner` writes `localStorage`, with no per-answer server write), so continuing a survey on another device means persisting *partial answers* server-side — a new contract plus a privacy decision on partial-answer storage and retention (the same ePrivacy angle #126 raises). Same-device resume already works, so this only serves the rarer "switched devices mid-survey" case.
+
+**Deferral is a ticket, not buried prose:** the remaining capability — recording resumable-upload (option A, the higher-value self-contained slice: don't lose a *finished* recording to a dropped upload) and cross-device survey answers (option B, the larger backend+privacy feature) — is tracked in **#127**, to be sequenced after the beta as separate MRs. `getInterruptedRunRecovery` and the interruption-reset rule are left untouched.
+
+**Gates:** none run — this MR is a single documentation entry with zero code. The code-reviewer / security-auditor gates review code changes; there is none here.
+
+---
+
+*Design-backlog (D) tier CLOSED: DT-7, DT-8 (!422), RS-10 increment-1 (!423), CB-31 (!424). RS-10 increment-2 closed here at increment-1 with the forward capability tracked as #127 — the (D) tier and its one forward item are now both resolved.*
