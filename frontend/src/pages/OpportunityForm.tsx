@@ -3,6 +3,7 @@ import { useNavigate, useParams, useMatch, Navigate } from 'react-router-dom';
 
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { useOptionalNavigationGuard } from '../contexts/NavigationGuardContext';
 import { createOpportunity, updateOpportunity, deleteOpportunity, getOpportunity, getSessions } from '../api/client';
 import { getFirstHandStudy, wasRateLimited } from '../api/firsthand-studies';
 import {
@@ -53,8 +54,10 @@ import {
   estimateSurveyMinutes
 } from '../lib/opportunity-authoring/estimate-duration';
 import {
+  buildReviewHeader,
   buildReviewSummary,
-  stepForPublishProblem
+  stepForPublishProblem,
+  type ReviewSummaryInput
 } from '../lib/opportunity-authoring/review-summary';
 import {
   PUBLISH_PROBLEM_MESSAGES,
@@ -642,6 +645,9 @@ const OpportunityForm: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { user, loading } = useAuth();
   const { theme } = useTheme();
+  // Optional: the form registers an unsaved-work guard for the Header's links,
+  // but is also rendered without a provider in tests, where this is a no-op.
+  const { registerGuard } = useOptionalNavigationGuard();
   const isDark = theme === 'dark';
   const isEdit = Boolean(id);
 
@@ -2472,7 +2478,9 @@ const OpportunityForm: React.FC = () => {
    * list comes from `tabs`, so this cannot describe a shape the form is not
    * rendering.
    */
-  const reviewSections = buildReviewSummary({
+  // One input, shared by the summary and the header (WZ-17) so the two cannot
+  // disagree about the title or the type they each read from it.
+  const reviewSummaryInput: ReviewSummaryInput = {
     steps: tabs,
     type: formData.type,
     title: formData.title,
@@ -2536,7 +2544,9 @@ const OpportunityForm: React.FC = () => {
     copiedFromStudyTitle: formData.copied_from_title,
     linkedStudyId: formData.firsthand_study_id?.trim() ?? '',
     sessionCount: sessions.length
-  });
+  };
+  const reviewSections = buildReviewSummary(reviewSummaryInput);
+  const reviewHeader = buildReviewHeader(reviewSummaryInput);
 
   /**
    * The refusal the SERVER would give this opportunity if it were saved now,
@@ -3238,6 +3248,38 @@ const OpportunityForm: React.FC = () => {
     // keystroke - which works, and is a lot of churn to say the same thing a
     // boolean says.
   }, [somethingToLose]);
+
+  /**
+   * The in-app cousin of the beforeunload guard (WZ-13).
+   *
+   * The Header's links navigate straight through react-router, so a dirty
+   * author who clicks one leaves without either guard firing - the browser one
+   * (above) hears nothing, and the form's own `requestExit` is only wired to
+   * controls inside the form. This registers a guard on the shared registry
+   * (`NavigationGuardProvider`, mounted above both Header and page in
+   * `AppChromeLayout`) so those links consult the same unsaved-work check and
+   * open the same "Leave without saving?" confirmation.
+   *
+   * The registered function is a THIN WRAPPER over a ref updated every render,
+   * not the closure itself. Registered once and never re-registered, a captured
+   * closure would freeze `hasUnsavedWork` at its first-render value and stop
+   * seeing new edits; re-registering on every render instead would thrash the
+   * ref on every keystroke. The wrapper is stable and reads the latest closure
+   * through the ref, so it always sees the current dirty state without churn.
+   */
+  const latestGuardRef = useRef<(destination: string) => boolean>(() => false);
+  latestGuardRef.current = (destination: string): boolean => {
+    if (hasUnsavedWork()) {
+      setPendingExit(destination);
+      return true;
+    }
+    return false;
+  };
+
+  useEffect(() => {
+    registerGuard((destination) => latestGuardRef.current(destination));
+    return () => registerGuard(null);
+  }, [registerGuard]);
 
 
   /**
@@ -5062,18 +5104,32 @@ const OpportunityForm: React.FC = () => {
 
               <form onSubmit={(event) => event.preventDefault()}>
                 {/* Tab Navigation */}
-                <div className="border-bottom">
-                  <StepNav
-                    steps={tabs}
-                    activeStepId={activeTab}
-                    statusOf={statusOfStep}
-                    /* Backward AND forward navigation both stay free. A step
-                       reporting Needs attention is information, not a lock:
-                       refusing to let an author look at step 4 because step 1
-                       is short of a purpose is how a form loses work. */
-                    onSelect={setActiveTab}
-                  />
-                </div>
+                {/*
+                  The strip is hidden until a type is chosen (WZ-18). Before a
+                  type the shape is [1, 2, 5] - three steps - and choosing a
+                  type grows it to four or five, so an author watching the strip
+                  saw the count jump as their first act on the form. Gating the
+                  strip on `formData.type` means it appears once, at its now-
+                  fixed count, rather than announcing a total it is about to
+                  revise. The Basic Information body below still holds the type
+                  selector and its Continue control, so nothing about choosing a
+                  type moves. An existing study always has a type, so an edit
+                  shows the strip from first render.
+                */}
+                {formData.type && (
+                  <div className="border-bottom">
+                    <StepNav
+                      steps={tabs}
+                      activeStepId={activeTab}
+                      statusOf={statusOfStep}
+                      /* Backward AND forward navigation both stay free. A step
+                         reporting Needs attention is information, not a lock:
+                         refusing to let an author look at step 4 because step 1
+                         is short of a purpose is how a form loses work. */
+                      onSelect={setActiveTab}
+                    />
+                  </div>
+                )}
 
                 {/*
                   The panel below is replaced wholesale on a step change and
@@ -5459,6 +5515,7 @@ const OpportunityForm: React.FC = () => {
                     <>
                       <ReviewStep
                         sections={reviewSections}
+                        header={reviewHeader}
                         publishRefusal={publishRefusal}
                         onEdit={goToStepAndFocus}
                         isEdit={isEdit}

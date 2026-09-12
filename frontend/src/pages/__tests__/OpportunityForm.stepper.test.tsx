@@ -127,15 +127,12 @@ describe('the step strip reports progress, not just position', () => {
   it('numbers every step against the real total for the shape on screen', () => {
     renderForm();
 
-    // No type chosen is a REACHABLE state with only three steps - Basic
-    // Information, Content & Details and Review - and the numbering has to be
-    // honest about it rather than promising a fourth.
-    expect(steps().map((step) => step.textContent)).toEqual([
-      expect.stringContaining('Step 1 of 3'),
-      expect.stringContaining('Step 2 of 3'),
-      expect.stringContaining('Step 3 of 3'),
-    ]);
-
+    // The strip is locked at type-choice (WZ-18): with no type chosen it does
+    // not render at all, so the count it shows is the shape's FIXED total from
+    // the moment it first appears rather than one that grows as the author
+    // picks a type. That "no strip before a type" behaviour is pinned in
+    // OpportunityForm.type-gate.test.tsx; here the concern is the numbering
+    // once the strip is on screen.
     selectType('unmoderated');
     expect(steps().map((step) => step.textContent)).toEqual([
       expect.stringContaining('Step 1 of 5'),
@@ -163,57 +160,22 @@ describe('the step strip reports progress, not just position', () => {
     // it should read IDENTITY would behave identically on those and only show
     // the mistake on a shorter shape.
     //
-    // No type chosen is the SHORTEST shape that still reaches Review: [1, 2,
-    // 5], length 3 - Review sits at index 2 and reads "Step 3 of 3" despite
-    // carrying id 5.
+    // An external poll is the shortest shape that reaches Review WITH a strip:
+    // [1, 2, 3, 5], length 4 - Review sits at index 3 and reads "Step 4 of 4"
+    // despite carrying id 5. (The still-shorter no-type shape [1, 2, 5] shows
+    // no strip at all now - WZ-18 - so it cannot be the case that pins this.)
     renderForm();
-
-    const blankSteps = steps();
-    expect(blankSteps).toHaveLength(3);
-
-    fireEvent.click(blankSteps[1]); // Content & Details
-
-    /*
-     * Reached by clicking the TILE, not the forward control, and that is a
-     * statement about the form rather than a convenience.
-     *
-     * With no type chosen the forward control on step 2 reads a bare
-     * "Continue" and refuses the move, sending the author to the type field -
-     * so there is no "Continue: Review" here to press. Asserted, because the
-     * first version of this test pressed it and the label existed: the control
-     * named Review while going to step 1, which is precisely the lying label
-     * C3 removed from this row.
-     */
-    expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', { name: 'Continue: Review' })
-    ).not.toBeInTheDocument();
-
-    fireEvent.click(blankSteps[2]); // Review, directly
-
-    const blankOnReview = steps();
-    expect(blankOnReview).toHaveLength(3);
-    expect(blankOnReview[2]).toHaveTextContent('Step 3 of 3');
-    expect(blankOnReview[2]).toHaveTextContent('Review');
-    expect(blankOnReview[2]).toHaveAttribute('aria-current', 'step');
-
-    // An external poll is one step longer - [1, 2, 3, 5], length 4 - so
-    // Review's id (5) is one past what THIS shape's length would suggest too,
-    // at a different position than the case above.
-    // Review's backward control names the step BEFORE it in this shape, which
-    // with no type chosen is Content & Details rather than the type-dependent
-    // step - asserted rather than assumed, because it is the label that would
-    // be wrong if the control read a fixed number instead of the list.
-    expect(
-      screen.getByRole('button', { name: 'Previous: Content & Details' })
-    ).toBeInTheDocument();
-    fireEvent.click(steps()[0]);
     selectType('poll');
 
     const beforeReview = steps();
     expect(beforeReview).toHaveLength(4);
 
     fireEvent.click(beforeReview[2]); // External Link
+
+    // Review's backward control names the step BEFORE it in this shape, which
+    // for a poll is External Link rather than a hard-coded step - asserted
+    // rather than assumed, because it is the label that would be wrong if the
+    // control read a fixed number instead of the list.
     fireEvent.click(screen.getByRole('button', { name: 'Continue: Review' }));
 
     const onReview = steps();
@@ -221,6 +183,9 @@ describe('the step strip reports progress, not just position', () => {
     expect(onReview[3]).toHaveTextContent('Step 4 of 4');
     expect(onReview[3]).toHaveTextContent('Review');
     expect(onReview[3]).toHaveAttribute('aria-current', 'step');
+    expect(
+      screen.getByRole('button', { name: 'Previous: External Link' })
+    ).toBeInTheDocument();
   });
 
   it('opens a blank form with one current step and the rest not started', () => {

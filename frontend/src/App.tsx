@@ -2,6 +2,7 @@ import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { NavigationGuardProvider } from './contexts/NavigationGuardContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import SkipLink from './components/SkipLink';
 import Header from './components/Header';
@@ -46,14 +47,22 @@ function AppChromeLayout() {
   return (
     <>
       <SkipLink />
-      <Header />
-      <main id="main-content" className="main" role="main">
-        <div className="container">
-          <Suspense fallback={<PageLoader />}>
-            <Outlet />
-          </Suspense>
-        </div>
-      </main>
+      {/*
+        The Header and the page below share ONE navigation guard (WZ-13). The
+        provider has to sit above both so a page (e.g. a dirty OpportunityForm)
+        can register a guard that the Header's links consult - the two live in
+        different subtrees and could not reach each other otherwise.
+      */}
+      <NavigationGuardProvider>
+        <Header />
+        <main id="main-content" className="main" role="main">
+          <div className="container">
+            <Suspense fallback={<PageLoader />}>
+              <Outlet />
+            </Suspense>
+          </div>
+        </main>
+      </NavigationGuardProvider>
       <FeedbackFooter />
     </>
   );
