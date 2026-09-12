@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import SessionsTab, { groupEventsBySession } from '../SessionsTab';
 import { SessionEvent } from '../../../api/types';
@@ -54,14 +55,14 @@ describe('groupEventsBySession', () => {
   });
 });
 
-describe('SessionsTab', () => {
-  const renderTab = (events: SessionEvent[]) =>
-    render(
-      <MemoryRouter>
-        <SessionsTab opportunityId="opp-1" events={events} loading={false} onRefresh={() => undefined} />
-      </MemoryRouter>
-    );
+const renderTab = (events: SessionEvent[]) =>
+  render(
+    <MemoryRouter>
+      <SessionsTab opportunityId="opp-1" events={events} loading={false} onRefresh={() => undefined} />
+    </MemoryRouter>
+  );
 
+describe('SessionsTab', () => {
   it('renders one row per session with an internal review link', () => {
     renderTab([
       buildEvent({ id: 'evt-1', event_type: 'session_started', occurred_at: '2026-07-15T10:00:00.000Z' }),
@@ -83,5 +84,120 @@ describe('SessionsTab', () => {
     renderTab([]);
 
     expect(screen.getByText('No session events recorded yet.')).toBeInTheDocument();
+  });
+});
+
+describe('SessionsTab column sorting (DA-23)', () => {
+  // Deliberately picked so timestamp order, name order and status-rank order
+  // all disagree with each other - a test that coincidentally reuses the same
+  // ordering for two sort modes cannot tell them apart.
+  const threeSessions = (): SessionEvent[] => [
+    buildEvent({
+      id: 'evt-bob',
+      firsthand_session_id: 'session_bob',
+      participant_name: 'Bob',
+      event_type: 'session_failed',
+      occurred_at: '2026-07-15T09:00:00.000Z'
+    }),
+    buildEvent({
+      id: 'evt-nina',
+      firsthand_session_id: 'session_nina',
+      participant_name: 'Nina',
+      event_type: 'session_started',
+      occurred_at: '2026-07-15T11:00:00.000Z'
+    }),
+    buildEvent({
+      id: 'evt-amy',
+      firsthand_session_id: 'session_amy',
+      participant_name: 'Amy',
+      event_type: 'session_completed',
+      occurred_at: '2026-07-15T10:00:00.000Z'
+    })
+  ];
+
+  const rowOrder = (): string[] =>
+    screen
+      .getAllByRole('row')
+      .slice(1)
+      .map((row) => row.textContent ?? '');
+
+  const namesIn = (rows: string[], names: string[]): string[] =>
+    rows.map((rowText) => names.find((name) => rowText.includes(name)) ?? '');
+
+  it('CONTROL: defaults to last-activity descending, unclicked - the ordering that ships today', () => {
+    renderTab(threeSessions());
+
+    expect(namesIn(rowOrder(), ['Bob', 'Nina', 'Amy'])).toEqual(['Nina', 'Amy', 'Bob']);
+    expect(screen.getByRole('columnheader', { name: 'Last activity' })).toHaveAttribute(
+      'aria-sort',
+      'descending'
+    );
+    expect(screen.getByRole('columnheader', { name: 'Status' })).toHaveAttribute('aria-sort', 'none');
+    expect(screen.getByRole('columnheader', { name: 'Participant' })).toHaveAttribute(
+      'aria-sort',
+      'none'
+    );
+  });
+
+  it('sorts by Status rank ascending on first click, descending on second', async () => {
+    const user = userEvent.setup();
+    renderTab(threeSessions());
+
+    const statusHeader = screen.getByRole('button', { name: 'Status' });
+    await user.click(statusHeader);
+
+    // started(0) < completed(1) < failed(3)
+    expect(namesIn(rowOrder(), ['Bob', 'Nina', 'Amy'])).toEqual(['Nina', 'Amy', 'Bob']);
+    expect(screen.getByRole('columnheader', { name: 'Status' })).toHaveAttribute(
+      'aria-sort',
+      'ascending'
+    );
+    expect(screen.getByRole('columnheader', { name: 'Last activity' })).toHaveAttribute(
+      'aria-sort',
+      'none'
+    );
+
+    await user.click(statusHeader);
+
+    expect(namesIn(rowOrder(), ['Bob', 'Nina', 'Amy'])).toEqual(['Bob', 'Amy', 'Nina']);
+    expect(screen.getByRole('columnheader', { name: 'Status' })).toHaveAttribute(
+      'aria-sort',
+      'descending'
+    );
+  });
+
+  it('sorts by Participant name ascending on first click, descending on second', async () => {
+    const user = userEvent.setup();
+    renderTab(threeSessions());
+
+    const participantHeader = screen.getByRole('button', { name: 'Participant' });
+    await user.click(participantHeader);
+
+    expect(namesIn(rowOrder(), ['Bob', 'Nina', 'Amy'])).toEqual(['Amy', 'Bob', 'Nina']);
+    expect(screen.getByRole('columnheader', { name: 'Participant' })).toHaveAttribute(
+      'aria-sort',
+      'ascending'
+    );
+
+    await user.click(participantHeader);
+
+    expect(namesIn(rowOrder(), ['Bob', 'Nina', 'Amy'])).toEqual(['Nina', 'Bob', 'Amy']);
+    expect(screen.getByRole('columnheader', { name: 'Participant' })).toHaveAttribute(
+      'aria-sort',
+      'descending'
+    );
+  });
+
+  it('toggles Last activity to ascending on click, since it starts descending by default', async () => {
+    const user = userEvent.setup();
+    renderTab(threeSessions());
+
+    await user.click(screen.getByRole('button', { name: 'Last activity' }));
+
+    expect(namesIn(rowOrder(), ['Bob', 'Nina', 'Amy'])).toEqual(['Bob', 'Amy', 'Nina']);
+    expect(screen.getByRole('columnheader', { name: 'Last activity' })).toHaveAttribute(
+      'aria-sort',
+      'ascending'
+    );
   });
 });

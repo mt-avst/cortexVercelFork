@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { SessionEvent } from '../../api/types';
 
@@ -16,11 +16,17 @@ export const EVENT_TYPE_BADGE: Record<string, string> = {
   session_failed: ''
 };
 
+// Derived from the shared contract (shared/types/index.ts -> SessionEvent),
+// not redeclared here - a fifth event type added there widens this type too,
+// so STATUS_RANK below (typed on it) fails to compile instead of silently
+// ranking the new value as unknown.
+export type SessionEventType = SessionEvent['event_type'];
+
 export interface SessionRow {
   sessionId: string;
   participantName: string | null;
   participantEmail: string | null;
-  latestEventType: string;
+  latestEventType: SessionEventType;
   latestOccurredAt: string;
 }
 
@@ -50,12 +56,77 @@ export function groupEventsBySession(events: SessionEvent[]): SessionRow[] {
   );
 }
 
+type SessionSortField = 'participant' | 'status' | 'lastActivity';
+type SortDirection = 'asc' | 'desc';
+
+/**
+ * Where a session sits in its own lifecycle, not the raw event-type string -
+ * a plain alphabetical sort would put "Abandoned" ahead of "Started" for no
+ * reason a researcher would recognise. In-progress first, then the outcomes
+ * from best to worst.
+ *
+ * Typed as Record<SessionEventType, number>, not Record<string, number>: if a
+ * fifth event type is ever added to SessionEvent['event_type'] (shared/types/
+ * index.ts), this object literal stops satisfying the type and TypeScript
+ * refuses to compile until a rank is added here too - no silent rank-99 drift.
+ */
+const STATUS_RANK: Record<SessionEventType, number> = {
+  session_started: 0,
+  session_completed: 1,
+  session_abandoned: 2,
+  session_failed: 3
+};
+
+function compareSessions(left: SessionRow, right: SessionRow, field: SessionSortField): number {
+  switch (field) {
+    case 'participant':
+      return (left.participantName ?? 'Unknown').localeCompare(right.participantName ?? 'Unknown');
+    case 'status':
+      return (STATUS_RANK[left.latestEventType] ?? 99) - (STATUS_RANK[right.latestEventType] ?? 99);
+    case 'lastActivity':
+    default:
+      return left.latestOccurredAt.localeCompare(right.latestOccurredAt);
+  }
+}
+
 const SessionsTab: React.FC<{
   opportunityId: string;
   events: SessionEvent[];
   loading: boolean;
   onRefresh: () => void;
 }> = ({ opportunityId, events, loading, onRefresh }) => {
+  // "Last activity, descending" is the ordering that ships today - the
+  // default here MUST match groupEventsBySession's own sort, or a first
+  // render would silently reorder the table before anyone touches a header.
+  const [sortField, setSortField] = useState<SessionSortField>('lastActivity');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+  const handleSort = (field: SessionSortField) => {
+    if (field === sortField) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  // Only the active column reports asc/descending - the rest report 'none',
+  // so the table's aria-sort names exactly one sorted column at a time.
+  const ariaSortFor = (field: SessionSortField): 'ascending' | 'descending' | 'none' =>
+    sortField === field ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none';
+
+  const sessions = useMemo(() => groupEventsBySession(events), [events]);
+
+  // Hooks run every render regardless of the `loading` early return below.
+  const sortedSessions = useMemo(
+    () =>
+      [...sessions].sort((left, right) => {
+        const comparison = compareSessions(left, right, sortField);
+        return sortDirection === 'asc' ? comparison : -comparison;
+      }),
+    [sessions, sortField, sortDirection]
+  );
+
   if (loading) {
     return (
       <div className="text-center py-5">
@@ -65,8 +136,6 @@ const SessionsTab: React.FC<{
       </div>
     );
   }
-
-  const sessions = groupEventsBySession(events);
 
   return (
     <div className="cortex-analytics-card" style={{ marginBottom: '24px' }}>
@@ -94,14 +163,44 @@ const SessionsTab: React.FC<{
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--cortex-border, rgba(255,255,255,0.08))' }}>
-                <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>Participant</th>
-                <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>Status</th>
-                <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>Last activity</th>
+                <th
+                  style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}
+                  aria-sort={ariaSortFor('participant')}
+                >
+                  <button type="button" className="admin-th-sort" onClick={() => handleSort('participant')}>
+                    Participant
+                    <span className="admin-th-sort-caret" aria-hidden="true">
+                      {sortField === 'participant' ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}
+                    </span>
+                  </button>
+                </th>
+                <th
+                  style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}
+                  aria-sort={ariaSortFor('status')}
+                >
+                  <button type="button" className="admin-th-sort" onClick={() => handleSort('status')}>
+                    Status
+                    <span className="admin-th-sort-caret" aria-hidden="true">
+                      {sortField === 'status' ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}
+                    </span>
+                  </button>
+                </th>
+                <th
+                  style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}
+                  aria-sort={ariaSortFor('lastActivity')}
+                >
+                  <button type="button" className="admin-th-sort" onClick={() => handleSort('lastActivity')}>
+                    Last activity
+                    <span className="admin-th-sort-caret" aria-hidden="true">
+                      {sortField === 'lastActivity' ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}
+                    </span>
+                  </button>
+                </th>
                 <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>Session</th>
               </tr>
             </thead>
             <tbody>
-              {sessions.map((session) => (
+              {sortedSessions.map((session) => (
                 <tr
                   key={session.sessionId}
                   style={{ borderBottom: '1px solid var(--cortex-border, rgba(255,255,255,0.04))' }}
