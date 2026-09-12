@@ -7356,6 +7356,49 @@ describe('Opportunities API', () => {
       expect(response.body.error).toContain('click_type');
       expect(findInsertCall()).toBeUndefined();
     });
+
+    // #125: the visitor_nonce is persisted so anonymous distinct counts survive
+    // the proxy. The INSERT params order is [opp, user, clickType, ua, ipHash,
+    // visitorNonce], so params[5] is the nonce.
+    it('persists a valid visitor_nonce on the click row', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [publishedUnmoderated] });
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+
+      await request(listening(app))
+        .post('/api/opportunities/1/click')
+        .send({ click_type: 'view', visitor_nonce: 'abcd1234-EF_90' })
+        .expect(200);
+
+      const insertCall = findInsertCall();
+      expect(insertCall![0]).toContain('visitor_nonce');
+      expect(insertCall![1][5]).toBe('abcd1234-EF_90');
+    });
+
+    it('stores null for a malformed visitor_nonce rather than rejecting the click', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [publishedUnmoderated] });
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+
+      // Too short (< 8 chars) and an out-of-charset char: degrade to ip_hash, do
+      // not 400 - tracking must never fail on a hostile or stale client value.
+      await request(listening(app))
+        .post('/api/opportunities/1/click')
+        .send({ click_type: 'action', visitor_nonce: 'no spaces!' })
+        .expect(200);
+
+      expect(findInsertCall()![1][5]).toBeNull();
+    });
+
+    it('stores null when the body omits visitor_nonce', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [publishedUnmoderated] });
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+
+      await request(listening(app))
+        .post('/api/opportunities/1/click')
+        .send({ click_type: 'view' })
+        .expect(200);
+
+      expect(findInsertCall()![1][5]).toBeNull();
+    });
   });
 
   // GET / and GET /:id are optionalAuth by design - anonymous participants land

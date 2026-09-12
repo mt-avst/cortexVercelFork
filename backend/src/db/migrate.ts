@@ -859,7 +859,8 @@ export async function runMigrations() {
         click_type TEXT NOT NULL DEFAULT 'action',
         clicked_at TIMESTAMPTZ DEFAULT NOW(),
         user_agent TEXT,
-        ip_hash TEXT
+        ip_hash TEXT,
+        visitor_nonce TEXT
       )
     `);
 
@@ -928,6 +929,54 @@ export async function runMigrations() {
       }
 
       console.log('ℹ️  opportunity_clicks.click_type is present despite the error above, continuing');
+    }
+
+    // Add visitor_nonce column if the table predates it (#125). A first-party
+    // per-visitor id recorded on anonymous clicks so the distinct-visitor count
+    // survives the reverse proxy, which collapses every anonymous ip_hash to the
+    // ingress address. Old rows and clients that send no nonce fall back to
+    // ip_hash in the COALESCE at read time.
+    //
+    // Guarded exactly like click_type above, and for the same reason: the column
+    // add itself is metadata-only (nullable, no default, no rewrite), but
+    // `ADD COLUMN IF NOT EXISTS` still takes ACCESS EXCLUSIVE before it evaluates
+    // IF NOT EXISTS, so on a busy opportunity_clicks it can lock-timeout even on
+    // the no-op re-run. Unguarded, that one failure aborts the whole migration
+    // and CrashLoops the pod - far too high a price for an OPTIONAL analytics
+    // column the read path already degrades past (COALESCE -> ip_hash). So on
+    // failure, ask the schema directly (to_regclass + pg_catalog, the same
+    // resolution rule the ALTER used, not privilege-filtered information_schema)
+    // and continue if the column is there, fail only if it genuinely is not.
+    try {
+      await client.query(`
+        ALTER TABLE opportunity_clicks
+        ADD COLUMN IF NOT EXISTS visitor_nonce TEXT
+      `);
+    } catch (error) {
+      console.error(
+        '❌ Could not add opportunity_clicks.visitor_nonce:',
+        error instanceof Error ? error.message : String(error)
+      );
+
+      let columnCheck;
+      try {
+        columnCheck = await client.query(`
+          SELECT 1
+          FROM pg_attribute
+          WHERE attrelid = to_regclass('opportunity_clicks')
+            AND attname = 'visitor_nonce'
+            AND attnum > 0
+            AND NOT attisdropped
+        `);
+      } catch {
+        throw error;
+      }
+
+      if (columnCheck.rows.length === 0) {
+        throw error;
+      }
+
+      console.log('ℹ️  opportunity_clicks.visitor_nonce is present despite the error above, continuing');
     }
 
     // Create index for efficient analytics queries
