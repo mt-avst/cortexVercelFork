@@ -5,9 +5,17 @@ import type { ReviewSection } from '../../lib/opportunity-authoring/review-summa
 import FieldError from './FieldError';
 import ShareOpportunityLink from '../ShareOpportunityLink';
 import type { User } from '@shared/types';
+import './review-step.css';
 
 export interface ReviewStepProps {
   sections: ReviewSection[];
+  /**
+   * The identity that leads the screen (WZ-17): the study's title and the
+   * participant-facing label for its type. Read-only orientation, computed by
+   * `buildReviewHeader` from the same data the sections are built from - this
+   * component still never reads `type` itself, only the label handed to it.
+   */
+  header: { title: string; typeLabel: string };
   /** The publish refusal this opportunity would get, or null. */
   publishRefusal: { message: string; stepId: number; stepTitle: string } | null;
   /** Open a step, focusing a control when one is named. */
@@ -89,6 +97,7 @@ export interface ReviewStepProps {
  */
 const ReviewStep: React.FC<ReviewStepProps> = ({
   sections,
+  header,
   publishRefusal,
   onEdit,
   isEdit,
@@ -106,6 +115,48 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
           ? 'Check everything before you save. Any change you have not already saved is still only on this screen.'
           : 'Your last chance to check everything before the study is created. Nothing has been saved yet.'}
       </p>
+    </div>
+
+    {/*
+      The identity card (WZ-17): the study's title as the largest text, then a
+      row of two pills - the type label and the current draft/published state.
+      Read-only orientation; the Status control below remains the one place the
+      state is actually chosen, and this pill only reflects it. Anchoring the
+      screen here is why the publish-refusal alert now sits directly beneath it.
+    */}
+    <div className="review-header" data-testid="review-header">
+      <h3
+        className={`review-header__title${header.title ? '' : ' review-header__title--empty validation-error'}`}
+      >
+        {/*
+          A missing title is a REQUIRED field short of a value, not a stylistic
+          blank - and title is not a publish-readiness code, so the refusal
+          alert never mentions it. This is the one place it shows before Save,
+          so it is flagged the way every other missing value on this screen is:
+          an icon and the words "No title yet", never colour alone.
+        */}
+        {header.title || (
+          <>
+            <AlertCircle size={18} className="me-1" aria-hidden="true" />
+            No title yet
+          </>
+        )}
+      </h3>
+      <div className="review-header__pills">
+        <span className="review-header__pill review-header__pill--type">
+          {header.typeLabel}
+        </span>
+        {status === 'draft' ? (
+          <span className="review-header__pill review-header__pill--draft">
+            <AlertTriangle size={14} className="me-1" aria-hidden="true" />
+            Draft
+          </span>
+        ) : (
+          <span className="review-header__pill review-header__pill--published">
+            Published
+          </span>
+        )}
+      </div>
     </div>
 
     {publishRefusal && (
@@ -151,7 +202,7 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
             Edit {section.title}
           </button>
         </div>
-        <dl className="mb-0">
+        <dl className="review-dl">
           {section.items.map((item) => (
             <React.Fragment key={item.label}>
               <dt>{item.label}</dt>
@@ -185,7 +236,10 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
       <h3 id="status-heading" className="h6 mb-2">Status</h3>
       <div id="status-help" className="form-text mb-2">
         {status === 'draft' ? (
-          <strong className="text-warning">⚠️ DRAFT - Not visible to users. Change to Published to make visible.</strong>
+          <strong className="text-warning">
+            <AlertTriangle size={14} className="me-1" aria-hidden="true" />
+            DRAFT - Not visible to users. Change to Published to make visible.
+          </strong>
         ) : (
           'Published studies are visible to all users'
         )}

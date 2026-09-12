@@ -1,5 +1,6 @@
 import React, { useState, memo } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
+import { GuardedLink } from '../contexts/NavigationGuardContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import LoadingSpinner from './LoadingSpinner';
@@ -128,25 +129,25 @@ const Header: React.FC = memo(() => {
         >
           Submit Research Request
         </a>,
-        <Link key="my-bookings" to="/my-bookings" className={secondary}>
+        <GuardedLink key="my-bookings" to="/my-bookings" className={secondary}>
           My bookings
-        </Link>,
+        </GuardedLink>,
       ];
     }
 
     if (!isOnAdminPage) {
       return [
-        <Link key="admin" to="/admin" className={primary}>
+        <GuardedLink key="admin" to="/admin" className={primary}>
           Admin
-        </Link>,
+        </GuardedLink>,
       ];
     }
 
     return [
-      <Link key="browse" to="/" className={primary}>
+      <GuardedLink key="browse" to="/" className={primary}>
         <List size={18} className="me-1" aria-hidden="true" />
         Browse Studies
-      </Link>,
+      </GuardedLink>,
     ];
   };
 
@@ -177,20 +178,20 @@ const Header: React.FC = memo(() => {
 
     if (isAdmin) {
       items.push(
-        <Link key="settings" to="/admin/settings" className="dropdown-item">
+        <GuardedLink key="settings" to="/admin/settings" className="dropdown-item">
           <Settings size={16} className="me-2" aria-hidden="true" />
           Settings
-        </Link>
+        </GuardedLink>
       );
     }
 
     if (user.role !== 'superadmin') {
       if (user.role === 'employee') {
         items.push(
-          <Link key="gamification" to="/gamification" className="dropdown-item">
+          <GuardedLink key="gamification" to="/gamification" className="dropdown-item">
             <Trophy size={16} className="me-2" aria-hidden="true" />
             AdaptaBits
-          </Link>,
+          </GuardedLink>,
           <DropdownDivider key="div-after-adaptabits" />
         );
       }
@@ -223,10 +224,10 @@ const Header: React.FC = memo(() => {
 
     items.push(
       <DropdownDivider key="div-before-feedback" />,
-      <Link key="feedback" to="/feedback" className="dropdown-item">
+      <GuardedLink key="feedback" to="/feedback" className="dropdown-item">
         <MessageSquare size={16} className="me-2" aria-hidden="true" />
         Send Feedback
-      </Link>,
+      </GuardedLink>,
       <DropdownDivider key="div-before-logout" />,
       <DropdownItem
         key="logout"
@@ -269,10 +270,10 @@ const Header: React.FC = memo(() => {
     <header className="header">
       <div className="container">
         <div className="header-content">
-          <Link to={logoLink} className="logo" aria-label="Cortex home">
+          <GuardedLink to={logoLink} className="logo" aria-label="Cortex home">
             <CortexMark className="logo-mark" />
             <span className="logo-word">Cortex</span>
-          </Link>
+          </GuardedLink>
 
           <nav className="nav" aria-label="Main navigation">
             {/* Desktop toolbar - hidden below 768px */}

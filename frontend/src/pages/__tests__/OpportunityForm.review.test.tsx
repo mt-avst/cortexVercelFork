@@ -707,12 +707,20 @@ describe('a value the participant cannot use is never marked by colour alone', (
      */
     expect(tasks.querySelector('svg')).not.toBeNull();
 
-    // Satisfied, for contrast: the title the author actually filled in. Without
-    // this the assertions above would also pass against a component that marked
-    // EVERY row as a problem.
-    const title = valueFor('Title');
-    expect(title).not.toHaveClass('validation-error');
-    expect(title.querySelector('svg')).toBeNull();
+    // Satisfied, for contrast: the purpose the author actually filled in.
+    // (Title moved to the header under WZ-17, so it is no longer a dl row; the
+    // purpose is the filled basics row that stayed.) Without this the assertions
+    // above would also pass against a component that marked EVERY row a problem.
+    const purpose = valueFor('Purpose');
+    expect(purpose).not.toHaveClass('validation-error');
+    expect(purpose.querySelector('svg')).toBeNull();
+
+    // Through-line (WZ-17): the title the author typed reaches the header that
+    // now leads the screen - the end-to-end seam the promoted Title row used to
+    // give, wiring buildReviewHeader's output into ReviewStep.
+    expect(
+      within(screen.getByTestId('review-header')).getByText('A study with a long enough title')
+    ).toBeInTheDocument();
   });
 
   it('flags a link that is not a web address, on the step that owns it', () => {
@@ -1051,9 +1059,17 @@ describe('the step that is not a StepActions row still names where it goes', () 
 describe('a refusal does not follow the author off the step that caused it', () => {
   it('clears the banner when they move on, and when they use an Edit link', () => {
     renderCreate();
-    // No type chosen: step 2's forward control refuses and reports.
-    fireEvent.click(strip()[1]);
-    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    // No type chosen, but the other basics filled, so the ONLY refusal is the
+    // missing type. The strip is hidden until a type is chosen now (WZ-18), so
+    // the refusal is triggered from the Basic Information body's own forward
+    // control rather than by clicking a step 2 tile.
+    fireEvent.change(screen.getByLabelText(/^Title/i), {
+      target: { value: 'A study with a long enough title' }
+    });
+    fireEvent.change(screen.getByLabelText(/^Purpose/i), {
+      target: { value: 'A purpose long enough to pass validation' }
+    });
+    fireEvent.click(forwardControl()!);
     // By its own heading, not by role alone: a refused step also carries the
     // type error's inline alert, so `getByRole('alert')` is ambiguous here.
     expect(errorSummary()).toBeInTheDocument();

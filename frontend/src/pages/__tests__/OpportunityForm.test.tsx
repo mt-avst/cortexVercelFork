@@ -1785,27 +1785,24 @@ describe('FIELD_LOCATIONS completeness', () => {
 });
 
 describe('OpportunityForm - a refused action always says so', () => {
-  it('sends the author back to the type field instead of no-oping on Continue', async () => {
-    // Reachable because the tab headers are directly clickable, which bypasses
-    // the guard on tab 1's own Continue. With no type chosen there is no tab 3
-    // to continue to, so the button used to setActiveTab(2) from tab 2 - a
-    // no-op, with the label silently degraded to a bare "Continue".
+  it('refuses Continue with no type instead of no-oping, and marks the type field', async () => {
+    // Type is the choice that decides the shape, so the form refuses to advance
+    // without it. The strip is hidden until a type is chosen (WZ-18), so this
+    // refusal comes from Basic Information's own Continue rather than from
+    // clicking a later tile. Everything else filled, the sole problem is `type`.
     renderForm();
-
-    // Scoped to the step strip. C3's "Continue: {next step}" label means the
-    // forward control on step 1 is now ALSO named "Content & Details" -
-    // "Continue: Content & Details" - so an unscoped match is ambiguous.
-    fireEvent.click(
-      within(screen.getByRole('navigation', { name: 'Form steps' }))
-        .getByRole('button', { name: /Content & Details/i })
-    );
-    expect(screen.getByLabelText(/Description \(Optional\)/i)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/^Title/i), {
+      target: { value: 'A perfectly serviceable title' },
+    });
+    fireEvent.change(screen.getByLabelText(/purpose/i), {
+      target: { value: 'Find out where people stall in the checkout flow' },
+    });
 
     fireEvent.click(screen.getByRole('button', { name: /^Continue/i }));
 
     await screen.findByRole('alert', { name: /There is a problem/i });
     expect(summarisedErrorKeys()).toEqual(['type']);
-    // Back on the tab that holds the field, with the field itself marked.
+    // Left on the step that holds the field, with the field itself marked.
     expect(
       screen.getByRole('combobox', { name: /Research Study Type/i })
     ).toBeInvalid();
@@ -1894,13 +1891,15 @@ describe('OpportunityForm - a refused action always says so', () => {
     // went on naming it. Derived now, so it empties itself.
     const { container } = renderForm();
 
-    // Scoped to the step strip. C3's "Continue: {next step}" label means the
-    // forward control on step 1 is now ALSO named "Content & Details" -
-    // "Continue: Content & Details" - so an unscoped match is ambiguous.
-    fireEvent.click(
-      within(screen.getByRole('navigation', { name: 'Form steps' }))
-        .getByRole('button', { name: /Content & Details/i })
-    );
+    // Refuse on the missing type from Basic Information's own Continue (the
+    // strip is hidden until a type is chosen - WZ-18). Title and purpose filled,
+    // so the sole refusal named is `type`.
+    fireEvent.change(screen.getByLabelText(/^Title/i), {
+      target: { value: 'A perfectly serviceable title' },
+    });
+    fireEvent.change(screen.getByLabelText(/purpose/i), {
+      target: { value: 'Find out where people stall in the checkout flow' },
+    });
     fireEvent.click(screen.getByRole('button', { name: /^Continue/i }));
     expect(summarisedErrorKeys()).toEqual(['type']);
 

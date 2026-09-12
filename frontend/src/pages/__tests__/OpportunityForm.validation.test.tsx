@@ -285,22 +285,24 @@ describe('Continue can never pass what Submit refuses', () => {
     expect(summarisedErrorKeys()).toEqual(['external_link_optional']);
   });
 
-  it('keeps `type` in scope on a later step, because it decides the shape', () => {
-    // Step 2 is reachable with no type set - the step headers are clickable -
-    // and continuing would walk the author past the only choice that decides
-    // what this form is for.
+  it('keeps `type` in scope, because it decides the shape', () => {
+    // Type is required before the form advances at all. The strip is hidden
+    // until a type is chosen (WZ-18), so an author cannot click past Basic
+    // Information to a later step with no type - and step 1's own Continue
+    // refuses without one. Filled everything else, the sole refusal is `type`.
     renderForm();
-    const strip = within(
-      screen.getByRole('navigation', { name: 'Form steps' })
-    ).getAllByRole('button');
-    fireEvent.click(strip[1]);
-    expect(currentStepName()).toMatch(/Content & Details/i);
+    setTitle('A perfectly serviceable title');
+    setPurpose('Find out where people stall in the checkout flow');
 
-    fireEvent.click(screen.getByRole('button', { name: /^Continue$/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Continue(:|$)/ }));
 
     expect(summarisedErrorKeys()).toEqual(['type']);
-    // Routed to the step that HOLDS the field, not left where it was refused.
-    expect(currentStepName()).toMatch(/Basic Information/i);
+    // Left on the step that HOLDS the field: the type selector is still on
+    // screen, so the author was not advanced past the choice. (The strip is
+    // absent with no type, so this is asserted by the body, not by the strip.)
+    expect(
+      screen.getByRole('combobox', { name: /Research Study Type/i })
+    ).toBeInTheDocument();
   });
 
   it('does not erase another step\'s reported problem when a later Continue refuses', () => {
