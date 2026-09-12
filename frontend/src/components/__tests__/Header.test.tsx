@@ -5,17 +5,23 @@ import { beforeEach, vi } from 'vitest';
 
 import Header from '../Header';
 
-// Header requires the auth and theme contexts. The default is a signed-out
-// visitor; a test that needs one signed in assigns `auth.user` before render.
+// Header requires the auth and theme contexts. The default is a *resolved*
+// signed-out visitor (user null, initialAuthCheck true) - most existing tests
+// query by role/accessible name and don't care about the resolved flag, but
+// defaulting it true keeps the default state realistic rather than matching
+// the transient cold-load window. A test that needs one signed in assigns
+// `auth.user` before render; a test that needs the pre-resolution window sets
+// `auth.initialAuthCheck = false` explicitly.
 const auth = vi.hoisted(() => ({
   user: null as { name: string; role: string } | null,
+  initialAuthCheck: true,
 }));
 
 vi.mock('../../contexts/AuthContext', () => ({
   useAuth: () => ({
     user: auth.user,
     loading: false,
-    initialAuthCheck: false,
+    initialAuthCheck: auth.initialAuthCheck,
     logout: vi.fn(),
   }),
 }));
@@ -29,6 +35,7 @@ vi.mock('../../contexts/ThemeContext', () => ({
 
 beforeEach(() => {
   auth.user = null;
+  auth.initialAuthCheck = true;
 });
 
 // Simple Header component tests
@@ -55,7 +62,7 @@ describe('Header Component', () => {
   });
 
   it('should render the theme toggle for signed-out visitors', () => {
-    const { getByText } = render(
+    const { getAllByRole } = render(
       <BrowserRouter>
         <Header />
       </BrowserRouter>
@@ -63,7 +70,9 @@ describe('Header Component', () => {
 
     // Signed-out users get no nav actions - login lives on the landing page.
     // The theme toggle is the one control present regardless of auth state.
-    expect(getByText('Dark Mode')).toBeInTheDocument();
+    expect(
+      getAllByRole('button', { name: 'Switch to dark mode' }).length
+    ).toBeGreaterThan(0);
   });
 
   it('should have proper structure', () => {
@@ -76,6 +85,87 @@ describe('Header Component', () => {
     const header = container.querySelector('header');
     expect(header).toBeInTheDocument();
     expect(header).toHaveClass('header');
+  });
+});
+
+/**
+ * CB-26: on the signed-out header the theme toggle is the ONLY control (every
+ * other header item is gated behind `user`), so a full outlined button with a
+ * text label read as the page's loudest control. Once signed-out is
+ * *confirmed* (`!user && initialAuthCheck`), it demotes to a quiet icon-only
+ * control - no outlined-button chrome, no visible text label - while keeping
+ * a descriptive `aria-label`. Signed in, and during the pre-resolution cold-
+ * load window, the toggle keeps the outlined appearance unchanged.
+ *
+ * Desktop assertions are scoped to `.header-actions--desktop` and mobile ones
+ * to `.header-actions--mobile`: jsdom applies no CSS, so both layouts are
+ * always in the DOM and an unscoped query would be ambiguous between them.
+ */
+describe('Signed-out theme toggle demotion (CB-26)', () => {
+  const renderToggle = (
+    scope: '.header-actions--desktop' | '.header-actions--mobile',
+    role: string | null,
+    resolved = true
+  ) => {
+    auth.user = role ? { name: 'A Person', role } : null;
+    auth.initialAuthCheck = resolved;
+    const { container } = render(
+      <BrowserRouter>
+        <Header />
+      </BrowserRouter>
+    );
+    const scoped = container.querySelector(scope) as HTMLElement;
+    return within(scoped).getByRole('button', { name: 'Switch to dark mode' });
+  };
+  const renderDesktopToggle = (role: string | null, resolved = true) =>
+    renderToggle('.header-actions--desktop', role, resolved);
+  const renderMobileToggle = (role: string | null, resolved = true) =>
+    renderToggle('.header-actions--mobile', role, resolved);
+
+  it('renders icon-only, with no visible text label, once signed-out is confirmed', () => {
+    // Resolved signed-out state: user null AND initialAuthCheck true.
+    const toggle = renderDesktopToggle(null, true);
+
+    expect(toggle).not.toHaveTextContent('Dark Mode');
+    expect(toggle).not.toHaveTextContent('Light Mode');
+    // Still keyboard-accessible with a clear accessible name.
+    expect(toggle).toHaveAccessibleName('Switch to dark mode');
+    // Dropped the outlined-button chrome - it must not read as the page's CTA.
+    expect(toggle).not.toHaveClass('btn-outline-secondary');
+  });
+
+  it('keeps the labelled outlined toggle unchanged when signed in (control)', () => {
+    const toggle = renderDesktopToggle('employee', true);
+
+    expect(toggle).toHaveTextContent('Dark Mode');
+    expect(toggle).toHaveAccessibleName('Switch to dark mode');
+    expect(toggle).toHaveClass('btn-outline-secondary');
+  });
+
+  it('keeps the outlined toggle during the pre-resolution cold-load window, to avoid a layout shift', () => {
+    // Cold load: user hasn't resolved yet (null) and initialAuthCheck hasn't
+    // flipped true. A visitor who is about to resolve as signed-in (the beta
+    // majority, since the all-admin switch lifts every signed-in employee)
+    // must not see the narrower quiet icon first and then have it widen.
+    const toggle = renderDesktopToggle(null, false);
+
+    expect(toggle).toHaveClass('btn-outline-secondary');
+    expect(toggle).toHaveTextContent('Dark Mode');
+  });
+
+  it('renders the mobile signed-out toggle as quiet, not outlined, once signed-out is confirmed', () => {
+    const toggle = renderMobileToggle(null, true);
+
+    expect(toggle).toHaveClass('header-theme-toggle--quiet');
+    expect(toggle).not.toHaveClass('btn-outline-secondary');
+    expect(toggle).toHaveAccessibleName('Switch to dark mode');
+  });
+
+  it('keeps the mobile toggle outlined during the pre-resolution cold-load window', () => {
+    const toggle = renderMobileToggle(null, false);
+
+    expect(toggle).toHaveClass('btn-outline-secondary');
+    expect(toggle).not.toHaveClass('header-theme-toggle--quiet');
   });
 });
 
