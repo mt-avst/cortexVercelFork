@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import SessionsTab, { groupEventsBySession } from '../SessionsTab';
 import { SessionEvent } from '../../../api/types';
 
@@ -199,5 +199,45 @@ describe('SessionsTab column sorting (DA-23)', () => {
       'aria-sort',
       'ascending'
     );
+  });
+});
+
+describe('SessionsTab hands the CURRENT order to the review page (DA-25)', () => {
+  // Reads back the order the review route received in router state.
+  const OrderProbe: React.FC = () => {
+    const location = useLocation();
+    const order = (location.state as { sessionOrder?: string[] } | null)?.sessionOrder ?? [];
+    return <div data-testid="landed-order">{order.join(',')}</div>;
+  };
+
+  const threeSessions = (): SessionEvent[] => [
+    buildEvent({ id: 'evt-bob', firsthand_session_id: 'session_bob', participant_name: 'Bob', event_type: 'session_failed', occurred_at: '2026-07-15T09:00:00.000Z' }),
+    buildEvent({ id: 'evt-nina', firsthand_session_id: 'session_nina', participant_name: 'Nina', event_type: 'session_started', occurred_at: '2026-07-15T11:00:00.000Z' }),
+    buildEvent({ id: 'evt-amy', firsthand_session_id: 'session_amy', participant_name: 'Amy', event_type: 'session_completed', occurred_at: '2026-07-15T10:00:00.000Z' })
+  ];
+
+  const renderWithReviewRoute = (events: SessionEvent[]) =>
+    render(
+      <MemoryRouter initialEntries={['/tab']}>
+        <Routes>
+          <Route path="/tab" element={<SessionsTab opportunityId="opp-1" events={events} loading={false} onRefresh={() => undefined} />} />
+          <Route path="/admin/opportunities/:id/sessions/:sessionId/review" element={<OrderProbe />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+  it('carries the sorted order the researcher is looking at, not the default', async () => {
+    const user = userEvent.setup();
+    renderWithReviewRoute(threeSessions());
+
+    // Re-sort by participant ascending: Amy, Bob, Nina - which is neither the
+    // default last-activity order (Nina, Amy, Bob) nor its reverse.
+    await user.click(screen.getByRole('button', { name: 'Participant' }));
+
+    // Click the FIRST review link (Amy's row after the sort).
+    const links = screen.getAllByRole('link', { name: 'Review session' });
+    await user.click(links[0]);
+
+    expect(screen.getByTestId('landed-order')).toHaveTextContent('session_amy,session_bob,session_nina');
   });
 });
