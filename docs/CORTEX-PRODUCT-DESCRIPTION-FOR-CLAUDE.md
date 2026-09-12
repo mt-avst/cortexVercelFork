@@ -35,7 +35,7 @@ Cortex is described in-product as Adaptavist’s **collective intelligence engin
 
 | Role | Who | Capabilities |
 |------|-----|--------------|
-| **Visitor** | Anyone (unauthenticated) | Browse all published opportunities; view details; open poll/survey links. Cannot book. |
+| **Visitor** | Anyone (unauthenticated) | Open a published study by its direct link; view its details; open poll/survey links. Sees the signed-out landing, which carries no browsable list — the list of studies appears only after sign-in. Cannot book. |
 | **Employee** | Authenticated staff (e.g. Google SSO) | Everything a visitor can do; book and cancel sessions; view “My Bookings”; earn AdaptaBits; request admin access; submit feedback. **There is no reschedule** — the control was removed because it shipped permanently disabled; the route is cancel and re-book. |
 | **Researcher admin** | Researcher / PM with admin role | Create, edit, delete, duplicate opportunities and sessions; publish/draft/close; view dashboard and per-opportunity analytics; **read and export user feedback**; manage notification preferences; optional demo login for testing. |
 | **Superadmin** | Platform owner | All admin capabilities; approve/deny admin and superadmin requests; manage admins; **delete** feedback. |
@@ -233,7 +233,7 @@ Do **not** widen `authorableStepTypes` to do it; that set is the vocabulary of a
 - **Theme:** Light/dark mode toggle; WCAG 2.2 AA–oriented.
 - **Landing:** Branded hero (“ADAPTAVIST” eyebrow, “Cortex”), then a line-by-line proposition (“Building new things is hard. / Building the right things is harder. / Cortex is where we find out. / Where we ask the people who’ll use it. / Where you say what you actually think.”) closed by the tagline “Collective intelligence”; the two entry doors (“Run a study” / “Take part”, one per reader) sit inside the first viewport, with a quiet “Already using Cortex? Sign in” text control beneath them; demo access pills when enabled. Below the fold, six narrative sections — loop, audiences, methods, promises, voice, final CTA (the closing pair of doors).
   The hero copy is pinned by literal in `frontend/src/pages/__tests__/Landing.test.tsx`; the door copy lives in `frontend/src/components/DoorCard.tsx`.
-  The landing renders only for a signed-out visitor (`Home.tsx`), directly above the browsable list of published studies.
+  The landing renders only for a signed-out visitor (`Home.tsx`); the browsable list of published studies is gated on being signed in (`{user && …}`) and replaces the landing once the visitor signs in, rather than sitting beneath it.
   **There is no social proof section.** It was deleted in the copy refresh: its three metrics and two testimonials were invented, nothing in the repository sourced them, and the product is in alpha with test data only. Bring it back only with attributed quotes and counts read from the dashboard aggregates.
   The copy is guarded by `frontend/src/components/__tests__/SalesSections.test.tsx`, which pins the section list and holds a literal list of banned claims — including the participant-matching engine that has never existed — with a control arm proving the detector still fires.
 
