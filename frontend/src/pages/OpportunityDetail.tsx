@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { getOpportunity, bookSession, trackOpportunityClick, getMyCalendarEvents, getMyBookings, getRecordedStudyBrief, startRecordedStudySession, startSurveySession } from '../api/client';
 import type { RecordedStudyBrief } from '@shared/types';
 import { formatStudyDate, formatTimeRange, formatTimeZoneLabel, formatClockTime, formatDateTime } from '../utils/datetime';
+import { describeCalendarClash } from '../utils/calendarClash';
 import './booking-slot-list.css';
 import { Opportunity, CalendarEvent, Session } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
@@ -494,16 +495,19 @@ const OpportunityDetail: React.FC = () => {
     };
   }, [opportunity?.sessions]);
 
-  // Check if a session conflicts with user's calendar
-  const hasCalendarConflict = useCallback((session: { start_time: string; end_time: string }): boolean => {
+  // Return the participant's own calendar event this session clashes with, or
+  // null. BK-2: the table view needs the matched event to NAME the clash, not
+  // just a yes/no - a boolean cannot say what the slot conflicts with. Callers
+  // that only want the yes/no read its truthiness.
+  const getCalendarConflict = useCallback((session: { start_time: string; end_time: string }): CalendarEvent | null => {
     if (userCalendarEvents.length === 0) {
-      return false;
+      return null;
     }
 
     const sessionStart = new Date(session.start_time);
     const sessionEnd = new Date(session.end_time);
 
-    const hasConflict = userCalendarEvents.some(event => {
+    return userCalendarEvents.find(event => {
       // Skip cancelled or declined events
       if (event.status === 'cancelled' || event.status === 'declined') {
         return false;
@@ -520,9 +524,7 @@ const OpportunityDetail: React.FC = () => {
       // Check for actual overlap (not just touching)
       // Events overlap if: sessionStart < eventEnd AND sessionEnd > eventStart
       return (sessionStart < eventEnd && sessionEnd > eventStart);
-    });
-
-    return hasConflict;
+    }) ?? null;
   }, [userCalendarEvents]);
 
   // Refresh data when user returns to the page (handles browser back/forward)
@@ -1234,6 +1236,41 @@ const OpportunityDetail: React.FC = () => {
                       </div>
                     ) : (
                     <>
+                      {/* BK-1: a soft warning when the participant already holds
+                          a slot in this study. Session-level double booking is
+                          blocked at the API (409 + partial unique index); this
+                          covers the still-open case - booking a SECOND, different
+                          slot of the same study - by naming the slot they hold
+                          and linking to it, without disabling the booking. */}
+                      {bookedSlots.size > 0 && (() => {
+                        const held = opportunity.sessions
+                          .filter(session => bookedSlots.has(session.id))
+                          .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())[0];
+                        if (!held) return null;
+                        const heldStart = new Date(held.start_time);
+                        const heldDate = formatStudyDate(held.start_time);
+                        const heldTime = formatClockTime(heldStart);
+                        // Defensive: an unusable date would render "on  at .";
+                        // a real session never produces one, so suppress rather
+                        // than print blanks.
+                        if (!heldDate || !heldTime) return null;
+                        // Name the zone, same as the slot chips - this is the
+                        // "booked an hour out" surface the datetime module guards.
+                        const heldZone = formatTimeZoneLabel(heldStart);
+                        return (
+                          <div
+                            className="alert alert-info d-flex align-items-center mb-3"
+                            role="status"
+                            data-testid="already-booked-notice"
+                          >
+                            <Info size={18} className="me-2 flex-shrink-0" aria-hidden="true" />
+                            <span>
+                              You are already booked for this study on {heldDate} at {heldTime} {heldZone}.{' '}
+                              <Link to="/my-bookings">View my bookings</Link>
+                            </span>
+                          </div>
+                        );
+                      })()}
                       {viewMode === 'calendar' ? (
                         <CalendarGrid
                           key={`calendar-${opportunity.id}-${opportunity.sessions?.length || 0}-${opportunity.sessions?.reduce((sum, s) => sum + s.booked_count, 0) || 0}`}
@@ -1245,36 +1282,26 @@ const OpportunityDetail: React.FC = () => {
                       ) : (
                         <>
                           {(() => {
-                            // Filter sessions: only future sessions without calendar conflicts
+                            // BK-2: show every future session, conflicts
+                            // included. A slot that clashes with the
+                            // participant's own diary is no longer hidden - it
+                            // renders disabled, naming the clash - so no filter
+                            // and no "N hidden" banner.
                             const futureSessions = opportunity.sessions.filter(
                               session => new Date(session.end_time) >= new Date()
                             );
 
-                            const sessionsWithoutConflicts = futureSessions.filter(
-                              session => !hasCalendarConflict(session)
-                            );
-
-                            const conflictedCount = futureSessions.length - sessionsWithoutConflicts.length;
-
                             return (
                               <>
-                                {conflictedCount > 0 && (
-                                  <div className="alert alert-info mb-3 d-flex align-items-center" style={{ marginBottom: '1rem' }}>
-                                    <Info size={16} className="me-2" />
-                                    {conflictedCount} conflicted slot{conflictedCount !== 1 ? 's' : ''} hidden from view
-                                  </div>
-                                )}
                                 <div className="momentum-table-container" aria-label="Available sessions">
-                                  {sessionsWithoutConflicts.length === 0 ? (
+                                  {futureSessions.length === 0 ? (
                                     <div className="text-center py-4">
                                       <small className="text-muted">
-                                        {futureSessions.length === 0
-                                          ? 'No available sessions'
-                                          : 'All available sessions conflict with your calendar'}
+                                        No available sessions
                                       </small>
                                     </div>
                                   ) : (
-                                    groupSessionsByDay(sessionsWithoutConflicts).map((group) => (
+                                    groupSessionsByDay(futureSessions).map((group) => (
                                       <div className="slot-day-group" key={group.key}>
                                         <div className="slot-day-header">
                                           {group.dateStr}
@@ -1321,6 +1348,27 @@ const OpportunityDetail: React.FC = () => {
                                                   aria-label={`${rangeStr} is full`}
                                                 >
                                                   {startStr} · Full
+                                                </span>
+                                              );
+                                            }
+
+                                            // BK-2: a slot that clashes with the
+                                            // participant's own diary - shown
+                                            // disabled, naming the clash, checked
+                                            // after Full (a full slot is full for
+                                            // everyone regardless of their diary),
+                                            // mirroring CalendarGrid's precedence.
+                                            const conflict = getCalendarConflict(session);
+                                            if (conflict) {
+                                              const clashLabel = describeCalendarClash(conflict);
+                                              return (
+                                                <span
+                                                  key={session.id}
+                                                  className="slot-chip slot-chip-conflict"
+                                                  title={clashLabel}
+                                                  aria-label={`${rangeStr} — ${clashLabel}`}
+                                                >
+                                                  {startStr} · Conflict
                                                 </span>
                                               );
                                             }

@@ -4,6 +4,7 @@ import { Session, CalendarEvent } from '../api/types';
 import { getMyCalendarEvents, getCalendarConnectionStatus, getMyBookings } from '../api/client';
 import { logger } from '../utils/logger';
 import { sharedZoneOffset } from '../utils/datetime';
+import { describeCalendarClash } from '../utils/calendarClash';
 import { Info, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from 'framer-motion';
 
@@ -293,32 +294,32 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
     checkAndFetchCalendar();
   }, [sessions]);
 
-  // Check if a session conflicts with user's calendar
-  const hasCalendarConflict = useCallback((session: Session): boolean => {
+  // Return the participant's own calendar event this session clashes with, or
+  // null. BK-2: the slot tooltip names the clash, so it needs the matched
+  // event, not just a yes/no; callers wanting the yes/no read its truthiness.
+  const getCalendarConflict = useCallback((session: Session): CalendarEvent | null => {
     if (userCalendarEvents.length === 0) {
-      return false;
+      return null;
     }
 
     const sessionStart = new Date(session.start_time);
     const sessionEnd = new Date(session.end_time);
 
-    const hasConflict = userCalendarEvents.some(event => {
+    return userCalendarEvents.find(event => {
       if (event.status === 'cancelled' || event.status === 'declined') {
         return false;
       }
-      
+
       const eventStart = new Date(event.start);
       const eventEnd = new Date(event.end);
-      
+
       if (isNaN(eventStart.getTime()) || isNaN(eventEnd.getTime())) {
         return false;
       }
-      
+
       const overlaps = (sessionStart < eventEnd && sessionEnd > eventStart);
       return overlaps;
-    });
-    
-    return hasConflict;
+    }) ?? null;
   }, [userCalendarEvents]);
 
   // Format time for display (condensed format) — **local** wall clock (matches grid axis 7am–11pm)
@@ -650,7 +651,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
 
   const handleSlotClick = (session: Session, slotElement: HTMLElement) => {
     const isBooked = bookedSlots.has(session.id);
-    const hasConflict = hasCalendarConflict(session);
+    const hasConflict = !!getCalendarConflict(session);
     const isAvailable = session.remaining > 0 && new Date(session.end_time) >= new Date();
     
     if (!isBooked && !hasConflict && isAvailable && !bookingLoading) {
@@ -1242,7 +1243,8 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                       
                       {dateSessions.map((session, slotIndex) => {
                         const isBooked = bookedSlots.has(session.id);
-                        const hasConflict = hasCalendarConflict(session);
+                        const conflict = getCalendarConflict(session);
+                        const hasConflict = !!conflict;
                         const isFull = session.remaining <= 0;
                         const isAvailable = session.remaining > 0 && new Date(session.end_time) >= new Date();
                         const isSessionPast = new Date(session.end_time) < currentTime;
@@ -1304,7 +1306,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                               const endTime = formatTime(session.end_time);
                               if (isBooked) return `Your booking: ${startTime} - ${endTime}`;
                               if (isFull) return `Full: ${startTime} - ${endTime}`;
-                              if (hasConflict) return `Calendar conflict: ${startTime} - ${endTime}`;
+                              if (conflict) return describeCalendarClash(conflict);
                               if (isSessionPast) return `Past: ${startTime} - ${endTime}`;
                               return `Available: ${startTime} - ${endTime} (${session.remaining} remaining)`;
                             })()}
