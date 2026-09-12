@@ -238,16 +238,11 @@
   },
   "frontend/src/utils/errorHandler.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 12
+      "count": 10
     }
   },
   "frontend/src/utils/logger.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "frontend/src/utils/opportunityUtils.ts": {
-    "@typescript-eslint/no-unused-vars": {
       "count": 1
     }
   },
@@ -271,12 +266,12 @@
   },
   "shared/test-utils/index.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 14
+      "count": 4
     }
   },
   "shared/types/index.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 6
+      "count": 1
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 1
