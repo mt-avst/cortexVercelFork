@@ -859,7 +859,8 @@ export async function runMigrations() {
         click_type TEXT NOT NULL DEFAULT 'action',
         clicked_at TIMESTAMPTZ DEFAULT NOW(),
         user_agent TEXT,
-        ip_hash TEXT
+        ip_hash TEXT,
+        visitor_nonce TEXT
       )
     `);
 
@@ -929,6 +930,18 @@ export async function runMigrations() {
 
       console.log('ℹ️  opportunity_clicks.click_type is present despite the error above, continuing');
     }
+
+    // Add visitor_nonce column if the table predates it (#125). A first-party
+    // per-visitor id recorded on anonymous clicks so the distinct-visitor count
+    // survives the reverse proxy, which collapses every anonymous ip_hash to the
+    // ingress address. Unlike click_type this is a plain NULLABLE column with no
+    // default, so the add is metadata-only (no table rewrite, no lock to time
+    // out on) and the lighter idempotent ALTER is safe; old rows and clients
+    // that send no nonce fall back to ip_hash in the COALESCE at read time.
+    await client.query(`
+      ALTER TABLE opportunity_clicks
+      ADD COLUMN IF NOT EXISTS visitor_nonce TEXT
+    `);
 
     // Create index for efficient analytics queries
     await client.query(`

@@ -4431,11 +4431,24 @@ router.post('/:id/click', optionalAuth, asyncHandler(async (req: Request, res: R
       .substring(0, 32); // Store only first 32 chars
   }
 
+  // First-party per-visitor nonce (#125). The client persists a random id and
+  // sends it so anonymous visitors count distinctly at read time, surviving the
+  // reverse proxy that collapses every anonymous ip_hash to the ingress address.
+  // Not thrown on when malformed (unlike click_type): a bad or absent nonce just
+  // degrades to the ip_hash fallback in the COALESCE, so tracking never fails on
+  // it. Bounded length + a conservative charset so a hostile client cannot stuff
+  // arbitrary bytes into the column; it is an opaque id, never rendered.
+  const rawNonce = req.body?.visitor_nonce;
+  const visitorNonce =
+    typeof rawNonce === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(rawNonce)
+      ? rawNonce
+      : null;
+
   // Record the click
   await pool.query(
-    `INSERT INTO opportunity_clicks (opportunity_id, user_id, click_type, user_agent, ip_hash)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [opportunityId, userId, clickType, userAgent, ipHash]
+    `INSERT INTO opportunity_clicks (opportunity_id, user_id, click_type, user_agent, ip_hash, visitor_nonce)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [opportunityId, userId, clickType, userAgent, ipHash, visitorNonce]
   );
 
   res.json({ ok: true });
@@ -4538,19 +4551,31 @@ router.get('/:id/analytics', requireAdmin, asyncHandler(async (req: Request, res
   // per-visitor identity the row already carries, so an anonymous visitor still
   // counts once and "Distinct visitors" means what the card says.
   //
-  // It is an estimate, and honestly so on several counts: a visit with neither
-  // a user_id nor an ip_hash (no client IP, or SESSION_SECRET unset) is still
-  // uncounted; one person seen signed-in on one visit and signed-out on another
-  // counts twice; and a SESSION_SECRET rotation re-buckets every returning
-  // anonymous visitor. All beat a flat, misleading 0.
+  // Distinct identity is the best one the row holds, in order: the signed-in
+  // user_id; else the first-party visitor_nonce (#125), which the client
+  // persists and sends so anonymous visitors survive the proxy; else the
+  // privacy-hashed ip_hash as a last resort for clients that sent no nonce.
   //
-  // ponytail: the biggest ceiling is the proxy. ip_hash = sha256(req.ip + secret),
-  //   and behind trust proxy:1 with multiple hops req.ip is the INGRESS, not the
-  //   visitor (see per-user-rate-limit.ts / runtime-work-class.ts), so anonymous
-  //   visitors share ONE ip_hash and the anonymous distinct count collapses
-  //   toward 1. Signed-in visitors are unaffected (counted by user_id)
-  //   -> cto/AdaptaLabs#125, real fix is a per-visitor client nonce recorded on
-  //   the click, which survives the proxy and a secret rotation
+  // It is an estimate, and honestly so on several counts: a visit with none of
+  // the three (no nonce, and no client IP or SESSION_SECRET unset) is still
+  // uncounted; one person seen signed-in on one visit and signed-out on another
+  // counts twice; and a returning anonymous visitor who cleared storage gets a
+  // fresh nonce. All beat a flat, misleading 0.
+  //
+  // ponytail: the residual ceiling is the ip_hash FALLBACK only. ip_hash =
+  //   sha256(req.ip + secret), and behind trust proxy:1 with multiple hops
+  //   req.ip is the INGRESS, not the visitor (see per-user-rate-limit.ts /
+  //   runtime-work-class.ts), so the nonce-less tail still collapses toward one
+  //   ip_hash. The visitor_nonce (#125) removes this for any client that sends
+  //   one; the fallback covers only no-JS / storage-blocked / pre-#125 clients.
+  //
+  // ponytail: folding a client-supplied nonce into the distinct namespace makes
+  //   this count gameable - an anonymous client can rotate nonces to inflate, or
+  //   reuse/forge one to merge buckets. Accepted: it is an admin-only estimate,
+  //   and the endpoint already allowed raw-count inflation, so the surface is not
+  //   meaningfully wider. -> cto/AdaptaLabs#126 (also tracks the go-live privacy
+  //   notice); the cap is per-(opportunity, ip_hash) distinct nonces if it ever
+  //   feeds a real decision.
   const overallResult = await pool.query(
     `WITH bounds AS (
       SELECT (date_trunc('day', NOW() AT TIME ZONE $3) - (($2::int - 1) * INTERVAL '1 day'))
@@ -4558,7 +4583,7 @@ router.get('/:id/analytics', requireAdmin, asyncHandler(async (req: Request, res
     )
     SELECT
       COUNT(*) FILTER (WHERE clicked_at >= b.period_start)::int AS total,
-      COUNT(DISTINCT COALESCE(user_id::text, ip_hash))
+      COUNT(DISTINCT COALESCE(user_id::text, visitor_nonce, ip_hash))
         FILTER (WHERE clicked_at >= b.period_start)::int AS unique_users,
       COUNT(*) FILTER (WHERE clicked_at >= NOW() - INTERVAL '24 hours')::int AS count_24h,
       COUNT(*) FILTER (WHERE clicked_at >= NOW() - INTERVAL '7 days')::int AS count_7d,
@@ -4581,8 +4606,9 @@ router.get('/:id/analytics', requireAdmin, asyncHandler(async (req: Request, res
       -- Totals scoped to the selected period (calendar days, analytics zone);
       -- see the overall query above.
       COUNT(*) FILTER (WHERE clicked_at >= b.period_start)::int AS total,
-      -- Distinct visitors by best-held identity, within the period.
-      COUNT(DISTINCT COALESCE(user_id::text, ip_hash))
+      -- Distinct visitors by best-held identity (user_id, else visitor_nonce,
+      -- else ip_hash; see the overall query above), within the period.
+      COUNT(DISTINCT COALESCE(user_id::text, visitor_nonce, ip_hash))
         FILTER (WHERE clicked_at >= b.period_start)::int AS unique_count,
       COUNT(*) FILTER (WHERE clicked_at >= NOW() - INTERVAL '24 hours')::int AS count_24h,
       COUNT(*) FILTER (WHERE clicked_at >= NOW() - INTERVAL '7 days')::int AS count_7d

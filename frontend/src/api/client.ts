@@ -3,6 +3,7 @@ import axios, { AxiosResponse, AxiosError } from 'axios';
 import { API_CONFIG, getAuthUrl, getApiBaseUrl } from '../config/api';
 import { ensureCsrfToken, isCsrfError, isMutatingMethod, CSRF_HEADER } from './csrf';
 import { logger } from '../utils/logger';
+import { getVisitorNonce } from '../utils/visitorNonce';
 import { authNavigation, isAdminRoute, isProductionEnvironment, redirectTo, AUTH_ENDPOINTS } from '../utils/navigation';
 
 import { User, Opportunity, CreateOpportunityRequest, UpdateOpportunityRequest, Session, CreateSessionRequest, UpdateSessionRequest, Booking, UserBookings, RescheduleBookingRequest, CalendarEvent, AvailabilityResponse, ConflictCheckResponse, AdminRequest, OpportunityBookingRow, ResearcherNotesResponse } from './types';
@@ -619,7 +620,14 @@ export const trackOpportunityClick = async (
   clickType: 'view' | 'action' = 'action'
 ): Promise<{ ok: boolean }> => {
   try {
-    const response = await api.post(`/opportunities/${opportunityId}/click`, { click_type: clickType });
+    // Send a first-party per-visitor nonce (#125) so anonymous distinct-visitor
+    // counts survive the proxy. Omitted when storage is unavailable; the server
+    // then falls back to ip_hash. Opaque id, no PII - see getVisitorNonce.
+    const visitorNonce = getVisitorNonce();
+    const response = await api.post(`/opportunities/${opportunityId}/click`, {
+      click_type: clickType,
+      ...(visitorNonce ? { visitor_nonce: visitorNonce } : {}),
+    });
     return response.data;
   } catch (error) {
     // Don't fail the navigation if tracking fails - just log it
