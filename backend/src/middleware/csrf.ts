@@ -21,7 +21,7 @@ const EXEMPT_PATH_PREFIXES = [
   '/auth/logout',
 ];
 
-export interface CsrfProtectionOptions {
+interface CsrfProtectionOptions {
   secret: string;
   secureCookies: boolean;
 }

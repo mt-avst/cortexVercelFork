@@ -20,7 +20,7 @@ import { parseVtt, VttCue } from '@shared/firsthand/vtt-parser';
  * handle on the sibling <video>, and the panels render independently.
  */
 
-export interface TranscriptViewProps {
+interface TranscriptViewProps {
   /** The gated media URL for this transcript artefact, api-client-minted. */
   mediaUrl: string;
 }

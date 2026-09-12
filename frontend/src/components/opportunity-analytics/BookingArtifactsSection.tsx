@@ -12,7 +12,7 @@ import TranscriptView from './TranscriptView';
  * moment (the opportunity refetch spinner) without losing an upload.
  */
 
-export interface BookingArtifactsSectionProps {
+interface BookingArtifactsSectionProps {
   booking: OpportunityBookingRow;
   controller: BookingArtifactsController;
 }
