@@ -4517,7 +4517,17 @@ router.get('/:id/analytics', requireAdmin, asyncHandler(async (req: Request, res
     throw new ForbiddenError('Only the study owner can view analytics');
   }
 
-  // Overall totals (all-time), independent of the selected chart period.
+  // Snapshot tiles follow the SAME period the charts do (DA-19): the selector
+  // used to drive only the charts while these totals stayed all-time, so a
+  // "Study Views" of 40 sat above a 30-day chart summing to 6 and the two read
+  // as if they measured different things. The period predicate below is cut on
+  // CALENDAR DAYS in the analytics zone - the last `period` whole days,
+  // matching exactly the days the chart draws (frontend buildAnalyticsChartData
+  // + the header sums in OpportunityAnalytics.tsx) - so a tile total equals the
+  // sum of the bars beneath it rather than a rolling period*24h window that
+  // would reintroduce the boundary-day drift of #124. first_click/last_click
+  // stay all-time (they answer "tracking since"), and the 24h/7d sub-metrics
+  // keep their own fixed windows.
   //
   // Distinct visitors count by the best identity we hold, not by user_id alone.
   // Click tracking is enabled for published poll/survey/unmoderated studies,
@@ -4542,32 +4552,44 @@ router.get('/:id/analytics', requireAdmin, asyncHandler(async (req: Request, res
   //   -> cto/AdaptaLabs#125, real fix is a per-visitor client nonce recorded on
   //   the click, which survives the proxy and a secret rotation
   const overallResult = await pool.query(
-    `SELECT
-      COUNT(*)::int AS total,
-      COUNT(DISTINCT COALESCE(user_id::text, ip_hash))::int AS unique_users,
+    `WITH bounds AS (
+      SELECT (date_trunc('day', NOW() AT TIME ZONE $3) - (($2::int - 1) * INTERVAL '1 day'))
+             AT TIME ZONE $3 AS period_start
+    )
+    SELECT
+      COUNT(*) FILTER (WHERE clicked_at >= b.period_start)::int AS total,
+      COUNT(DISTINCT COALESCE(user_id::text, ip_hash))
+        FILTER (WHERE clicked_at >= b.period_start)::int AS unique_users,
       COUNT(*) FILTER (WHERE clicked_at >= NOW() - INTERVAL '24 hours')::int AS count_24h,
       COUNT(*) FILTER (WHERE clicked_at >= NOW() - INTERVAL '7 days')::int AS count_7d,
       MIN(clicked_at) AS first_click,
       MAX(clicked_at) AS last_click
-     FROM opportunity_clicks
+     FROM opportunity_clicks, bounds b
      WHERE opportunity_id = $1`,
-    [opportunityId]
+    [opportunityId, period, ANALYTICS_TIME_ZONE]
   );
   const overall = overallResult.rows[0];
 
   // Totals split by click_type ('view' = study details viewed, 'action' = link opened / session booked)
   const byTypeResult = await pool.query(
-    `SELECT
+    `WITH bounds AS (
+      SELECT (date_trunc('day', NOW() AT TIME ZONE $3) - (($2::int - 1) * INTERVAL '1 day'))
+             AT TIME ZONE $3 AS period_start
+    )
+    SELECT
       click_type,
-      COUNT(*)::int AS total,
-      -- Distinct visitors by best-held identity; see the overall query above.
-      COUNT(DISTINCT COALESCE(user_id::text, ip_hash))::int AS unique_count,
+      -- Totals scoped to the selected period (calendar days, analytics zone);
+      -- see the overall query above.
+      COUNT(*) FILTER (WHERE clicked_at >= b.period_start)::int AS total,
+      -- Distinct visitors by best-held identity, within the period.
+      COUNT(DISTINCT COALESCE(user_id::text, ip_hash))
+        FILTER (WHERE clicked_at >= b.period_start)::int AS unique_count,
       COUNT(*) FILTER (WHERE clicked_at >= NOW() - INTERVAL '24 hours')::int AS count_24h,
       COUNT(*) FILTER (WHERE clicked_at >= NOW() - INTERVAL '7 days')::int AS count_7d
-     FROM opportunity_clicks
+     FROM opportunity_clicks, bounds b
      WHERE opportunity_id = $1
      GROUP BY click_type`,
-    [opportunityId]
+    [opportunityId, period, ANALYTICS_TIME_ZONE]
   );
   const viewStats = byTypeResult.rows.find((r: { click_type: string }) => r.click_type === 'view') || {};
   const actionStats = byTypeResult.rows.find((r: { click_type: string }) => r.click_type === 'action') || {};
@@ -4653,6 +4675,7 @@ router.get('/:id/analytics', requireAdmin, asyncHandler(async (req: Request, res
   );
   const prevWeekCount = prevWeekResult.rows[0].count;
 
+  // Period-scoped now (DA-19): the tiles these feed follow the selector.
   const clicks_total = overall.total || 0;
   const clicks_7d = overall.count_7d || 0;
   const views_total = viewStats.total || 0;
@@ -4675,7 +4698,9 @@ router.get('/:id/analytics', requireAdmin, asyncHandler(async (req: Request, res
     clicks_24h: overall.count_24h || 0,
     clicks_7d,
     unique_users: overall.unique_users || 0,
-    avg_clicks_per_day: Math.round((periodClicksTotal / period) * 10) / 10,
+    // Averaged over the same calendar-day period the clicks_total tile counts,
+    // so "Avg Daily" equals the mean of the bars the combined chart draws.
+    avg_clicks_per_day: Math.round((clicks_total / period) * 10) / 10,
     week_over_week_change: weekOverWeekChange(clicks_7d, prevWeekCount),
 
     views_total,

@@ -232,6 +232,10 @@ const SessionsTab: React.FC<{
                   <td style={{ padding: '10px 12px' }}>
                     <Link
                       to={`/admin/opportunities/${opportunityId}/sessions/${session.sessionId}/review`}
+                      // Hand the review page the order the researcher is looking
+                      // at right now, so its prev/next honours THIS sort/filter
+                      // rather than rebuilding a default from the events.
+                      state={{ sessionOrder: sortedSessions.map((row) => row.sessionId) }}
                       style={{ color: 'var(--color-analytics-orange)', fontSize: '0.8rem' }}
                     >
                       Review session
