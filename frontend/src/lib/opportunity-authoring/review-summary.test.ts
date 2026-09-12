@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildReviewHeader,
   buildReviewSummary,
   hostnameOf,
   stepForPublishProblem,
@@ -107,7 +108,10 @@ describe('buildReviewSummary', () => {
     expect(findSection(sections, 'consent')?.stepId).toBe(12);
   });
 
-  describe('basics section', () => {
+  describe('the review header (WZ-17)', () => {
+    // The study title and type led the basics SECTION until WZ-17 promoted them
+    // into the header. These assertions moved with them, unchanged in substance.
+
     // Spelled out as literals rather than read from getParticipantFacingType,
     // deliberately: a table that derives its expectation from the thing it is
     // checking cannot see that thing change. These six ARE the contract, and
@@ -120,29 +124,37 @@ describe('buildReviewSummary', () => {
       ['question', 'One question'],
       ['unmoderated', 'Recorded session']
     ])('labels type %s as %s', (type, label) => {
-      const sections = buildReviewSummary(completeInput({ type }));
-      const basics = findSection(sections, 'basics');
-      expect(findItem(basics, 'Research Study Type')?.value).toBe(label);
-      expect(findItem(basics, 'Research Study Type')?.missing).toBeFalsy();
+      expect(buildReviewHeader(completeInput({ type })).typeLabel).toBe(label);
     });
 
-    it('marks an unchosen type as missing, with "Not chosen"', () => {
-      const sections = buildReviewSummary(completeInput({ type: '' }));
-      const item = findItem(findSection(sections, 'basics'), 'Research Study Type');
-      expect(item?.value).toBe('Not chosen');
-      expect(item?.missing).toBe(true);
+    it('carries the study title through unchanged', () => {
+      expect(
+        buildReviewHeader(completeInput({ title: 'Onboarding walkthrough' })).title
+      ).toBe('Onboarding walkthrough');
     });
 
-    // The label table is now built from getParticipantFacingType, which answers
-    // "Study" for anything it does not recognise. That is right for a
-    // participant reading a browse row and wrong here, where an unrecognised
-    // type must still read as nothing chosen. Without this, a stray value would
-    // show a confident "Study" and count as complete on the publish check.
-    it('marks an unrecognised type as missing rather than calling it "Study"', () => {
-      const sections = buildReviewSummary(completeInput({ type: 'wat' }));
-      const item = findItem(findSection(sections, 'basics'), 'Research Study Type');
-      expect(item?.value).toBe('Not chosen');
-      expect(item?.missing).toBe(true);
+    it('falls back to "Not chosen" for an unchosen type', () => {
+      expect(buildReviewHeader(completeInput({ type: '' })).typeLabel).toBe('Not chosen');
+    });
+
+    // getParticipantFacingType answers "Study" for anything it does not
+    // recognise. That is right for a participant reading a browse row and wrong
+    // here, where an unrecognised type must still read as nothing chosen.
+    it('falls back to "Not chosen" for an unrecognised type rather than "Study"', () => {
+      expect(buildReviewHeader(completeInput({ type: 'wat' })).typeLabel).toBe('Not chosen');
+    });
+  });
+
+  describe('basics section', () => {
+    // The title and type now live in the header, not as rows here (WZ-17). A
+    // duplicate row would undo the promotion, so the section must NOT carry
+    // them - and the Purpose row that follows them is left where it was.
+    it('no longer carries Title or Research Study Type rows (WZ-17 promoted them to the header)', () => {
+      const basics = findSection(buildReviewSummary(completeInput()), 'basics');
+      expect(findItem(basics, 'Title')).toBeUndefined();
+      expect(findItem(basics, 'Research Study Type')).toBeUndefined();
+      // Purpose stays, so the section is not left empty on the shortest shape.
+      expect(findItem(basics, 'Purpose')).toBeDefined();
     });
 
     /*

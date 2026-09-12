@@ -33,6 +33,9 @@ const SECTION: ReviewSection = {
 
 const baseProps = {
   sections: [SECTION],
+  // Deliberately distinct from the SECTION's Title value above, so a test that
+  // reads the header title cannot accidentally match the section row instead.
+  header: { title: 'Checkout research study', typeLabel: 'Survey' },
   publishRefusal: null,
   onEdit: vi.fn(),
   isEdit: false,
@@ -73,6 +76,61 @@ describe('ReviewStep - the summary', () => {
     const value = screen.getByText('javascript:alert(1)').closest('dd')!;
     expect(value).toHaveClass('validation-error');
     expect(value.querySelector('svg')).not.toBeNull();
+  });
+
+  it('lays each section out as a two-column description list', () => {
+    render(<ReviewStep {...baseProps} />);
+
+    // The label and its value both still render, and the pair sits in the
+    // two-column grid rather than the old stacked list.
+    const label = screen.getByText('Purpose');
+    const dl = label.closest('dl')!;
+    expect(dl).toHaveClass('review-dl');
+    expect(within(dl).getByText('Find where people stall')).toBeInTheDocument();
+  });
+});
+
+describe('ReviewStep - the identity header (WZ-17)', () => {
+  it('leads with the study title and a type pill', () => {
+    render(<ReviewStep {...baseProps} />);
+
+    const header = screen.getByTestId('review-header');
+    expect(within(header).getByRole('heading', { name: 'Checkout research study' }))
+      .toBeInTheDocument();
+    expect(within(header).getByText('Survey')).toBeInTheDocument();
+  });
+
+  it('shows a Draft pill with a warning icon when the status is draft', () => {
+    render(<ReviewStep {...baseProps} status="draft" />);
+
+    const header = screen.getByTestId('review-header');
+    const draft = within(header).getByText('Draft');
+    // Never colour alone: the draft pill carries the AlertTriangle icon too.
+    expect(draft.closest('span')!.querySelector('svg')).not.toBeNull();
+    expect(within(header).queryByText('Published')).not.toBeInTheDocument();
+  });
+
+  it('shows a neutral Published pill when the status is published', () => {
+    render(<ReviewStep {...baseProps} status="published" />);
+
+    const header = screen.getByTestId('review-header');
+    expect(within(header).getByText('Published')).toBeInTheDocument();
+    expect(within(header).queryByText('Draft')).not.toBeInTheDocument();
+  });
+
+  it('flags a missing title as a problem, never by colour alone, when none is entered', () => {
+    render(<ReviewStep {...baseProps} header={{ title: '', typeLabel: 'Not chosen' }} />);
+
+    const header = screen.getByTestId('review-header');
+    const heading = within(header).getByRole('heading');
+    // The word says it is a required field short of a value, not a placeholder.
+    expect(heading).toHaveTextContent(/No title yet/i);
+    // The shared missing-value colour (validation-error) - the same channel
+    // every other missing value on this screen uses.
+    expect(heading).toHaveClass('validation-error');
+    // And an icon, so the state survives greyscale and being read aloud.
+    expect(heading.querySelector('svg')).not.toBeNull();
+    expect(within(header).getByText('Not chosen')).toBeInTheDocument();
   });
 });
 

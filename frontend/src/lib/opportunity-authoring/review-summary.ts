@@ -15,8 +15,10 @@ import { getParticipantFacingType } from '../../utils/opportunityUtils';
  * 3 meaning four different things depending on `type` is exactly the kind of
  * drift this project has already paid for once. This module never reads
  * `input.type` to decide what to SHOW; it only reads it to render the one
- * label ("Research Study Type") that names it. Everything else about which
- * sections exist and what they say comes from mapping over `input.steps`.
+ * label that NAMES the study - the "Research Study Type" it once carried as a
+ * basics row and now hands to `buildReviewHeader` (WZ-17). Everything else
+ * about which sections exist and what they say comes from mapping over
+ * `input.steps`.
  */
 
 /** One line of the check-answers screen. */
@@ -119,8 +121,8 @@ export interface ReviewSummaryInput {
  * stop agreeing, which is the argument this whole module is built on.
  *
  * Still a lookup rather than a direct call, and that is the point: an
- * unrecognised or empty type must come back `undefined` so it falls through to
- * "Not chosen" and counts as missing. `getParticipantFacingType` answers
+ * unrecognised or empty type must come back `undefined` so `buildReviewHeader`
+ * falls through to the "Not chosen" label. `getParticipantFacingType` answers
  * "Study" for anything it does not know, which is right for a participant
  * reading a row and wrong for an author who has chosen nothing yet.
  */
@@ -306,14 +308,15 @@ const consentFieldId = (steps: readonly ReviewStepRef[]): string | undefined => 
 const itemsForStep = (step: ReviewStepRef, input: ReviewSummaryInput): ReviewItem[] => {
   switch (step.key) {
     case 'basics': {
-      const typeLabel = input.type ? STUDY_TYPE_LABELS[input.type] : undefined;
+      // Title and Research Study Type used to head this section; WZ-17 PROMOTED
+      // them into the check-answers HEADER (`buildReviewHeader`), which leads
+      // the screen with the study's identity. They are deliberately not
+      // repeated here - two rows saying the same thing the header already says
+      // is exactly the duplication the promotion set out to remove - so the
+      // basics section now begins at Purpose. The header is read-only
+      // orientation; editing the title or the type still happens through this
+      // section's own "Edit Basic Information" link, which opens step 1.
       const items: ReviewItem[] = [
-        {
-          label: 'Research Study Type',
-          value: typeLabel ?? 'Not chosen',
-          missing: !typeLabel
-        },
-        { label: 'Title', value: orNotSet(input.title), missing: !input.title },
         {
           label: 'Purpose',
           value: orNotSet(input.purpose),
@@ -482,6 +485,27 @@ const FOCUS_FIELD_BY_KEY: Record<string, string | undefined> = {
   taskList: 'inline_study_steps',
   externalLink: 'external_link_optional',
   sessions: undefined
+};
+
+/**
+ * The identity that leads the check-answers screen (WZ-17): the study's title,
+ * and the participant-facing label for its type.
+ *
+ * Both were rows in the basics section until WZ-17 promoted them here, so this
+ * reads exactly the fields those rows read - `input.title`, and the same
+ * `STUDY_TYPE_LABELS` lookup, falling back to 'Not chosen' for an empty or
+ * unrecognised type just as the old "Research Study Type" row did. `type` is
+ * used only to NAME the study, never to decide what the summary shows - the one
+ * exception this module allows itself, and the same one the basics row took.
+ */
+export const buildReviewHeader = (
+  input: ReviewSummaryInput
+): { title: string; typeLabel: string } => {
+  const typeLabel = input.type ? STUDY_TYPE_LABELS[input.type] : undefined;
+  return {
+    title: input.title,
+    typeLabel: typeLabel ?? 'Not chosen'
+  };
 };
 
 /** The whole check-answers screen, in step order. */
