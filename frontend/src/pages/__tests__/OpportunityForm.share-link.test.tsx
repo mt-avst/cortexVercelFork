@@ -25,7 +25,6 @@ vi.mock('../../contexts/AuthContext', () => ({
   })
 }));
 vi.mock('../../contexts/ThemeContext', () => ({ useTheme: () => ({ theme: 'light' }) }));
-vi.mock('../../components/SlowNeuralBackground', () => ({ default: () => null }));
 
 /**
  * A real forward control on the session step, the same shape as

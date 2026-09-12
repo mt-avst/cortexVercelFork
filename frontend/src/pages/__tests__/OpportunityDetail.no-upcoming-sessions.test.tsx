@@ -49,7 +49,6 @@ vi.mock('../../contexts/AuthContext', () => ({
   useAuth: () => ({ user: { id: 'u1', role: 'employee', name: 'E' }, loading: false }),
 }));
 vi.mock('../../contexts/ThemeContext', () => ({ useTheme: () => ({ theme: 'light' }) }));
-vi.mock('../../components/SlowNeuralBackground', () => ({ default: () => null }));
 
 // A sentinel, not null: the whole point is asserting the booking calendar is
 // NOT mounted for an all-past study, so it has to be distinguishable when it is.

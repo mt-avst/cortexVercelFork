@@ -51,7 +51,6 @@ vi.mock('../../contexts/ThemeContext', () => ({
 
 // Heavy leaf components irrelevant to the A1 study-vs-external-link behaviour;
 // stub them so jsdom never pulls in three.js or the session manager.
-vi.mock('../../components/SlowNeuralBackground', () => ({ default: () => null }));
 vi.mock('../../components/AdminSessionManager', () => ({ default: () => null }));
 
 // The form and the Task List tab both call the API client on interaction.

@@ -29,7 +29,6 @@ vi.mock('../../contexts/ThemeContext', () => ({
 }));
 
 // The WebGL background is the jsdom blocker; AdminManagement fires its own fetch.
-vi.mock('../../components/SlowNeuralBackground', () => ({ default: () => null }));
 vi.mock('../../components/AdminManagement', () => ({ default: () => null }));
 
 const mockGetPrefs = vi.mocked(getNotificationPreferences);
