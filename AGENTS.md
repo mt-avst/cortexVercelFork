@@ -31,6 +31,20 @@ The five canonical triage roles, label strings equal to their names. See
 
 Single-context: `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
 
+## Project agents
+
+Two implementation agents live in `.claude/agents/` and are scoped to one subtree each. They are
+for building, not reviewing - the review gates are the five global agents in `~/.claude/agents`
+(`code-reviewer`, `security-auditor`, and the rest), which are unchanged.
+
+- **backend-engineer** (`sonnet`) - API and data layer: routes, services, schema, queries,
+  integrations. Owns **only** `backend/src`.
+- **frontend-engineer** (`sonnet`) - UI: components, hooks, pages, state, styling. Owns **only**
+  `frontend/src`.
+
+Keep each agent inside its subtree. A change that spans both is two delegations, not one agent
+reaching across the boundary.
+
 ## Deliberate shortcuts
 
 A deliberate simplification with a known ceiling always gets a `ponytail:` comment at the site,
