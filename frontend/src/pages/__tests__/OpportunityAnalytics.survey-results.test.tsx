@@ -37,7 +37,6 @@ vi.mock('../../contexts/AuthContext', () => ({
   useAuth: () => AUTH,
 }));
 vi.mock('../../contexts/ThemeContext', () => ({ useTheme: () => ({ theme: 'light' }) }));
-vi.mock('../../components/SlowNeuralBackground', () => ({ default: () => null }));
 
 // Named individually rather than spread from the real module: an incomplete
 // factory leaves an import undefined, and a click test then passes by

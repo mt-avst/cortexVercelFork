@@ -28,12 +28,11 @@ vi.mock('../../contexts/ThemeContext', () => ({
   useTheme: () => ({ theme: 'light' }),
 }));
 
-// Stub the leaf components that are irrelevant here: SlowNeuralBackground is the genuine
-// three.js/WebGL jsdom blocker; PendingApprovals and AdminFeedback each fire a network
-// call in useEffect, so stubbing them avoids act() noise. AdminSessionManager is NOT
-// imported by Admin.tsx, so there is nothing to stub for it. ErrorState and
-// ConfirmationModal are jsdom-safe and left real.
-vi.mock('../../components/SlowNeuralBackground', () => ({ default: () => null }));
+// Stub the leaf components that are irrelevant here: PendingApprovals and
+// AdminFeedback each fire a network call in useEffect, so stubbing them avoids
+// act() noise. AdminSessionManager is NOT imported by Admin.tsx, so there is
+// nothing to stub for it. ErrorState and ConfirmationModal are jsdom-safe and
+// left real.
 vi.mock('../../components/PendingApprovals', () => ({ default: () => null }));
 vi.mock('../../components/AdminFeedback', () => ({ default: () => null }));
 

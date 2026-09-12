@@ -67,7 +67,6 @@ vi.mock('../../contexts/AuthContext', () => ({
 vi.mock('../../contexts/ThemeContext', () => ({
   useTheme: () => ({ theme: 'light', isDarkMode: false }),
 }));
-vi.mock('../../components/SlowNeuralBackground', () => ({ default: () => null }));
 
 vi.mock('../../components/CalendarGrid', () => ({
   CALENDAR_LEGEND_ITEMS: [],

@@ -68,7 +68,6 @@ vi.mock('../../contexts/AuthContext', () => ({
   }),
 }));
 vi.mock('../../contexts/ThemeContext', () => ({ useTheme: () => ({ theme: 'light' }) }));
-vi.mock('../../components/SlowNeuralBackground', () => ({ default: () => null }));
 
 // Every export the page imports has to be here. A factory that omits one
 // leaves that import `undefined`, and the page then fails for a reason no
