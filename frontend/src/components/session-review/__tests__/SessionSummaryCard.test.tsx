@@ -43,4 +43,28 @@ describe('SessionSummaryCard', () => {
     const badges = [...container.querySelectorAll('.cortex-badge')].map((b) => b.textContent?.trim());
     expect(badges).toEqual(['Completed', 'Failed']);
   });
+
+  it('renders the completion time only when the session actually completed (row 10)', () => {
+    const { queryByText } = render(
+      <SessionSummaryCard
+        outputs={outputs({ session_status: 'completed', completed_at: '2026-07-15T10:20:00.000Z' })}
+        onSelectAttempt={() => {}}
+      />
+    );
+    // A completed session with a real completed_at shows the formatted time, so
+    // no field reads the empty "Not recorded" placeholder.
+    expect(queryByText('Not recorded')).not.toBeInTheDocument();
+  });
+
+  it('does not render a completion time for an abandoned session even if completed_at is set', () => {
+    // An abandoned run can still carry a completed_at from an earlier step;
+    // showing it read as though the session had finished.
+    const { getByText } = render(
+      <SessionSummaryCard
+        outputs={outputs({ session_status: 'abandoned', completed_at: '2026-07-15T10:20:00.000Z' })}
+        onSelectAttempt={() => {}}
+      />
+    );
+    expect(getByText('Not recorded')).toBeInTheDocument();
+  });
 });

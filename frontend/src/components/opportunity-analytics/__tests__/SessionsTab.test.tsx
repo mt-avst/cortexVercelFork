@@ -241,3 +241,37 @@ describe('SessionsTab hands the CURRENT order to the review page (DA-25)', () =>
     expect(screen.getByTestId('landed-order')).toHaveTextContent('session_amy,session_bob,session_nina');
   });
 });
+
+describe('SessionsTab derives true session status (row 10)', () => {
+  it('shows "Transcript failed" for a completed session whose transcript failed', () => {
+    renderTab([
+      buildEvent({ id: 'e1', event_type: 'session_completed', transcript_status: 'failed' })
+    ]);
+    expect(screen.getByText('Transcript failed')).toBeInTheDocument();
+    expect(screen.queryByText('Completed')).not.toBeInTheDocument();
+  });
+
+  it('shows "Declined consent", not "Abandoned", when consent was declined', () => {
+    renderTab([
+      buildEvent({ id: 'e1', event_type: 'session_abandoned', consent_declined: true })
+    ]);
+    expect(screen.getByText('Declined consent')).toBeInTheDocument();
+    expect(screen.queryByText('Abandoned')).not.toBeInTheDocument();
+  });
+
+  it('leaves a plain abandon as "Abandoned" when consent was not declined', () => {
+    renderTab([
+      buildEvent({ id: 'e1', event_type: 'session_abandoned', consent_declined: false })
+    ]);
+    expect(screen.getByText('Abandoned')).toBeInTheDocument();
+    expect(screen.queryByText('Declined consent')).not.toBeInTheDocument();
+  });
+
+  it('leaves a cleanly completed session as "Completed"', () => {
+    renderTab([
+      buildEvent({ id: 'e1', event_type: 'session_completed', transcript_status: 'complete' })
+    ]);
+    expect(screen.getByText('Completed')).toBeInTheDocument();
+    expect(screen.queryByText('Transcript failed')).not.toBeInTheDocument();
+  });
+});

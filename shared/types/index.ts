@@ -558,6 +558,18 @@ export interface SessionEvent {
   received_at: string;
   participant_name?: string;
   participant_email?: string;
+  /**
+   * Transcript state of the matching runtime session's latest attempt, or null
+   * when there is no runtime row (pre-runtime or HMAC event). Lets the sessions
+   * list say "Transcript failed" instead of a bare "Completed".
+   */
+  transcript_status?: FirstHandTranscriptStatus | null;
+  /**
+   * True when the participant declined consent on this session. The event
+   * stream records those as `session_abandoned`; this separates a decline from
+   * a genuine abandon.
+   */
+  consent_declined?: boolean;
 }
 
 export interface MySessionEvent {
