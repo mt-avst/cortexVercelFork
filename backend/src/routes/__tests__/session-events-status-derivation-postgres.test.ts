@@ -137,8 +137,10 @@ describe.skipIf(skipDbTests)("GET session-events derives transcript-failed and d
       .set("x-test-user-id", ownerId)
       .set("x-test-user-role", "researcher_admin");
 
-  const byFhId = (rows: Array<{ firsthand_session_id: string }>, id: string) =>
-    rows.find((r) => r.firsthand_session_id === id)!;
+  const byFhId = (
+    rows: Array<{ firsthand_session_id: string; transcript_status?: string | null; consent_declined?: boolean }>,
+    id: string
+  ) => rows.find((r) => r.firsthand_session_id === id)!;
 
   it("carries transcript_status: 'failed' for a completed session whose transcript failed", async () => {
     await seedRuntimeSession({ logicalSessionId: "logical-A", sessionStatus: "completed", transcriptStatus: "failed" });

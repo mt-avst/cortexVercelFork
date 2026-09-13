@@ -175,7 +175,7 @@ describe('Admin page', () => {
     // the common case: every admin sees a colleague's studies as unowned.
     vi.mocked(getOpportunities).mockResolvedValue([
       { ...fixtures.opportunity, owner_user_id: 'someone-else', owner_name: 'Dana Owner' },
-    ]);
+    ] as never);
     renderAdmin();
     await screen.findByText('Checkout usability test');
 
@@ -194,7 +194,7 @@ describe('Admin page', () => {
     };
     vi.mocked(getOpportunities).mockResolvedValue([
       { ...fixtures.opportunity, owner_user_id: 'someone-else', owner_name: 'Dana Owner' },
-    ]);
+    ] as never);
     renderAdmin();
     await screen.findByText('Checkout usability test');
 
