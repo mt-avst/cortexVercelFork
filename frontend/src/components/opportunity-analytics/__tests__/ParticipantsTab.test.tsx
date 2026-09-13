@@ -461,4 +461,13 @@ describe('BOOKING_STATUS_RANK drift guard (DA-23)', () => {
       ['Awaiting approval', 'Booked', 'Cancelled', 'Completed', 'Rejected']
     );
   });
+
+  it('gives every table header scope="col" (row 12; a role query cannot see this)', () => {
+    const { container } = renderTab([buildBooking()]);
+    const headers = [...container.querySelectorAll('th')];
+    expect(headers.length).toBeGreaterThan(0);
+    for (const th of headers) {
+      expect(th.getAttribute('scope')).toBe('col');
+    }
+  });
 });

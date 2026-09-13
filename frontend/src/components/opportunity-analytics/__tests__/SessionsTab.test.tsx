@@ -275,3 +275,14 @@ describe('SessionsTab derives true session status (row 10)', () => {
     expect(screen.queryByText('Transcript failed')).not.toBeInTheDocument();
   });
 });
+
+describe('SessionsTab column headers name their scope (row 12)', () => {
+  it('gives every table header scope="col" (a role query cannot see this - jsdom maps a bare th to columnheader)', () => {
+    const { container } = renderTab([buildEvent({ id: 'e1' })]);
+    const headers = [...container.querySelectorAll('th')];
+    expect(headers.length).toBeGreaterThan(0);
+    for (const th of headers) {
+      expect(th.getAttribute('scope')).toBe('col');
+    }
+  });
+});

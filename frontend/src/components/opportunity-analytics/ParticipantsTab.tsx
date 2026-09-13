@@ -270,6 +270,7 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
               <tr style={{ borderBottom: '1px solid var(--cortex-border, rgba(255,255,255,0.08))' }}>
                 <th
                   style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}
+                  scope="col"
                   aria-sort={ariaSortFor('participant')}
                 >
                   <button type="button" className="admin-th-sort" onClick={() => handleSort('participant')}>
@@ -279,9 +280,10 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
                     </span>
                   </button>
                 </th>
-                <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>Session</th>
+                <th scope="col" style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>Session</th>
                 <th
                   style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}
+                  scope="col"
                   aria-sort={ariaSortFor('status')}
                 >
                   <button type="button" className="admin-th-sort" onClick={() => handleSort('status')}>
@@ -291,8 +293,8 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
                     </span>
                   </button>
                 </th>
-                <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500, width: '45%' }}>Researcher notes</th>
-                <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>Artefacts</th>
+                <th scope="col" style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500, width: '45%' }}>Researcher notes</th>
+                <th scope="col" style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>Artefacts</th>
               </tr>
             </thead>
             <tbody>
