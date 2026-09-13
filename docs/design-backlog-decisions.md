@@ -107,4 +107,20 @@ Asked to "finish RS-10 and get it out of the way", the honest engineering answer
 
 ---
 
-*Design-backlog (D) tier CLOSED: DT-7, DT-8 (!422), RS-10 increment-1 (!423), CB-31 (!424). RS-10 increment-2 closed here at increment-1 with the forward capability tracked as #127 — the (D) tier and its one forward item are now both resolved.*
+## DA-19 - one scope for the snapshot band and the table
+
+**Decision: make the per-study analytics period selector govern the tiles as well as the charts (backlog option A, "one scope is the literal ask"); on the Admin dashboard, keep the distinct scopes but label each one so none can be misread. Shipped earlier than the autonomous four, in the MR-3 analytics batch (!420); recorded here retrospectively with a 2026-09-13 both-surfaces verification.**
+
+DA-19 named a scope-mix on two surfaces. The decisions and shipped state, verified against `origin/main`:
+
+**Per-study analytics page (fixed in !420).** The 7/14/30d selector used to drive only the charts while the snapshot tiles were all-time, so a tile and the chart band beside it reported different windows. The fix adds the period predicate to the tile sources with a calendar-day-aligned bound (`date_trunc('day', NOW() AT TIME ZONE $tz) - (period-1 days)`), chosen precisely so the tile equals the sum of the drawn chart bars rather than a rolling `NOW() - period days` window that would not. first_click/last_click stay all-time (MIN/MAX, no filter). Pinned by a real-Postgres test (`opportunities.analytics-period-scoped-tiles-postgres.test.ts`, ages 0/3/20/100 so 7d differs from 30d) with a null control (revert to all-time gives 10/10, fails by name).
+
+**Admin dashboard (verified 2026-09-13, no further change needed).** The sharp end of DA-19 here was that the "Operational snapshot" band counts are owner-scoped for a researcher admin and global for a superadmin, so a count read as the platform total to someone who owned only part of it. Shipped code fixes exactly that: an explicit scope note renders beside the heading ("Your studies only" for a researcher admin, "Across every researcher on Cortex" for a superadmin, `Admin.tsx:463-467`), and the snapshot and the table now derive every "now"-relative figure from one clock reading per mount (`Admin.tsx:72-74`) so they agree with each other. Each figure is individually scope-labelled ("Sessions this week", "Across all published studies", "People who booked").
+
+**What was consciously NOT done.** The dashboard table's "Clicks" column is still all-time `clicks_total` with a bare "Clicks" header, no "all-time" tag. Left as-is because it cannot create the period-vs-all-time confusion DA-19 flagged: the Admin dashboard has no period selector, so there is no competing period figure on the page for an all-time count to be mistaken for. That confusion was structurally a per-study-page problem, and it is fixed there. An explicit "all-time" label on the column is a LOW cosmetic nicety, available as a trivial reversible follow-up if wanted.
+
+**Gates:** the code shipped in !420 (code-reviewer at high reasoning, no CRITICAL/HIGH; the real-pg test above). This entry is documentation only, so no gate runs on it.
+
+---
+
+*Design-backlog (D) tier CLOSED: DT-7, DT-8 (!422), RS-10 increment-1 (!423), CB-31 (!424). RS-10 increment-2 closed at increment-1 with the forward capability tracked as #127. DA-19 shipped in the earlier MR-3 analytics batch (!420) and is verified complete across both surfaces (2026-09-13). The (D) tier and its one forward item are all resolved.*
