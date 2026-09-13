@@ -245,7 +245,6 @@
 }
 
 .card-shell--interactive:hover {
-  transform: translateY(-2px);
   border-color: var(--border-strong-current);
 }
 
@@ -405,8 +404,6 @@
 
 .card:hover {
   border-color: var(--brand-headline);
-  /* Enhanced lift with subtle scale */
-  transform: translateY(-3px) scale(1.01);
   box-shadow: var(--shadow-card-hover);
 }
 
@@ -604,7 +601,6 @@
 }
 
 .opportunity-card:hover {
-  transform: translateY(-2px);
   box-shadow: var(--shadow-card-hover);
 }
 
@@ -6024,9 +6020,8 @@ body.theme-light .study-summary-line {
 .bento-grid .card.card-clickable:hover,
 .card.card-clickable:hover {
   border-color: var(--dynamic-hover-color, var(--brand-headline)) !important;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15), 
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15),
               0 0 0 1px var(--dynamic-hover-color, transparent) !important;
-  transform: translateY(-4px);
 }
 
 /* Light mode: use text color for crisp, high-contrast hover borders */
@@ -6490,7 +6485,6 @@ body.theme-light .atmospheric-orb-secondary {
 }
 
 .cortex-analytics-card:hover {
-  transform: translateY(-2px);
   border-color: rgba(255, 255, 255, 0.12);
   box-shadow: 0 8px 32px -1px rgba(0, 0, 0, 0.3);
 }
@@ -7041,7 +7035,6 @@ body.theme-light .atmospheric-orb-secondary {
 }
 
 .booking-card-upcoming:hover {
-  transform: translateY(-2px);
   box-shadow: 0 0 16px rgba(255, 78, 80, 0.25);
 }
 
@@ -11999,7 +11992,6 @@ body.theme-light .col-actions .dropdown-menu .dropdown-divider {
 }
 
 .sales-promise-card:hover {
-  transform: translateY(-2px);
   border-color: var(--border-strong-current);
 }
 
@@ -13422,7 +13414,6 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
 .admin-attention__card:focus-visible {
   border-color: var(--color-cortex-orange);
   box-shadow: var(--shadow-card-current);
-  transform: translateY(-1px);
   outline: none;
 }
 
