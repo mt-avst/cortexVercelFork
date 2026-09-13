@@ -6,6 +6,7 @@ import { NavigationGuardProvider } from './contexts/NavigationGuardContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import SkipLink from './components/SkipLink';
 import Header from './components/Header';
+import ScrollToTop from './components/ScrollToTop';
 import LoadingSpinner from './components/LoadingSpinner';
 import FeedbackFooter from './components/FeedbackFooter';
 import { opportunityFormRoutes } from './pages/OpportunityForm.routes';
@@ -74,6 +75,7 @@ function App() {
       <AuthProvider>
         <ThemeProvider>
           <Router>
+            <ScrollToTop />
             <div className="App">
               <Routes>
                 {/* Chrome-less participant recording surface (B6). */}
