@@ -107,7 +107,7 @@ router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request,
     // Guardrails
     if (session.opportunity_status !== 'published') {
       await client.query('ROLLBACK');
-      throw new NotFoundError('Opportunity not published');
+      throw new NotFoundError('Study not published');
     }
 
     if (new Date(session.end_time) <= new Date()) {
@@ -815,7 +815,7 @@ router.post('/:id/reschedule', requireAuth, asyncHandler(async (req: Request, re
     // Guardrails
     if (targetSession.opportunity_id !== booking.current_opportunity_id) {
       await client.query('ROLLBACK');
-      throw new ValidationError('Target session must be from the same opportunity');
+      throw new ValidationError('Target session must be from the same study');
     }
 
     // ponytail: a reschedule carries the booking's consent record unchanged,
@@ -829,7 +829,7 @@ router.post('/:id/reschedule', requireAuth, asyncHandler(async (req: Request, re
 
     if (targetSession.opportunity_status !== 'published') {
       await client.query('ROLLBACK');
-      throw new ValidationError('Target opportunity not published');
+      throw new ValidationError('Target study not published');
     }
 
     if (new Date(targetSession.end_time) <= new Date()) {
@@ -1461,7 +1461,7 @@ router.get('/opportunities/:id/bookings', requireAdmin, asyncHandler(async (req:
     );
 
     if (opportunityCheck.rows.length === 0) {
-      return res.status(404).json({ error: 'Opportunity not found' });
+      return res.status(404).json({ error: 'Study not found' });
     }
 
     // Owner OR superadmin. This route used to admit the owner and nobody
@@ -1474,7 +1474,7 @@ router.get('/opportunities/:id/bookings', requireAdmin, asyncHandler(async (req:
     const isSuperadmin = req.user!.role === 'superadmin';
     const isOwner = isOpportunityOwner(opportunityCheck.rows[0], req.user);
     if (!isSuperadmin && !isOwner) {
-      return res.status(403).json({ error: 'Only the owner or a superadmin can view bookings for this opportunity' });
+      return res.status(403).json({ error: 'Only the owner or a superadmin can view bookings for this study' });
     }
 
     // Get bookings with participant details
@@ -1509,7 +1509,7 @@ router.get('/opportunities/:id/bookings', requireAdmin, asyncHandler(async (req:
       throw error;
     }
     logger.error('Error fetching opportunity bookings', { error });
-    res.status(500).json({ error: 'Failed to fetch opportunity bookings' });
+    res.status(500).json({ error: 'Failed to fetch study bookings' });
   }
 }));
 
@@ -1701,7 +1701,7 @@ router.post('/:bookingId/approve', requireAuth, asyncHandler(async (req: Request
     const isSuperadmin = userResult.rows[0].role === 'superadmin';
     if (!isSuperadmin && !isOpportunityOwner(booking, req.user)) {
       await client.query('ROLLBACK');
-      throw new ForbiddenError('You can only approve sessions for your own opportunities');
+      throw new ForbiddenError('You can only approve sessions for your own studies');
     }
 
     // Update booking status to approved
@@ -1788,7 +1788,7 @@ router.post('/:bookingId/reject', requireAuth, asyncHandler(async (req: Request,
     const isSuperadmin = userResult.rows[0].role === 'superadmin';
     if (!isSuperadmin && !isOpportunityOwner(booking, req.user)) {
       await client.query('ROLLBACK');
-      throw new ForbiddenError('You can only reject sessions for your own opportunities');
+      throw new ForbiddenError('You can only reject sessions for your own studies');
     }
 
     // Update booking status to rejected
@@ -1874,7 +1874,7 @@ router.put('/:bookingId/notes', requireAuth, asyncHandler(async (req: Request, r
 
   const isSuperadmin = userResult.rows[0].role === 'superadmin';
   if (!isSuperadmin && !isOpportunityOwner(bookingResult.rows[0], req.user)) {
-    throw new ForbiddenError('You can only edit notes for your own opportunities');
+    throw new ForbiddenError('You can only edit notes for your own studies');
   }
 
   // '' stores as NULL: "no note" is one state, not two.

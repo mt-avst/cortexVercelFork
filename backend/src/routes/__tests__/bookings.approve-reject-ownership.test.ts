@@ -91,12 +91,12 @@ const ROUTES = [
   {
     name: 'approve',
     path: '/api/bookings/b1/approve',
-    refusal: 'You can only approve sessions for your own opportunities',
+    refusal: 'You can only approve sessions for your own studies',
   },
   {
     name: 'reject',
     path: '/api/bookings/b1/reject',
-    refusal: 'You can only reject sessions for your own opportunities',
+    refusal: 'You can only reject sessions for your own studies',
   },
 ] as const;
 

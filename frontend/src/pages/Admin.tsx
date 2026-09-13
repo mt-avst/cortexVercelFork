@@ -955,10 +955,26 @@ const Admin: React.FC = () => {
                                       interview) reach their booked-participant roster only
                                       through here - gating this to poll/survey/unmoderated left
                                       that roster unreachable. Audit rows a04-row-actions-menu,
-                                      a64-analytics-live-session-participants. */}
-                                  <DropdownItem onClick={() => navigate(`/admin/opportunities/${opportunity.id}/analytics`)}>
-                                    Analytics
-                                  </DropdownItem>
+                                      a64-analytics-live-session-participants.
+
+                                      Analytics is owner-scoped on the server (a non-owner gets a
+                                      403), so the menu tells the truth up front: only the owner or
+                                      a superadmin gets a live item, everyone else gets a disabled
+                                      one naming who owns it (row 8). Under the beta all-admin
+                                      switch that disables it on most rows for most viewers, by
+                                      design. */}
+                                  {(user?.role === 'superadmin' || opportunity.owner_user_id === user?.id) ? (
+                                    <DropdownItem onClick={() => navigate(`/admin/opportunities/${opportunity.id}/analytics`)}>
+                                      Analytics
+                                    </DropdownItem>
+                                  ) : (
+                                    <DropdownItem
+                                      disabled
+                                      title={`Only ${opportunity.owner_name ?? 'the study owner'} can view analytics for this study`}
+                                    >
+                                      Analytics
+                                    </DropdownItem>
+                                  )}
                                   <DropdownDivider />
                                   <DropdownItem className="text-danger" onClick={() => handleDelete(opportunity.id, opportunity.title)}>
                                     Delete

@@ -448,8 +448,8 @@
     "id": "approve-consults-opportunity-ownership",
     "why": "Approving writes `admin_notes` - a researcher's written judgement of a named colleague - and awards that colleague points. Short-circuiting the owner check to false passed 844 of 844. The named test carries BOTH a status assertion and a no-UPDATE assertion; the status one is what fires first under this mutation, and the no-UPDATE arm is what makes the test worth naming here rather than the status alone - a 403 raised for some other reason would satisfy the status by itself.",
     "file": "backend/src/routes/bookings.ts",
-    "anchor": "    if (!isSuperadmin && !isOpportunityOwner(booking, req.user)) {\n      await client.query('ROLLBACK');\n      throw new ForbiddenError('You can only approve sessions for your own opportunities');",
-    "mutation": "    if (false && !isSuperadmin && !isOpportunityOwner(booking, req.user)) {\n      await client.query('ROLLBACK');\n      throw new ForbiddenError('You can only approve sessions for your own opportunities');",
+    "anchor": "    if (!isSuperadmin && !isOpportunityOwner(booking, req.user)) {\n      await client.query('ROLLBACK');\n      throw new ForbiddenError('You can only approve sessions for your own studies');",
+    "mutation": "    if (false && !isSuperadmin && !isOpportunityOwner(booking, req.user)) {\n      await client.query('ROLLBACK');\n      throw new ForbiddenError('You can only approve sessions for your own studies');",
     "runner": "jest",
     "spec": "src/routes/__tests__/bookings.approve-reject-ownership.test.ts",
     "test": "writes nothing when a non-owner tries to approve, and rolls back"
@@ -458,8 +458,8 @@
     "id": "reject-consults-opportunity-ownership",
     "why": "The SECOND of two near-identical handlers 80 lines apart, and that is the whole reason it gets its own entry: a fix applied to approve reads as a fix applied to both, and a canary entry naming only one would carry that same blind spot into the thing meant to detect it. Neutering it passed 844 of 844 independently of approve.",
     "file": "backend/src/routes/bookings.ts",
-    "anchor": "    if (!isSuperadmin && !isOpportunityOwner(booking, req.user)) {\n      await client.query('ROLLBACK');\n      throw new ForbiddenError('You can only reject sessions for your own opportunities');",
-    "mutation": "    if (false && !isSuperadmin && !isOpportunityOwner(booking, req.user)) {\n      await client.query('ROLLBACK');\n      throw new ForbiddenError('You can only reject sessions for your own opportunities');",
+    "anchor": "    if (!isSuperadmin && !isOpportunityOwner(booking, req.user)) {\n      await client.query('ROLLBACK');\n      throw new ForbiddenError('You can only reject sessions for your own studies');",
+    "mutation": "    if (false && !isSuperadmin && !isOpportunityOwner(booking, req.user)) {\n      await client.query('ROLLBACK');\n      throw new ForbiddenError('You can only reject sessions for your own studies');",
     "runner": "jest",
     "spec": "src/routes/__tests__/bookings.approve-reject-ownership.test.ts",
     "test": "writes nothing when a non-owner tries to reject, and rolls back"
@@ -1928,8 +1928,8 @@
     "id": "researcher-notes-write-consults-ownership",
     "why": "cto/AdaptaLabs#79. PUT /:bookingId/notes writes a researcher's free-text judgement about a named colleague onto their booking. This mutation opens the write to ANY live-role admin on any opportunity. The named test asserts both the 403 and that no UPDATE ran; under the mutation the handler answers 200 and runs the UPDATE. Proven KILLED before entry.",
     "file": "backend/src/routes/bookings.ts",
-    "anchor": "  if (!isSuperadmin && !isOpportunityOwner(bookingResult.rows[0], req.user)) {\n    throw new ForbiddenError('You can only edit notes for your own opportunities');\n  }",
-    "mutation": "  if (false) {\n    throw new ForbiddenError('You can only edit notes for your own opportunities');\n  }",
+    "anchor": "  if (!isSuperadmin && !isOpportunityOwner(bookingResult.rows[0], req.user)) {\n    throw new ForbiddenError('You can only edit notes for your own studies');\n  }",
+    "mutation": "  if (false) {\n    throw new ForbiddenError('You can only edit notes for your own studies');\n  }",
     "runner": "jest",
     "spec": "src/routes/__tests__/bookings.researcher-notes.test.ts",
     "test": "refuses a researcher_admin who does not own the opportunity, without writing"

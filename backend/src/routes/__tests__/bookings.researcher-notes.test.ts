@@ -133,7 +133,7 @@ describe('PUT /api/bookings/:bookingId/notes', () => {
       .send({ researcher_notes: 'should never land' })
       .expect(403);
 
-    expect(res.body.error).toBe('You can only edit notes for your own opportunities');
+    expect(res.body.error).toBe('You can only edit notes for your own studies');
     expect(updateStatements()).toHaveLength(0);
   });
 
@@ -176,7 +176,7 @@ describe('PUT /api/bookings/:bookingId/notes', () => {
       .send({ researcher_notes: 'demoted since login' })
       .expect(403);
 
-    expect(res.body.error).toBe('You can only edit notes for your own opportunities');
+    expect(res.body.error).toBe('You can only edit notes for your own studies');
     expect(updateStatements()).toHaveLength(0);
   });
 

@@ -84,7 +84,13 @@ const SessionSummaryCard: React.FC<{
         </div>
         <div>
           <p className="cortex-stat-subtitle" style={{ marginBottom: '4px' }}>Completed</p>
-          <span style={{ fontVariantNumeric: 'tabular-nums' }}>{formatTimestamp(session.completed_at)}</span>
+          {/* Only a completed session has a meaningful completion time. An
+              abandoned or failed run can still carry a completed_at from an
+              earlier step, and rendering it read as though the session had
+              finished (row 10). */}
+          <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+            {session.session_status === 'completed' ? formatTimestamp(session.completed_at) : 'Not recorded'}
+          </span>
         </div>
       </div>
 
