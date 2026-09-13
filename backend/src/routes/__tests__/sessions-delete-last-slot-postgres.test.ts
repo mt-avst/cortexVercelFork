@@ -6,7 +6,7 @@ import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { startTestPostgres, type TestPostgres } from "../../__tests__/helpers/postgres-instance";
-import { closeListeningServers } from "../../__tests__/helpers/listening";
+import { closeListeningServers, listening } from "../../__tests__/helpers/listening";
 
 /**
  * DELETE /api/sessions/:id must refuse to remove the LAST bookable slot of a
@@ -59,7 +59,7 @@ async function seedStudy(opts: {
 }
 
 const del = (sessionId: string) =>
-  request(app)
+  request(listening(app))
     .delete(`/api/sessions/${sessionId}`)
     .set("x-test-user-id", ownerId)
     .set("x-test-user-role", "researcher_admin");

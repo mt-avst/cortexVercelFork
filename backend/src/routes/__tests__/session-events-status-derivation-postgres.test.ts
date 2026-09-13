@@ -9,7 +9,7 @@ import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { startTestPostgres, type TestPostgres } from "../../__tests__/helpers/postgres-instance";
-import { closeListeningServers } from "../../__tests__/helpers/listening";
+import { closeListeningServers, listening } from "../../__tests__/helpers/listening";
 
 const execFileAsync = promisify(execFile);
 
@@ -132,7 +132,7 @@ describe.skipIf(skipDbTests)("GET session-events derives transcript-failed and d
   });
 
   const fetchEvents = () =>
-    request(app)
+    request(listening(app))
       .get(`/api/opportunities/${opportunityId}/session-events`)
       .set("x-test-user-id", ownerId)
       .set("x-test-user-role", "researcher_admin");

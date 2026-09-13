@@ -6,7 +6,7 @@ import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { startTestPostgres, type TestPostgres } from "../../__tests__/helpers/postgres-instance";
-import { closeListeningServers } from "../../__tests__/helpers/listening";
+import { closeListeningServers, listening } from "../../__tests__/helpers/listening";
 
 /**
  * GET /api/me/session-events must carry the opportunity TYPE (row 5, Lane D
@@ -103,7 +103,7 @@ describe.skipIf(skipDbTests)("GET /api/me/session-events carries the opportunity
 
   it("returns type 'poll' for a poll session event", async () => {
     const { participantId } = await seedEvent("poll");
-    const res = await request(app)
+    const res = await request(listening(app))
       .get("/api/me/session-events")
       .set("x-test-user-id", participantId);
     expect(res.status).toBe(200);
@@ -113,7 +113,7 @@ describe.skipIf(skipDbTests)("GET /api/me/session-events carries the opportunity
 
   it("returns type 'interview' for an interview session event", async () => {
     const { participantId } = await seedEvent("interview");
-    const res = await request(app)
+    const res = await request(listening(app))
       .get("/api/me/session-events")
       .set("x-test-user-id", participantId);
     expect(res.status).toBe(200);
