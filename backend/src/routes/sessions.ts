@@ -643,7 +643,7 @@ router.delete('/:id', requireAdmin, asyncHandler(async (req: Request, res: Respo
     await client.query(`SET LOCAL lock_timeout = ${SESSION_DELETE_LOCK_TIMEOUT_MS}`);
 
     const sessionCheck = await client.query(
-      'SELECT booked_count FROM sessions WHERE id = $1 FOR UPDATE',
+      'SELECT booked_count, end_time > NOW() AS is_upcoming FROM sessions WHERE id = $1 FOR UPDATE',
       [sessionId]
     );
     if (sessionCheck.rows.length === 0) {
@@ -661,31 +661,44 @@ router.delete('/:id', requireAdmin, asyncHandler(async (req: Request, res: Respo
     // and refuse rather than silently unpublishing. Non-moderated types and
     // drafts pass `findPublishProblem` untouched, so only a published
     // test/interview losing its last future slot is refused.
-    const oppInfo = await client.query(
-      `SELECT o.id AS opportunity_id, o.status, o.type
-         FROM sessions s JOIN opportunities o ON o.id = s.opportunity_id
-        WHERE s.id = $1`,
-      [sessionId]
-    );
-    const opp = oppInfo.rows[0];
-    if (opp && opp.status === 'published' && MODERATED_CONSENT_TYPES.has(opp.type)) {
-      const remainingBookable = await client.query(
-        'SELECT 1 FROM sessions WHERE opportunity_id = $1 AND end_time > NOW() AND id <> $2 LIMIT 1',
-        [opp.opportunity_id, sessionId]
+    //
+    // ONLY when the slot being removed is itself upcoming: deleting a PAST slot
+    // does not reduce the bookable set, so a study whose slots have all elapsed
+    // (its booking window closed) must still let its old slots be tidied away -
+    // refusing that with "this is the last bookable slot" would be both wrong
+    // and untrue.
+    // ponytail: single-row FOR UPDATE only; two concurrent deletes of a study's
+    //   final two upcoming slots can each see the other as remaining and both
+    //   commit, leaving it slotless. Narrow and recoverable (add a slot or
+    //   unpublish). Upgrade path: lock the study's session rows in id order
+    //   before the count. -> cto/AdaptaLabs#128
+    if (sessionCheck.rows[0].is_upcoming === true) {
+      const oppInfo = await client.query(
+        `SELECT o.id AS opportunity_id, o.status, o.type
+           FROM sessions s JOIN opportunities o ON o.id = s.opportunity_id
+          WHERE s.id = $1`,
+        [sessionId]
       );
-      const problem = findPublishProblem({
-        willBePublished: true,
-        type: opp.type,
-        deliveryMode: 'native',
-        hasLinkedStudy: false,
-        hasInlineStudy: false,
-        hasInlineSurvey: false,
-        hasBookableSlot: (remainingBookable.rowCount ?? 0) > 0,
-      });
-      if (problem?.code === 'bookable_slot_required') {
-        throw new ConflictError(
-          'This is the last bookable slot of a published live session or interview. Add another upcoming slot, or unpublish the study, before removing it.'
+      const opp = oppInfo.rows[0];
+      if (opp && opp.status === 'published' && MODERATED_CONSENT_TYPES.has(opp.type)) {
+        const remainingBookable = await client.query(
+          'SELECT 1 FROM sessions WHERE opportunity_id = $1 AND end_time > NOW() AND id <> $2 LIMIT 1',
+          [opp.opportunity_id, sessionId]
         );
+        const problem = findPublishProblem({
+          willBePublished: true,
+          type: opp.type,
+          deliveryMode: 'native',
+          hasLinkedStudy: false,
+          hasInlineStudy: false,
+          hasInlineSurvey: false,
+          hasBookableSlot: (remainingBookable.rowCount ?? 0) > 0,
+        });
+        if (problem?.code === 'bookable_slot_required') {
+          throw new ConflictError(
+            'This is the last bookable slot of a published live session or interview. Add another upcoming slot, or unpublish the study, before removing it.'
+          );
+        }
       }
     }
 

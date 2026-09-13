@@ -145,6 +145,16 @@ describe.skipIf(skipDbTests)("DELETE session guards the last bookable slot of a 
     expect((await del(sessionIds[0])).status).toBe(204);
   });
 
+  it("allows deleting a PAST slot when NO future slot remains (booking window already closed)", async () => {
+    // A published interview whose slots have all elapsed is already unbookable;
+    // deleting an old slot must not be refused as "the last bookable slot",
+    // because a past slot is not bookable at all. The guard only engages when
+    // the slot being removed is itself upcoming.
+    const { sessionIds } = await seedStudy({ type: "interview", status: "published", slots: ["past", "past"] });
+    expect((await del(sessionIds[0])).status).toBe(204);
+    expect((await del(sessionIds[1])).status).toBe(204);
+  });
+
   it("allows deleting the last slot of a published POLL (polls are not booked)", async () => {
     const { sessionIds } = await seedStudy({ type: "poll", status: "published", slots: ["future"] });
     expect((await del(sessionIds[0])).status).toBe(204);
