@@ -9,6 +9,8 @@ import { MAX_TIME_SLOTS_PER_REQUEST, NEW_SESSION_PAST_GRACE_MS, validateNewSessi
 import { Session, CreateSessionRequest, UpdateSessionRequest } from '../types';
 import { getMockOpportunity, addMockSessions, getMockSessions, getAllMockSessions, updateMockSession, deleteMockSession } from '../../../demo/mock-data';
 import { isOpportunityOwner } from '../utils/opportunityOwnership';
+import { findPublishProblem } from '../../../shared/firsthand/publish-readiness';
+import { MODERATED_CONSENT_TYPES } from '../../../shared/firsthand/consent-templates';
 
 const router: Router = Router();
 
@@ -649,6 +651,42 @@ router.delete('/:id', requireAdmin, asyncHandler(async (req: Request, res: Respo
     }
     if (sessionCheck.rows[0].booked_count > 0) {
       throw new ValidationError('Cannot delete session with existing bookings');
+    }
+
+    // Last-bookable-slot guard (row 14). A published test/interview is BOOKED,
+    // not handed off: strip its last upcoming slot and it advertises "Book a
+    // time" over nothing anyone can book - the a21 defect. Re-ask the publish
+    // predicate for the state this delete would LEAVE, counting the remaining
+    // `end_time > NOW()` slots (the same bookable set the publish gate counts),
+    // and refuse rather than silently unpublishing. Non-moderated types and
+    // drafts pass `findPublishProblem` untouched, so only a published
+    // test/interview losing its last future slot is refused.
+    const oppInfo = await client.query(
+      `SELECT o.id AS opportunity_id, o.status, o.type
+         FROM sessions s JOIN opportunities o ON o.id = s.opportunity_id
+        WHERE s.id = $1`,
+      [sessionId]
+    );
+    const opp = oppInfo.rows[0];
+    if (opp && opp.status === 'published' && MODERATED_CONSENT_TYPES.has(opp.type)) {
+      const remainingBookable = await client.query(
+        'SELECT 1 FROM sessions WHERE opportunity_id = $1 AND end_time > NOW() AND id <> $2 LIMIT 1',
+        [opp.opportunity_id, sessionId]
+      );
+      const problem = findPublishProblem({
+        willBePublished: true,
+        type: opp.type,
+        deliveryMode: 'native',
+        hasLinkedStudy: false,
+        hasInlineStudy: false,
+        hasInlineSurvey: false,
+        hasBookableSlot: (remainingBookable.rowCount ?? 0) > 0,
+      });
+      if (problem?.code === 'bookable_slot_required') {
+        throw new ConflictError(
+          'This is the last bookable slot of a published live session or interview. Add another upcoming slot, or unpublish the study, before removing it.'
+        );
+      }
     }
 
     await client.query('DELETE FROM sessions WHERE id = $1', [sessionId]);
