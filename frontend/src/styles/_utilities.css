@@ -308,9 +308,9 @@
 .text-muted { color: var(--text-muted); }
 .text-brand { color: var(--brand-headline); }
 .text-link { color: var(--link); }
-.text-success { color: var(--status-success); }
+.text-success { color: var(--status-success-text); }
 .text-warning { color: var(--status-warning); }
-.text-danger { color: var(--status-danger); }
+.text-danger { color: var(--status-danger-text); }
 .text-info { color: var(--status-info); }
 .text-white { color: #FFFFFF; }
 .text-black { color: #000000; }

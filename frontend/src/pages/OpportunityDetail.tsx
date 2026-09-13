@@ -163,7 +163,7 @@ const OpportunityDetail: React.FC = () => {
   const isDark = theme === 'dark';
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
   // Title tracks the loaded opportunity; undefined while loading no-ops, so the
-  // static "AdaptaLabs" title holds until data lands. Restored on unmount.
+  // static "Cortex" title (index.html) holds until data lands. Restored on unmount.
   useDocumentTitle(opportunity?.title);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
