@@ -740,7 +740,7 @@
 
 .btn-outline-danger {
   background: transparent;
-  color: var(--status-danger);
+  color: var(--status-danger-text);
   border-color: var(--status-danger);
 }
 
@@ -1205,13 +1205,13 @@ body.theme-light .badge--question {
 .alert-success {
   background: rgba(40, 167, 69, 0.1);
   border-color: var(--status-success);
-  color: var(--status-success);
+  color: var(--status-success-text);
 }
 
 .alert-danger {
   background: rgba(220, 53, 69, 0.1);
   border-color: var(--status-danger);
-  color: var(--status-danger);
+  color: var(--status-danger-text);
 }
 
 .alert-warning {
@@ -1958,11 +1958,6 @@ body.landing-page .header,
   right: 0;
 }
 
-body.landing-page .header .logo-image,
-.landing-page .header .logo-image {
-  filter: brightness(1.2);
-}
-
 body.landing-page .header .btn-outline-secondary,
 .landing-page .header .btn-outline-secondary {
   color: rgba(255, 255, 255, 0.8);
@@ -2036,13 +2031,7 @@ body.landing-page .header .text-muted,
   text-decoration: none;
 }
 
-.logo-image {
-  height: 36px;
-  width: auto;
-  object-fit: contain;
-}
-
-/* Cortex lockup: Beaded C mark in brand orange + Fraunces wordmark in ink.
+/* Cortex lockup: the Neuron mark in brand orange + Fraunces wordmark in ink.
    The mark inherits currentColor, so the orange is set here, not baked in. */
 .logo-mark {
   height: 30px;
@@ -2060,11 +2049,18 @@ body.landing-page .header .text-muted,
   color: var(--text-primary);
 }
 
-/* On the dark signed-out landing the header sits on a dark ground, so the
-   ink wordmark flips to white (mirrors the landing's button treatment). */
-body:has(.cortex-landing) .header .logo-word,
-body.landing-page .header .logo-word,
-.landing-page .header .logo-word {
+/* The landing header itself is transparent in both themes (_themes.css); what
+   actually sits behind it is .landing-page-wrapper, which the DARK landing
+   paints solid near-black (#030305) and the LIGHT landing paints solid white.
+   So on the dark landing the ink wordmark needs to flip to white (mirrors the
+   landing's button treatment); the light landing keeps the ink wordmark from
+   the base .logo-word rule above - this override must not fire there (row 1:
+   it used to, at ~1.1:1 on the white ground). `:has(.cortex-landing)` is not
+   included here: that class has no remaining renderer anywhere in the
+   codebase (grepped whole tree), so a selector requiring it can never match -
+   `.landing-page` (set by Landing.tsx on body) is the one that actually
+   fires. */
+body.theme-dark.landing-page .header .logo-word {
   color: #ffffff;
 }
 
@@ -5774,32 +5770,6 @@ body.theme-dark .legend-label-past {
   color: rgba(255, 255, 255, 0.6);
 }
 
-/* Cortex Home Title - Premium gradient with glow */
-.adaptalabs-home-title {
-  font-family: var(--font-family-base);
-  margin-bottom: 24px;
-  font-size: clamp(2.75rem, 10vw, 4.5rem);
-  font-weight: 800;
-  line-height: 1;
-  letter-spacing: -0.03em;
-  
-  /* Premium gradient effect: deep orange → peach → white (dark mode) */
-  background: linear-gradient(
-    to right,
-    #FF5A1F 0%,
-    #FF7A45 35%,
-    #FFA070 60%,
-    #FFFFFF 100%
-  );
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
-  
-  /* Outer glow effect - similar to CORTEX logo on landing */
-  filter: drop-shadow(0 0 40px rgba(255, 85, 0, 0.4)) drop-shadow(0 0 80px rgba(255, 85, 0, 0.2));
-}
-
 /* ============================================================
    STUDY LISTING PAGE - Wrapper Styles
    ============================================================ */
@@ -6624,7 +6594,7 @@ body.theme-light .atmospheric-orb-secondary {
 }
 
 .cortex-stat-trend--negative {
-  color: var(--status-danger);
+  color: var(--status-danger-text);
 }
 
 /* No previous week to compare against. Deliberately muted and unemphasised -
@@ -8298,10 +8268,6 @@ body:has(.cortex-landing) .header {
   top: 0;
   left: 0;
   right: 0;
-}
-
-body:has(.cortex-landing) .header .logo-image {
-  filter: brightness(1.2);
 }
 
 body:has(.cortex-landing) .header .btn {
@@ -11474,6 +11440,26 @@ body.theme-dark .opportunity-form small:not(.badge) {
   padding: var(--spacing-1) 0;
 }
 
+/* Below 768px the table reflows to stacked cards and the kebab moves to the
+   LEFT of a narrow card (.admin-action-group becomes justify-content:
+   flex-start), so the unconditional `right: 0 !important` above (correct on
+   desktop, opening leftward from a right-aligned trigger) opens the menu off
+   the LEFT edge of the viewport instead - confirmed live at 390px, menu left
+   edge negative and its text clipped. Reverse the anchor so a left-aligned
+   trigger opens rightward, into the room that is actually there (row 20).
+   Needs !important, and to sit AFTER the block above, to win against it -
+   two `!important` declarations of equal specificity resolve by source
+   order, same as normal rules. */
+@media (max-width: 767.98px) {
+  .admin-action-dropdown-menu,
+  .admin-action-dropdown,
+  .admin-data-table .dropdown-menu,
+  .col-actions .dropdown-menu {
+    left: 0 !important;
+    right: auto !important;
+  }
+}
+
 /* Menu Items - Base state (Light Mode) */
 body.theme-light .admin-action-dropdown-menu .dropdown-item,
 body.theme-light .admin-action-dropdown .dropdown-item,
@@ -13562,7 +13548,7 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
 .admin-status-pill--confirmed {
   background: color-mix(in srgb, var(--status-success) 16%, transparent);
   border-color: color-mix(in srgb, var(--status-success) 40%, transparent);
-  color: var(--status-success);
+  color: var(--status-success-text);
 }
 
 .admin-status-pill--pending {
@@ -13576,7 +13562,7 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
 .admin-study-status--published {
   background: color-mix(in srgb, var(--status-success) 16%, transparent);
   border-color: color-mix(in srgb, var(--status-success) 40%, transparent);
-  color: var(--status-success);
+  color: var(--status-success-text);
 }
 
 .admin-study-status--draft {

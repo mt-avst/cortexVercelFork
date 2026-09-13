@@ -180,4 +180,97 @@ describe('brand identity is one system across themes (#12)', () => {
       expect(contrast(primary, WHITE)).toBeLessThan(4.5);
     });
   });
+
+  describe('the signed-out landing wordmark follows the theme, not a flat white override (row 1)', () => {
+    // The override used to fire on `.landing-page`/`.cortex-landing` alone, so
+    // it painted the ink wordmark white even on the LIGHT landing (near-white
+    // on white: ~1.1:1). The header itself is transparent in both themes;
+    // .landing-page-wrapper is the real ground, and only the DARK landing
+    // paints it near-black - so the fix scopes the override to
+    // `body.theme-dark`, not deletes it. A regression that drops the
+    // `theme-dark` qualifier (restoring the old blanket rule) fails here by
+    // name before it ever reaches a browser.
+    const components = read('_components.css');
+
+    it('every `.logo-word` white override is qualified on body.theme-dark', () => {
+      // Locate the anchor comment, then the /*...*/ that immediately follows
+      // it, then the rule that follows THAT - so the comment's own prose
+      // (which may contain commas) never leaks into the selector list below.
+      const anchorAt = components.search(/the landing header itself is transparent/i);
+      expect(anchorAt, 'the dark-landing wordmark override comment must still exist').toBeGreaterThanOrEqual(0);
+      const commentEnd = components.indexOf('*/', anchorAt);
+      expect(commentEnd, 'the anchor comment must be closed').toBeGreaterThan(anchorAt);
+      const ruleText = components.slice(commentEnd + 2);
+      const ruleOpenBrace = ruleText.indexOf('{');
+      const selectors = ruleText.slice(0, ruleOpenBrace);
+      const lines = selectors.split(',').map((s) => s.trim()).filter(Boolean);
+      expect(lines.length, 'expected at least one .logo-word override selector').toBeGreaterThan(0);
+      for (const line of lines) {
+        expect(line, `selector "${line}" must require body.theme-dark`).toMatch(/body\.theme-dark/);
+        expect(line, `selector "${line}" must target .logo-word`).toMatch(/\.logo-word$/);
+      }
+    });
+
+    it('no unqualified `.landing-page .header .logo-word` or `:has(.cortex-landing)` rule survives', () => {
+      // The exact pre-fix selectors, so a re-introduction elsewhere in the file
+      // (not just an edit of the block above) still fails.
+      expect(components).not.toMatch(/(?<!theme-dark[^\n{]*)\.landing-page \.header \.logo-word\s*\{/);
+      expect(components).not.toMatch(/body:has\(\.cortex-landing\) \.header \.logo-word\s*\{/);
+    });
+  });
+
+  describe('status colors are one set shared by both themes, not a dark-only Bootstrap default (row 27)', () => {
+    // Dark shipped the raw Bootstrap trio (#28a745/#ffc107/#dc3545) while light
+    // already carried deliberate, AA-checked replacements. #28a745 + the
+    // Approve button's white text measured 3.13:1 - below AA - in dark only.
+    // Promoting light's values to :root (mirroring the row-12 orange
+    // unification) fixes dark without light re-declaring them.
+    it('--fs-success and --fs-danger are bound at :root', () => {
+      expect(valueOf(rootTokens, '--fs-success')?.toUpperCase()).toBe('#2F6F5E');
+      expect(valueOf(rootTokens, '--fs-danger')?.toUpperCase()).toBe('#A63D40');
+    });
+
+    it('--fs-warning is defined at :root from the AA-checked literal (black text 6.12:1, not white 3.43:1)', () => {
+      expect(valueOf(rootTokens, '--fs-warning')?.toUpperCase()).toBe('#C27A2D');
+    });
+
+    it('--status-success/-warning/-danger resolve to the fs-* tokens at :root', () => {
+      expect(valueOf(rootTokens, '--status-success')).toBe('var(--fs-success)');
+      expect(valueOf(rootTokens, '--status-warning')).toBe('var(--fs-warning)');
+      expect(valueOf(rootTokens, '--status-danger')).toBe('var(--fs-danger)');
+    });
+
+    it('the Approve button fill (--status-success + white text) clears AA in dark', () => {
+      const success = resolveHex(rootTokens, '--status-success');
+      expect(contrast(success, WHITE)).toBeGreaterThanOrEqual(4.5);
+    });
+
+    it('the old Bootstrap trio literals are gone from _tokens.css', () => {
+      const lower = tokens.toLowerCase();
+      for (const hex of ['#28a745', '#ffc107', '#dc3545']) {
+        expect(lower, `${hex} is a pre-row-27 Bootstrap default and must not appear in _tokens.css`).not.toContain(hex);
+      }
+    });
+
+    it('the light theme no longer re-anchors success/warning/danger (one brand, not a per-theme re-declaration)', () => {
+      expect(lightBlock).not.toMatch(/--fs-success\s*:/);
+      expect(lightBlock).not.toMatch(/--fs-danger\s*:/);
+      expect(lightBlock).not.toMatch(/--status-success\s*:/);
+      expect(lightBlock).not.toMatch(/--status-warning\s*:/);
+      expect(lightBlock).not.toMatch(/--status-danger\s*:/);
+    });
+
+    it('--status-info is deliberately left split per theme, not folded into the trio deletion', () => {
+      // info is used BOTH as a white-on-fill badge (badge-info) and as bare text
+      // on the alert-info tint (alert-info, on a still-dark composited
+      // background in dark theme). Dark's Bootstrap teal (#17a2b8) already
+      // clears AA as text (6.46:1) though not as a fill (3.04:1); light's navy
+      // (#1e5a8a) clears AA as a fill (7.28:1) though not as text on a dark
+      // ground. Unifying either direction trades a passing role for a failing
+      // one, so unlike success/warning/danger this token is NOT promoted to
+      // :root in row 27 - each theme keeps its own value.
+      expect(valueOf(rootTokens, '--status-info')?.toUpperCase()).toBe('#17A2B8');
+      expect(valueOf(lightBlock, '--status-info')?.toUpperCase()).toBe('#1E5A8A');
+    });
+  });
 });
