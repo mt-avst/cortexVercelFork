@@ -10,27 +10,6 @@
  */
 
 /* ============================================================
-   ADAPTALABS HOME TITLE - Gradient Override (Both Themes)
-   Must be in themes layer to override base h1 color
-   ============================================================ */
-
-/* Light Mode - AdaptaLabs Home Title — FirstHand navy → terracotta */
-body.theme-light .adaptalabs-home-title {
-  background: linear-gradient(
-    to right,
-    var(--fs-ink) 0%,
-    var(--fs-accent) 52%,
-    var(--fs-accent-strong) 100%
-  );
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
-  font-family: var(--font-family-display, 'Fraunces', Georgia, serif);
-  filter: drop-shadow(0 2px 14px rgba(20, 33, 61, 0.12));
-}
-
-/* ============================================================
    STUDY LISTING PAGE - Theme Overrides
    ============================================================ */
 
@@ -80,8 +59,6 @@ body.theme-light {
      fill step (700, #BF4417, 5.18 under white). */
   --fs-accent: var(--brand-orange-500);
   --fs-accent-strong: var(--brand-orange-700);
-  --fs-success: #2f6f5e;
-  --fs-danger: #a63d40;
   --fs-shadow: 0 24px 70px rgba(20, 33, 61, 0.08);
 
   /* Typography and the orange ramp are bound once at :root (see _tokens.css)
@@ -213,10 +190,14 @@ body.theme-light {
   --accent-amber-text: #8f5a1c;
   --accent-teal: #2f6f5e;
 
-  /* Status — FirstHand success / danger */
-  --status-success: var(--fs-success);
-  --status-warning: #c27a2d;
-  --status-danger: var(--fs-danger);
+  /* Status — success/warning/danger fills are bound once at :root (row 27)
+     and shared by both themes; only --status-info is deliberately kept
+     per-theme (see the note at :root in _tokens.css). The text-role tokens
+     alias straight back to the fill here: light's single value already reads
+     fine as text (5.30/5.60 on cream), unlike dark's, which needed a
+     brighter, distinct pair. */
+  --status-success-text: var(--status-success);
+  --status-danger-text: var(--status-danger);
   --status-info: #1e5a8a;
 
   /* Tag Colors */

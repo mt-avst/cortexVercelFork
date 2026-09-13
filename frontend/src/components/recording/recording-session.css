@@ -7,8 +7,10 @@
  * (`.button`, `.chip`, `.alert-banner`, ...) are generic and would otherwise
  * collide. The journey is a documented exception to the Cortex/Momentum design
  * system, so its own type scale and palette are reproduced here rather than
- * re-skinned. Fonts fall back to system faces (Cortex does not bundle the
- * FirstHand webfonts); a webfont import is a follow-up, not a blocker.
+ * re-skinned. Fraunces (display) is already self-hosted via @font-face in
+ * _base.css and Manrope (UI) loads via Google Fonts in index.html, so
+ * `--font-display`/`--font-sans` above already resolve to the real brand faces
+ * on this scoped surface too - no separate webfont import is needed here.
  *
  * The modal (`.fh-modal-*`) is portalled to document.body and so lives outside
  * the page's own `.fh-recording` subtree; its backdrop carries the
@@ -694,7 +696,10 @@
   padding: 10px 18px;
   border: 1.5px solid var(--accent-strong);
   border-radius: 4px;
-  background: var(--accent);
+  /* --accent (#dd6e42) under white text is below AA; --accent-fill-text-safe
+     is the global token already proven >= 4.5:1 under white in both themes
+     (see the accent-fill loop in e2e/accessibility.test.ts). Row 4. */
+  background: var(--accent-fill-text-safe);
   color: #fff;
   font-family: var(--font-mono), monospace;
   font-size: 12px;

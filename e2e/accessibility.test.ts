@@ -1129,5 +1129,335 @@ test.describe('Accessibility Tests', () => {
     const results = await new AxeBuilder({ page }).analyze();
     expect(results.violations).toEqual([]);
   });
+
+  /**
+   * Fix-first row 1. The signed-out landing wordmark used to flip to a flat
+   * white on `.landing-page`/`.cortex-landing` alone, regardless of theme -
+   * so the LIGHT landing (white ground) painted a near-white wordmark on a
+   * near-white ground (~1.1:1). The fix scopes the override to
+   * `body.theme-dark`. This measures the real rendered colors rather than the
+   * token source, in both themes, on the actual signed-out landing.
+   */
+  for (const theme of ['light', 'dark'] as const) {
+    test(`Landing wordmark meets AA contrast in ${theme} mode (row 1)`, async ({ page }) => {
+      // Override the beforeEach's blanket /api/me mock (a logged-in employee)
+      // with a genuine 401 - Home only renders Landing (and its dark-ground
+      // header) when signed out, which is exactly the state row 1 is about.
+      await page.route('**/api/me', (route) => route.fulfill({ status: 401, contentType: 'application/json', body: '{}' }));
+      await page.goto('/');
+      await page.evaluate((t) => localStorage.setItem('theme', t), theme);
+      await page.goto('/');
+      await page.waitForLoadState('load');
+      await expect(page.locator(`body.theme-${theme}`)).toHaveCount(1);
+      await expect(page.locator('body.landing-page')).toHaveCount(1);
+
+      const wordmark = page.locator('.header .logo-word').first();
+      await expect(wordmark).toBeVisible();
+
+      // .header itself is transparent on the landing page in BOTH themes (a
+      // separate, pre-existing fact discovered while writing this test: the
+      // "header paints an opaque ground" comment above the row-1 CSS fix did
+      // not hold on landing, and has since been corrected). <Header> is a
+      // DOM SIBLING of <main> (App.tsx), not an ancestor of anything the
+      // routed page renders, so no ancestor walk from the wordmark can ever
+      // reach the landing page's own content. What's actually visible behind
+      // the fixed header is .landing-page-wrapper - an opaque, full-height,
+      // z-index:50 sibling of the header that each theme paints solid
+      // (#030305 dark / #FFFFFF light, per _components.css) - so measure that
+      // element directly instead of guessing an ancestor.
+      const fg = await wordmark.evaluate((el) => getComputedStyle(el).color);
+      const bg = await page.locator('.landing-page-wrapper').evaluate((el) => getComputedStyle(el).backgroundColor);
+      const toRgbTuple = (rgb: string): [number, number, number] => {
+        const parts = rgb.match(/[\d.]+/g);
+        if (!parts || parts.length < 3) throw new Error(`not a color: ${rgb}`);
+        return [Number(parts[0]), Number(parts[1]), Number(parts[2])];
+      };
+      const ratio = contrastRatio(toRgbTuple(fg), toRgbTuple(bg));
+      expect(
+        ratio,
+        `.logo-word (${fg}) on .landing-page-wrapper (${bg}) measures ${ratio.toFixed(2)} in ${theme} mode, below the 4.5 AA threshold`
+      ).toBeGreaterThanOrEqual(4.5);
+    });
+  }
+
+  /**
+   * Fix-first row 13. index.html shipped a commented-out favicon link and a
+   * plain "AdaptaLabs" <title> with no product icon anywhere - the browser
+   * tab carried no visual identity at all. This is the one place a fresh
+   * <title>/<link rel="icon"> can fail by name; jsdom never loads index.html.
+   */
+  test('Signed-out landing carries the Cortex tab identity (row 13)', async ({ page }) => {
+    // Override the beforeEach's blanket /api/me mock so this is genuinely
+    // the signed-out landing, not the logged-in Home page.
+    await page.route('**/api/me', (route) => route.fulfill({ status: 401, contentType: 'application/json', body: '{}' }));
+    const response = await page.goto('/');
+    await page.waitForLoadState('load');
+    expect(response?.ok()).toBe(true);
+
+    await expect(page).toHaveTitle(/^Cortex/);
+
+    const description = await page.evaluate(
+      () => document.querySelector('meta[name="description"]')?.getAttribute('content') ?? null
+    );
+    expect(description).toMatch(/^Cortex/);
+
+    const iconHref = await page.evaluate(() => {
+      const link = document.querySelector('link[rel="icon"]') as HTMLLinkElement | null;
+      return link?.getAttribute('href') ?? null;
+    });
+    expect(iconHref).toBe('/favicon.svg');
+
+    const iconResponse = await page.request.get(new URL(iconHref!, page.url()).toString());
+    expect(iconResponse.ok()).toBe(true);
+    expect(iconResponse.headers()['content-type'] || '').toContain('svg');
+
+    const touchIconHref = await page.evaluate(() => {
+      const link = document.querySelector('link[rel="apple-touch-icon"]') as HTMLLinkElement | null;
+      return link?.getAttribute('href') ?? null;
+    });
+    expect(touchIconHref).toBe('/apple-touch-icon.png');
+    const touchIconResponse = await page.request.get(new URL(touchIconHref!, page.url()).toString());
+    expect(touchIconResponse.ok()).toBe(true);
+  });
+
+  /**
+   * Fix-first row 20 (dropdown half). `.admin-action-dropdown-menu` opened
+   * leftward (`right: 0`) at every width. Correct on desktop, where the kebab
+   * sits at the right of a wide row - but below 768px the table reflows to
+   * stacked cards and the kebab moves to the LEFT of a narrow card, so the
+   * same anchor opened the menu off the LEFT edge of the viewport (confirmed
+   * live at 390px: the menu's left half went negative and its text clipped).
+   * jsdom applies no layout, so this geometry can only be proven here.
+   */
+  test('Row-actions dropdown stays within the viewport at 390px (row 20)', async ({ page }) => {
+    await page.route('**/api/me', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ id: 'admin-1', name: 'Admin User', email: 'admin@example.com', role: 'researcher_admin' }),
+      });
+    });
+    await page.route('**/api/dashboard', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/admin');
+    await page.waitForLoadState('load');
+
+    const kebab = page.locator('.admin-data-table .admin-action-btn-kebab').first();
+    await expect(kebab).toBeVisible();
+    await kebab.click();
+
+    const menu = page.locator('.admin-action-dropdown-menu.show, .admin-action-dropdown-menu').first();
+    await expect(menu).toBeVisible();
+
+    const rect = await menu.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return { left: r.left, right: r.right };
+    });
+    expect(rect.left, `menu left edge ${rect.left} must not be negative`).toBeGreaterThanOrEqual(0);
+    expect(rect.right, `menu right edge ${rect.right} must not exceed the 390px viewport`).toBeLessThanOrEqual(391);
+  });
+
+  /**
+   * Fix-first rows 19, 20 (detail half), 27. The Completion Approvals card:
+   * the rejection-reason textarea had a near-invisible border (row 19), the
+   * session-details grid clipped instead of wrapped at narrow widths (row
+   * 20), and the Approve button (`.btn-success`) failed AA in dark before the
+   * status-color unification (row 27). One long study title reproduces the
+   * clip; both themes exercise the Approve button fill.
+   */
+  const longApproval = {
+    booking_id: 'booking-1',
+    user_id: 'user-1',
+    session_id: 'session-1',
+    completed_at: new Date().toISOString(),
+    admin_notes: null,
+    user_name: 'Demo User',
+    user_email: 'demo@example.com',
+    start_time: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+    end_time: new Date().toISOString(),
+    opportunity_title: 'ScriptRunner for Jira: the next-generation script editor experience',
+    opportunity_type: 'test',
+    owner_user_id: 'admin-1',
+  };
+
+  for (const theme of ['light', 'dark'] as const) {
+    test(`Completion Approvals card is accessible in ${theme} mode, with no clipped text (rows 19, 20, 27)`, async ({ page }) => {
+      await page.route('**/api/me', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ id: 'admin-1', name: 'Admin User', email: 'admin@example.com', role: 'researcher_admin' }),
+        });
+      });
+      await page.route('**/api/dashboard', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
+      await page.route('**/api/bookings/pending-approvals', (route) =>
+        route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([longApproval]) }));
+
+      await page.goto('/');
+      await page.evaluate((t) => localStorage.setItem('theme', t), theme);
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto('/admin');
+      await page.waitForLoadState('load');
+      await expect(page.locator(`body.theme-${theme}`)).toHaveCount(1);
+
+      await page.getByRole('tab', { name: /Completion Approvals/ }).click();
+      await expect(page.locator('.pending-approvals__card')).toHaveCount(1);
+
+      // Row 20: no detail line clips - every one fits its own card width.
+      const overflow = await page.evaluate(() => {
+        const nodes = Array.from(document.querySelectorAll('.pending-approvals__detail'));
+        return nodes
+          .map((el) => ({ text: el.textContent, scrollW: el.scrollWidth, clientW: el.clientWidth }))
+          .filter((n) => n.scrollW > n.clientW + 1);
+      });
+      expect(overflow, `clipped detail line(s): ${JSON.stringify(overflow)}`).toEqual([]);
+
+      // Row 19: the textarea border clears the 3:1 UI-component minimum
+      // against its own background, computed from the real rendered styles.
+      const border = await page.locator('.pending-approvals__textarea').evaluate((el) => {
+        const s = getComputedStyle(el);
+        return { border: s.borderTopColor, bg: s.backgroundColor };
+      });
+      const toRgbTuple = (rgb: string): [number, number, number] => {
+        const parts = rgb.match(/[\d.]+/g);
+        if (!parts || parts.length < 3) throw new Error(`not a color: ${rgb}`);
+        return [Number(parts[0]), Number(parts[1]), Number(parts[2])];
+      };
+      const borderRatio = contrastRatio(toRgbTuple(border.border), toRgbTuple(border.bg));
+      expect(
+        borderRatio,
+        `textarea border (${border.border}) on its background (${border.bg}) measures ${borderRatio.toFixed(2)} in ${theme} mode, below the 3:1 minimum`
+      ).toBeGreaterThanOrEqual(3);
+
+      // Row 27: the Approve button (--status-success fill + white text).
+      // Scoped to color-contrast: this card sits inside the admin page's
+      // pre-existing (unrelated) heading-order structure, which a full scan
+      // would otherwise blame on this fix.
+      const scan = await new AxeBuilder({ page })
+        .include('.pending-approvals__card')
+        .withRules(['color-contrast'])
+        .analyze();
+      // A scan that resolves nothing reports zero violations too - assert it
+      // actually measured something before trusting the empty violations list.
+      // One pre-existing, unrelated exception: axe cannot resolve the
+      // textarea's placeholder-text background ("partially obscured") on
+      // this markup regardless of theme or this diff's changes - it is not
+      // the border (row 19, measured directly above) or the Approve button
+      // (row 27, the actual subject of this scan).
+      const unexpectedIncomplete = scan.incomplete
+        .flatMap((rule) => rule.nodes.map((node) => node.target.map(String).join(' ')))
+        .filter((target) => target !== '#notes-booking-1');
+      expect(
+        unexpectedIncomplete,
+        `axe could not resolve ${unexpectedIncomplete.length} unexpected node(s) in ${theme} mode - the scan may be blind: ${unexpectedIncomplete.join(', ')}`
+      ).toEqual([]);
+      expectNoViolations(scan, `Completion Approvals card (${theme})`);
+    });
+  }
+
+  /**
+   * Fix-first row 23. All six `--lozenge-<type>-text` tokens were flat
+   * #FFFFFF at :root (dark) regardless of type. The light-mode counterpart of
+   * this scan already exists above; this is its dark-mode twin, proving axe
+   * measures every type's badge as passing once each carries its own hue.
+   */
+  test('Admin study type badges meet WCAG AA contrast in dark mode (row 23)', async ({ page }) => {
+    await page.route('**/api/me', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ id: 'admin-1', name: 'Admin User', email: 'admin@example.com', role: 'researcher_admin' }),
+      });
+    });
+    await page.route('**/api/admin/dashboard', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: {} }) });
+    });
+    const types = ['test', 'interview', 'poll', 'survey', 'question', 'unmoderated'];
+    const statuses = ['draft', 'published', 'closed'];
+    const studies = types.map((type, i) => ({
+      id: `opp-${i}`,
+      type,
+      title: `${type} study`,
+      purpose_one_liner: 'Badge contrast fixture',
+      status: statuses[i % statuses.length],
+      default_duration_minutes: 30,
+      sessions: [],
+    }));
+    await page.route('**/api/opportunities**', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(studies) });
+    });
+
+    await page.goto('/');
+    await page.evaluate(() => localStorage.setItem('theme', 'dark'));
+    await page.goto('/admin');
+    await page.waitForLoadState('load');
+    await expect(page.locator('body.theme-dark')).toHaveCount(1);
+    await expect(page.locator('.admin-study-status').first()).toBeVisible();
+    await expect(page.locator('td.col-type .lozenge')).toHaveCount(types.length);
+
+    const scan = await new AxeBuilder({ page })
+      .include('.admin-data-table')
+      .withRules(['color-contrast'])
+      .analyze();
+    // A scan that resolves nothing reports zero violations too - assert it
+    // actually measured something before trusting the empty violations list.
+    // Three pre-existing, unrelated exceptions on this table's markup, none
+    // touched by row 23 (the TYPE lozenges, td.col-type .lozenge, which DO
+    // get fully measured with zero incompletes - this filter would not hide
+    // a regression there): the sort-caret and kebab icons are decorative
+    // glyphs axe cannot contrast-check at all ("non-text characters"), and
+    // the STATUS pills (draft/published/closed - a different fix, row 27) hit
+    // axe's "partially obscured" heuristic regardless of their color, since
+    // it also fires unchanged on .badge.bg-dark (an unrelated status color
+    // this diff never touches).
+    const unexpectedIncomplete = scan.incomplete
+      .flatMap((rule) => rule.nodes.map((node) => node.target.map(String).join(' ')))
+      .filter((target) => !/admin-th-sort-caret|Actions for .* study.*aria-hidden|admin-study-status|badge\.bg-dark/.test(target));
+    expect(
+      unexpectedIncomplete,
+      `axe could not resolve ${unexpectedIncomplete.length} unexpected node(s) - the scan may be blind: ${unexpectedIncomplete.join(', ')}`
+    ).toEqual([]);
+    expectNoViolations(scan, 'Admin study badges (dark)');
+  });
+
+  /**
+   * Fix-first row 27 (HIGH follow-up). The status-color unification promoted
+   * light's FILL values to :root, but --status-success/-danger are also used
+   * as bare TEXT in several places (.text-success, .alert-success, the admin
+   * status pills, .cortex-stat-trend--negative) - and light's fill values
+   * measure only 3.33/3.15 as text directly on the dark app background, below
+   * AA. --status-success-text/--status-danger-text are the separate TEXT-role
+   * tokens this needed (mirroring the --status-info split already made for
+   * exactly this reason). The admin status pill this affects hits axe's
+   * "partially obscured" heuristic regardless of color (filtered out above),
+   * so this resolves the tokens directly in a real browser instead - the same
+   * technique the accent-fill loop above uses - sidestepping that heuristic
+   * entirely.
+   */
+  test('Status text tokens clear AA against the dark app background (row 27)', async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(() => localStorage.setItem('theme', 'dark'));
+    await page.goto('/');
+    await page.waitForLoadState('load');
+    await expect(page.locator('body.theme-dark')).toHaveCount(1);
+
+    const darkAppBg: [number, number, number] = [10, 9, 26]; // #0A091A
+    for (const token of ['--status-success-text', '--status-danger-text']) {
+      const rgb = await resolveColourToken(page, token);
+      const ratio = contrastRatio(rgb, darkAppBg);
+      const asHex = `#${rgb.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')}`;
+      expect(
+        ratio,
+        `${token} (${asHex}) on the dark app background measures ${ratio.toFixed(2)}, below the 4.5 AA threshold`
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+
+    // Teeth: the FILL tokens they were split from must still be the thing
+    // that fails as text in dark, or a future edit collapsing them back into
+    // one token passes this file quietly.
+    const successFill = await resolveColourToken(page, '--status-success');
+    expect(contrastRatio(successFill, darkAppBg)).toBeLessThan(4.5);
+  });
 });
 

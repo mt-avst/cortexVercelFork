@@ -65,7 +65,11 @@
 
 .pending-approvals__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  /* min(240px, 100%) lets a column shrink to the card's own width instead of
+     forcing a 240px floor wider than a narrow phone card - the fixed floor
+     overflowed the card, which .pending-approvals__card clips via
+     overflow:hidden rather than wrapping (row 20). */
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
   gap: 1.25rem;
 }
 
@@ -106,7 +110,11 @@
 .pending-approvals__textarea {
   width: 100%;
   background: var(--surface-panel-current);
-  border: 1px solid var(--border-subtle-current);
+  /* --border-subtle-current is a near-invisible overlay (rgba alpha 0.06 in
+     dark; the theme's own hairline in light) - well under the 3:1
+     UI-component minimum. --text-muted already clears 3:1 as body text in
+     both themes, so it clears it comfortably as a border too (row 19). */
+  border: 1px solid var(--text-muted);
   border-radius: 8px;
   color: var(--text-primary);
   padding: 0.625rem 0.75rem;
@@ -117,7 +125,10 @@
 .pending-approvals__textarea:focus {
   outline: 2px solid var(--brand-orange-500);
   outline-offset: 1px;
-  border-color: transparent;
+  /* Was `transparent`: with the old near-invisible resting border that was a
+     no-op, but against the now-visible --text-muted border (row 19) it made
+     the boundary disappear at the exact moment focus should make it clearer. */
+  border-color: var(--brand-orange-500);
 }
 
 .pending-approvals__textarea--invalid {
