@@ -564,6 +564,8 @@ export interface MySessionEvent {
   id: string;
   opportunity_id: string;
   opportunity_title: string;
+  /** The study format, so My bookings can name it instead of assuming unmoderated. */
+  type: OpportunityType;
   firsthand_session_id: string;
   event_type: 'session_started' | 'session_completed' | 'session_abandoned' | 'session_failed';
   occurred_at: string;
