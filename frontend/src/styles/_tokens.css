@@ -248,28 +248,65 @@
   --accent-amber: #F0A500;
   --accent-teal: #4DD4C0;
 
-  /* Status Colors */
-  --status-success: #28a745;
-  --status-warning: #ffc107;
-  --status-danger: #dc3545;
+  /* Status Colors. success/warning/danger are one FILL set shared by both
+     themes (row 27, mirrors the row-12 orange unification): dark used to
+     carry the raw Bootstrap defaults while light already carried deliberate,
+     AA-checked replacements - the old dark Bootstrap green under the Approve
+     button's white text measured 3.13:1, below AA, in dark only. Promoting
+     light's values here fixes the fill role in dark; light no longer
+     re-declares them (_themes.css). --fs-warning is the AA-checked literal
+     light already used (black text 6.12:1; white text 3.43:1 fails, so it
+     never carries white text - see btn-warning/badge-warning, which already
+     pair it with black).
+
+     --status-success/-danger are ALSO used as bare TEXT (not just a fill) in
+     several places (.text-success/.text-danger, .alert-success/-danger,
+     .btn-outline-danger, the admin status pills, .cortex-stat-trend). Light's
+     fill values read fine as text on light grounds (5.30/5.60 on cream), but
+     as text directly on the DARK app ground they measure 3.33/3.15 - the fill
+     unification above would silently fail AA for every one of those text
+     consumers in dark. --status-success-text/--status-danger-text are the
+     TEXT-role tokens instead: in dark, distinct brighter values (11.30/7.12
+     on #0A091A); in light (_themes.css) they simply alias the fill tokens,
+     since light's single value already served both roles. --status-info is
+     deliberately NOT unified at all (fill or text): it is used both as a
+     white-on-fill badge and as bare text on a still-dark alert tint, and the
+     two theme values already each clear AA for one of those two roles but not
+     the other, so either unification direction would trade a passing role for
+     a failing one. */
+  --fs-success: #2f6f5e;
+  --fs-warning: #c27a2d;
+  --fs-danger: #a63d40;
+  --status-success: var(--fs-success);
+  --status-warning: var(--fs-warning);
+  --status-danger: var(--fs-danger);
+  --status-success-text: #4ADE80;
+  --status-danger-text: #F87171;
   --status-info: #17a2b8;
 
   /* Tag Colors (Legacy) */
   --tag-bg: #222222;
   --tag-text: #FFFFFF;
 
-  /* Lozenge Colors - Dark Mode (TASK 4: Brighter text, increased bg opacity) */
-  --lozenge-usertest-text: #FFFFFF;
+  /* Lozenge Colors - Dark Mode. Text was flat #FFFFFF for all six types, so
+     every lozenge badge read as the same white regardless of type (row 23).
+     Each text value below is that same type's own bg hue at full opacity
+     instead of 20% - already >= 4.5:1 against its own composited dark
+     background with no further tuning (see lozenge-dark-text.test.ts). These
+     tokens also feed a color-mix() badge outline and a study-card hover
+     border (opportunityUtils.ts) - both decorative, neither a contrast role,
+     so unaffected by the AA reasoning here, but their hue does shift too. */
+  --lozenge-usertest-text: #4DD0E1;
   --lozenge-usertest-bg: rgba(77, 208, 225, 0.2);
-  --lozenge-unmoderated-text: #FFFFFF;
+  --lozenge-unmoderated-text: #CE93D8;
   --lozenge-unmoderated-bg: rgba(206, 147, 216, 0.2);
-  --lozenge-survey-text: #FFFFFF;
+  --lozenge-survey-text: #69F0AE;
   --lozenge-survey-bg: rgba(105, 240, 174, 0.2);
-  --lozenge-poll-text: #FFFFFF;
+  --lozenge-poll-text: #FFAB91;
   --lozenge-poll-bg: rgba(255, 171, 145, 0.2);
-  --lozenge-interview-text: #FFFFFF;
+  --lozenge-interview-text: #F48FB1;
   --lozenge-interview-bg: rgba(244, 143, 177, 0.2);
-  --lozenge-question-text: #FFFFFF;
+  --lozenge-question-text: #FFE082;
   --lozenge-question-bg: rgba(255, 224, 130, 0.2);
 
   /* Focus & Accessibility - WCAG 2.2 Compliant */
