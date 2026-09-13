@@ -82,4 +82,13 @@ describe('PendingApprovals', () => {
     expect(alertSpy).not.toHaveBeenCalled();
     alertSpy.mockRestore();
   });
+
+  it('names the study type with the participant-facing label, not the raw enum (V-7)', async () => {
+    render(<PendingApprovals />);
+    await screen.findByRole('heading', { name: 'Ada Tester' });
+    // opportunity_type 'test' reads as "Live session" everywhere else in the
+    // product; the approvals card printed the raw enum.
+    expect(screen.getByText('Live session')).toBeInTheDocument();
+    expect(screen.queryByText('test')).not.toBeInTheDocument();
+  });
 });
