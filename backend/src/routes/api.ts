@@ -32,10 +32,10 @@ router.get('/me/session-events', requireAuth, asyncHandler(async (req: Request, 
   const userId = req.user!.id;
   const { rows } = await pool.query<{
     id: string; opportunity_id: string; opportunity_title: string;
-    firsthand_session_id: string; event_type: string;
+    type: string; firsthand_session_id: string; event_type: string;
     occurred_at: Date; received_at: Date;
   }>(`
-    SELECT e.id, e.opportunity_id, o.title AS opportunity_title,
+    SELECT e.id, e.opportunity_id, o.title AS opportunity_title, o.type,
            e.firsthand_session_id, e.event_type,
            e.occurred_at, e.received_at
     FROM opportunity_session_events e

@@ -259,7 +259,7 @@ function requireSuperadminForStudyResults(req: Request): void {
   });
 
   throw new ForbiddenError(
-    'Only a superadmin can view survey responses across every opportunity'
+    'Only a superadmin can view survey responses across every study'
   );
 }
 

@@ -193,7 +193,7 @@ describe('GET /api/bookings/opportunities/:id/bookings ownership', () => {
       .get(PATH)
       .expect(403);
 
-    expect(res.body.error).toBe('Only the owner or a superadmin can view bookings for this opportunity');
+    expect(res.body.error).toBe('Only the owner or a superadmin can view bookings for this study');
   });
 
   // The absence-assertion, with the control above proving it can be present.

@@ -3417,6 +3417,17 @@ router.get('/:id/session-events', requireAdmin, asyncHandler(async (req: Request
     throw new ForbiddenError('Only the study owner can view session events');
   }
 
+  // The event stream records `session_abandoned` for a consent decline and no
+  // transcript state at all - both facts live in the `firsthand` runtime schema
+  // (same database). Recover them so the list tells the truth (row 10):
+  //   - `transcript_status` from the latest attempt of the matching runtime
+  //     session, so a completed session whose transcript failed reads
+  //     "Transcript failed" rather than a bare "Completed";
+  //   - `consent_declined`, true when that session carries a `consent_declined`
+  //     runtime event, so a decline is its own status, not lumped in with the
+  //     genuinely abandoned.
+  // Both LEFT-joined: a pre-runtime or HMAC event with no runtime row keeps its
+  // raw event_type and these come back null/false.
   const result = await pool.query(
     `SELECT
        e.id,
@@ -3428,9 +3439,24 @@ router.get('/:id/session-events', requireAdmin, asyncHandler(async (req: Request
        e.payload,
        e.received_at,
        u.name AS participant_name,
-       u.email AS participant_email
+       u.email AS participant_email,
+       rs.transcript_status,
+       COALESCE(cd.consent_declined, false) AS consent_declined
      FROM opportunity_session_events e
      LEFT JOIN users u ON u.id = e.participant_user_id
+     LEFT JOIN LATERAL (
+       SELECT r.session_id, r.transcript_status
+       FROM firsthand.runtime_sessions r
+       WHERE r.logical_session_id = e.firsthand_session_id
+       ORDER BY r.attempt_number DESC, r.updated_at DESC
+       LIMIT 1
+     ) rs ON TRUE
+     LEFT JOIN LATERAL (
+       SELECT EXISTS (
+         SELECT 1 FROM firsthand.runtime_events ev
+         WHERE ev.session_id = rs.session_id AND ev.event_type = 'consent_declined'
+       ) AS consent_declined
+     ) cd ON TRUE
      WHERE e.opportunity_id = $1
      ORDER BY e.occurred_at DESC`,
     [id]

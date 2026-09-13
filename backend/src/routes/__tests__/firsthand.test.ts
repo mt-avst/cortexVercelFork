@@ -1218,7 +1218,7 @@ describe('FirstHand Express router', () => {
       const res = await request(listening(app))
         .get('/api/firsthand/studies/study_abc/results')
         .expect(403);
-      expect(res.body).toMatchObject({ error: 'Only a superadmin can view survey responses across every opportunity', code: 'FORBIDDEN' });
+      expect(res.body).toMatchObject({ error: 'Only a superadmin can view survey responses across every study', code: 'FORBIDDEN' });
       expect(mockListResponsesForStudy).not.toHaveBeenCalled();
     });
 
@@ -1239,7 +1239,7 @@ describe('FirstHand Express router', () => {
       const res = await request(listening(app))
         .get('/api/firsthand/studies/study_abc/results')
         .expect(403);
-      expect(res.body).toMatchObject({ error: 'Only a superadmin can view survey responses across every opportunity', code: 'FORBIDDEN' });
+      expect(res.body).toMatchObject({ error: 'Only a superadmin can view survey responses across every study', code: 'FORBIDDEN' });
       // Refusing after loading the answers would still have read them.
       expect(mockListResponsesForStudy).not.toHaveBeenCalled();
     });
@@ -1249,7 +1249,7 @@ describe('FirstHand Express router', () => {
       const res = await request(listening(app))
         .get('/api/firsthand/studies/study_abc/results.csv')
         .expect(403);
-      expect(res.body).toMatchObject({ error: 'Only a superadmin can view survey responses across every opportunity' });
+      expect(res.body).toMatchObject({ error: 'Only a superadmin can view survey responses across every study' });
       // A refusal that still set the download headers would hand over a file.
       expect(res.headers['content-type']).not.toContain('text/csv');
       expect(res.headers['content-disposition']).toBeUndefined();

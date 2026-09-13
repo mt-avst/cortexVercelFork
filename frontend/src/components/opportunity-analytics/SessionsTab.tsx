@@ -28,11 +28,15 @@ export interface SessionRow {
   participantEmail: string | null;
   latestEventType: SessionEventType;
   latestOccurredAt: string;
+  transcriptStatus: SessionEvent['transcript_status'];
+  consentDeclined: boolean;
 }
 
 /**
  * Collapse the raw event stream (one row per lifecycle event) into one row per
  * FirstHand session, keyed by firsthand_session_id, showing the latest event.
+ * `transcript_status` and `consent_declined` are session facts (the backend
+ * JOINs them from the runtime schema), so they carry on the latest event.
  */
 export function groupEventsBySession(events: SessionEvent[]): SessionRow[] {
   const bySession = events.reduce((sessions, event) => {
@@ -47,13 +51,41 @@ export function groupEventsBySession(events: SessionEvent[]): SessionRow[] {
       participantName: event.participant_name ?? existing?.participantName ?? null,
       participantEmail: event.participant_email ?? existing?.participantEmail ?? null,
       latestEventType: event.event_type,
-      latestOccurredAt: event.occurred_at
+      latestOccurredAt: event.occurred_at,
+      transcriptStatus: event.transcript_status ?? null,
+      consentDeclined: event.consent_declined ?? false
     });
   }, new Map<string, SessionRow>());
 
   return [...bySession.values()].sort((left, right) =>
     right.latestOccurredAt.localeCompare(left.latestOccurredAt)
   );
+}
+
+/**
+ * The status a researcher should read for a session, not the raw lifecycle
+ * event. Two truths the event type alone hides (row 10):
+ *   - a completed recording whose transcript FAILED is not simply "Completed";
+ *   - a consent DECLINE is recorded as `session_abandoned` but is its own
+ *     outcome, not a participant who wandered off.
+ * A transcript failure outranks a decline: a session cannot both complete a
+ * recording and decline consent, but if the data ever disagreed, the failed
+ * artefact is the one a reviewer must see.
+ */
+export function deriveSessionStatus(row: Pick<SessionRow, 'latestEventType' | 'transcriptStatus' | 'consentDeclined'>): {
+  label: string;
+  badge: string;
+} {
+  if (row.transcriptStatus === 'failed') {
+    return { label: 'Transcript failed', badge: '' };
+  }
+  if (row.consentDeclined) {
+    return { label: 'Declined consent', badge: EVENT_TYPE_BADGE.session_abandoned };
+  }
+  return {
+    label: EVENT_TYPE_LABELS[row.latestEventType] ?? row.latestEventType,
+    badge: EVENT_TYPE_BADGE[row.latestEventType] ?? ''
+  };
 }
 
 type SessionSortField = 'participant' | 'status' | 'lastActivity';
@@ -165,6 +197,7 @@ const SessionsTab: React.FC<{
               <tr style={{ borderBottom: '1px solid var(--cortex-border, rgba(255,255,255,0.08))' }}>
                 <th
                   style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}
+                  scope="col"
                   aria-sort={ariaSortFor('participant')}
                 >
                   <button type="button" className="admin-th-sort" onClick={() => handleSort('participant')}>
@@ -176,6 +209,7 @@ const SessionsTab: React.FC<{
                 </th>
                 <th
                   style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}
+                  scope="col"
                   aria-sort={ariaSortFor('status')}
                 >
                   <button type="button" className="admin-th-sort" onClick={() => handleSort('status')}>
@@ -187,6 +221,7 @@ const SessionsTab: React.FC<{
                 </th>
                 <th
                   style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}
+                  scope="col"
                   aria-sort={ariaSortFor('lastActivity')}
                 >
                   <button type="button" className="admin-th-sort" onClick={() => handleSort('lastActivity')}>
@@ -196,7 +231,7 @@ const SessionsTab: React.FC<{
                     </span>
                   </button>
                 </th>
-                <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>Session</th>
+                <th scope="col" style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>Session</th>
               </tr>
             </thead>
             <tbody>
@@ -216,9 +251,14 @@ const SessionsTab: React.FC<{
                     )}
                   </td>
                   <td style={{ padding: '10px 12px' }}>
-                    <span className={`cortex-badge ${EVENT_TYPE_BADGE[session.latestEventType] ?? ''}`}>
-                      {EVENT_TYPE_LABELS[session.latestEventType] ?? session.latestEventType}
-                    </span>
+                    {(() => {
+                      const status = deriveSessionStatus(session);
+                      return (
+                        <span className={`cortex-badge ${status.badge}`}>
+                          {status.label}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td style={{ padding: '10px 12px', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
                     {new Date(session.latestOccurredAt).toLocaleDateString('en-GB', {

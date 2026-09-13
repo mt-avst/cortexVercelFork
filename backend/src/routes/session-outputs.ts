@@ -39,14 +39,14 @@ async function assertOpportunityOwnership(opportunityId: string, user: SessionUs
   );
 
   if (result.rows.length === 0) {
-    throw new NotFoundError('Opportunity');
+    throw new NotFoundError('Study');
   }
 
   const isOwner = isOpportunityOwner(result.rows[0], user);
   const isSuperadmin = user.role === 'superadmin';
 
   if (!isOwner && !isSuperadmin) {
-    throw new ForbiddenError('Only the opportunity owner can view session outputs');
+    throw new ForbiddenError('Only the study owner can view session outputs');
   }
 }
 
