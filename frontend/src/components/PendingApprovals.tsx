@@ -6,6 +6,7 @@ import { logger } from '../utils/logger';
 import { RefreshCw, CheckCircle, UserCheck, XCircle } from 'lucide-react';
 
 import { formatDateTime } from '../utils/datetime';
+import { getParticipantFacingType } from '../utils/opportunityUtils';
 import './pending-approvals.css';
 
 interface PendingApproval {
@@ -222,7 +223,7 @@ const PendingApprovals: React.FC = () => {
                   <div>
                     <p className="pending-approvals__detail-title">Session Details</p>
                     <p className="pending-approvals__detail"><strong>Study:</strong> {approval.opportunity_title}</p>
-                    <p className="pending-approvals__detail"><strong>Type:</strong> {approval.opportunity_type}</p>
+                    <p className="pending-approvals__detail"><strong>Type:</strong> {getParticipantFacingType(approval.opportunity_type)}</p>
                     <p className="pending-approvals__detail"><strong>Start:</strong> {formatDate(approval.start_time)}</p>
                     <p className="pending-approvals__detail"><strong>End:</strong> {formatDate(approval.end_time)}</p>
                   </div>

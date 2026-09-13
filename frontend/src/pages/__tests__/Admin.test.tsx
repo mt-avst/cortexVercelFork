@@ -49,6 +49,8 @@ const fixtures = vi.hoisted(() => ({
     purpose_one_liner: 'See where participants stumble at checkout',
     default_duration_minutes: 30,
     status: 'published',
+    owner_user_id: 'admin-1',
+    owner_name: 'Admin',
     created_at: '2026-07-01T10:00:00.000Z',
     updated_at: '2026-07-01T10:00:00.000Z',
   },
@@ -161,7 +163,44 @@ describe('Admin page', () => {
     fireEvent.click(screen.getByRole('button', { name: /Actions for Checkout usability test/i }));
 
     // The row actions are now a real menu (#117): items carry role="menuitem".
-    expect(screen.getByRole('menuitem', { name: 'Analytics' })).toBeInTheDocument();
+    const item = screen.getByRole('menuitem', { name: 'Analytics' });
+    expect(item).toBeInTheDocument();
+    // The fixture study is owned by the acting admin, so it is live, not disabled.
+    expect(item).not.toBeDisabled();
+  });
+
+  it('disables Analytics and names the owner for a study the viewer does not own (row 8)', async () => {
+    // Analytics is owner-scoped on the server; the menu must not offer a live
+    // item that only leads to a 403. Under the beta all-admin switch this is
+    // the common case: every admin sees a colleague's studies as unowned.
+    vi.mocked(getOpportunities).mockResolvedValue([
+      { ...fixtures.opportunity, owner_user_id: 'someone-else', owner_name: 'Dana Owner' },
+    ] as never);
+    renderAdmin();
+    await screen.findByText('Checkout usability test');
+
+    fireEvent.click(screen.getByRole('button', { name: /Actions for Checkout usability test/i }));
+
+    const item = screen.getByRole('menuitem', { name: 'Analytics' });
+    expect(item).toBeDisabled();
+    expect(item.getAttribute('title')).toContain('Dana Owner');
+  });
+
+  it('keeps Analytics live for a superadmin even on a study they do not own (row 8)', async () => {
+    auth.value = {
+      user: { id: 'super-1', role: 'superadmin', name: 'Super', email: 'super@example.com' },
+      loading: false,
+      initialAuthCheck: true,
+    };
+    vi.mocked(getOpportunities).mockResolvedValue([
+      { ...fixtures.opportunity, owner_user_id: 'someone-else', owner_name: 'Dana Owner' },
+    ] as never);
+    renderAdmin();
+    await screen.findByText('Checkout usability test');
+
+    fireEvent.click(screen.getByRole('button', { name: /Actions for Checkout usability test/i }));
+
+    expect(screen.getByRole('menuitem', { name: 'Analytics' })).not.toBeDisabled();
   });
 
   it('states the truncation when Recent bookings is capped below the total (register #16)', async () => {

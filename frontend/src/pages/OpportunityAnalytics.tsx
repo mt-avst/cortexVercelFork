@@ -212,6 +212,10 @@ const OpportunityAnalyticsPage: React.FC = () => {
   const [loadingOpportunity, setLoadingOpportunity] = useState(true);
   const [loadingAnalytics, setLoadingAnalytics] = useState(true);
   const [error, setError] = useState<string>('');
+  // A 403 is a permission answer, not a transport failure: it renders its own
+  // state (no Retry - retrying cannot grant access - and it names the owner),
+  // distinct from the generic "Failed to load / Try Again" (row 8).
+  const [permissionDenied, setPermissionDenied] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<AnalyticsPeriod>(30);
   const [activeTab, setActiveTab] = useState<'overview' | 'sessions' | 'results' | 'participants'>('overview');
   const [sessionEvents, setSessionEvents] = useState<SessionEvent[]>([]);
@@ -241,6 +245,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
       const axiosError = err as { response?: { status?: number } };
       if (axiosError.response?.status === 403) {
         setError('You do not have permission to view analytics for this study');
+        setPermissionDenied(true);
       }
     } finally {
       setLoadingAnalytics(false);
@@ -363,6 +368,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
 
     try {
       setLoadingOpportunity(true);
+      setPermissionDenied(false);
       const opp = await getOpportunity(id);
       setOpportunity(opp);
 
@@ -380,6 +386,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
         setError('Study not found');
       } else if (axiosError.response?.status === 403) {
         setError('You do not have permission to view analytics for this study');
+        setPermissionDenied(true);
       } else {
         setError('Failed to load analytics');
       }
@@ -490,6 +497,36 @@ const OpportunityAnalyticsPage: React.FC = () => {
     );
   }
 
+  // Permission state: a 403 is an answer, not a failure. No Retry (it cannot
+  // grant access), Back stays live, and it names the owner so the reader knows
+  // whom to ask - distinct from the transport-error state below (row 8).
+  if (permissionDenied) {
+    const ownerName = opportunity?.owner_name;
+    return (
+      <div className="container py-5">
+        <div className="row">
+          <div className="col-12">
+            <button
+              className="btn btn-outline-secondary mb-4"
+              onClick={() => navigate('/admin')}
+            >
+              <ArrowLeft size={16} className="me-2" />
+              Back to Admin Dashboard
+            </button>
+            <ErrorState
+              title="Analytics are owner-only"
+              message={
+                ownerName
+                  ? `Only ${ownerName} can view analytics for this study. Ask them to share what you need.`
+                  : 'Only the study owner can view its analytics.'
+              }
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Show error state
   if (error || !opportunity) {
     return (
@@ -503,7 +540,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
               <ArrowLeft size={16} className="me-2" />
               Back to Admin Dashboard
             </button>
-            <ErrorState 
+            <ErrorState
               title="Unable to Load Analytics"
               message={error || 'Study not found'}
               onAction={() => loadData()}
