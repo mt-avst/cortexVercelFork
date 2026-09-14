@@ -110,12 +110,14 @@ body.theme-dark .App::before {
   pointer-events: none;
   z-index: -10;
   
-  /* Large, subtle radial gradient - center-top focus */
+  /* Large, subtle radial gradient - center-top focus. Was Tailwind's
+     orange-500 (#F97316), not the brand ramp - the comment said "Brand
+     Orange hint" but the literal was a different hue. */
   background: radial-gradient(
     ellipse 80% 60% at 50% 10%,
-    rgba(249, 115, 22, 0.10) 0%,   /* Brand Orange hint */
-    rgba(249, 115, 22, 0.05) 25%,
-    rgba(249, 115, 22, 0.02) 45%,
+    color-mix(in srgb, var(--brand-orange-500) 10%, transparent) 0%,
+    color-mix(in srgb, var(--brand-orange-500) 5%, transparent) 25%,
+    color-mix(in srgb, var(--brand-orange-500) 2%, transparent) 45%,
     transparent 70%
   );
 }
@@ -182,7 +184,7 @@ body.theme-light .App::after {
   z-index: -10;
 
   background-image:
-    radial-gradient(ellipse 120% 85% at 50% -15%, rgba(255, 90, 31, 0.09) 0%, transparent 58%),
+    radial-gradient(ellipse 120% 85% at 50% -15%, color-mix(in srgb, var(--brand-orange-500) 9%, transparent) 0%, transparent 58%),
     radial-gradient(ellipse 70% 55% at 100% 15%, rgba(20, 33, 61, 0.04) 0%, transparent 52%),
     radial-gradient(ellipse 55% 45% at 0% 60%, rgba(255, 251, 246, 0.85) 0%, transparent 55%),
     radial-gradient(rgba(20, 33, 61, 0.045) 1px, transparent 1px);
