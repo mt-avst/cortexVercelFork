@@ -141,7 +141,11 @@ const SessionReviewPage: React.FC = () => {
   }
 
   return (
-    <div className="analytics-page-wrapper" style={{ position: 'relative', minHeight: '100vh' }}>
+    // session-review-page: a styling-only marker, the same pattern
+    // Home.tsx's .study-listing-page already uses, so _themes.css can scope
+    // the Decision 4 register re-skin to this page without touching the
+    // OpportunityAnalytics page it shares .analytics-page-wrapper with.
+    <div className="analytics-page-wrapper session-review-page" style={{ position: 'relative', minHeight: '100vh' }}>
       <div className="container-fluid py-4 analytics-container">
         <button
           className="btn btn-outline-secondary btn-sm"

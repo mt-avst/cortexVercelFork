@@ -4,10 +4,14 @@ import { test, expect } from '@playwright/test';
  * Row 15 regression guard: `.btn-power` (the landing hero CTA and the
  * `DoorCard` CTA) moved from a literal `#C2410C` to `var(--brand-orange-700)`
  * in this lane. An earlier draft read `var(--cta-bg)` instead - visually
- * identical in dark mode (both resolve to an orange), but `--cta-bg` is
- * rebound to `var(--fs-ink)` (navy) under `body.theme-light`, which would
- * have turned the primary landing CTA navy in light mode. This pins the CTA
- * as orange, measured, in both themes.
+ * identical in dark mode (both resolve to an orange), but at the time
+ * `--cta-bg` was rebound to `var(--fs-ink)` (navy) under `body.theme-light`,
+ * which would have turned the primary landing CTA navy in light mode.
+ * `--cta-bg` is orange in both themes too now (Decision 5, Lane H) - the two
+ * tokens read the same colour family today - but `.btn-power` keeps its own
+ * name for the independent AA-safe guarantee `--accent-fill-text-safe`
+ * carries, not to dodge a navy fill that no longer exists. This still pins
+ * the CTA as orange, measured, in both themes.
  *
  * Paths are relative so `use.baseURL` from the running config decides the
  * target, per the convention in the other e2e specs here.
