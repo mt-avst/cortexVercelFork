@@ -23,7 +23,12 @@ export interface IconProps extends Omit<LucideProps, 'size' | 'ref' | 'absoluteS
  */
 export const Icon = forwardRef<SVGSVGElement, IconProps>(
   ({ icon: LucideIconComponent, size = 16, ...props }, ref) => (
-    <LucideIconComponent ref={ref} size={size} absoluteStrokeWidth {...props} />
+    // {...props} spreads FIRST: `size` is typed out of it via the Omit
+    // above, but a caller spreading a wider-typed object of their own
+    // (TypeScript does not excess-property-check a spread) could still
+    // carry an `absoluteStrokeWidth` through if it were applied after.
+    // `size` and `absoluteStrokeWidth` last is what actually enforces them.
+    <LucideIconComponent ref={ref} {...props} size={size} absoluteStrokeWidth />
   )
 );
 

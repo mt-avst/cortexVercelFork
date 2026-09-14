@@ -36,6 +36,20 @@ describe('one icon system (row 24)', () => {
     it.each(files)('%s renders sort indicators through <SortCaret', (file) => {
       expect(read(file)).toContain('<SortCaret');
     });
+
+    // A second review pass found this was the one piece of the fix nothing
+    // pinned: SortCaretProps.test.tsx checks the component in isolation
+    // under jsdom, which has no layout, so it cannot see that the caret's
+    // svg is `display: block` by the global reset and breaks out of the
+    // header button's inline flow without this rule. Deleting the rule
+    // reintroduces the exact regression the fix commit measured live, with
+    // every other test in the suite staying green.
+    it('_components.css keeps the caret inline (the svg reset would otherwise wrap it onto its own line)', () => {
+      const components = read('styles/_components.css');
+      const block = components.match(/\.admin-th-sort-caret\s*\{([^}]*)\}/);
+      expect(block, 'expected an .admin-th-sort-caret rule near .admin-th-sort').not.toBeNull();
+      expect(block![1]).toMatch(/display:\s*inline-flex/);
+    });
   });
 
   describe('back-navigation uses a lucide ArrowLeft, not a unicode arrow', () => {
@@ -128,7 +142,15 @@ describe('one icon system (row 24)', () => {
     it.each(['_components.css', '_themes.css'] as const)(
       'no form-select rule in %s resets background-image via an !important shorthand without restoring it',
       (file) => {
-        const text = read(`styles/${file}`);
+        // Comments stripped first: a review gate found that the explanatory
+        // comment this fix itself leaves behind ("background-color, not the
+        // shorthand: ... background-image ...") contains the literal string
+        // "background-image:", which satisfied `restoresImage` below without
+        // an actual restoring declaration - the sweep was blind at exactly
+        // the site that motivated it. Verified by mutation: reintroducing
+        // the bug at _themes.css's light-mode block produced zero offenders
+        // before this fix, and is caught by name after it.
+        const text = read(`styles/${file}`).replace(/\/\*[\s\S]*?\*\//g, '');
         const offenders: string[] = [];
         // Matches `<selector list> { <body> }` blocks (no nested braces,
         // true of every rule in these two files).

@@ -39,7 +39,7 @@ describe('getStudyTypeGlyph', () => {
   // two independent implementations happen to agree.
   it.each([
     'test', 'interview', 'poll', 'survey', 'question', 'unmoderated',
-    'testpublished', 'unmoderateddraft', 'bogus', '',
+    'testpublished', 'unmoderateddraft', 'testclosed', 'bogus', '',
   ] as const)('a glyph exists exactly when getTypeBadgeClass renders a lozenge: %s', (type) => {
     expect(getStudyTypeGlyph(type) !== null).toBe(getTypeBadgeClass(type).startsWith('lozenge'));
   });

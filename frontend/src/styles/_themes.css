@@ -3217,7 +3217,10 @@ body.theme-light .leaderboard-row-number {
 /* The dark-mode medal colours (#D4AF37/#A8A9AD/#CD7F32 in _components.css)
    measured 1.89:1/2.11:1 against a light-theme row - under the 3:1 WCAG
    floor for a non-text graphic that is the only rank cue besides size.
-   Darkened for light mode only; each clears 4.5:1 on the row background. */
+   Darkened for light mode only, clearing 3:1 with room on a plain white
+   row (the gold row's own amber-tinted background brings gold closer to
+   4.5:1 by calculation, not measured live, but the applicable floor here
+   is 3:1 either way). */
 body.theme-light .leaderboard-row-medal--gold {
   color: #8C6D1F;
 }
