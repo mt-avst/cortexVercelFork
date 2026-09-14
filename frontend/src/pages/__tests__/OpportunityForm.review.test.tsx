@@ -250,11 +250,15 @@ beforeEach(() => {
 
 describe('Review is the only step that commits', () => {
   it.each([
+    // WZ-18 (Decision 9): every type that reaches Review is five steps and
+    // Review's previous is Consent - a hand-off's Consent step is a short
+    // confirmation, but it is a step all the same, so the count no longer jumps
+    // between four and five as the delivery mode changes.
     ['unmoderated', 5, 'Consent'],
-    ['poll', 4, 'External Link'],
-    ['question', 4, 'External Link'],
-    // Five since #79: Consent sits between Session Management and Review on
-    // the moderated pair, because Cortex now stores what those sessions agree
+    ['poll', 5, 'Consent'],
+    ['question', 5, 'Consent'],
+    // Five since #79 for the moderated pair too: Consent sits between Session
+    // Management and Review, because Cortex now stores what those sessions agree
     // to keep.
     ['test', 5, 'Consent'],
     ['interview', 5, 'Consent']
@@ -276,9 +280,13 @@ describe('Review is the only step that commits', () => {
       );
       expect(seen[seen.length - 1].step).toMatch(/Review/);
       expect(seen[seen.length - 1].commitControl).toBe('Create study');
-      // The step the author came from is named on the way back, and it differs
-      // per path - which is what makes this a check on five shapes rather than
-      // the same check five times.
+      // The step the author came from is named on the way back. Since WZ-18 it
+      // is Consent on all five shapes, but the walk length and the commit-free
+      // slots still vary per type, which is what makes this five shapes rather
+      // than the same shape five times. Consent's OWN previous (Task List /
+      // Questions / External Link / Session Management) is what proves the
+      // backward controls are list-derived, and that is pinned per path in the
+      // stepper suite.
       expect(
         screen.getByRole('button', { name: `Previous: ${stepBeforeReview}` })
       ).toBeInTheDocument();

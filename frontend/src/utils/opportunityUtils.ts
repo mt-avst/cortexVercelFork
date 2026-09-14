@@ -273,9 +273,10 @@ export const sortByClosingSoonest = <T extends Opportunity>(opportunities: T[]):
 
   // Three tiers, because a plain ascending sort gives an ENDED study the
   // smallest key of all and puts the longest-expired thing on the page at row
-  // one. Nothing closes an opportunity automatically - autoCloseOpportunityIfNeeded
-  // is only reachable from the /close-if-past route - so published-and-expired
-  // is a state a participant genuinely meets.
+  // one. Published studies are auto-closed at their end_date now (Decision 3),
+  // but the sweep runs hourly, so within the hour after a study ends it is
+  // still published-and-expired - a state a participant genuinely meets on a
+  // list that shows only published studies. The ended tier orders that window.
   const tierOf = (closesAt: Date | null): number => {
     if (!closesAt) return 1;             // unknown: after the open ones
     return closesAt.getTime() < now ? 2  // ended: last

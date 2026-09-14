@@ -1262,7 +1262,7 @@ export const MAX_OPPORTUNITY_SEARCH_LENGTH = 200;
  * a FOURTH one cannot repeat this a third time. That scan is the enforcement;
  * this comment is not.
  */
-const SINGLE_VALUE_FILTERS = ['type', 'q', 'status'] as const;
+const SINGLE_VALUE_FILTERS = ['type', 'q', 'status', 'scope'] as const;
 
 /**
  * The same guard for `GET /:id/sessions`. `from` is pushed straight into a
@@ -1356,7 +1356,14 @@ router.get('/', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req: Re
     const type = req.query.type as string | undefined;
     const q = req.query.q as string | undefined;
     const status = req.query.status as string | undefined;
+    // DECISION 2: the "Show all researchers" toggle. An admin's studies table
+    // scopes to their own studies when the toggle is off (`scope=mine`) and
+    // widens to every researcher when it is on (`scope=all`). Absent scope keeps
+    // today's behaviour - an admin sees every researcher's studies - so callers
+    // that never send it are unchanged. Non-admins never reach this branch.
+    const scope = req.query.scope as string | undefined;
     const isAdmin = isAdminRole(req.user?.role);
+    const scopeToOwnStudies = isAdmin && scope === 'mine' && Boolean(req.user?.id);
 
     if (q !== undefined && q.length > MAX_OPPORTUNITY_SEARCH_LENGTH) {
       return res.status(400).json({
@@ -1380,7 +1387,15 @@ router.get('/', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req: Re
       if (status) filters.status = status as string;
       else if (!isAdmin) filters.status = 'published'; // Default to published for non-admin
       
-      const opportunities = getMockOpportunities(filters);
+      let opportunities = getMockOpportunities(filters);
+      // Decision 2: mirror the DB path's owner scoping so the toggle behaves the
+      // same on the no-database fallback. Through `isOpportunityOwner`, not a
+      // bare column-to-caller equality, so the one owner-to-caller predicate the
+      // route layer is allowed to ask stays the only one (see
+      // owner-comparisons-go-through-the-helper.test.ts).
+      if (scopeToOwnStudies) {
+        opportunities = opportunities.filter((opp) => isOpportunityOwner(opp, req.user));
+      }
       res.json(isAdmin ? opportunities : opportunities.map(toPublicOpportunity));
       return;
     }
@@ -1413,7 +1428,16 @@ router.get('/', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req: Re
       // Non-admins may only ever see published studies, regardless of any status query param
       conditions.push(`o.status = 'published'`);
     }
-    
+
+    // Decision 2: scope the admin table to the caller's own studies when the
+    // "Show all researchers" toggle is off. Widening (scope=all) and absent both
+    // leave the table showing every researcher's studies, which is the current
+    // behaviour - this only ever NARROWS, so it is not a new exposure.
+    if (scopeToOwnStudies) {
+      conditions.push(`o.owner_user_id = $${params.length + 1}`);
+      params.push(req.user!.id);
+    }
+
     if (conditions.length > 0) {
       query += ` WHERE ${conditions.join(' AND ')}`;
     }
