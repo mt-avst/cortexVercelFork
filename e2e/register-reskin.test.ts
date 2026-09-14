@@ -363,6 +363,10 @@ test.describe('Orange primary in both themes (Decision 5)', () => {
   test('.fh-recording --accent resolves the one brand orange, not its old terracotta', async ({ page, baseURL }) => {
     test.skip(!PARTICIPANT_E2E_ENABLED, 'Set FIRSTHAND_PARTICIPANT_E2E=1 to run against a real local backend.');
 
+    // A fresh Playwright context carries no localStorage, so ThemeContext
+    // falls back to light - the register's dark half (this test's whole
+    // point, code-reviewer HIGH finding) would go untested without this.
+    await page.addInitScript(() => localStorage.setItem('theme', 'dark'));
     await loginAsParticipant(page);
     const mint = await page.request.post(
       `${baseURL}/api/opportunities/0aa00001-0000-4000-8000-00000000000c/recorded-study-session`,
@@ -373,12 +377,29 @@ test.describe('Orange primary in both themes (Decision 5)', () => {
 
     await page.goto(session_url);
     await expect(page.locator('.fh-recording').first()).toBeVisible();
-    const accent = await page
+    const style = await page
       .locator('.fh-recording')
       .first()
-      .evaluate((el) => getComputedStyle(el).getPropertyValue('--accent').trim());
+      .evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return { accent: cs.getPropertyValue('--accent').trim(), accentText: cs.getPropertyValue('--accent-text').trim(), bg: cs.getPropertyValue('--bg').trim() };
+      });
     // Pinned: was the literal #dd6e42 (terracotta), a different hue from the
     // rest of the brand. Now var(--brand-orange-500), #FF5A1F - resolved.
-    expect(accent.toLowerCase()).toBe('#ff5a1f');
+    expect(style.accent.toLowerCase()).toBe('#ff5a1f');
+
+    // code-reviewer HIGH finding: --accent-strong (a fill-safe token) was
+    // being read as text colour on this surface, measuring 3.41:1 in dark -
+    // below AA. --accent-text is the split-out text role; pin it AND prove
+    // it actually clears AA against the register ground it is read on,
+    // rather than only pinning the hex (a hex pin alone would not have
+    // caught the original bug - the wrong TOKEN was AA-safe too, just for a
+    // different background).
+    const parseHex = (hex: string): [number, number, number] => {
+      const h = hex.replace('#', '');
+      return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+    };
+    const ratio = contrastRatio(parseHex(style.accentText), parseHex(style.bg));
+    expect(ratio, `--accent-text ${style.accentText} on --bg ${style.bg} must clear AA (4.5:1)`).toBeGreaterThanOrEqual(4.5);
   });
 });
