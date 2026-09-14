@@ -68,6 +68,14 @@ export function OpportunityRow({ opportunity, role }: OpportunityRowProps) {
   // completion; the action word just stops promising a fresh start.
   const isCompleted = Boolean(opportunity.completion?.completed);
 
+  // Fix-first row 7 (second-pass review). The action word used to come from
+  // the TYPE alone, with no regard for whether the study could still be
+  // taken part in - "Start recorded session" on something that closed 40
+  // days ago is a promise the click cannot keep. `remaining` is the same
+  // countdown the meta line already prints "Ended" from, so this cannot
+  // disagree with what the row tells the reader two lines up.
+  const hasEnded = remaining.urgency === 'ended';
+
   return (
     <li className="opportunity-row">
       {/* No aria-label. An explicit label REPLACES the link's content as its
@@ -135,7 +143,7 @@ export function OpportunityRow({ opportunity, role }: OpportunityRowProps) {
             <Check size={16} aria-hidden="true" />
             Completed
           </span>
-        ) : (
+        ) : hasEnded ? null : (
           <span className="opportunity-row__action">
             {getParticipantActionLabel(opportunity.type)}
             <ArrowRight size={16} />

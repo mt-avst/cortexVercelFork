@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Navigate, useParams } from "react-router-dom";
+import { Link, Navigate, useParams } from "react-router-dom";
 
 import { useAuth } from "../contexts/AuthContext";
 import { getApiBaseUrl } from "../config/api";
@@ -18,10 +18,13 @@ import { buildParticipantReturnUrl } from "../lib/recording/participant-return";
  * the placeholder that lived there since v6.0.0 has been removed rather than
  * left to look like a route that works.
  *
- * Deliberately NOT chrome-less like the recording surface. That one takes the
- * screen over because a recording is running and a stray click costs the
- * session; a survey is an ordinary page and a participant who wants to leave
- * should have the normal way out.
+ * Chrome-less like the recording surface (row 22, second-pass review): no
+ * header nav, no footer feedback form stacked under an in-progress answer.
+ * Unlike the recording surface, this is NOT a trap - a survey carries no
+ * in-progress capture a stray click could cost, and this page supplies its
+ * own explicit "Back to Cortex" exit (below) rather than relying on the
+ * chrome that used to sit around it. There is also no ambient `<main>`
+ * landmark once the chrome is gone, so this page supplies its own.
  */
 export default function SurveySession() {
   const { user, loading, initialAuthCheck } = useAuth();
@@ -96,19 +99,22 @@ export default function SurveySession() {
 
   if (error) {
     return (
-      <div className="container mt-4">
+      <main id="main-content" role="main" className="container mt-4">
         <div className="alert alert-warning" role="alert">
           {error}
         </div>
-      </div>
+        <Link to="/" className="btn btn-outline-secondary mt-3">
+          ← Back to Cortex
+        </Link>
+      </main>
     );
   }
 
   if (!payload) {
     return (
-      <div className="container mt-4">
+      <main id="main-content" role="main" className="container mt-4">
         <p className="text-muted">Opening the survey...</p>
-      </div>
+      </main>
     );
   }
 
@@ -121,7 +127,7 @@ export default function SurveySession() {
       : null;
 
     return (
-      <div className="container mt-4">
+      <main id="main-content" role="main" className="container mt-4">
         <div className="alert alert-success" role="status">
           Thanks - your answers have been sent to the research team.
         </div>
@@ -136,14 +142,25 @@ export default function SurveySession() {
           >
             Back to the study
           </a>
-        ) : null}
-      </div>
+        ) : (
+          <Link to="/" className="btn btn-outline-secondary">
+            ← Back to Cortex
+          </Link>
+        )}
+      </main>
     );
   }
 
   return (
-    <div className="container mt-4">
+    <main id="main-content" role="main" className="container mt-4">
+      {/* Row 22: the only exit this page offers while the survey is still in
+          progress - without the standard chrome there is no header nav to
+          fall back on, and unlike the recording surface this page is not
+          meant to trap anyone. */}
+      <Link to="/" className="btn btn-outline-secondary mb-3">
+        ← Back to Cortex
+      </Link>
       <SurveyRunner payload={payload} onComplete={() => setComplete(true)} />
-    </div>
+    </main>
   );
 }

@@ -121,6 +121,36 @@ describe('OpportunityDetail call to action', () => {
     expect(screen.getByRole('button', { name: /open survey/i })).toBeEnabled();
   });
 
+  // Fix-first row 21 (second-pass review). A pre-DT-8 generic "Opens in a new
+  // tab" line and the newer, named ExternalDestinationNote ("Opens
+  // example.com in a new tab. You're leaving Cortex.") both rendered on the
+  // same button path, so an external poll or survey carried the disclosure
+  // twice - once naming the destination, once not.
+  it('drops the unnamed disclosure once the named one exists, on an external survey', async () => {
+    load({
+      delivery_mode: 'external',
+      external_link_optional: 'https://example.com/survey',
+    });
+    renderDetail();
+    await screen.findByText(base.title);
+
+    expect(screen.queryByText('Opens in a new tab')).toBeNull();
+    expect(screen.getByText(/opens example\.com in a new tab/i)).toBeVisible();
+  });
+
+  it('drops the unnamed disclosure once the named one exists, on a recorded study with no linked study', async () => {
+    load({
+      type: 'unmoderated',
+      firsthand_study_id: undefined,
+      external_link_optional: 'https://example.com/study',
+    });
+    renderDetail();
+    await screen.findByText(base.title);
+
+    expect(screen.queryByText('Opens in a new tab')).toBeNull();
+    expect(screen.getByText(/opens example\.com in a new tab/i)).toBeVisible();
+  });
+
   /**
    * A native poll's visible label is "Start poll". Its accessible name fell
    * through to the generic native branch and announced "Start survey in
@@ -164,6 +194,76 @@ describe('OpportunityDetail call to action', () => {
     await screen.findByText(base.title);
 
     expect(screen.getByRole('button', { name: /open study/i })).toBeDisabled();
+  });
+
+  // Fix-first row 7 (second-pass review). `hasStartablePath` checked only
+  // whether a study was LINKED, never whether it was still open - a native
+  // survey with `end_date` in the past stayed enabled and minted a session
+  // for a study that had already closed, with nothing on the page saying so.
+  // The `hasEnded` check is now hoisted above every type branch (adversarial
+  // review: it was only checked inside the button branch, so an external
+  // `question` - the one type that skips that branch - still handed off) so
+  // a closed study renders no CTA at all, native or external alike.
+  it('offers no Start button once the study has closed, and says when it closed', async () => {
+    load({
+      delivery_mode: 'native',
+      firsthand_study_id: 'study_questions',
+      end_date: new Date(Date.now() - 40 * 86400000).toISOString(),
+    });
+    renderDetail();
+    await screen.findByText(base.title);
+
+    expect(
+      screen.queryByRole('button', { name: /start survey in Cortex/i })
+    ).toBeNull();
+    expect(screen.getByText(/this study closed on/i)).toBeVisible();
+  });
+
+  // Adversarial review finding: `hasEnded` was only checked inside the BUTTON
+  // branch. An external `question` reaches ExternalHandoff instead (it is
+  // the one type that does not join the button branch when delivered
+  // externally), which had no `hasEnded` check at all - a closed external
+  // question still handed a participant off to the external form.
+  it('refuses the hand-off for an external question once the study has closed', async () => {
+    load({
+      type: 'question',
+      delivery_mode: 'external',
+      external_link_optional: 'https://example.com/question',
+      end_date: new Date(Date.now() - 40 * 86400000).toISOString(),
+    });
+    renderDetail();
+    await screen.findByText(base.title);
+
+    expect(screen.queryByRole('link', { name: /answer question/i })).toBeNull();
+    expect(screen.getByText(/this study closed on/i)).toBeVisible();
+  });
+
+  it('still hands off an external question that has not closed', async () => {
+    load({
+      type: 'question',
+      delivery_mode: 'external',
+      external_link_optional: 'https://example.com/question',
+      end_date: new Date(Date.now() + 4 * 86400000).toISOString(),
+    });
+    renderDetail();
+    await screen.findByText(base.title);
+
+    expect(screen.getByRole('link', { name: /answer question/i })).toBeVisible();
+  });
+
+  it('keeps the Start button live for a study that has not yet closed', async () => {
+    load({
+      delivery_mode: 'native',
+      firsthand_study_id: 'study_questions',
+      end_date: new Date(Date.now() + 4 * 86400000).toISOString(),
+    });
+    renderDetail();
+    await screen.findByText(base.title);
+
+    expect(
+      screen.getByRole('button', { name: /start survey in Cortex/i })
+    ).toBeEnabled();
+    expect(screen.queryByText(/this study closed on/i)).toBeNull();
   });
 });
 
