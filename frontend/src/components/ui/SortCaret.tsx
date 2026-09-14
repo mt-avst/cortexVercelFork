@@ -21,5 +21,3 @@ export function SortCaret({ active, direction }: SortCaretProps) {
     </span>
   );
 }
-
-export default SortCaret;

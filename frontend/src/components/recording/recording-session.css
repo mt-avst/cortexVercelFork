@@ -1249,6 +1249,8 @@
 
 .fh-recording .journey-vtick {
   flex: none;
+  display: grid;
+  place-items: center;
   width: 16px;
   height: 16px;
   margin-top: 1px;
@@ -1256,8 +1258,6 @@
   border-radius: 3px;
   font-family: var(--font-mono), monospace;
   font-size: 10px;
-  line-height: 13px;
-  text-align: center;
   color: transparent;
 }
 

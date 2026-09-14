@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, readdirSync } from 'fs';
 import { join } from 'path';
 
 /**
@@ -79,6 +79,15 @@ describe('one icon system (row 24)', () => {
     it('neither theme re-locks .admin-stat-card .stat-icon in _themes.css', () => {
       expect(themes).not.toMatch(/body\.theme-(dark|light) \.admin-stat-card \.stat-icon\s*\{/);
     });
+
+    // The same duplicate-lock shape existed a second time, on the analytics
+    // card icon, and was missed in the first pass of this file: a review
+    // gate found it by re-measuring the live page. Both theme blocks are
+    // deleted now (the component rule is already theme-aware); this pins
+    // that they do not come back.
+    it('neither theme re-locks .cortex-analytics-card-icon in _themes.css', () => {
+      expect(themes).not.toMatch(/body\.theme-(dark|light) \.cortex-analytics-card-icon\s*\{/);
+    });
   });
 
   describe('the CSS select chevron is no longer squashed (16x16 viewBox rendered into a 16x12 box)', () => {
@@ -105,6 +114,41 @@ describe('one icon system (row 24)', () => {
       expect(block![1]).not.toMatch(/\n\s*background:\s*rgba/);
       expect(block![1]).toMatch(/background-color:\s*rgba\([^)]*\)\s*!important/);
     });
+
+    // General sweep, not just the two instances found by hand: an
+    // `!important` `background` SHORTHAND on any rule naming form-select
+    // resets `background-image` to `none` as an unspecified sub-value,
+    // silently deleting the chevron - unless the SAME rule also sets
+    // `background-image` explicitly afterwards (several rules in
+    // _themes.css do exactly that, correcting themselves within one block,
+    // and are not a defect). A rule that resets the image and never
+    // restores it in the same block is the real bug shape: found twice this
+    // way already (_components.css rest and :focus states, _themes.css's
+    // `select.form-select` variant outranking the plain chevron rule).
+    it.each(['_components.css', '_themes.css'] as const)(
+      'no form-select rule in %s resets background-image via an !important shorthand without restoring it',
+      (file) => {
+        const text = read(`styles/${file}`);
+        const offenders: string[] = [];
+        // Matches `<selector list> { <body> }` blocks (no nested braces,
+        // true of every rule in these two files).
+        const blockRe = /([^{}]+)\{([^{}]*)\}/g;
+        let m: RegExpExecArray | null;
+        while ((m = blockRe.exec(text))) {
+          const [, selector, body] = m;
+          if (!/form-select/.test(selector)) continue;
+          // A native <option> is rendered by the OS's own popup, never by
+          // the page's background-image, so a shorthand there cannot delete
+          // a chevron - excluded rather than a false positive to chase.
+          if (/form-select\s+option/.test(selector)) continue;
+          const shorthandImportant = /(?<![-\w])background\s*:\s*[^;]*!important/.test(body);
+          if (!shorthandImportant) continue;
+          const restoresImage = /background-image\s*:/.test(body);
+          if (!restoresImage) offenders.push(selector.trim().replace(/\s+/g, ' '));
+        }
+        expect(offenders, `shorthand resets the chevron without restoring it:\n${offenders.join('\n')}`).toEqual([]);
+      }
+    );
   });
 
   describe('the two orphan image assets are gone', () => {
@@ -136,15 +180,26 @@ describe('one icon system (row 24)', () => {
     // one of those three.
     const RETIRED_TIME_ICONS = ['CalendarClock', 'CalendarRange', 'CalendarCheck', 'CalendarDays', 'Timer'];
 
-    it('no .tsx file under src imports a retired time-metaphor icon from lucide-react', () => {
-      // Whole-tree, case-sensitive (these are exact export names): every
-      // .tsx file under frontend/src, excluding node_modules and dist.
-      const { execSync } = require('child_process');
-      const output = execSync(
-        `grep -rl "from 'lucide-react'" --include='*.tsx' "${SRC}" || true`,
-        { encoding: 'utf8' }
-      );
-      const files = output.split('\n').filter(Boolean);
+    /** Every .ts/.tsx file under `dir`, skipping node_modules-shaped dirs. */
+    function listSourceFiles(dir: string): string[] {
+      const out: string[] = [];
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) {
+          out.push(...listSourceFiles(full));
+        } else if (/\.tsx?$/.test(entry.name)) {
+          out.push(full);
+        }
+      }
+      return out;
+    }
+
+    it('no .ts/.tsx file under src imports a retired time-metaphor icon from lucide-react', () => {
+      // Whole tree, case-sensitive (these are exact export names): every
+      // .ts/.tsx file under frontend/src. A .tsx-only sweep would miss a
+      // retired icon re-exported or imported from a plain .ts module.
+      const files = listSourceFiles(SRC);
       expect(files.length).toBeGreaterThan(0);
 
       const offenders: string[] = [];

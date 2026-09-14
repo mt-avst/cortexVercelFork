@@ -36,5 +36,3 @@ export function StepMarker({ index, done, variant }: StepMarkerProps) {
     </span>
   );
 }
-
-export default StepMarker;

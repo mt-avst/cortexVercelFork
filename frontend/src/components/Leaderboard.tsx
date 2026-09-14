@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { gamificationApi, gamificationUtils, LeaderboardEntry } from '../api/gamification';
 import LoadingSpinner from './LoadingSpinner';
 import { AlertTriangle, Trophy, Calendar, History, Medal } from 'lucide-react';
-import { Icon } from './ui';
 
 interface LeaderboardProps {
   limit?: number;
@@ -107,7 +106,14 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ limit = 20 }) => {
         <div className="leaderboard-row-rank">
           {medalRankClass ? (
             <span className={`leaderboard-row-medal ${medalRankClass}`}>
-              <Icon icon={Medal} size={20} aria-hidden="true" />
+              {/* Not the <Icon> wrapper: its rendered size here is set in CSS
+                  (`em`, scaled by the rank-gold/-silver/-bronze font-size
+                  overrides below, matching what the medal emoji it replaced
+                  scaled by), not by the `size` prop, so Icon's
+                  absoluteStrokeWidth would compute the wrong weight for the
+                  size actually painted. */}
+              <Medal size={20} aria-hidden="true" />
+              <span className="visually-hidden">Rank {entry.rank}</span>
             </span>
           ) : (
             <span className="leaderboard-row-number">#{entry.rank}</span>

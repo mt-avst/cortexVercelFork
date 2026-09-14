@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { getStudyTypeGlyph, STUDY_TYPE_KEYS } from '../studyTypeIcons';
+import { getTypeBadgeClass } from '../opportunityUtils';
 
 /**
  * Decision 6 (second-pass review, decided 2026-09-13): the six-colour
@@ -28,5 +29,23 @@ describe('getStudyTypeGlyph', () => {
     expect(getStudyTypeGlyph('bogus')).toBeNull();
     expect(getStudyTypeGlyph(null)).toBeNull();
     expect(getStudyTypeGlyph(undefined)).toBeNull();
+  });
+
+  // A review gate flagged that `getTypeBadgeClass` and `getCardHoverColor`
+  // each carried their own copy of the status-suffix-stripping logic
+  // `baseTypeOf` claims to centralise, so a glyph and its lozenge colour
+  // could in principle drift onto different types. Both now call the same
+  // `baseTypeOf`; this pins the coupling directly rather than trusting that
+  // two independent implementations happen to agree.
+  it.each([
+    'test', 'interview', 'poll', 'survey', 'question', 'unmoderated',
+    'testpublished', 'unmoderateddraft', 'bogus', '',
+  ] as const)('a glyph exists exactly when getTypeBadgeClass renders a lozenge: %s', (type) => {
+    expect(getStudyTypeGlyph(type) !== null).toBe(getTypeBadgeClass(type).startsWith('lozenge'));
+  });
+
+  it('a glyph exists exactly when getTypeBadgeClass renders a lozenge: null/undefined', () => {
+    expect(getStudyTypeGlyph(null) !== null).toBe(getTypeBadgeClass(null).startsWith('lozenge'));
+    expect(getStudyTypeGlyph(undefined) !== null).toBe(getTypeBadgeClass(undefined).startsWith('lozenge'));
   });
 });

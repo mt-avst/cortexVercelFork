@@ -800,7 +800,7 @@ const OpportunityDetail: React.FC = () => {
               className="btn btn-sm btn-outline-secondary"
               onClick={() => navigate('/')}
             >
-              <ArrowLeft size={16} className="me-1" aria-hidden="true" />
+              <Icon icon={ArrowLeft} size={16} className="me-1" aria-hidden="true" />
               Back to Cortex
             </button>
           </div>
@@ -856,7 +856,7 @@ const OpportunityDetail: React.FC = () => {
             onClick={() => navigate('/')}
             aria-label="Navigate back to Cortex home"
           >
-            <ArrowLeft size={16} className="me-1" aria-hidden="true" />
+            <Icon icon={ArrowLeft} size={16} className="me-1" aria-hidden="true" />
             Back to Cortex
           </button>
 

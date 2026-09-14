@@ -50,12 +50,16 @@ describe('Icon', () => {
     expect(svg?.getAttribute('class')).toContain('opportunity-row__icon');
   });
 
-  it('only accepts the four canonical sizes at the type level', () => {
-    // Compile-time guard, exercised at runtime as a no-op: TypeScript should
-    // refuse a fifth size. This assertion is the readable half of that; the
-    // enforcement is `npm run typecheck` failing if IconSize ever widens
-    // silently to `number`.
-    const allowed: ReadonlyArray<14 | 16 | 20 | 24> = [14, 16, 20, 24];
-    expect(allowed).toHaveLength(4);
+  it('rejects a non-canonical size at compile time (enforced by npm run typecheck)', () => {
+    // A review gate found the previous version of this test asserted a
+    // locally-declared array had length 4, which cannot fail for the reason
+    // its name gave. This one actually exercises the type: `size={18}`
+    // must be a type error, or `@ts-expect-error` itself errors ("unused
+    // directive") and `npm run typecheck` fails for real.
+    const renderWithInvalidSize = () => (
+      // @ts-expect-error - 18 is not one of the four canonical IconSize values
+      <Icon icon={ArrowRight} size={18} aria-hidden="true" />
+    );
+    expect(typeof renderWithInvalidSize).toBe('function');
   });
 });

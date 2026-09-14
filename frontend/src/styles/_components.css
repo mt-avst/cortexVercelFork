@@ -5693,6 +5693,18 @@ body.theme-dark .legend-label-past {
   border-radius: 2px;
 }
 
+/* The caret used to be a `' ↑'`/`' ↓'` text node, which stayed
+   inline by default. `_reset.css` sets `svg { display: block }`, so the
+   lucide glyph SortCaret now renders breaks the inline flow and drops onto
+   its own line unless told otherwise; `margin-inline-start` replaces the
+   leading space the old string carried. */
+.admin-th-sort-caret {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: -0.15em;
+  margin-inline-start: 4px;
+}
+
 .admin-th-title {
   cursor: pointer;
   user-select: none;
@@ -5718,14 +5730,12 @@ body.theme-dark .legend-label-past {
 
 /* Admin action button (kebab menu) */
 .admin-action-btn-kebab {
-  font-size: 18px;
-  font-weight: bold;
   padding: 4px 10px;
 }
 
 /* The shared Dropdown marks its trigger `.dropdown-toggle`, which paints a
-   caret via ::after. The kebab is a bare ⋮ glyph and wants none - suppress it
-   just for this trigger (#117). */
+   caret via ::after. The kebab is a lucide MoreVertical icon and wants none -
+   suppress it just for this trigger (#117). */
 .admin-action-btn-kebab.dropdown-toggle::after {
   content: none;
 }
@@ -11339,7 +11349,9 @@ body.theme-dark textarea.form-control {
 body.theme-dark .form-control:focus,
 body.theme-dark .form-select:focus,
 body.theme-dark textarea.form-control:focus {
-  background: rgba(255, 255, 255, 0.05) !important;
+  /* background-color, not the shorthand: see the rest-state rule above for
+     why the shorthand silently deletes the select chevron on focus. */
+  background-color: rgba(255, 255, 255, 0.05) !important;
   border-color: var(--color-brand-orange) !important;
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-orange-500) 20%, transparent) !important; /* Orange glow */
   outline: none;

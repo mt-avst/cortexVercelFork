@@ -154,6 +154,18 @@ describe('Admin page', () => {
     expect(screen.getByText('Active studies')).toBeInTheDocument();
   });
 
+  it('renders a lucide glyph in the study-type lozenge (Decision 6)', async () => {
+    // A review gate found that studyTypeIcons.ts was tested only in
+    // isolation - removing the glyph from Admin.tsx's own JSX would have
+    // kept the whole suite green. The fixture study is `type: 'test'`
+    // ("Live" per getAdminTypeLabel).
+    renderAdmin();
+
+    const typeCell = (await screen.findByText('Live')).closest('.lozenge');
+    expect(typeCell).not.toBeNull();
+    expect(typeCell!.querySelector('svg.lozenge__glyph')).not.toBeNull();
+  });
+
   it('offers Analytics in the row menu for a moderated (test) study', async () => {
     // Row 4: Analytics used to be gated to poll/survey/unmoderated, so a
     // moderated study - the fixture is a `test` - had no way through to its

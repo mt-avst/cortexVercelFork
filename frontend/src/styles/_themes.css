@@ -587,7 +587,12 @@ body.theme-light .form-select,
 body.theme-light input.form-control,
 body.theme-light select.form-select,
 body.theme-light textarea.form-control {
-  background: #F8FAFC !important; /* Light slate fill for visibility against white card */
+  /* background-color, not the shorthand: `body.theme-light select.form-select`
+     here outranks the plain `.form-select` chevron rule below on a real
+     <select> element (an extra element-type selector raises specificity),
+     so the shorthand's implicit `background-image: none` was winning and
+     deleting the chevron on every plain light-mode select. */
+  background-color: #F8FAFC !important; /* Light slate fill for visibility against white card */
   border: 1px solid #CBD5E1 !important; /* Defined edge for clarity */
   color: #334155 !important; /* Entered/typed text and selected value - dark on white */
 }
@@ -1909,10 +1914,12 @@ body.theme-dark .cortex-analytics-card-title {
   color: var(--color-slate-400);
 }
 
-body.theme-dark .cortex-analytics-card-icon {
-  color: var(--color-slate-400);
-  opacity: 0.7;
-}
+/* A theme-scoped `.cortex-analytics-card-icon` override used to sit here,
+   opacity 0.7, more specific than the component-level fix in
+   _components.css and so still dimming the icon underneath it - the same
+   duplicate-lock shape found and removed on .stat-icon above. Removed for
+   the same reason: no override here lets the theme-aware component rule
+   apply. */
 
 /* ENFORCED: All stat values are white by default */
 body.theme-dark .cortex-stat-value {
@@ -2043,10 +2050,8 @@ body.theme-light .cortex-analytics-card-title {
   color: var(--fs-muted);
 }
 
-body.theme-light .cortex-analytics-card-icon {
-  color: var(--fs-muted);
-  opacity: 0.75;
-}
+/* Same duplicate-lock shape as the dark-mode block above (opacity 0.75,
+   more specific than the component rule): removed for the same reason. */
 
 body.theme-light .cortex-stat-value {
   color: var(--fs-ink) !important;
@@ -3207,6 +3212,22 @@ body.theme-light .leaderboard-row-name {
 
 body.theme-light .leaderboard-row-number {
   color: #6B7280;
+}
+
+/* The dark-mode medal colours (#D4AF37/#A8A9AD/#CD7F32 in _components.css)
+   measured 1.89:1/2.11:1 against a light-theme row - under the 3:1 WCAG
+   floor for a non-text graphic that is the only rank cue besides size.
+   Darkened for light mode only; each clears 4.5:1 on the row background. */
+body.theme-light .leaderboard-row-medal--gold {
+  color: #8C6D1F;
+}
+
+body.theme-light .leaderboard-row-medal--silver {
+  color: #6B6D70;
+}
+
+body.theme-light .leaderboard-row-medal--bronze {
+  color: #8C5524;
 }
 
 body.theme-light .leaderboard-row-score {

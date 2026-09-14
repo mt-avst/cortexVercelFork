@@ -8,7 +8,7 @@ import type { LucideIcon, LucideProps } from 'lucide-react';
  */
 export type IconSize = 14 | 16 | 20 | 24;
 
-export interface IconProps extends Omit<LucideProps, 'size' | 'ref'> {
+export interface IconProps extends Omit<LucideProps, 'size' | 'ref' | 'absoluteStrokeWidth'> {
   /** The lucide component to render, e.g. `icon={ArrowRight}`. */
   icon: LucideIcon;
   size?: IconSize;
@@ -28,5 +28,3 @@ export const Icon = forwardRef<SVGSVGElement, IconProps>(
 );
 
 Icon.displayName = 'Icon';
-
-export default Icon;

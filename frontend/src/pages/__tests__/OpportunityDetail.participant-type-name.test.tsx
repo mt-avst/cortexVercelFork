@@ -109,4 +109,15 @@ describe('OpportunityDetail type badge', () => {
     await screen.findByText(recordedStudy.title);
     expect(container.textContent).not.toMatch(/published/i);
   });
+
+  it('renders a lucide glyph in the hero badge (Decision 6), not just a label', async () => {
+    // studyTypeIcons.test.ts tests the type-to-glyph map in isolation; a
+    // review gate found that removing the glyph from this page's own JSX
+    // would keep the whole suite green regardless.
+    const { container } = renderDetail();
+    await screen.findByText(recordedStudy.title);
+
+    const badgeRow = container.querySelector('.mission-brief-content > div');
+    expect(badgeRow?.querySelector('svg.lozenge__glyph')).not.toBeNull();
+  });
 });
