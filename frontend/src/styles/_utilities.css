@@ -282,6 +282,9 @@
 .lowercase { text-transform: lowercase; }
 .capitalize { text-transform: capitalize; }
 .normal-case { text-transform: none; }
+/* Bootstrap-named alias: eight components reference this class and none of
+   them define it - there is no Bootstrap stylesheet loaded to supply it. */
+.text-uppercase { text-transform: uppercase; }
 
 /* Decoration */
 .underline { text-decoration: underline; }
