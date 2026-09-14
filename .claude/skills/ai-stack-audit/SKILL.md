@@ -65,7 +65,7 @@ Copy `references/stack-map.html` as the starting point and populate it entirely 
 - The stack bands, counts and session-load figure are filled from the inventory verbatim - the map must reconcile with the numbers.
 - The audit panel lists surviving findings, most severe first, each with its evidence path and one-line fix. If there are none, show the "clean" state, not an empty box.
 - The **way-of-working pipeline** is a REQUIRED part of the map whenever the stack encodes a workflow (a development-workflow, testing or code-review rule - the usual case). Derive its stages from those rules and draw it as an inline SVG; the template ships a worked pipeline to adapt, not to copy blindly. This is the *visualise* half of the skill - do not skip it because a similar diagram exists elsewhere, because the audit alone looks sufficient, or to save time. Omit it ONLY for a bare setup with no workflow rules at all, and say so explicitly in the page.
-- Load `artifact-design` before writing the page and follow it; keep the treatment the template sets. Then publish with the Artifact tool and hand back the link.
+- The template already carries a complete, considered design system - keep its treatment and fill every section faithfully from the inventory. You do not need any external design skill; if your Claude Code happens to have an `artifact-design` skill it is a bonus to load first, but most machines will not have it and the template stands on its own. Then publish with the Artifact tool and hand back the link; where that tool is unavailable, write the finished HTML to a file and hand that over instead.
 
 ### 4. Make the report downloadable (HTML + SVG)
 
