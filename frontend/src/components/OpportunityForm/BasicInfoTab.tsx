@@ -61,12 +61,47 @@ const formatDateToISO = (dateValue: string): string | undefined => {
   return date.toISOString();
 };
 
+/**
+ * The one-line gloss under the study-type select, or '' when no type is chosen.
+ *
+ * Returned as a string so the caller can render the help slot only when there is
+ * something to say - the slot used to reserve a fixed ~2.5rem height holding a
+ * single space, an empty grey gap above the select before a type was picked
+ * (Lane C "Then"). The "question sessions" line here was already corrected in
+ * #78: a `question` has no Session Management step and books nothing.
+ */
+const typeHintFor = (type: string, deliveryMode: string): string => {
+  if (type === 'test' || type === 'interview') {
+    return 'Creates bookable time slots for interactive sessions';
+  }
+  if (type === 'question') {
+    return deliveryMode === 'native'
+      ? 'One question, answered in Cortex'
+      : 'Opens an external tool for a single question';
+  }
+  if (type === 'poll') {
+    return deliveryMode === 'native'
+      ? 'Quick responses, answered in Cortex'
+      : 'Opens an external poll tool for quick responses';
+  }
+  if (type === 'survey') {
+    return deliveryMode === 'native'
+      ? 'Detailed feedback, answered in Cortex'
+      : 'Opens an external survey tool for detailed feedback';
+  }
+  if (type === 'unmoderated') {
+    return 'Self-guided, recorded in the browser';
+  }
+  return '';
+};
+
 const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
   formData,
   validationErrors,
   handleInputChange,
   handleBlur
 }) => {
+  const typeHint = typeHintFor(formData.type, formData.delivery_mode ?? 'external');
   // An explicit clear (value === '') always propagates, setting the field to
   // undefined. Anything else that fails to parse is a mid-edit keystroke, not
   // a deliberate clear, so it is ignored - the previous value in formData
@@ -103,27 +138,14 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
               <label htmlFor="type" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5' }}>
                 Research Study Type *
               </label>
-              <div id="type-help" className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4' }}>
-                {(formData.type === 'test' || formData.type === 'interview') && 'Creates bookable time slots for interactive sessions'}
-                {/* This said "Creates bookable time slots for question
-                    sessions", which was never true - a `question` has no
-                    Session Management step and books nothing. Corrected while
-                    #78 gave it the native option the other two already had. */}
-                {formData.type === 'question' &&
-                  (formData.delivery_mode === 'native'
-                    ? 'One question, answered in Cortex'
-                    : 'Opens an external tool for a single question')}
-                {formData.type === 'poll' &&
-                  (formData.delivery_mode === 'native'
-                    ? 'Quick responses, answered in Cortex'
-                    : 'Opens an external poll tool for quick responses')}
-                {formData.type === 'survey' &&
-                  (formData.delivery_mode === 'native'
-                    ? 'Detailed feedback, answered in Cortex'
-                    : 'Opens an external survey tool for detailed feedback')}
-                {formData.type === 'unmoderated' && 'Self-guided, recorded in the browser'}
-                {!formData.type && ' '}
-              </div>
+              {/* Rendered only when a type is chosen (Lane C "Then"): before
+                  then this reserved a fixed ~2.5rem help slot holding a single
+                  space, an empty grey gap above the select. */}
+              {typeHint && (
+                <div id="type-help" className="form-text mb-2" style={{ fontSize: '0.875rem', lineHeight: '1.4' }}>
+                  {typeHint}
+                </div>
+              )}
               <select
                 id="type"
                 className={`form-select ${validationErrors.type ? 'is-invalid' : ''}`}
@@ -131,7 +153,14 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                 value={formData.type}
                 onChange={(e) => handleInputChange('type', e.target.value)}
                 onBlur={() => handleBlur?.('type')}
-                aria-describedby={validationErrors.type ? 'type-error type-help' : 'type-help'}
+                aria-describedby={
+                  [
+                    validationErrors.type ? 'type-error' : null,
+                    typeHint ? 'type-help' : null
+                  ]
+                    .filter(Boolean)
+                    .join(' ') || undefined
+                }
                 aria-invalid={validationErrors.type ? 'true' : 'false'}
                 aria-required="true"
                 required

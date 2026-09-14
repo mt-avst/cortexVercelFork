@@ -63,4 +63,26 @@ describe('BasicInfoTab research study type options', () => {
     expect(select.textContent).not.toMatch(/user test/i);
     expect(select.textContent).not.toMatch(/unmoderated/i);
   });
+
+  it('reserves no empty hint slot before a type is chosen (Lane C "Then")', () => {
+    // With no type selected there is no hint to show; the help element (which
+    // used to reserve a fixed ~2.5rem gap holding a single space) must not be
+    // rendered at all, so the label sits straight above the select.
+    const { container } = renderTab();
+    expect(container.querySelector('#type-help')).toBeNull();
+  });
+
+  it('shows the hint, in the help slot, once a type is chosen', () => {
+    const { container } = render(
+      <BasicInfoTab
+        formData={{ ...formData, type: 'unmoderated' } as unknown as OpportunityFormData}
+        validationErrors={{}}
+        handleInputChange={vi.fn()}
+        handleBlur={vi.fn()}
+      />
+    );
+    const help = container.querySelector('#type-help');
+    expect(help).not.toBeNull();
+    expect(help!.textContent).toMatch(/Self-guided, recorded in the browser/i);
+  });
 });

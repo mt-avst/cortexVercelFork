@@ -1894,7 +1894,17 @@ const OpportunityForm: React.FC = () => {
 
     // Only validate meeting location and duration for test and interview type opportunities
     if (formData.type === 'test' || formData.type === 'interview') {
-      if (!formData.meeting_location_optional || !formData.meeting_location_optional.trim()) {
+      // The venue is a PUBLISH requirement, not a step-1 one (row 9). A draft
+      // author who has not booked a room yet can still fill in the rest and move
+      // on; the same empty location is refused only when the study is published,
+      // by the shared publish gate (`findPublishProblem` ->
+      // `meeting_location_required`), which Review previews and Submit enforces.
+      // Gated on `status === 'published'` the same way the unmoderated task-list
+      // check below is, so a published edit still cannot clear the field.
+      if (
+        formData.status === 'published' &&
+        (!formData.meeting_location_optional || !formData.meeting_location_optional.trim())
+      ) {
         errors.meeting_location_optional = 'Enter where the session takes place';
       }
       // Moderated consent (#79) is OPTIONAL - a session that stores nothing
@@ -2581,7 +2591,15 @@ const OpportunityForm: React.FC = () => {
      * the same set, and this mirrors `shareLinkStartable` below rather than
      * duplicating the server's `end_time > NOW()` clock here.
      */
-    hasBookableSlot: sessions.length > 0
+    hasBookableSlot: sessions.length > 0,
+    /*
+     * Preview parity for the meeting-location gate (row 9). The venue moved off
+     * step 1 onto the publish arm, so Review previews its absence the same way
+     * it previews a missing slot. `=== false` fires only for the moderated
+     * types (the predicate gates on them); every other shape passes a value the
+     * gate never reads.
+     */
+    hasMeetingLocation: (formData.meeting_location_optional ?? '').trim().length > 0
     /*
      * `removingLinkedStudy` is deliberately not passed, and it is not an
      * oversight. The server words its refusal differently for a caller TAKING
@@ -5494,6 +5512,24 @@ const OpportunityForm: React.FC = () => {
                             onBackLabel={previousStep?.title}
                             onContinue={continueControl?.onNext}
                             onContinueLabel={nextStep?.title}
+                            /*
+                             * The step's footer is the shared StepActions row
+                             * now (row 2), so it takes the same save controls
+                             * every other step's StepActions does. Rendered
+                             * inside AdminSessionManager rather than here because
+                             * the pending-selection "Confirm & continue" footer
+                             * (which commits a slot selection before advancing)
+                             * lives with the selection state in that component;
+                             * splitting the two footers across the boundary
+                             * would double the navigation controls whenever a
+                             * selection is pending.
+                             */
+                            isEdit={isEdit}
+                            saving={saving}
+                            justSaved={Boolean(successMessage)}
+                            saveControlsDisabled={saveControlsDisabled}
+                            onSaveAndExit={handleSaveAndExit}
+                            onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
                           />
                         )}
                       </div>

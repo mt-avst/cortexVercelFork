@@ -35,7 +35,8 @@ export type PublishProblemCode =
   | "unmoderated_study_removed"
   | "native_survey_study_required"
   | "external_link_required"
-  | "bookable_slot_required";
+  | "bookable_slot_required"
+  | "meeting_location_required";
 
 export interface PublishProblem {
   code: PublishProblemCode;
@@ -51,7 +52,9 @@ export const PUBLISH_PROBLEM_MESSAGES: Record<PublishProblemCode, string> = {
   external_link_required:
     "External link is required for published polls, surveys and one-question studies",
   bookable_slot_required:
-    "Add at least one upcoming time slot before publishing a live session or interview"
+    "Add at least one upcoming time slot before publishing a live session or interview",
+  meeting_location_required:
+    "Enter where the session takes place before publishing a live session or interview"
 };
 
 /**
@@ -129,6 +132,21 @@ export interface PublishReadinessInput {
    *                    positive report of zero gates. See the branch below.
    */
   hasBookableSlot?: boolean;
+  /**
+   * Whether a meeting location (where the moderated session takes place) is
+   * set, for the moderated-type gate below. TRI-STATE for the same reason
+   * `hasBookableSlot` is (row 9):
+   *   - `false`     -> the caller counted an empty location. A moderated
+   *                    publish is refused.
+   *   - `true`      -> a location is set. Permitted.
+   *   - `undefined` -> the caller does not report it. The gate does NOT fire.
+   *                    The backend routes never required a location and still
+   *                    pass no signal, so they keep publishing without one; the
+   *                    Review step (which knows the field) passes the real
+   *                    value and previews the refusal. Only a positive report
+   *                    of empty gates.
+   */
+  hasMeetingLocation?: boolean;
 }
 
 /**
@@ -170,6 +188,24 @@ export const findPublishProblem = (
   // count. Only a positive report of zero refuses; the create route (sessions
   // are a separate write) and every pre-#118 caller pass no signal and sail
   // through, exactly as before.
+  // A live session or interview also needs a venue - where the participant goes
+  // to meet the researcher (row 9). This used to be required on step 1 of the
+  // authoring form, which blocked a draft author who had not booked a room yet;
+  // it now refuses only at publish, like every other content gate here.
+  //
+  // Its own block, placed ABOVE the slot gate rather than inside it, on purpose:
+  // the slot gate's return below is a mutation-canary anchor
+  // (`publish-gate-refuses-slotless-bookable`), so it stays byte-for-byte as it
+  // was and nothing is inserted next to it. Guarded on `=== false`, the same
+  // tri-state the slot gate uses (see the field doc): only a positive report of
+  // an empty location refuses; `undefined` sails through.
+  if (
+    MODERATED_CONSENT_TYPES.has(input.type) &&
+    input.hasMeetingLocation === false
+  ) {
+    return { code: "meeting_location_required" };
+  }
+
   if (MODERATED_CONSENT_TYPES.has(input.type)) {
     return input.hasBookableSlot === false
       ? { code: "bookable_slot_required" }
