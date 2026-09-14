@@ -191,6 +191,27 @@ describe('AdminSessionManager - Table view is the slot picker', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('exposes a non-interactive state chip as role="img" with a name, not aria-label on a bare span (V-6)', async () => {
+    renderPicker({ sessions: [existingSessionAt10()] as never });
+
+    // Wait on the created chip's TEXT - the same settle the sibling test above
+    // uses, which is stable under a loaded CI runner - then assert synchronously.
+    // (A `findByRole('img', ...)` here raced the sessions-sync effect under load
+    // and timed out at its default 1s; the text wait does not.)
+    const label = await screen.findByText('10:00 - 10:30');
+    const chip = label.closest('[role="img"]');
+
+    // A bare <span aria-label=...> is the anti-pattern V-6 removes: a generic
+    // element with an accessible name is exposed inconsistently by assistive
+    // tech. role="img" makes the name a first-class label, and the name still
+    // carries the slot's STATE (here, that it is an existing session).
+    expect(chip).not.toBeNull();
+    expect(chip).toHaveAttribute(
+      'aria-label',
+      expect.stringMatching(/10:00 to 10:30 - Session:/i)
+    );
+  });
+
   it('keeps the calendar reachable as the optional view', async () => {
     renderPicker();
     // Default is Table; the toggle swaps to the calendar and back.

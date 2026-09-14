@@ -256,6 +256,50 @@ describe("findPublishProblem", () => {
       // passes no signal, breaking the create route and every existing test.
       expect(findPublishProblem(input({ type }))).toBeNull();
     });
+
+    /*
+     * The meeting-location gate (row 9). Where a session takes place used to be
+     * required at step 1, blocking a draft author who had not decided the venue
+     * yet. It moves to publish time, and - like the slot gate above - the signal
+     * is DELIBERATELY tri-state:
+     *   - `false` -> a caller that positively found the field empty. Gated.
+     *   - `true`  -> a location is set. Permitted.
+     *   - absent  -> a caller that does not report it (the backend routes, which
+     *     never required a location and still do not). NOT gated.
+     * Each assertion holds the OTHER moderated signal satisfied so it isolates
+     * one gate regardless of which is checked first.
+     */
+    it("refuses a publish when the caller reports no meeting location", () => {
+      expect(
+        findPublishProblem(
+          input({ type, hasMeetingLocation: false, hasBookableSlot: true })
+        )
+      ).toEqual({ code: "meeting_location_required" });
+    });
+
+    it("permits a publish when the caller reports a meeting location", () => {
+      expect(
+        findPublishProblem(
+          input({ type, hasMeetingLocation: true, hasBookableSlot: true })
+        )
+      ).toBeNull();
+    });
+
+    it("permits saving a draft with no meeting location", () => {
+      expect(
+        findPublishProblem(
+          input({ type, willBePublished: false, hasMeetingLocation: false })
+        )
+      ).toBeNull();
+    });
+
+    it("does not gate when the caller cannot report meeting-location state", () => {
+      // The explicit-signal guard again: an absent signal (the backend routes,
+      // which never enforced a location) must not start refusing.
+      expect(
+        findPublishProblem(input({ type, hasBookableSlot: true }))
+      ).toBeNull();
+    });
   });
 
   /*

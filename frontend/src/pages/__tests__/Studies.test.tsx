@@ -100,6 +100,55 @@ describe('Studies page - task list vocabulary', () => {
   });
 });
 
+describe('Studies page - status label, vocabulary and dates (Lane C "Then")', () => {
+  it('shows a launched task list as Published, not the raw enum "launched"', async () => {
+    mockedList.mockResolvedValue([
+      study({ status: 'launched', owner_user_id: 'user-viewer' }),
+    ] as never);
+
+    renderPage();
+
+    const row = (await screen.findByText('Checkout walkthrough')).closest('li');
+    expect(row).not.toBeNull();
+    expect(row!.textContent).toMatch(/Published/);
+    expect(row!.textContent).not.toMatch(/launched/i);
+  });
+
+  it('shows a draft task list as Draft', async () => {
+    mockedList.mockResolvedValue([
+      study({ status: 'draft', owner_user_id: 'user-viewer' }),
+    ] as never);
+
+    renderPage();
+
+    const row = (await screen.findByText('Checkout walkthrough')).closest('li');
+    expect(row!.textContent).toMatch(/Draft/);
+  });
+
+  it('describes a task list in study vocabulary, not "opportunity"', async () => {
+    renderPage();
+
+    await screen.findByRole('heading', { name: 'Task Lists' });
+    expect(
+      screen.getByText(/An unmoderated study references a task list by id/i)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/unmoderated opportunity/i)).toBeNull();
+  });
+
+  it('formats the updated date in en-GB, not the US default', async () => {
+    mockedList.mockResolvedValue([
+      study({ updated_at: '2026-08-18T09:15:30.123Z', owner_user_id: 'user-viewer' }),
+    ] as never);
+
+    renderPage();
+
+    const row = (await screen.findByText('Checkout walkthrough')).closest('li');
+    expect(row!.textContent).toMatch(/Updated .*18 Aug 2026/);
+    // The US m/d/yyyy shape the default toLocaleString produced must be gone.
+    expect(row!.textContent).not.toMatch(/8\/18\/2026/);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Ownership affordance. The list shows every task list, including other
 // researchers' - reuse across owners is a designed feature. What it must not
