@@ -20,8 +20,9 @@ import PendingApprovals from '../components/PendingApprovals';
 import AdminFeedback from '../components/AdminFeedback';
 import ErrorState from '../components/ErrorState';
 import ConfirmationModal from '../components/ConfirmationModal';
-import { Dropdown, DropdownItem, DropdownDivider } from '../components/ui';
-import { Settings, ClipboardList, Users, Clock, List, History, MessageSquare, Calendar, Download, Clapperboard, Flag, ArrowRight, CalendarClock, CheckCircle } from 'lucide-react';
+import { Dropdown, DropdownItem, DropdownDivider, Icon, SortCaret } from '../components/ui';
+import { Settings, ClipboardList, Users, Clock, List, History, MessageSquare, Calendar, Download, Clapperboard, Flag, ArrowRight, MoreVertical, CheckCircle } from 'lucide-react';
+import { getStudyTypeGlyph } from '../utils/studyTypeIcons';
 
 import { formatStudyDate, formatClockTime, formatTimeZoneLabel } from '../utils/datetime';
 const Admin: React.FC = () => {
@@ -354,8 +355,9 @@ const Admin: React.FC = () => {
                     onClick={() => navigate('/admin/opportunities/new')}
                     aria-label="Create new research study"
                   >
-                    <span className="d-none d-md-inline">Create Research Study →</span>
-                    <span className="d-md-none">Create Study →</span>
+                    <span className="d-none d-md-inline">Create Research Study</span>
+                    <span className="d-md-none">Create Study</span>
+                    <Icon icon={ArrowRight} size={16} className="ms-2" aria-hidden="true" />
                   </button>
                 </div>
               </div>
@@ -498,7 +500,7 @@ const Admin: React.FC = () => {
                         <div className="stat-card-header">
                           <span className="text-uppercase stat-label">Sessions this week</span>
                           <div className="stat-icon-wrapper">
-                            <CalendarClock size={20} className="stat-icon" />
+                            <Calendar size={20} className="stat-icon" />
                           </div>
                         </div>
                         <h2 className="mb-0 stat-value">{sessionsThisWeek.total}</h2>
@@ -759,19 +761,19 @@ const Admin: React.FC = () => {
                             <th className="admin-th col-title" scope="col" aria-sort={ariaSortFor('title')}>
                               <button type="button" className="admin-th-sort" onClick={() => handleSort('title')}>
                                 Study
-                                <span className="admin-th-sort-caret" aria-hidden="true">{sortField === 'title' ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}</span>
+                                <SortCaret active={sortField === 'title'} direction={sortDirection} />
                               </button>
                             </th>
                             <th className="admin-th col-type" scope="col" aria-sort={ariaSortFor('type')}>
                               <button type="button" className="admin-th-sort" onClick={() => handleSort('type')}>
                                 Type
-                                <span className="admin-th-sort-caret" aria-hidden="true">{sortField === 'type' ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}</span>
+                                <SortCaret active={sortField === 'type'} direction={sortDirection} />
                               </button>
                             </th>
                             <th className="admin-th col-status" scope="col" aria-sort={ariaSortFor('status')}>
                               <button type="button" className="admin-th-sort" onClick={() => handleSort('status')}>
                                 Status
-                                <span className="admin-th-sort-caret" aria-hidden="true">{sortField === 'status' ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}</span>
+                                <SortCaret active={sortField === 'status'} direction={sortDirection} />
                               </button>
                             </th>
                             {/* Recruitment replaces the old "Booked" column - same booked/capacity
@@ -784,7 +786,7 @@ const Admin: React.FC = () => {
                             <th className="admin-th col-date" scope="col" aria-sort={ariaSortFor('created_at')}>
                               <button type="button" className="admin-th-sort" onClick={() => handleSort('created_at')}>
                                 Created
-                                <span className="admin-th-sort-caret" aria-hidden="true">{sortField === 'created_at' ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}</span>
+                                <SortCaret active={sortField === 'created_at'} direction={sortDirection} />
                               </button>
                             </th>
                             <th className="admin-th col-actions" scope="col">Actions</th>
@@ -794,6 +796,7 @@ const Admin: React.FC = () => {
                           {sortedOpportunities.map((opportunity) => {
                             const recruitment = getRecruitment(opportunity);
                             const milestone = getNextMilestone(opportunity, now);
+                            const TypeGlyph = getStudyTypeGlyph(opportunity.type);
                             return (
                             <tr
                               key={opportunity.id}
@@ -842,6 +845,9 @@ const Admin: React.FC = () => {
                               </td>
                               <td className="col-type" data-label="Type">
                                 <span className={`${getTypeBadgeClass(opportunity.type)} badge--${opportunity.type}`}>
+                                  {TypeGlyph && (
+                                    <Icon icon={TypeGlyph} size={14} aria-hidden="true" className="lozenge__glyph" />
+                                  )}
                                   {getAdminTypeLabel(opportunity.type)}
                                 </span>
                               </td>
@@ -936,7 +942,7 @@ const Admin: React.FC = () => {
                                       onMouseDown={(e) => e.stopPropagation()}
                                       aria-label={`Actions for ${opportunity.title}`}
                                     >
-                                      <span aria-hidden="true">⋮</span>
+                                      <Icon icon={MoreVertical} size={16} aria-hidden="true" />
                                     </button>
                                   }
                                 >

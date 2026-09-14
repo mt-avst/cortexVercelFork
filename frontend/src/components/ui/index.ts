@@ -33,6 +33,8 @@ export {
   type StatusType
 } from './Badge';
 export { Alert, type AlertProps, type AlertVariant } from './Alert';
+export { Icon, type IconProps, type IconSize } from './Icon';
+export { SortCaret, type SortCaretProps } from './SortCaret';
 export { Spinner, Loading, type SpinnerProps, type SpinnerSize, type LoadingProps } from './Spinner';
 export { 
   Dropdown, 

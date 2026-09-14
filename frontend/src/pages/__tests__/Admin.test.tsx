@@ -139,7 +139,9 @@ describe('Admin page', () => {
     // research study (the opportunity), and only one of them renamed.
     expect(screen.getByText('Task Lists')).toBeInTheDocument();
     expect(screen.getByText('Tasks')).toBeInTheDocument();
-    expect(screen.getByText('Create Research Study →')).toBeInTheDocument();
+    // The trailing arrow moved from unicode text onto a lucide icon (Lane E
+    // icon system), so the accessible name is the label alone now.
+    expect(screen.getByText('Create Research Study')).toBeInTheDocument();
 
     // Opportunities table renders the mocked row once the async load resolves.
     expect(await screen.findByText('Checkout usability test')).toBeInTheDocument();
@@ -150,6 +152,18 @@ describe('Admin page', () => {
     // so the phrase appears exactly once - the two senses no longer collide.
     expect(screen.getAllByText('Research Studies')).toHaveLength(1);
     expect(screen.getByText('Active studies')).toBeInTheDocument();
+  });
+
+  it('renders a lucide glyph in the study-type lozenge (Decision 6)', async () => {
+    // A review gate found that studyTypeIcons.ts was tested only in
+    // isolation - removing the glyph from Admin.tsx's own JSX would have
+    // kept the whole suite green. The fixture study is `type: 'test'`
+    // ("Live" per getAdminTypeLabel).
+    renderAdmin();
+
+    const typeCell = (await screen.findByText('Live')).closest('.lozenge');
+    expect(typeCell).not.toBeNull();
+    expect(typeCell!.querySelector('svg.lozenge__glyph')).not.toBeNull();
   });
 
   it('offers Analytics in the row menu for a moderated (test) study', async () => {

@@ -109,4 +109,20 @@ describe('OpportunityDetail type badge', () => {
     await screen.findByText(recordedStudy.title);
     expect(container.textContent).not.toMatch(/published/i);
   });
+
+  it('renders a lucide glyph in the hero badge (Decision 6), not just a label', async () => {
+    // studyTypeIcons.test.ts tests the type-to-glyph map in isolation; a
+    // review gate found that removing the glyph from this page's own JSX
+    // would keep the whole suite green regardless.
+    const { container } = renderDetail();
+    await screen.findByText(recordedStudy.title);
+
+    const badgeRow = container.querySelector('.mission-brief-content > div');
+    // A second review pass found this was vacuous without its own null
+    // check: `badgeRow?.querySelector(...)` evaluates to `undefined` and
+    // `expect(undefined).not.toBeNull()` passes just as well as a real
+    // glyph, if the selector above ever stops matching.
+    expect(badgeRow).not.toBeNull();
+    expect(badgeRow!.querySelector('svg.lozenge__glyph')).not.toBeNull();
+  });
 });
