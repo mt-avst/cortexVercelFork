@@ -608,6 +608,110 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
   /** Shared by the sticky header row and the columns, so the two cannot drift. */
   const dayGrid = useMemo(() => dayGridMetrics(visibleDays.length), [visibleDays.length]);
 
+  /**
+   * Row 6 (second-pass review): on a phone the grid never shows more than a
+   * sliver of one day column, and the only way to see the rest was a native
+   * horizontal scrollbar the width of a hairline - or an accidental swipe.
+   * That is distinct from `showWeekNav` above, which pages a whole
+   * MAX_VISIBLE_DAYS-wide window and only appears once a study has more
+   * bookable days than fit in one window; an ordinary one-week study never
+   * triggers it and had no phone affordance at all. This is a plain
+   * one-column-at-a-time pager, visible only where a column truly cannot
+   * share the viewport with its neighbour.
+   */
+  const timelineRef = useRef<HTMLDivElement>(null);
+  const [isNarrowViewport, setIsNarrowViewport] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth <= 480
+  );
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia('(max-width: 480px)');
+    const handleChange = (e: MediaQueryListEvent) => setIsNarrowViewport(e.matches);
+    setIsNarrowViewport(mq.matches);
+    mq.addEventListener('change', handleChange);
+    return () => mq.removeEventListener('change', handleChange);
+  }, []);
+
+  // ponytail: only the Previous/Next buttons write this - a swipe on the
+  // still-swipeable scroller below leaves it stale, and the pager renders on
+  // viewport width alone rather than on whether the grid actually overflows.
+  //   -> cto/AdaptaLabs#130, breaks once a real gesture or a wide-enough
+  //      narrow viewport is what a real device sends.
+  const [focusedDayIndex, setFocusedDayIndex] = useState(0);
+  // A new set of visible days (a refetch, a week-nav page change) can leave a
+  // stale index pointing past the end, or at a day that is no longer the one
+  // being looked at - land back on the first column, same as `navPage` above.
+  useEffect(() => {
+    setFocusedDayIndex(0);
+  }, [visibleDays]);
+  // Clamped at RENDER time, not only by the effect above: for the one frame
+  // between `visibleDays` shrinking and that effect running, `focusedDayIndex`
+  // can point past the new end, and `formatDate(undefined)` would print
+  // "Invalid Date" in the pager label for that frame.
+  const displayedDayIndex = Math.min(focusedDayIndex, Math.max(0, visibleDays.length - 1));
+
+  const canGoToPreviousDay = displayedDayIndex > 0;
+  const canGoToNextDay = displayedDayIndex < visibleDays.length - 1;
+  const goToDay = useCallback((index: number) => {
+    const clamped = Math.max(0, Math.min(index, visibleDays.length - 1));
+    setFocusedDayIndex(clamped);
+    timelineRef.current?.scrollTo({
+      left: clamped * (DAY_COLUMN_MIN_WIDTH_PX + dayGrid.gap),
+      behavior: 'smooth',
+    });
+  }, [visibleDays.length, dayGrid.gap]);
+
+  /**
+   * Whether `.calendar-timeline` needs to become its own horizontal scroll
+   * container (see the CSS comment above `.calendar-timeline--scrolls`).
+   *
+   * This CANNOT be a bare `overflow-x: auto` on `.calendar-timeline` at every
+   * width: `position: sticky` (the desktop header row) computes against the
+   * nearest scroll container rather than the viewport, so giving the timeline
+   * an overflow rule unconditionally silently broke the sticky day-header on
+   * every desktop width the moment it was added - not only the ones that
+   * actually needed to scroll. A real measurement keeps a comfortably-fitting
+   * calendar exactly as it was; only one that genuinely cannot fit gives up
+   * the sticky header for the same scroll-contained treatment phone already
+   * has.
+   *
+   * Phone is decided by `matchMedia` alone (matching the previously-shipped,
+   * already-tested behaviour exactly, with no dependency on ResizeObserver
+   * existing) rather than by measurement, so a real phone can never fail to
+   * get this treatment even if the observer below never fires.
+   */
+  const [needsScrollContainment, setNeedsScrollContainment] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(max-width: 768px)').matches
+  );
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia('(max-width: 768px)');
+    // Only turns it ON here; a resize back to desktop-width defers to the
+    // measurement effect below rather than assuming "wide enough" on its own.
+    const handleChange = (e: MediaQueryListEvent) => {
+      if (e.matches) setNeedsScrollContainment(true);
+    };
+    mq.addEventListener('change', handleChange);
+    return () => mq.removeEventListener('change', handleChange);
+  }, []);
+
+  useEffect(() => {
+    const el = timelineRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    // Time column (90px) plus its fixed 24px gap to the day grid - the same
+    // arithmetic `--cal-content-w` uses, so this measurement and that CSS
+    // variable can never disagree about what "fits" means.
+    const requiredWidth = dayGrid.minWidth + 90 + 24;
+    const measure = () => {
+      const isPhone = window.matchMedia?.('(max-width: 768px)').matches ?? false;
+      setNeedsScrollContainment(isPhone || el.clientWidth < requiredWidth);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [dayGrid.minWidth]);
+
   const timeMarkers = useMemo(() => generateTimeMarkers(), []);
   /** Timeline column height — slots use top/height as % of .calendar-timeline-container (same reference as grid lines). */
   const TIMELINE_HEIGHT_PX = 900;
@@ -824,7 +928,6 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
     <div
       className="calendar-view calendar-living-interface calendar-hud"
       style={{
-        overflow: 'visible',
         position: 'relative',
         // True width of the scrolled calendar content = time gutter (90) + its
         // gap (24) + the day-grid floor. On phone both the header row and the
@@ -925,14 +1028,94 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
         </div>
       )}
 
-      {/* Calendar Timeline - Page scroll with viewport-sticky headers.
-          On phone (<=768px) this becomes its own horizontal scroll container
-          (see _components.css) so a full week of >=128px columns can no longer
-          force the whole document wider than the viewport (audit #114). The
-          overflow is left to CSS rather than pinned inline here, because an
-          inline `overflow` would win over the phone media query. */}
+      {/* Day pager (row 6, second-pass review). Phone-only: at that width the
+          grid shows one column at a time and the horizontal scrollbar is the
+          only other way to move, which is easy to miss entirely. Distinct
+          from the week nav above - this steps one COLUMN, not one WINDOW, and
+          exists even for a plain one-week study that never triggers that. */}
+      {isNarrowViewport && visibleDays.length > 1 && (
+        <div
+          className="calendar-day-pager d-flex justify-content-between align-items-center mb-3"
+          role="group"
+          aria-label="Calendar day navigation"
+        >
+          <button
+            type="button"
+            onClick={() => goToDay(displayedDayIndex - 1)}
+            disabled={!canGoToPreviousDay}
+            aria-label="Previous day"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              flexShrink: 0,
+              whiteSpace: 'nowrap',
+              gap: '4px',
+              padding: '4px 8px',
+              fontSize: '0.75rem',
+              fontWeight: 500,
+              border: '1px solid var(--border-card)',
+              borderRadius: '4px',
+              backgroundColor: 'transparent',
+              color: 'var(--text-muted)',
+              cursor: canGoToPreviousDay ? 'pointer' : 'not-allowed',
+              opacity: canGoToPreviousDay ? 1 : 0.5,
+            }}
+          >
+            <ChevronLeft size={14} aria-hidden="true" />
+            Previous day
+          </button>
+          <span aria-live="polite" style={{
+            fontSize: '0.75rem',
+            color: 'var(--text-muted)',
+            fontWeight: 500,
+            flex: '1 1 auto',
+            minWidth: 0,
+            textAlign: 'center',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            padding: '0 4px',
+          }}>
+            {formatDate(visibleDays[displayedDayIndex]?.[0])} · {displayedDayIndex + 1} of {visibleDays.length}
+          </span>
+          <button
+            type="button"
+            onClick={() => goToDay(displayedDayIndex + 1)}
+            disabled={!canGoToNextDay}
+            aria-label="Next day"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              flexShrink: 0,
+              whiteSpace: 'nowrap',
+              gap: '4px',
+              padding: '4px 8px',
+              fontSize: '0.75rem',
+              fontWeight: 500,
+              border: '1px solid var(--border-card)',
+              borderRadius: '4px',
+              backgroundColor: 'transparent',
+              color: 'var(--text-muted)',
+              cursor: canGoToNextDay ? 'pointer' : 'not-allowed',
+              opacity: canGoToNextDay ? 1 : 0.5,
+            }}
+          >
+            Next day
+            <ChevronRight size={14} aria-hidden="true" />
+          </button>
+        </div>
+      )}
+
+      {/* Calendar Timeline - Page scroll with viewport-sticky headers, UNLESS
+          `needsScrollContainment` says the grid does not fit - see the state
+          comment above and the `.calendar-timeline--scrolls` CSS comment for
+          why this has to be measured rather than a bare media query or an
+          unconditional rule (audit #114, row 6). The overflow itself is left
+          to CSS rather than pinned inline here, because an inline `overflow`
+          would win over the class. */}
       <div
-        className="calendar-timeline"
+        ref={timelineRef}
+        className={`calendar-timeline${needsScrollContainment ? ' calendar-timeline--scrolls' : ''}`}
         style={{ position: 'relative' }}
         // On phone this is a horizontal scroll container (audit #114); a
         // scrollable region must be keyboard-reachable so it can be scrolled

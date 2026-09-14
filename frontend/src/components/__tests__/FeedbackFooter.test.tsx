@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi } from 'vitest';
 
@@ -22,7 +23,7 @@ const mockSubmitFeedback = vi.mocked(submitFeedback);
 describe('FeedbackFooter', () => {
   it('submits a category the feedback table actually accepts', async () => {
     const user = userEvent.setup();
-    render(<FeedbackFooter />);
+    render(<MemoryRouter><FeedbackFooter /></MemoryRouter>);
 
     await user.type(screen.getByLabelText('How we can improve Cortex'), 'This is broken');
     await user.click(screen.getByRole('button', { name: 'Send feedback' }));
@@ -31,5 +32,28 @@ describe('FeedbackFooter', () => {
 
     const { category } = mockSubmitFeedback.mock.calls[0][0];
     expect(VALID_CATEGORIES).toContain(category);
+  });
+
+  // Row 22 (second-pass review): /feedback has its own dedicated form: the
+  // footer rendering its identical prompt underneath it offered the same
+  // request twice on the one page built to collect it.
+  it('renders nothing on the /feedback page', () => {
+    render(
+      <MemoryRouter initialEntries={['/feedback']}>
+        <FeedbackFooter />
+      </MemoryRouter>
+    );
+
+    expect(screen.queryByLabelText('How we can improve Cortex')).toBeNull();
+  });
+
+  it('still renders elsewhere', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <FeedbackFooter />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByLabelText('How we can improve Cortex')).toBeInTheDocument();
   });
 });

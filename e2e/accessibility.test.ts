@@ -587,6 +587,171 @@ test.describe('Accessibility Tests', () => {
     expect(scan.violations).toEqual([]);
   });
 
+  // Fix-first row 6 (second-pass review). `.calendar-content-row` is
+  // `width: 100%` of `.calendar-timeline`, but its day-grid child carries a
+  // >=128px-per-column inline min-width floor that can exceed the space the
+  // row actually has - a flex child's min-width wins over its row's own box.
+  // Below 768px `.calendar-timeline` scrolled to absorb that, so it was
+  // contained; above it there was no scroller anywhere in the chain, so the
+  // excess painted straight through `.calendar-content-row` and the card
+  // border, out into the page (measured live: slots reaching x=1317 against a
+  // card ending at x=1248 at 1440x900). A narrow desktop window reproduces the
+  // identical overflow without needing a phone.
+  const mockWeekOfSessionsStudy = async (page: import('@playwright/test').Page) => {
+    const day = 24 * 60 * 60 * 1000;
+    const sessions = Array.from({ length: 7 }, (_, i) => ({
+      id: `session-${i + 1}`,
+      opportunity_id: 'opp-1',
+      start_time: new Date(Date.now() + (i + 1) * day + 17 * 60 * 60 * 1000).toISOString(),
+      end_time: new Date(Date.now() + (i + 1) * day + 17.5 * 60 * 60 * 1000).toISOString(),
+      capacity: 5,
+      booked_count: 0,
+    }));
+    const opportunity = {
+      id: 'opp-1',
+      type: 'test',
+      title: 'Calendar Containment Study',
+      purpose_one_liner: 'Guards calendar containment at desktop and phone widths',
+      status: 'published',
+      default_duration_minutes: 30,
+      sessions,
+    };
+    await page.route('**/api/opportunities**', async (route) => {
+      const isDetail = /\/api\/opportunities\/opp-1(\?|$)/.test(route.request().url());
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(isDetail ? opportunity : [opportunity]),
+      });
+    });
+    await page.route('**/api/bookings/my/bookings', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ upcoming: [], past: [] }) }));
+    await page.route('**/api/calendar/connection-status', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ connected: false }) }));
+    await page.route('**/api/calendar/my-events**', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+  };
+
+  test('Calendar view stays inside its own card at 1440 desktop', async ({ page }) => {
+    await mockWeekOfSessionsStudy(page);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/opportunities/opp-1');
+    await page.waitForLoadState('load');
+
+    await page.getByRole('button', { name: /switch to calendar view/i }).click();
+    await expect(page.locator('.calendar-timeline')).toBeVisible();
+    await expect(page.locator('.calendar-days-container .calendar-day-column')).toHaveCount(7);
+    // The measurement that decides scroll-containment (ResizeObserver) is
+    // async; give it a tick before reading the class or the geometry below.
+    await expect(page.locator('.calendar-timeline.calendar-timeline--scrolls')).toBeVisible();
+
+    // A raw slot/column rect is unaffected by ancestor clipping
+    // (getBoundingClientRect ignores overflow), and the scroller's own border
+    // box is unaffected by whether ITS content overflows - neither proves
+    // anything painted past the card. What actually renders at a point just
+    // past the card's right edge does: contained, that point hits the page
+    // background; broken, it hits the calendar itself.
+    const hitsCalendar = await page.evaluate(() => {
+      const card = document.querySelector('.mission-scheduler') as HTMLElement;
+      const timeline = document.querySelector('.calendar-timeline') as HTMLElement;
+      const cardRect = card.getBoundingClientRect();
+      const y = timeline.getBoundingClientRect().top + 20;
+      const el = document.elementFromPoint(cardRect.right + 30, y);
+      return Boolean(el && (el.closest('.calendar-timeline') || el.closest('.calendar-days-container')));
+    });
+    expect(hitsCalendar).toBe(false);
+
+    const scan = await new AxeBuilder({ page }).analyze();
+    expect(scan.violations).toEqual([]);
+  });
+
+  // The fix for the finding above (a real measurement-driven
+  // `.calendar-timeline--scrolls` class, not a bare `overflow-x: auto` on
+  // every width) exists because a blanket rule broke `position: sticky` on
+  // the desktop day-header for every week, including ones with room to
+  // spare - `position: sticky` computes against the nearest scroll
+  // container, not the viewport, so ANY overflow rule on `.calendar-timeline`
+  // silently detaches the header the moment it exists. This is the control:
+  // a week that comfortably fits must keep its sticky header exactly as
+  // before.
+  test('Calendar view keeps its sticky day header on desktop when the week comfortably fits', async ({ page }) => {
+    const day = 24 * 60 * 60 * 1000;
+    const opportunity = {
+      id: 'opp-1',
+      type: 'test',
+      title: 'Comfortable Week Study',
+      purpose_one_liner: 'A single session, nowhere near the day-grid floor',
+      status: 'published',
+      default_duration_minutes: 30,
+      sessions: [{
+        id: 'session-1',
+        opportunity_id: 'opp-1',
+        start_time: new Date(Date.now() + day + 17 * 60 * 60 * 1000).toISOString(),
+        end_time: new Date(Date.now() + day + 17.5 * 60 * 60 * 1000).toISOString(),
+        capacity: 5,
+        booked_count: 0,
+      }],
+    };
+    await page.route('**/api/opportunities**', async (route) => {
+      const isDetail = /\/api\/opportunities\/opp-1(\?|$)/.test(route.request().url());
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(isDetail ? opportunity : [opportunity]) });
+    });
+    await page.route('**/api/bookings/my/bookings', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ upcoming: [], past: [] }) }));
+    await page.route('**/api/calendar/connection-status', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ connected: false }) }));
+    await page.route('**/api/calendar/my-events**', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+
+    await page.setViewportSize({ width: 1440, height: 700 });
+    await page.goto('/opportunities/opp-1');
+    await page.waitForLoadState('load');
+
+    await page.getByRole('button', { name: /switch to calendar view/i }).click();
+    await expect(page.locator('.calendar-timeline')).toBeVisible();
+    // One session, one column - nowhere near the 968px day-grid floor at a
+    // 1440px viewport, so the measurement must NOT switch this into
+    // scroll-contained mode.
+    await expect(page.locator('.calendar-timeline.calendar-timeline--scrolls')).toHaveCount(0);
+
+    await page.evaluate(() => window.scrollBy(0, 600));
+    const headerTop = await page.locator('.calendar-sticky-header-row').evaluate((el) => el.getBoundingClientRect().top);
+    // Pinned near the viewport top, not scrolled away with the page.
+    expect(headerTop).toBeGreaterThanOrEqual(0);
+    expect(headerTop).toBeLessThan(100);
+  });
+
+  // A 390px phone still has to scroll seven >=128px columns sideways, and the
+  // only affordance for that was an unlabelled native scrollbar the width of a
+  // sliver at the top of the grid - discoverable only by an accidental swipe.
+  // The existing "N active studies"-style Previous/Next week nav does not
+  // help here either: it only renders once a study has MORE session days than
+  // fit in one page (MAX_VISIBLE_DAYS), so a plain one-week study shows no
+  // pager at all on phone.
+  test('Calendar view offers a visible day pager at 390 phone width', async ({ page }) => {
+    await mockWeekOfSessionsStudy(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/opportunities/opp-1');
+    await page.waitForLoadState('load');
+
+    await page.getByRole('button', { name: /switch to calendar view/i }).click();
+    await expect(page.locator('.calendar-timeline')).toBeVisible();
+
+    const nextDay = page.getByRole('button', { name: /next day/i });
+    const previousDay = page.getByRole('button', { name: /previous day/i });
+    await expect(nextDay).toBeVisible();
+    await expect(previousDay).toBeVisible();
+    await expect(previousDay).toBeDisabled();
+
+    const scrollBefore = await page.locator('.calendar-timeline').evaluate((el) => el.scrollLeft);
+    await nextDay.click();
+    await expect.poll(() => page.locator('.calendar-timeline').evaluate((el) => el.scrollLeft))
+      .toBeGreaterThan(scrollBefore);
+
+    const doc = await page.evaluate(() => ({ scrollW: document.documentElement.scrollWidth, clientW: document.documentElement.clientWidth }));
+    expect(doc.scrollW).toBeLessThanOrEqual(doc.clientW + 1);
+  });
+
   test('Forms should be accessible', async ({ page }) => {
     // Mock admin user for form access
     await page.route('**/api/me', async (route) => {

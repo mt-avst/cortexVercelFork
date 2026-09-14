@@ -88,17 +88,29 @@ function App() {
                   }
                 />
 
+                {/* Row 22 (second-pass review): chrome-less for the same
+                    reason as the recording surface above - a participant
+                    mid-poll or mid-survey should not be handed a one-click
+                    exit via the header nav, or an unrelated "tell us how to
+                    improve Cortex" form stacked under their answers. Keyed on
+                    a session token, because every answer is written against a
+                    runtime session and there is nothing to store into until
+                    one exists. This replaces `/poll/:id`, a placeholder
+                    present since v6.0.0, linked from nowhere, which an
+                    opportunity id alone could never have made work. */}
+                <Route
+                  path="/survey/:token"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <SurveySession />
+                    </Suspense>
+                  }
+                />
+
                 {/* Everything else keeps the standard app chrome. */}
                 <Route element={<AppChromeLayout />}>
                   <Route path="/" element={<Home />} />
                   <Route path="/opportunities/:id" element={<OpportunityDetail />} />
-                  {/* The native poll and survey runner. Keyed on a session
-                      token, because every answer is written against a runtime
-                      session and there is nothing to store into until one
-                      exists. This replaces `/poll/:id`, a placeholder present
-                      since v6.0.0, linked from nowhere, which an opportunity id
-                      alone could never have made work. */}
-                  <Route path="/survey/:token" element={<SurveySession />} />
                   {/* No `/submit-research-request` route. A non-admin who wants
                       research run raises it on the service desk, which Header
                       links out to - see #46. The route used to render the
