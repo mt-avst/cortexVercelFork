@@ -661,7 +661,7 @@
   transform: translateY(-2px) scale(1.02);
   box-shadow: 
     var(--shadow-button-hover),
-    0 0 20px rgba(255, 122, 51, 0.25);
+    0 0 20px color-mix(in srgb, var(--brand-orange-500) 25%, transparent);
 }
 
 .btn-primary:active {
@@ -847,9 +847,9 @@
   font-size: 1rem;
   font-weight: 500;
   font-family: var(--font-family-base);
-  color: #FF5A1F; /* Adaptavist Orange */
+  color: var(--brand-orange-500); /* Adaptavist Orange */
   background: transparent;
-  border: 2px solid #FF5A1F; /* Adaptavist Orange */
+  border: 2px solid var(--brand-orange-500); /* Adaptavist Orange */
   border-radius: 100px;
   cursor: pointer;
   backdrop-filter: blur(12px);
@@ -864,10 +864,10 @@
 .btn-glass:hover {
   /* Solid Adaptavist Orange fill on hover */
   background: var(--accent-fill-text-safe);
-  border-color: #FF5A1F;
+  border-color: var(--brand-orange-500);
   color: #FFFFFF;
   transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(255, 90, 31, 0.4);
+  box-shadow: 0 8px 25px color-mix(in srgb, var(--brand-orange-500) 40%, transparent);
   text-decoration: none;
 }
 
@@ -888,15 +888,15 @@ body.theme-light .btn-glass {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   font-weight: 500;
-  color: #FF5A1F; /* Adaptavist Orange */
+  color: var(--brand-orange-500); /* Adaptavist Orange */
   background: transparent;
-  border-color: #FF5A1F; /* Adaptavist Orange */
+  border-color: var(--brand-orange-500); /* Adaptavist Orange */
 }
 
 body.theme-light .btn-glass:hover {
   /* Solid Adaptavist Orange fill on hover */
   background: var(--accent-fill-text-safe);
-  border-color: #FF5A1F;
+  border-color: var(--brand-orange-500);
   color: #FFFFFF;
 }
 
@@ -916,26 +916,35 @@ body.theme-light .btn-glass:hover {
   font-weight: 600;
   font-family: var(--font-family-base);
   color: #FFFFFF;
-  background: #C2410C; /* Orange-700: WCAG AA contrast 4.5:1+ with white */
+  /* --accent-fill-text-safe, not var(--cta-bg): that token is ink navy in
+     light mode (a different button's convention), which would turn the
+     orange landing CTA navy. And not the raw ramp step directly: every
+     --brand-orange-* identity step is an IDENTITY colour that FAILS AA
+     under white text (accent-fill-policy.test.ts enforces this) -
+     --accent-fill-text-safe is the token that resolves to whichever step
+     actually passes, per theme (800 in dark, the light-safe alias in
+     light). This button stays orange in both themes, same as it always
+     was, just AA-safe under its own white label now. */
+  background: var(--accent-fill-text-safe);
   border: none;
   border-radius: 100px;
   cursor: pointer;
-  box-shadow: 0 4px 14px 0 rgba(194, 65, 12, 0.4);
+  box-shadow: 0 4px 14px 0 color-mix(in srgb, var(--brand-orange-700) 40%, transparent);
   transition: all 0.25s ease;
   letter-spacing: 0.01em;
 }
 
 .btn-power:hover {
-  background: #9A3412; /* Darker on hover, maintains contrast */
+  background: var(--brand-orange-800);
   transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(194, 65, 12, 0.5);
+  box-shadow: 0 8px 25px color-mix(in srgb, var(--brand-orange-700) 50%, transparent);
   text-decoration: none;
   color: #FFFFFF;
 }
 
 .btn-power:active {
   transform: translateY(0) scale(var(--scale-button-active));
-  box-shadow: 0 4px 14px 0 rgba(194, 65, 12, 0.4);
+  box-shadow: 0 4px 14px 0 color-mix(in srgb, var(--brand-orange-700) 40%, transparent);
 }
 
 .btn-power:focus-visible {
@@ -965,11 +974,11 @@ body.theme-light .btn-glass:hover {
 
 /* Light mode: same styling, works on light backgrounds */
 body.theme-light .btn-power {
-  box-shadow: 0 4px 14px 0 rgba(194, 65, 12, 0.35);
+  box-shadow: 0 4px 14px 0 color-mix(in srgb, var(--brand-orange-700) 35%, transparent);
 }
 
 body.theme-light .btn-power:hover {
-  box-shadow: 0 8px 25px rgba(194, 65, 12, 0.45);
+  box-shadow: 0 8px 25px color-mix(in srgb, var(--brand-orange-700) 45%, transparent);
 }
 
 /* Button Sizes */
@@ -1084,7 +1093,7 @@ body.theme-light .btn-power:hover {
 
 /* App Testing / Test (Brand) */
 .badge--test {
-  background: rgba(255, 122, 51, 0.15);
+  background: color-mix(in srgb, var(--brand-orange-500) 15%, transparent);
   color: var(--brand-orange-500);
 }
 
@@ -1112,7 +1121,7 @@ body.theme-light .badge--question {
 
 /* Poll (Brand) */
 .badge--poll {
-  background: rgba(255, 122, 51, 0.15);
+  background: color-mix(in srgb, var(--brand-orange-500) 15%, transparent);
   color: var(--brand-orange-500);
 }
 
@@ -1124,7 +1133,7 @@ body.theme-light .badge--question {
 
 /* Interview (Brand) */
 .badge--interview {
-  background: rgba(255, 122, 51, 0.15);
+  background: color-mix(in srgb, var(--brand-orange-500) 15%, transparent);
   color: var(--brand-orange-500);
 }
 
@@ -3212,8 +3221,34 @@ body.admin-page .header .container {
    breakpoint matches the header's collapse point. The label sits on its
    own line above the value so cells that hold several nodes (status +
    "Auto-closed", the recruitment ratio + bar) never misalign.
+
+   Row 16 (second-pass audit): the same `table-layout: fixed` columns also
+   compress between this breakpoint and the point where the admin content
+   column hits its own max-width (~1220px viewport upward: MEASURED, the
+   table's rendered width stays fixed at 918px from 1440px viewport up, so
+   nothing above ~1220px was ever squeezed). In that gap a status pill's box
+   - capped at `max-width: 100%` of its own compressed cell by the "prevent
+   content from spilling into adjacent cells" rule above - renders narrower
+   than its own label ("PUBLISHED" needs ~77px, the cell was giving it as
+   little as 55px), so the pill's colour fill clips its own text. Raising
+   this breakpoint to the width the table already renders cleanly at is
+   simpler and safer than teaching a `table-layout: fixed` table with no
+   min-width to scroll horizontally inside a container that has its own
+   `overflow: visible` (kept `visible` on purpose: it lets the row action
+   menu escape the table's bounds - see `Admin.tsx`). Below it, everything
+   reuses the phone-card path this comment already documents, which every
+   width in this gap was already forcing into a horizontal document-level
+   scroll to render at all (a symptom, not a feature, of the same defect).
+
+   ponytail: the card view hides <thead>, which is where this table's only
+   column-sort controls live (Admin.tsx handleSort/ariaSortFor) - so this
+   fix costs sorting for every admin between 768 and 1220px (tablet, and
+   many laptops at less than full width). Accepted here because a visibly
+   broken status pill was judged worse than a lost secondary control; a real
+   fix is a scrollable table (keeps <thead>) or a sort control inside card
+   view -> cto/AdaptaLabs#131
    ============================================================ */
-@media (max-width: 767.98px) {
+@media (max-width: 1219.98px) {
   .admin-data-table,
   .admin-data-table tbody,
   .admin-data-table tr {
@@ -4171,7 +4206,7 @@ body.theme-dark .admin-data-table td.col-date {
   background: linear-gradient(
     135deg,
     rgba(255, 78, 80, 0.15) 0%,
-    rgba(255, 122, 51, 0.08) 100%
+    color-mix(in srgb, var(--brand-orange-500) 8%, transparent) 100%
   );
   border: 1px solid rgba(255, 78, 80, 0.2);
   border-radius: 2px;
@@ -4324,10 +4359,13 @@ body.theme-dark .admin-data-table td.col-date {
   margin: 0;
   letter-spacing: -0.02em;
   
-  /* Premium gradient effect: deep orange → white (dark mode) */
+  /* Premium gradient effect: deep orange → white (dark mode). The first stop
+     is an exact match for the ramp, so it reads the token; the two
+     intermediate stops are bespoke lightened midpoints with no ramp
+     equivalent (allow-listed in accent-fill-policy.test.ts). */
   background: linear-gradient(
     to right,
-    #FF5A1F 0%,
+    var(--brand-orange-500) 0%,
     #FF7A45 35%,
     #FFA070 60%,
     #FFFFFF 100%
@@ -4338,7 +4376,7 @@ body.theme-dark .admin-data-table td.col-date {
   color: transparent;
   
   /* Subtle glow for depth */
-  filter: drop-shadow(0 2px 12px rgba(255, 90, 31, 0.35));
+  filter: drop-shadow(0 2px 12px color-mix(in srgb, var(--brand-orange-500) 35%, transparent));
 }
 
 .hero-subtitle-centered {
@@ -4988,9 +5026,9 @@ body.theme-dark .calendar-slot-ghost:hover .timeslot-label {
 
 /* Dark mode: same outline treatment, lighter orange for contrast on dark */
 body.theme-dark .calendar-slot-booked {
-  background: rgba(255, 122, 51, 0.14) !important;
+  background: color-mix(in srgb, var(--brand-orange-500) 14%, transparent) !important;
   border: 2px solid #FB923C !important; /* orange-400 */
-  box-shadow: 0 0 8px rgba(255, 90, 31, 0.2) !important; /* subtle brand glow */
+  box-shadow: 0 0 8px color-mix(in srgb, var(--brand-orange-500) 20%, transparent) !important; /* subtle brand glow */
 }
 
 body.theme-dark .calendar-slot-booked .timeslot-label {
@@ -5065,7 +5103,7 @@ body.theme-dark .calendar-slot-conflict .timeslot-label {
   border-radius: 8px !important;
   z-index: 1000 !important;
   position: relative;
-  box-shadow: 0 10px 20px -3px rgba(255, 90, 31, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.1) !important;
+  box-shadow: 0 10px 20px -3px color-mix(in srgb, var(--brand-orange-500) 30%, transparent), 0 4px 6px -2px rgba(0, 0, 0, 0.1) !important;
 }
 
 .calendar-slot-selected .timeslot-label {
@@ -5077,7 +5115,7 @@ body.theme-dark .calendar-slot-conflict .timeslot-label {
 body.theme-dark .calendar-slot-selected {
   background: var(--accent-fill-text-safe) !important;
   border: 2px solid #EA580C !important;
-  box-shadow: 0 0 20px rgba(255, 90, 31, 0.4), 0 10px 20px -3px rgba(0, 0, 0, 0.3) !important;
+  box-shadow: 0 0 20px color-mix(in srgb, var(--brand-orange-500) 40%, transparent), 0 10px 20px -3px rgba(0, 0, 0, 0.3) !important;
 }
 
 /* ============================================================
@@ -5521,9 +5559,9 @@ body.theme-dark .legend-label-full {
 
 /* Dark Mode: same outline, lighter orange for contrast on dark */
 body.theme-dark .legend-booked {
-  background-color: rgba(255, 122, 51, 0.14);
+  background-color: color-mix(in srgb, var(--brand-orange-500) 14%, transparent);
   border: 2px solid #FB923C; /* orange-400 */
-  box-shadow: 0 0 8px rgba(255, 90, 31, 0.2);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--brand-orange-500) 20%, transparent);
 }
 
 body.theme-dark .legend-label-booked {
@@ -6023,7 +6061,7 @@ body.theme-light .card.card-clickable:hover {
   --spotlight-opacity: 0;
   --spotlight-size: 400px;
   /* Use dynamic hover color from opportunity type, fallback to brand orange */
-  --spotlight-color: var(--dynamic-hover-color, rgba(255, 122, 51, 0.6));
+  --spotlight-color: var(--dynamic-hover-color, color-mix(in srgb, var(--brand-orange-500) 60%, transparent));
 }
 
 /* Spotlight Border - Radial gradient that follows cursor */
@@ -6063,10 +6101,14 @@ body.theme-light .card.card-clickable:hover {
   border-radius: inherit;
   pointer-events: none;
   
-  /* Fallback for browsers without color-mix */
+  /* Fallback for browsers without color-mix - deliberately a literal, not a
+     color-mix() over the token: that would defeat the one job this
+     declaration has. rgba(255, 90, 31, *) is var(--brand-orange-500)'s own
+     current RGB, so it stays on-ramp without depending on the feature this
+     path exists to work around. */
   background: radial-gradient(
     calc(var(--spotlight-size) * 1.2) circle at var(--spotlight-x) var(--spotlight-y),
-    rgba(255, 122, 51, 0.08),
+    rgba(255, 90, 31, 0.08),
     transparent 50%
   );
   
@@ -6225,7 +6267,7 @@ body.theme-light .spotlight-card:hover {
   background: radial-gradient(
     circle,
     rgba(255, 78, 80, 0.15) 0%,
-    rgba(255, 122, 51, 0.10) 25%,
+    color-mix(in srgb, var(--brand-orange-500) 10%, transparent) 25%,
     rgba(255, 78, 80, 0.05) 45%,
     transparent 65%
   );
@@ -8324,7 +8366,7 @@ body:has(.cortex-landing) #root {
 .gradient-orb-2 {
   width: 600px;
   height: 600px;
-  background: radial-gradient(circle, rgba(255, 90, 31, 0.3) 0%, transparent 70%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--brand-orange-500) 30%, transparent) 0%, transparent 70%);
   bottom: -15%;
   left: -5%;
   animation: orb-drift-2 30s ease-in-out infinite;
@@ -8400,14 +8442,14 @@ body:has(.cortex-landing) #root {
   transform: translate(-50%, -50%);
   width: 350px;
   height: 450px;
-  background: radial-gradient(ellipse, rgba(255, 90, 31, 0.2) 0%, rgba(255, 78, 80, 0.12) 40%, transparent 70%);
+  background: radial-gradient(ellipse, color-mix(in srgb, var(--brand-orange-500) 20%, transparent) 0%, rgba(255, 78, 80, 0.12) 40%, transparent 70%);
   filter: blur(40px);
   z-index: -1;
   animation: beaker-pulse 4s ease-in-out infinite;
 }
 
 .beaker-ambient-orange {
-  background: radial-gradient(ellipse, rgba(255, 90, 31, 0.25) 0%, rgba(232, 108, 36, 0.15) 40%, transparent 70%);
+  background: radial-gradient(ellipse, color-mix(in srgb, var(--brand-orange-500) 25%, transparent) 0%, rgba(232, 108, 36, 0.15) 40%, transparent 70%);
 }
 
 @keyframes beaker-pulse {
@@ -8525,7 +8567,7 @@ body:has(.cortex-landing) #root {
   color: #FFFFFF;
   text-shadow: 
     0 0 40px rgba(255, 78, 80, 0.3),
-    0 0 80px rgba(255, 90, 31, 0.2);
+    0 0 80px color-mix(in srgb, var(--brand-orange-500) 20%, transparent);
 }
 
 @keyframes glitch-cyan {
@@ -8589,7 +8631,7 @@ body:has(.cortex-landing) #root {
 }
 
 .blob-cta:focus-visible {
-  outline: 2px solid #FF5A1F;
+  outline: 2px solid var(--brand-orange-500);
   outline-offset: 4px;
   border-radius: 30px;
 }
@@ -8616,7 +8658,7 @@ body:has(.cortex-landing) #root {
   transform: translate(-50%, -50%);
   width: 130%;
   height: 160%;
-  background: radial-gradient(ellipse, rgba(255, 90, 31, 0.6) 0%, rgba(255, 78, 80, 0.3) 50%, transparent 70%);
+  background: radial-gradient(ellipse, color-mix(in srgb, var(--brand-orange-500) 60%, transparent) 0%, rgba(255, 78, 80, 0.3) 50%, transparent 70%);
   border-radius: 60% 40% 50% 45% / 50% 60% 40% 55%;
   filter: blur(25px);
   animation: blob-morph 8s ease-in-out infinite, glow-pulse 3s ease-in-out infinite;
@@ -8735,7 +8777,7 @@ body:has(.cortex-landing) #root {
 }
 
 .demo-pill:focus-visible {
-  outline: 2px solid #FF5A1F;
+  outline: 2px solid var(--brand-orange-500);
   outline-offset: 2px;
 }
 
@@ -8758,8 +8800,8 @@ body:has(.cortex-landing) #root {
 
 /* Individual pill colors - all orange shades */
 .demo-pill-user .pill-glow {
-  background: linear-gradient(135deg, rgba(255, 90, 31, 0.3) 0%, transparent 100%);
-  box-shadow: 0 0 20px rgba(255, 90, 31, 0.3);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--brand-orange-500) 30%, transparent) 0%, transparent 100%);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--brand-orange-500) 30%, transparent);
 }
 
 .demo-pill-admin .pill-glow {
@@ -8804,19 +8846,19 @@ body:has(.cortex-landing) #root {
 .pulse-dot {
   width: 8px;
   height: 8px;
-  background: #FF5A1F;
+  background: var(--brand-orange-500);
   border-radius: 50%;
   animation: pulse-dot 2s ease-in-out infinite;
 }
 
 @keyframes pulse-dot {
-  0%, 100% { 
-    opacity: 0.5; 
-    box-shadow: 0 0 0 0 rgba(255, 90, 31, 0.5);
+  0%, 100% {
+    opacity: 0.5;
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--brand-orange-500) 50%, transparent);
   }
-  50% { 
-    opacity: 1; 
-    box-shadow: 0 0 0 8px rgba(255, 90, 31, 0);
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--brand-orange-500) 0%, transparent);
   }
 }
 
@@ -9377,7 +9419,7 @@ body.theme-dark .mission-scheduler .calendar-slot-selected,
 body.theme-dark .calendar-hud .calendar-slot-selected {
   background: var(--accent-fill-text-safe) !important;
   border: 1px solid #EA580C !important; /* orange-600 */
-  box-shadow: 0 4px 12px rgba(255, 90, 31, 0.3) !important;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--brand-orange-500) 30%, transparent) !important;
 }
 
 body.theme-light .mission-scheduler .calendar-slot-selected .timeslot-label,
@@ -10281,7 +10323,7 @@ body.theme-light .admin-subtitle {
   inset: 0;
   background: linear-gradient(
     135deg,
-    rgba(255, 122, 51, 0.04) 0%,
+    color-mix(in srgb, var(--brand-orange-500) 4%, transparent) 0%,
     transparent 50%
   );
   pointer-events: none;
@@ -10290,10 +10332,10 @@ body.theme-light .admin-subtitle {
 }
 
 .leaderboard-card:hover {
-  border-color: rgba(255, 122, 51, 0.35);
+  border-color: color-mix(in srgb, var(--brand-orange-500) 35%, transparent);
   box-shadow: 
     inset 0 1px 0 0 rgba(255, 255, 255, 0.15),
-    0 0 40px rgba(255, 122, 51, 0.12),
+    0 0 40px color-mix(in srgb, var(--brand-orange-500) 12%, transparent),
     0 8px 32px rgba(0, 0, 0, 0.4);
 }
 
@@ -10346,7 +10388,7 @@ body.theme-light .admin-subtitle {
 
 .stat-hud-item:hover {
   background: rgba(255, 255, 255, 0.04);
-  border-color: rgba(255, 122, 51, 0.2);
+  border-color: color-mix(in srgb, var(--brand-orange-500) 20%, transparent);
 }
 
 /* Stat HUD Value - Brand Orange for positive, White for display */
@@ -10533,8 +10575,8 @@ body.theme-light .admin-subtitle {
   margin-bottom: var(--spacing-4);
   background: linear-gradient(
     180deg,
-    rgba(255, 122, 51, 0.06) 0%,
-    rgba(255, 122, 51, 0.02) 40%,
+    color-mix(in srgb, var(--brand-orange-500) 6%, transparent) 0%,
+    color-mix(in srgb, var(--brand-orange-500) 2%, transparent) 40%,
     transparent 100%
   );
   border-radius: var(--radius-lg);
@@ -11251,7 +11293,7 @@ body.theme-dark .form-select:focus,
 body.theme-dark textarea.form-control:focus {
   background: rgba(255, 255, 255, 0.05) !important;
   border-color: var(--color-brand-orange) !important;
-  box-shadow: 0 0 0 2px rgba(255, 122, 51, 0.2) !important; /* Orange glow */
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-orange-500) 20%, transparent) !important; /* Orange glow */
   outline: none;
 }
 
@@ -11440,17 +11482,21 @@ body.theme-dark .opportunity-form small:not(.badge) {
   padding: var(--spacing-1) 0;
 }
 
-/* Below 768px the table reflows to stacked cards and the kebab moves to the
-   LEFT of a narrow card (.admin-action-group becomes justify-content:
-   flex-start), so the unconditional `right: 0 !important` above (correct on
-   desktop, opening leftward from a right-aligned trigger) opens the menu off
-   the LEFT edge of the viewport instead - confirmed live at 390px, menu left
-   edge negative and its text clipped. Reverse the anchor so a left-aligned
-   trigger opens rightward, into the room that is actually there (row 20).
-   Needs !important, and to sit AFTER the block above, to win against it -
-   two `!important` declarations of equal specificity resolve by source
-   order, same as normal rules. */
-@media (max-width: 767.98px) {
+/* Below the .admin-data-table card-reflow breakpoint (row 14 above this
+   table's own rules; raised to 1219.98px by row 16 second-pass) the table
+   reflows to stacked cards and the kebab moves to the LEFT of a narrow card
+   (.admin-action-group becomes justify-content: flex-start), so the
+   unconditional `right: 0 !important` above (correct on desktop, opening
+   leftward from a right-aligned trigger) opens the menu off the LEFT edge of
+   the viewport instead - confirmed live at 390px, menu left edge negative
+   and its text clipped. Reverse the anchor so a left-aligned trigger opens
+   rightward, into the room that is actually there (row 20). Needs
+   !important, and to sit AFTER the block above, to win against it - two
+   `!important` declarations of equal specificity resolve by source order,
+   same as normal rules. MUST share the same breakpoint as the card reflow -
+   it drifted to 767.98px against the reflow's 1219.98px once, opening the
+   menu off-screen for every card view between 768 and 1220px. */
+@media (max-width: 1219.98px) {
   .admin-action-dropdown-menu,
   .admin-action-dropdown,
   .admin-data-table .dropdown-menu,
@@ -11500,10 +11546,18 @@ body.theme-light .col-actions .dropdown-menu .dropdown-item.text-danger {
   color: #DC2626;
 }
 
+/* :focus alongside :hover: ArrowDown/Home/End in the menu (Dropdown.tsx)
+   moves focus without a hover event, and the generic hover/focus rule above
+   applies to a focused Delete too - without this it read the same orange as
+   every other focused item instead of red (row 15 "Then" residual). */
 body.theme-light .admin-action-dropdown-menu .dropdown-item.text-danger:hover,
 body.theme-light .admin-action-dropdown .dropdown-item.text-danger:hover,
 body.theme-light .admin-data-table .dropdown-menu .dropdown-item.text-danger:hover,
-body.theme-light .col-actions .dropdown-menu .dropdown-item.text-danger:hover {
+body.theme-light .col-actions .dropdown-menu .dropdown-item.text-danger:hover,
+body.theme-light .admin-action-dropdown-menu .dropdown-item.text-danger:focus,
+body.theme-light .admin-action-dropdown .dropdown-item.text-danger:focus,
+body.theme-light .admin-data-table .dropdown-menu .dropdown-item.text-danger:focus,
+body.theme-light .col-actions .dropdown-menu .dropdown-item.text-danger:focus {
   background: #FEF2F2 !important;
   /* red 600 on red 50 is 4.41 - under by a hair, and this is a destructive
      action's hover state. Red 700 on the same wash is 5.91. */
