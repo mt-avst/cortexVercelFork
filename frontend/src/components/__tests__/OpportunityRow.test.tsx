@@ -218,6 +218,25 @@ describe('OpportunityRow', () => {
     expect(container.querySelector('.opportunity-row__closing--urgent')).toBeNull();
   });
 
+  // Fix-first row 7 (second-pass review): the action word was derived from
+  // the TYPE alone, never from whether the study could still be taken part
+  // in - so an opportunity that closed 40 days ago still said "Start
+  // recorded session" and linked straight into a study nobody could join.
+  it('renders no action word or arrow once a study has ended', () => {
+    renderRow(opp({ type: 'unmoderated', end_date: new Date(Date.now() - 40 * 86400000).toISOString() }));
+
+    expect(screen.queryByText(/start recorded session/i)).toBeNull();
+    expect(document.querySelector('.opportunity-row__action')).toBeNull();
+    // The row stays one link to the (now-closed) study; it just makes no promise.
+    expect(screen.getAllByRole('link')).toHaveLength(1);
+  });
+
+  it('keeps the action word for a study that has not yet ended', () => {
+    renderRow(opp({ type: 'unmoderated', end_date: new Date(Date.now() + 4 * 86400000).toISOString() }));
+
+    expect(screen.getByText(/start recorded session/i)).toBeVisible();
+  });
+
   it('marks a study closing within three days as urgent, and an unhurried one not', () => {
     const { container, unmount } = renderRow(
       opp({ end_date: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString() })
