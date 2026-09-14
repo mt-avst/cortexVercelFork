@@ -25,12 +25,12 @@ const toISOString = (value: string | Date | unknown): string => {
   }
   return String(value);
 };
-import { 
-  CalendarX, 
-  Lock, 
-  CheckSquare, 
-  CalendarDays, 
-  Clock, 
+import {
+  CalendarX,
+  Lock,
+  CheckSquare,
+  Calendar,
+  Clock,
   AlertTriangle, 
   Info, 
   Trash2, 
@@ -1533,7 +1533,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
               <div className="mt-4">
                 <div className="mb-2">
                   <small className="text-brand-headline">
-                    <CalendarDays size={14} className="me-1" />
+                    <Calendar size={14} className="me-1" />
                     Additional Days ({secondRowDays.length} more)
                   </small>
                 </div>
@@ -3176,7 +3176,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
           */}
           {calendarConnectAvailable && (
             <a className="btn btn-sm btn-outline-primary ms-auto" href={calendarConnectUrl()}>
-              <CalendarDays size={14} className="me-1" />
+              <Calendar size={14} className="me-1" />
               Connect your calendar
             </a>
           )}

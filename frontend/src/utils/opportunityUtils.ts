@@ -22,27 +22,32 @@ export const isExternalLinkType = (type: string | null | undefined): boolean => 
  */
 
 /**
+ * Strips a status suffix that the API has been seen concatenating onto a type
+ * (e.g. `unmoderatedpublished`). Shared by every type-reading helper in this
+ * file - `getTypeBadgeClass`, `getCardHoverColor`, `getParticipantFacingType`,
+ * `getStudyTypeGlyph` - so a fix in one place cannot drift from the others.
+ * A review gate found that `getTypeBadgeClass` and `getCardHoverColor` had
+ * each kept their own inline copy of this loop despite the docblock's claim;
+ * they were equivalent by chance, not by construction.
+ */
+export const baseTypeOf = (type: string | null | undefined): string => {
+  if (!type) return '';
+  const lowered = type.toLowerCase();
+  for (const suffix of ['published', 'draft', 'closed']) {
+    if (lowered.endsWith(suffix)) {
+      return lowered.slice(0, -suffix.length);
+    }
+  }
+  return lowered;
+};
+
+/**
  * Gets the appropriate CSS class for opportunity type badges
  * @param type - The opportunity type string (can be undefined/null)
  * @returns CSS class string
  */
 export const getTypeBadgeClass = (type: string | null | undefined): string => {
-  if (!type) {
-    return 'badge bg-secondary';
-  }
-  
-  // Extract base type if it's concatenated with status
-  const statusSuffixes = ['published', 'draft', 'closed'];
-  let baseType = type;
-  
-  for (const suffix of statusSuffixes) {
-    if (type.toLowerCase().endsWith(suffix)) {
-      baseType = type.slice(0, -suffix.length);
-      break;
-    }
-  }
-  
-  switch (baseType.toLowerCase()) {
+  switch (baseTypeOf(type)) {
     case 'test':
       return 'lozenge lozenge-usertest';
     case 'interview':
@@ -67,20 +72,7 @@ export const getTypeBadgeClass = (type: string | null | undefined): string => {
  * @returns CSS variable reference string
  */
 export const getCardHoverColor = (type: string | null | undefined): string => {
-  if (!type) return 'transparent';
-  
-  // Extract base type if concatenated with status
-  const statusSuffixes = ['published', 'draft', 'closed'];
-  let baseType = type;
-  
-  for (const suffix of statusSuffixes) {
-    if (type.toLowerCase().endsWith(suffix)) {
-      baseType = type.slice(0, -suffix.length);
-      break;
-    }
-  }
-  
-  switch (baseType.toLowerCase()) {
+  switch (baseTypeOf(type)) {
     case 'test': return 'var(--lozenge-usertest-text)';
     case 'survey': return 'var(--lozenge-survey-text)';
     case 'poll': return 'var(--lozenge-poll-text)';
@@ -117,21 +109,6 @@ function isOpportunityExcludedForPresentation(opportunity: Opportunity): boolean
   return false;
 }
 
-/**
- * Strips a status suffix that the API has been seen concatenating onto a type
- * (e.g. `unmoderatedpublished`). Shared by every type-reading helper here so a
- * fix in one place cannot drift from the others.
- */
-const baseTypeOf = (type: string | null | undefined): string => {
-  if (!type) return '';
-  const lowered = type.toLowerCase();
-  for (const suffix of ['published', 'draft', 'closed']) {
-    if (lowered.endsWith(suffix)) {
-      return lowered.slice(0, -suffix.length);
-    }
-  }
-  return lowered;
-};
 
 /**
  * What anyone should be told this is - participant and admin alike.

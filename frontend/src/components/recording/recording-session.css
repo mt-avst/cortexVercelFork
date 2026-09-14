@@ -1248,17 +1248,18 @@
 }
 
 .fh-recording .journey-vtick {
+  /* No font-family/font-size/color:transparent here: StepMarker renders
+     either the check icon or nothing at all in this variant, never text, so
+     styling meant to hide a text glyph is dead weight - and a silent trap
+     for any future change that puts text back without touching this rule. */
   flex: none;
+  display: grid;
+  place-items: center;
   width: 16px;
   height: 16px;
   margin-top: 1px;
   border: 1.5px solid var(--j-line-strong);
   border-radius: 3px;
-  font-family: var(--font-mono), monospace;
-  font-size: 10px;
-  line-height: 13px;
-  text-align: center;
-  color: transparent;
 }
 
 .fh-recording .journey-vitem--done .journey-vtick {
