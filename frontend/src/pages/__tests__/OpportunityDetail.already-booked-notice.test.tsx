@@ -48,6 +48,8 @@ const fixture = {
     session('sess-held', 3 * DAY, 2),
     session('sess-open', 3 * DAY + 4 * HOUR, 2),
     session('sess-held-late', 5 * DAY, 2),
+    // Already happened - end_time is in the past too, not merely start_time.
+    session('sess-held-past', -5 * DAY, 0),
   ],
 };
 
@@ -134,6 +136,38 @@ describe('OpportunityDetail - BK-1 already-booked-for-this-study notice', () => 
     expect(notice).toHaveTextContent(`already booked for this study on ${namedFor('sess-held')}`);
     // The later held slot's date must not be the one named.
     expect(notice).not.toHaveTextContent(formatStudyDate(sessionById('sess-held-late').start_time) as string);
+  });
+
+  // Fix-first row 11 (second-pass review). `bookedSlots` is sourced from
+  // BOTH `bookings.upcoming` and `bookings.past` (loadBookedSlots above), and
+  // the notice took the chronologically-EARLIEST held session with no regard
+  // for whether it had already happened - a participant whose only held
+  // session in this study was five days ago was told "You are already booked
+  // for this study" on a date that had already passed.
+  it('says nothing about a session that has already happened', async () => {
+    vi.mocked(getMyBookings).mockResolvedValue({
+      upcoming: [],
+      past: [{ session_id: 'sess-held-past', status: 'booked' }],
+    } as never);
+
+    renderDetail();
+    await screen.findByText(fixture.title);
+    await screen.findAllByRole('button', { name: /^Book session on/i });
+
+    expect(screen.queryByTestId('already-booked-notice')).not.toBeInTheDocument();
+  });
+
+  it('names the earliest FUTURE held slot, skipping one that has already happened', async () => {
+    vi.mocked(getMyBookings).mockResolvedValue({
+      upcoming: [{ session_id: 'sess-held', status: 'booked' }],
+      past: [{ session_id: 'sess-held-past', status: 'booked' }],
+    } as never);
+
+    renderDetail();
+    await screen.findByText(fixture.title);
+
+    const notice = await screen.findByTestId('already-booked-notice');
+    expect(notice).toHaveTextContent(`already booked for this study on ${namedFor('sess-held')}`);
   });
 
   it('does not warn when the participant holds no slot in this study', async () => {

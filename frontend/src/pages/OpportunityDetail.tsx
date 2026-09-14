@@ -13,13 +13,13 @@ import CalendarGrid, { CALENDAR_LEGEND_ITEMS } from '../components/CalendarGrid'
 import ConfirmationModal from '../components/ConfirmationModal';
 import ShareOpportunityLink from '../components/ShareOpportunityLink';
 import { RecordedStudyExpectations } from '../components/RecordedStudyExpectations';
-import { getParticipantFacingType, getEligibilityNote, getTypeBadgeClass, getCardHoverColor } from '../utils/opportunityUtils';
+import { getParticipantFacingType, getEligibilityNote, getTypeBadgeClass, getCardHoverColor, getClosingTime, getTimeRemainingUntil } from '../utils/opportunityUtils';
 import { logger } from '../utils/logger';
 import { runsNativeSurvey } from '@shared/firsthand/delivery';
 import { bookingConsentText } from '@shared/firsthand/consent-templates';
 import { isPublishableExternalLink } from '@shared/firsthand/url-safety';
 import { ExternalHandoff, ExternalDestinationNote } from '../components/ExternalHandoff';
-import { RefreshCw, CheckCircle, CalendarCheck, Info, LayoutGrid, Table2, ExternalLink } from 'lucide-react';
+import { RefreshCw, CheckCircle, CalendarCheck, Info, LayoutGrid, Table2 } from 'lucide-react';
 
 // Helper function to render poll description with checkbox indicators
 const renderPollDescription = (description: string) => {
@@ -223,10 +223,27 @@ const OpportunityDetail: React.FC = () => {
     !(opportunity?.type === 'unmoderated' && opportunity?.firsthand_study_id) &&
     externalLinkIsUsable;
 
+  // Fix-first row 7 (second-pass review). This used to check only whether a
+  // study was LINKED, never whether it was still open - a native survey/poll
+  // or a recorded study with an `end_date` in the past stayed enabled and
+  // minted a new session for something that had already closed. Derived from
+  // the same countdown the row and the "N active studies" count already read,
+  // so the button cannot disagree with what the rest of the product says
+  // about this study.
+  const closingTime = opportunity ? getClosingTime(opportunity) : null;
+  // ponytail: client-only refusal - the mint routes (survey-session, recorded
+  // study, poll) check only opportunity status, not end_date, so a stale tab
+  // or a direct request can still start a session for a closed study.
+  //   -> cto/AdaptaLabs#129, breaks once a participant reaches the endpoint
+  //      after their deadline without reloading the page first.
+  const hasEnded = getTimeRemainingUntil(closingTime).urgency === 'ended';
+  const closedOnLabel = formatStudyDate(closingTime?.toISOString());
+
   const hasStartablePath = Boolean(
-    opportunity?.type === 'unmoderated' || isNativeSurvey
+    !hasEnded &&
+    (opportunity?.type === 'unmoderated' || isNativeSurvey
       ? opportunity?.firsthand_study_id
-      : externalLinkIsUsable
+      : externalLinkIsUsable)
   );
 
   // The participant's own completion of this native survey/poll/one-question
@@ -1272,8 +1289,15 @@ const OpportunityDetail: React.FC = () => {
                           slot of the same study - by naming the slot they hold
                           and linking to it, without disabling the booking. */}
                       {bookedSlots.size > 0 && (() => {
+                        // Row 11 (second-pass review): `bookedSlots` is sourced
+                        // from BOTH upcoming and past bookings (loadBookedSlots
+                        // above), so a held session that has already happened
+                        // used to win this sort outright whenever it was the
+                        // chronologically earliest - telling a participant they
+                        // were "already booked" for a date that had passed.
+                        const now = Date.now();
                         const held = opportunity.sessions
-                          .filter(session => bookedSlots.has(session.id))
+                          .filter(session => bookedSlots.has(session.id) && new Date(session.end_time).getTime() > now)
                           .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())[0];
                         if (!held) return null;
                         const heldStart = new Date(held.start_time);
@@ -1497,6 +1521,16 @@ const OpportunityDetail: React.FC = () => {
                             </p>
                           </div>
                         </div>
+                      ) : hasEnded ? (
+                        // Row 7 (second-pass review): checked ONLY inside the
+                        // button branch below, so an EXTERNAL `question` -
+                        // the one type that reaches the ExternalHandoff
+                        // branch instead of the button - still handed off to
+                        // a closed study's external form. Hoisted above the
+                        // type branches so nothing downstream can bypass it.
+                        <p className="text-muted mb-0">
+                          This study closed on {closedOnLabel}.
+                        </p>
                       ) : opportunity.type === 'poll' || opportunity.type === 'survey' || opportunity.type === 'unmoderated' || isNativeSurvey ? (
                         <>
                         <button
@@ -1590,6 +1624,10 @@ const OpportunityDetail: React.FC = () => {
                             opportunity.firsthand_study_id ? 'Start recorded study' : 'Open study in new tab'
                           }
                           title={
+                            // `hasEnded` is handled by the branch above this
+                            // one, so reaching here already means the study
+                            // is open; `!hasStartablePath` is only ever a
+                            // missing/invalid link at this point.
                             !hasStartablePath ? 'Not available yet' : undefined
                           }
                         >
@@ -1645,19 +1683,10 @@ const OpportunityDetail: React.FC = () => {
                       )}
                     </div>
                   </div>
-                  {/* Not for a native one: it opens in this tab, in Cortex. */}
-                  {((!isNativeSurvey &&
-                    (opportunity.type === 'poll' || opportunity.type === 'survey')) ||
-                    (opportunity.type === 'unmoderated' && !opportunity.firsthand_study_id)) && (
-                    <div className="row mt-2">
-                      <div className="col-md-4">
-                        <small className="text-muted d-flex align-items-center">
-                          <ExternalLink size={14} className="me-1" aria-hidden="true" />
-                          Opens in a new tab
-                        </small>
-                      </div>
-                    </div>
-                  )}
+                  {/* Row 21 (second-pass review): this used to duplicate
+                      ExternalDestinationNote above with a second, unnamed
+                      "Opens in a new tab" line - the named disclosure (DT-8)
+                      is the only one this button path needs. */}
                 </div>
               )}
           </div>

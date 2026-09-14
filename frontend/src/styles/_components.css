@@ -7174,6 +7174,18 @@ body.theme-light .meeting-link:hover {
   align-items: center;
 }
 
+/* BK-5 ("Then" bundle, second-pass review): Cancel sat flush against Join
+   with only colour telling the primary action from the destructive one apart.
+   Pushed to the far end of the row so the two read as distinct, not paired.
+   Keyed on Join being a PRECEDING SIBLING (MyBookings.tsx only renders Join
+   when the booking has a usable meeting link) rather than on `.booking-actions`
+   generally: a lone Cancel - no Join, nothing to be separated from - would
+   otherwise get pushed to the far right too, out of line with the note
+   beneath it and every card that does have a Join link. */
+.btn-booking-join ~ .btn-booking-cancel {
+  margin-left: auto;
+}
+
 /* Join Meeting Button - Primary action */
 .btn-booking-join {
   display: inline-flex;
@@ -12351,54 +12363,75 @@ body.theme-light .col-actions .dropdown-menu .dropdown-divider {
   width: 100%;
 }
 
-@media (max-width: 768px) {
-  .calendar-timeline {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior-x: contain;
-  }
+/* Row 6 (second-pass review): `.calendar-content-row` is `width: 100%` of
+   `.calendar-timeline`, but its `.calendar-days-container` child carries an
+   inline `min-width` floor (the day-grid width computed in CalendarGrid.tsx)
+   that can exceed the space `.calendar-content-row` actually has. A flex
+   child's min-width wins over its row's own box, so the excess used to paint
+   straight past `.calendar-timeline` and out through the card - contained
+   only below 768px, where this whole block previously lived gated to the
+   phone media query.
+   A narrow DESKTOP window hits the identical overflow (a card 350px narrower
+   than a full week of >=128px columns does not need a phone to reproduce it)
+   - but making the scroller unconditional turned `.calendar-timeline` into a
+   scroll container at every width, and `position: sticky` computes against
+   the nearest scroll container, not the viewport. `.calendar-sticky-header-row`
+   silently stopped sticking to the viewport on EVERY desktop width the moment
+   `.calendar-timeline` gained ANY overflow rule, comfortable weeks included -
+   not only the ones that actually needed to scroll.
+   So this is now a CLASS (`.calendar-timeline--scrolls`, toggled by
+   CalendarGrid.tsx from a real container-width measurement, matching the
+   `matchMedia(max-width: 768px)` case unconditionally so phone keeps its
+   exact previously-shipped, already-tested behaviour) rather than a bare
+   media query: a calendar that comfortably fits keeps its sticky header and
+   its full-bleed desktop chrome untouched; one that does not gets exactly the
+   same scroll-contained, non-sticky treatment phone already had. */
+.calendar-timeline.calendar-timeline--scrolls {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
 
-  /* Both scrolled rows are pinned to one shared content width (set as a CSS var
-     on .calendar-view from the day-grid floor) rather than max-content: that
-     gives the sticky gutter/spacer the full scroll range to pin across, AND
-     makes the two independent grids resolve to identical column widths so the
-     day headers stay aligned with the day columns. min-width:100% keeps them
-     filling the panel when a short week is narrower than the viewport. */
-  .calendar-content-row,
-  .calendar-sticky-header-row {
-    width: var(--cal-content-w);
-    min-width: 100%;
-  }
+/* Both scrolled rows are pinned to one shared content width (set as a CSS var
+   on .calendar-view from the day-grid floor) rather than max-content: that
+   gives the sticky gutter/spacer the full scroll range to pin across, AND
+   makes the two independent grids resolve to identical column widths so the
+   day headers stay aligned with the day columns. min-width:100% keeps them
+   filling the panel when a short week is narrower than the viewport. */
+.calendar-timeline--scrolls .calendar-content-row,
+.calendar-timeline--scrolls .calendar-sticky-header-row {
+  width: var(--cal-content-w);
+  min-width: 100%;
+}
 
-  /* On desktop the header bleeds to the panel edges and sticks to the
-     viewport top; inside a horizontal scroller both fight the scroll, so
-     on phone it scrolls with the grid instead. */
-  .calendar-sticky-header-row {
-    position: static;
-    margin-left: 0;
-    margin-right: 0;
-    padding-left: 0;
-    padding-right: 0;
-  }
+/* Outside this class the header bleeds to the panel edges and sticks to the
+   viewport top; inside a horizontal scroller both fight the scroll, so here
+   it scrolls with the grid instead. */
+.calendar-timeline--scrolls .calendar-sticky-header-row {
+  position: static;
+  margin-left: 0;
+  margin-right: 0;
+  padding-left: 0;
+  padding-right: 0;
+}
 
-  /* Pin the header spacer to the left edge so the day headers stay
-     column-aligned with the day columns as the week scrolls. The time column
-     below it is already sticky-left inline (CalendarGrid.tsx), so it only needs
-     the opaque fill here; both need one or the scrolling columns show through
-     the transparent gutter. */
-  .calendar-header-time-spacer {
-    position: sticky;
-    left: 0;
-    z-index: 6;
-  }
-  body.theme-light .calendar-header-time-spacer,
-  body.theme-light .calendar-time-column {
-    background: #ffffff;
-  }
-  body.theme-dark .calendar-header-time-spacer,
-  body.theme-dark .calendar-time-column {
-    background: #0b0f19;
-  }
+/* Pin the header spacer to the left edge so the day headers stay
+   column-aligned with the day columns as the week scrolls. The time column
+   below it is already sticky-left inline (CalendarGrid.tsx), so it only needs
+   the opaque fill here; both need one or the scrolling columns show through
+   the transparent gutter. */
+.calendar-timeline--scrolls .calendar-header-time-spacer {
+  position: sticky;
+  left: 0;
+  z-index: 6;
+}
+body.theme-light .calendar-timeline--scrolls .calendar-header-time-spacer,
+body.theme-light .calendar-timeline--scrolls .calendar-time-column {
+  background: #ffffff;
+}
+body.theme-dark .calendar-timeline--scrolls .calendar-header-time-spacer,
+body.theme-dark .calendar-timeline--scrolls .calendar-time-column {
+  background: #0b0f19;
 }
 
 /* ============================================================

@@ -1,13 +1,21 @@
 import React, { useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { submitFeedback } from '../api/client';
 import { logger } from '../utils/logger';
 import { CheckCircle, AlertTriangle } from 'lucide-react';
 
 const FeedbackFooter: React.FC = () => {
+  const { pathname } = useLocation();
   const [feedback, setFeedback] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Row 22 (second-pass review): /feedback carries its own dedicated form, so
+  // the footer's identical "tell us how to improve Cortex" prompt stacked
+  // underneath it was the same request offered twice on the one page built to
+  // collect it.
+  if (pathname === '/feedback' || pathname.startsWith('/feedback/')) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

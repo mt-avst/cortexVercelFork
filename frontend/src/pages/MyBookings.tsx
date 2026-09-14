@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 // rescheduleBooking is deliberately not imported: the control was removed
 // (it shipped permanently disabled) and the endpoint stays live and guarded
@@ -28,6 +28,25 @@ const MyBookings: React.FC = () => {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [cancelConfirm, setCancelConfirm] = useState<{ show: boolean; bookingId: string | null }>({ show: false, bookingId: null });
   const [sessionEvents, setSessionEvents] = useState<MySessionEvent[]>([]);
+
+  // `opportunity_session_events` is one row per lifecycle transition
+  // (started, completed, abandoned, failed), not one row per session - a poll
+  // that fired session_started then session_completed produced two cards for
+  // the one study taken. `firsthand_session_id` is the only session key this
+  // payload carries, so group on that and let the latest transition by
+  // `occurred_at` stand for the session.
+  const completedSessions = useMemo(() => {
+    const bySession = new Map<string, MySessionEvent>();
+    for (const event of sessionEvents) {
+      const current = bySession.get(event.firsthand_session_id);
+      if (!current || new Date(event.occurred_at) > new Date(current.occurred_at)) {
+        bySession.set(event.firsthand_session_id, event);
+      }
+    }
+    return Array.from(bySession.values()).sort(
+      (a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime()
+    );
+  }, [sessionEvents]);
 
   useEffect(() => {
     loadBookings();
@@ -447,12 +466,12 @@ const MyBookings: React.FC = () => {
           )}
         </section>
 
-        {sessionEvents.length > 0 && (
+        {completedSessions.length > 0 && (
           <section className="my-bookings-section my-bookings-section-past">
             <h2 className="my-bookings-section-title">Completed studies</h2>
             <div className="booking-cards-grid">
-              {sessionEvents.map((event) => (
-                <Card key={event.id} className="booking-card booking-card-past">
+              {completedSessions.map((event) => (
+                <Card key={event.firsthand_session_id} className="booking-card booking-card-past">
                   <CardBody className="booking-card-body">
                     <div className="booking-card-badges">
                       <span className={`booking-badge ${
@@ -475,14 +494,7 @@ const MyBookings: React.FC = () => {
                         <dt className="booking-metadata-label">Type</dt>
                         <dd className="booking-metadata-value d-flex align-items-center gap-1">
                           <Monitor size={14} aria-hidden="true" />
-                          {/* Every session event on this list is an unmoderated
-                              study, but the NAME still comes from the one place
-                              that names types. Spelled out here, this said
-                              "Unmoderated" while the badge two sections up said
-                              "Recorded study" - the same list describing itself
-                              two ways, which is the drift the shared helper
-                              exists to stop. */}
-                          {getParticipantFacingType('unmoderated')}
+                          {getParticipantFacingType(event.type)}
                         </dd>
                       </div>
                     </dl>

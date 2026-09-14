@@ -154,6 +154,29 @@ describe('SurveySession', () => {
     expect(back).toHaveAttribute('href', expect.stringContaining('completed=1'));
   });
 
+  // Fix-first row 22 (second-pass review): moved out of the standard chrome
+  // (header nav, footer) onto the same chrome-less layout the recording
+  // surface uses - but a recording is trapped there deliberately (a stray
+  // click costs the session), and a survey is not. Without its own exit, a
+  // participant mid-survey had no way out at all once the header disappeared.
+  it('offers a way to leave while the survey is still in progress', async () => {
+    respondWith(200, payload);
+    renderSession();
+
+    await screen.findByRole('button', { name: /finish the survey/i });
+
+    expect(screen.getByRole('link', { name: /back to cortex/i })).toHaveAttribute('href', '/');
+  });
+
+  it('renders inside a main landmark, since there is no chrome to supply one', async () => {
+    respondWith(200, payload);
+    renderSession();
+
+    await screen.findByRole('button', { name: /finish the survey/i });
+
+    expect(screen.getByRole('main')).toBeInTheDocument();
+  });
+
   it('offers no way back when the return url cannot be trusted', async () => {
     respondWith(200, {
       ...payload,
