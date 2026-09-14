@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Check, Clock, Timer, Users } from 'lucide-react';
+import { ArrowRight, Check, Clock, Users } from 'lucide-react';
 
 import type { Opportunity, User } from '../api/types';
 import {
@@ -120,7 +120,7 @@ export function OpportunityRow({ opportunity, role }: OpportunityRowProps) {
                   isUrgent ? ' opportunity-row__closing--urgent' : ''
                 }`}
               >
-                <Timer size={14} aria-hidden="true" />
+                <Clock size={14} aria-hidden="true" />
                 {remaining.text}
               </li>
             )}

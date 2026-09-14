@@ -139,7 +139,9 @@ describe('Admin page', () => {
     // research study (the opportunity), and only one of them renamed.
     expect(screen.getByText('Task Lists')).toBeInTheDocument();
     expect(screen.getByText('Tasks')).toBeInTheDocument();
-    expect(screen.getByText('Create Research Study →')).toBeInTheDocument();
+    // The trailing arrow moved from unicode text onto a lucide icon (Lane E
+    // icon system), so the accessible name is the label alone now.
+    expect(screen.getByText('Create Research Study')).toBeInTheDocument();
 
     // Opportunities table renders the mocked row once the async load resolves.
     expect(await screen.findByText('Checkout usability test')).toBeInTheDocument();

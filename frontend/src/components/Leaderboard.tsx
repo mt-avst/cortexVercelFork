@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { gamificationApi, gamificationUtils, LeaderboardEntry } from '../api/gamification';
 import LoadingSpinner from './LoadingSpinner';
-import { AlertTriangle, Trophy, Calendar, CalendarRange } from 'lucide-react';
+import { AlertTriangle, Trophy, Calendar, History, Medal } from 'lucide-react';
+import { Icon } from './ui';
 
 interface LeaderboardProps {
   limit?: number;
@@ -58,12 +59,14 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ limit = 20 }) => {
     return 'leaderboard-row';
   };
 
-  // Get medal icon for top 3 (ensure number comparison)
-  const getMedalIcon = (rank: number): string | null => {
+  // Get medal colour modifier for top 3 (ensure number comparison). Replaces
+  // three medal emoji, which render as a different pictograph per platform
+  // and cannot be recoloured or sized with the rest of the icon system.
+  const getMedalRankClass = (rank: number): string | null => {
     const numRank = Number(rank);
-    if (numRank === 1) return '🥇';
-    if (numRank === 2) return '🥈';
-    if (numRank === 3) return '🥉';
+    if (numRank === 1) return 'leaderboard-row-medal--gold';
+    if (numRank === 2) return 'leaderboard-row-medal--silver';
+    if (numRank === 3) return 'leaderboard-row-medal--bronze';
     return null;
   };
 
@@ -91,7 +94,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ limit = 20 }) => {
 
   const renderRow = (entry: LeaderboardEntry) => {
     const points = getPoints(entry);
-    const medal = getMedalIcon(entry.rank);
+    const medalRankClass = getMedalRankClass(entry.rank);
     const isTopThree = Number(entry.rank) <= 3;
     const scoreDisplay = formatScoreDisplay(points, entry.rank);
     const showPtsLabel = isTopThree && points > 0;
@@ -102,8 +105,10 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ limit = 20 }) => {
       <div key={entry.rank} className={getRowClass(entry.rank)}>
         {/* Rank */}
         <div className="leaderboard-row-rank">
-          {medal ? (
-            <span className="leaderboard-row-medal">{medal}</span>
+          {medalRankClass ? (
+            <span className={`leaderboard-row-medal ${medalRankClass}`}>
+              <Icon icon={Medal} size={20} aria-hidden="true" />
+            </span>
           ) : (
             <span className="leaderboard-row-number">#{entry.rank}</span>
           )}
@@ -170,7 +175,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ limit = 20 }) => {
             className={`leaderboard-tab ${activeTab === 'total' ? 'leaderboard-tab--active' : ''}`}
             onClick={() => setActiveTab('total')}
           >
-            <CalendarRange size={14} />
+            <History size={14} />
             All Time
           </button>
         </div>

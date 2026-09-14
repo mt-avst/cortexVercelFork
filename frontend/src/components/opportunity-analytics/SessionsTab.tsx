@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { SessionEvent } from '../../api/types';
+import { SortCaret } from '../ui';
 
 export const EVENT_TYPE_LABELS: Record<string, string> = {
   session_started: 'Started',
@@ -202,9 +203,7 @@ const SessionsTab: React.FC<{
                 >
                   <button type="button" className="admin-th-sort" onClick={() => handleSort('participant')}>
                     Participant
-                    <span className="admin-th-sort-caret" aria-hidden="true">
-                      {sortField === 'participant' ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}
-                    </span>
+                    <SortCaret active={sortField === 'participant'} direction={sortDirection} />
                   </button>
                 </th>
                 <th
@@ -214,9 +213,7 @@ const SessionsTab: React.FC<{
                 >
                   <button type="button" className="admin-th-sort" onClick={() => handleSort('status')}>
                     Status
-                    <span className="admin-th-sort-caret" aria-hidden="true">
-                      {sortField === 'status' ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}
-                    </span>
+                    <SortCaret active={sortField === 'status'} direction={sortDirection} />
                   </button>
                 </th>
                 <th
@@ -226,9 +223,7 @@ const SessionsTab: React.FC<{
                 >
                   <button type="button" className="admin-th-sort" onClick={() => handleSort('lastActivity')}>
                     Last activity
-                    <span className="admin-th-sort-caret" aria-hidden="true">
-                      {sortField === 'lastActivity' ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}
-                    </span>
+                    <SortCaret active={sortField === 'lastActivity'} direction={sortDirection} />
                   </button>
                 </th>
                 <th scope="col" style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>Session</th>

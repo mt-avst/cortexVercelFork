@@ -607,7 +607,7 @@ body.theme-light .form-select {
   background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23374151' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e") !important;
   background-repeat: no-repeat !important;
   background-position: right 0.75rem center !important;
-  background-size: 16px 12px !important;
+  background-size: 16px 16px !important;
 }
 
 /* Admin dashboard form select - light mode */
@@ -615,7 +615,7 @@ body.theme-light .admin-dashboard .form-select {
   background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23374151' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e") !important;
   background-repeat: no-repeat !important;
   background-position: right 0.75rem center !important;
-  background-size: 16px 12px !important;
+  background-size: 16px 16px !important;
   background-color: rgba(255, 255, 255, 0.8) !important;
 }
 
@@ -1115,21 +1115,16 @@ body.theme-dark .admin-stat-card .stat-subtitle {
   color: rgba(255, 255, 255, 0.6);
 }
 
-/* STRICT MONOCHROME - No colored icons in Dark Mode */
-body.theme-dark .admin-stat-card .stat-icon {
-  color: var(--color-slate-400) !important;
-  filter: grayscale(100%) !important;
-  -webkit-filter: grayscale(100%) !important;
-  opacity: 0.5;
-}
-
+/* STRICT MONOCHROME - No colored icons in Dark Mode. This theme-scoped
+   override forced the SAME dark slate value regardless of theme (so the
+   "Light Mode" copy below rendered dark-theme grey on a white card) and,
+   like the base .stat-icon rule in _components.css, dimmed it to ~1.92:1
+   with opacity + !important. Removed rather than fixed in place: with no
+   override here the theme-aware base rule (--text-secondary) already
+   applies. */
 body.theme-dark .admin-stat-card .stat-icon-wrapper {
   background: var(--surface-glass-current);
   border: 1px solid var(--border-subtle-current);
-}
-
-body.theme-dark .admin-stat-card:hover .stat-icon {
-  opacity: 0.9;
 }
 
 /* Cortex Brand Title - Dark Mode */
@@ -1214,7 +1209,7 @@ body.theme-dark .admin-dashboard .form-select {
   background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23E0E0E0' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e") !important;
   background-repeat: no-repeat !important;
   background-position: right 0.75rem center !important;
-  background-size: 16px 12px !important;
+  background-size: 16px 16px !important;
 }
 
 body.theme-dark .admin-dashboard .form-select option {
@@ -1723,21 +1718,13 @@ body.theme-light .admin-stat-card .stat-subtitle {
   color: #6B7280;
 }
 
-/* STRICT MONOCHROME - No colored icons in Light Mode */
-body.theme-light .admin-stat-card .stat-icon {
-  color: var(--color-slate-400) !important;
-  filter: grayscale(100%) !important;
-  -webkit-filter: grayscale(100%) !important;
-  opacity: 0.5;
-}
-
+/* STRICT MONOCHROME - No colored icons in Light Mode. Same defect as the
+   dark-mode block above: an identical dark-slate value forced onto both
+   themes at ~1.92:1, which on a white card also had no theme-awareness at
+   all. Removed for the same reason. */
 body.theme-light .admin-stat-card .stat-icon-wrapper {
   background: var(--surface-glass-current);
   border: 1px solid var(--border-subtle-current);
-}
-
-body.theme-light .admin-stat-card:hover .stat-icon {
-  opacity: 0.9;
 }
 
 /* Cortex Brand Title - Light Mode */
@@ -2996,7 +2983,7 @@ body.theme-light .opportunity-form select.form-select {
   background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23374151' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e") !important;
   background-repeat: no-repeat !important;
   background-position: right 0.75rem center !important;
-  background-size: 16px 12px !important;
+  background-size: 16px 16px !important;
 }
 
 body.theme-light .opportunity-form .form-control:focus,
@@ -3018,7 +3005,7 @@ body.theme-light .opportunity-form select.form-select:focus {
   background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23374151' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e") !important;
   background-repeat: no-repeat !important;
   background-position: right 0.75rem center !important;
-  background-size: 16px 12px !important;
+  background-size: 16px 16px !important;
 }
 
 body.theme-light .opportunity-form .form-control::placeholder,

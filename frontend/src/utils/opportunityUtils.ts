@@ -122,7 +122,7 @@ function isOpportunityExcludedForPresentation(opportunity: Opportunity): boolean
  * (e.g. `unmoderatedpublished`). Shared by every type-reading helper here so a
  * fix in one place cannot drift from the others.
  */
-const baseTypeOf = (type: string | null | undefined): string => {
+export const baseTypeOf = (type: string | null | undefined): string => {
   if (!type) return '';
   const lowered = type.toLowerCase();
   for (const suffix of ['published', 'draft', 'closed']) {

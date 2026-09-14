@@ -14,12 +14,14 @@ import ConfirmationModal from '../components/ConfirmationModal';
 import ShareOpportunityLink from '../components/ShareOpportunityLink';
 import { RecordedStudyExpectations } from '../components/RecordedStudyExpectations';
 import { getParticipantFacingType, getEligibilityNote, getTypeBadgeClass, getCardHoverColor, getClosingTime, getTimeRemainingUntil } from '../utils/opportunityUtils';
+import { getStudyTypeGlyph } from '../utils/studyTypeIcons';
 import { logger } from '../utils/logger';
 import { runsNativeSurvey } from '@shared/firsthand/delivery';
 import { bookingConsentText } from '@shared/firsthand/consent-templates';
 import { isPublishableExternalLink } from '@shared/firsthand/url-safety';
 import { ExternalHandoff, ExternalDestinationNote } from '../components/ExternalHandoff';
-import { RefreshCw, CheckCircle, CalendarCheck, Info, LayoutGrid, Table2 } from 'lucide-react';
+import { RefreshCw, CheckCircle, Calendar, Info, LayoutGrid, Table2, ArrowLeft } from 'lucide-react';
+import { Icon } from '../components/ui';
 
 // Helper function to render poll description with checkbox indicators
 const renderPollDescription = (description: string) => {
@@ -798,7 +800,8 @@ const OpportunityDetail: React.FC = () => {
               className="btn btn-sm btn-outline-secondary"
               onClick={() => navigate('/')}
             >
-              ← Back to Cortex
+              <ArrowLeft size={16} className="me-1" aria-hidden="true" />
+              Back to Cortex
             </button>
           </div>
         </div>
@@ -853,7 +856,8 @@ const OpportunityDetail: React.FC = () => {
             onClick={() => navigate('/')}
             aria-label="Navigate back to Cortex home"
           >
-            ← Back to Cortex
+            <ArrowLeft size={16} className="me-1" aria-hidden="true" />
+            Back to Cortex
           </button>
 
 
@@ -955,6 +959,12 @@ const OpportunityDetail: React.FC = () => {
                       is not allowed to use. The status badge below stays
                       admin-only and keeps its real value. */}
                   <span className={getTypeBadgeClass(opportunity?.type)}>
+                    {(() => {
+                      const TypeGlyph = getStudyTypeGlyph(opportunity?.type);
+                      return TypeGlyph ? (
+                        <Icon icon={TypeGlyph} size={14} aria-hidden="true" className="lozenge__glyph" />
+                      ) : null;
+                    })()}
                     {getParticipantFacingType(opportunity?.type)}
                   </span>
                   {(user?.role === 'researcher_admin' || user?.role === 'superadmin') && (
@@ -1122,7 +1132,7 @@ const OpportunityDetail: React.FC = () => {
                           onClick={() => navigate('/my-bookings')}
                           aria-label="Navigate to My bookings page"
                         >
-                          <CalendarCheck size={14} className="me-1" aria-hidden="true" />
+                          <Calendar size={14} className="me-1" aria-hidden="true" />
                           View my bookings
                         </button>
                       </div>

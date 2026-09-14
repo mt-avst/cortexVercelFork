@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Eye, MousePointerClick, TrendingUp, Users,
-  BarChart3, CalendarDays, History, Activity,
-  Clock, Calendar, LineChart, Zap
+  Eye, CheckCircle2, Percent, Users,
+  BarChart3, Calendar, History, Activity,
+  Clock, LineChart, Zap
 } from 'lucide-react';
 import { useNavigate, useParams, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -832,7 +832,10 @@ const OpportunityAnalyticsPage: React.FC = () => {
             <div className="cortex-analytics-card">
               <div className="cortex-analytics-card-header">
                 <h6 className="cortex-analytics-card-title">Actions Taken</h6>
-                <span className="cortex-analytics-card-icon"><MousePointerClick size={18} aria-hidden="true" /></span>
+                {/* Not MousePointerClick: "action" varies by type (a booking, a
+                    completion, a link click), and a recorded study's action has
+                    no click at all - the glyph should not claim one. */}
+                <span className="cortex-analytics-card-icon"><CheckCircle2 size={18} aria-hidden="true" /></span>
               </div>
               <div className="cortex-analytics-card-content">
                 {/* What an action IS depends on the type. This said "Clicked
@@ -856,7 +859,10 @@ const OpportunityAnalyticsPage: React.FC = () => {
             <div className="cortex-analytics-card">
               <div className="cortex-analytics-card-header">
                 <h6 className="cortex-analytics-card-title">Conversion Rate</h6>
-                <span className="cortex-analytics-card-icon"><TrendingUp size={18} aria-hidden="true" /></span>
+                {/* Not TrendingUp: the week-change line right below this can
+                    read negative, and an icon that always points up would
+                    contradict its own card's own figure. */}
+                <span className="cortex-analytics-card-icon"><Percent size={18} aria-hidden="true" /></span>
               </div>
               <div className="cortex-analytics-card-content">
                 {/* Left as "Actions" deliberately. The line under it reads
@@ -918,7 +924,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
               value={analytics?.clicks_7d ?? 0}
               subtitle={weekChange === null ? 'no previous week to compare' : `${weekChange >= 0 ? '+' : ''}${weekChange}% vs prev week`}
               trend={analytics?.week_over_week_change ?? 0}
-              icon={<CalendarDays size={18} aria-hidden="true" />}
+              icon={<Calendar size={18} aria-hidden="true" />}
             />
             <StatCard 
               title="Last 24 Hours" 
