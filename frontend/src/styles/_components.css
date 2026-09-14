@@ -916,15 +916,15 @@ body.theme-light .btn-glass:hover {
   font-weight: 600;
   font-family: var(--font-family-base);
   color: #FFFFFF;
-  /* --accent-fill-text-safe, not var(--cta-bg): that token is ink navy in
-     light mode (a different button's convention), which would turn the
-     orange landing CTA navy. And not the raw ramp step directly: every
+  /* --accent-fill-text-safe, not the raw ramp step directly: every
      --brand-orange-* identity step is an IDENTITY colour that FAILS AA
      under white text (accent-fill-policy.test.ts enforces this) -
      --accent-fill-text-safe is the token that resolves to whichever step
      actually passes, per theme (800 in dark, the light-safe alias in
-     light). This button stays orange in both themes, same as it always
-     was, just AA-safe under its own white label now. */
+     light). --cta-bg would now read the same colour family too (Decision
+     5 made it orange in both themes), but this button keeps its own name
+     for the AA-safe guarantee specifically, not to dodge a navy fill that
+     no longer exists. */
   background: var(--accent-fill-text-safe);
   border: none;
   border-radius: 100px;
@@ -4396,7 +4396,7 @@ body.theme-dark .admin-data-table td.col-date {
 
 .hero-subtitle-centered .subtitle-emphasis {
   font-weight: 700;
-  color: #FF5722;
+  color: var(--brand-orange-500);
 }
 
 /* Section 2: Two Column Value Grid */
@@ -4524,7 +4524,7 @@ body.theme-light .hero-value-heading {
 }
 
 .hero-demo-link:hover:not(:disabled) {
-  color: #FF5722;
+  color: var(--brand-orange-500);
   text-decoration: none;
 }
 
@@ -4534,7 +4534,7 @@ body.theme-light .hero-value-heading {
 }
 
 .hero-demo-link:focus {
-  outline: 2px solid #FF5722;
+  outline: 2px solid var(--brand-orange-500);
   outline-offset: 2px;
 }
 
@@ -5022,7 +5022,7 @@ body.theme-dark .calendar-slot-ghost:hover .timeslot-label {
    book" looked identical. Outline vs solid keeps both in the brand colour while
    making them unmistakably different states. */
 .calendar-slot-booked {
-  background: rgba(197, 78, 18, 0.10) !important; /* brand-orange-800 tint */
+  background: color-mix(in srgb, var(--brand-orange-800) 10%, transparent) !important; /* brand-orange-800 tint, now the real token */
   border: 2px solid var(--accent-fill-text-safe) !important;
   border-radius: 8px !important;
 }
@@ -5417,11 +5417,11 @@ body.theme-dark .booking-popover-time {
 }
 
 .booking-popover-confirm:hover {
-  background-color: #EA580C; /* orange-600 */
+  background-color: var(--brand-orange-600);
 }
 
 .booking-popover-confirm:active {
-  background-color: #C2410C; /* orange-700 */
+  background-color: var(--brand-orange-700);
 }
 
 /* Secondary Button - Ghost style */
@@ -5556,7 +5556,7 @@ body.theme-dark .legend-label-full {
    slot is now an orange outline (the solid orange belongs to the selected
    state), so the key follows it: orange border, tinted fill, orange label. */
 .legend-booked {
-  background-color: rgba(197, 78, 18, 0.10); /* brand-orange-800 tint */
+  background-color: color-mix(in srgb, var(--brand-orange-800) 10%, transparent); /* brand-orange-800 tint, now the real token */
   border: 2px solid var(--accent-fill-text-safe);
 }
 
@@ -8403,7 +8403,7 @@ body:has(.cortex-landing) #root {
 .gradient-orb-3 {
   width: 400px;
   height: 400px;
-  background: radial-gradient(circle, rgba(232, 108, 36, 0.2) 0%, transparent 70%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--brand-orange-500) 20%, transparent) 0%, transparent 70%);
   top: 40%;
   left: 30%;
   animation: orb-drift-3 20s ease-in-out infinite;
@@ -8477,7 +8477,7 @@ body:has(.cortex-landing) #root {
 }
 
 .beaker-ambient-orange {
-  background: radial-gradient(ellipse, color-mix(in srgb, var(--brand-orange-500) 25%, transparent) 0%, rgba(232, 108, 36, 0.15) 40%, transparent 70%);
+  background: radial-gradient(ellipse, color-mix(in srgb, var(--brand-orange-500) 25%, transparent) 0%, color-mix(in srgb, var(--brand-orange-500) 15%, transparent) 40%, transparent 70%);
 }
 
 @keyframes beaker-pulse {
@@ -8838,8 +8838,8 @@ body:has(.cortex-landing) #root {
 }
 
 .demo-pill-super .pill-glow {
-  background: linear-gradient(135deg, rgba(232, 108, 36, 0.3) 0%, transparent 100%);
-  box-shadow: 0 0 20px rgba(232, 108, 36, 0.3);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--brand-orange-500) 30%, transparent) 0%, transparent 100%);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--brand-orange-500) 30%, transparent);
 }
 
 .pill-icon {
@@ -9080,7 +9080,7 @@ body.theme-light .mission-glass-panel {
 
 /* Dark Mode: Decisive status indicator - full opacity accent, 8px brand bar */
 body.theme-dark .mission-glass-panel.mission-brief {
-  border-top: 8px solid var(--accent-border-color, #FF5500) !important;
+  border-top: 8px solid var(--accent-border-color, var(--brand-orange-500)) !important;
 }
 
 /* Light Mode: Keep visible refined accent, 8px brand bar */
@@ -9688,8 +9688,8 @@ body.theme-dark .landing-page-wrapper {
 body.theme-light .landing-page-wrapper {
   background: #FFFFFF;
   background-image:
-    linear-gradient(to right, rgba(255, 85, 0, 0.05) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 85, 0, 0.05) 1px, transparent 1px);
+    linear-gradient(to right, color-mix(in srgb, var(--brand-orange-500) 5%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--brand-orange-500) 5%, transparent) 1px, transparent 1px);
   background-size: 24px 24px;
 }
 
@@ -9833,7 +9833,7 @@ body.theme-light .landing-shadow-shield {
 }
 
 body.theme-dark .landing-parent-brand {
-  text-shadow: 0 0 30px rgba(255, 85, 0, 0.5);
+  text-shadow: 0 0 30px color-mix(in srgb, var(--brand-orange-500) 50%, transparent);
 }
 
 body.theme-light .landing-parent-brand {
@@ -9900,7 +9900,7 @@ body.theme-dark .landing-product-name {
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  filter: drop-shadow(0 0 80px rgba(255, 85, 0, 0.4)) drop-shadow(0 0 40px rgba(255, 85, 0, 0.2));
+  filter: drop-shadow(0 0 80px color-mix(in srgb, var(--brand-orange-500) 40%, transparent)) drop-shadow(0 0 40px color-mix(in srgb, var(--brand-orange-500) 20%, transparent));
 }
 
 /* Light mode: Fraunces display font + solid dark text */
@@ -10091,7 +10091,7 @@ body.theme-dark .landing-find-out {
 
 body.theme-dark .landing-tagline {
   color: var(--color-cortex-orange);
-  text-shadow: 0 0 20px rgba(255, 85, 0, 0.35);
+  text-shadow: 0 0 20px color-mix(in srgb, var(--brand-orange-500) 35%, transparent);
 }
 
 body.theme-light .landing-hammers {
@@ -10105,7 +10105,7 @@ body.theme-light .landing-find-out {
 }
 
 body.theme-light .landing-tagline {
-  color: #C2410C;
+  color: var(--accent-text-on-light);
   text-shadow: none;
 }
 
@@ -11595,7 +11595,7 @@ body.theme-light .admin-action-dropdown .dropdown-item:focus,
 body.theme-light .admin-data-table .dropdown-menu .dropdown-item:focus,
 body.theme-light .col-actions .dropdown-menu .dropdown-item:focus {
   background: var(--color-slate-50) !important;
-  color: #F97316 !important;
+  color: var(--brand-orange-500) !important;
 }
 
 /* Danger item styling (Light Mode) */

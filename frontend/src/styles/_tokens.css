@@ -21,7 +21,38 @@
   --bg-input: rgba(255, 255, 255, 0.05);
   --bg-input-focus: rgba(255, 255, 255, 0.08);
   --bg-glass: rgba(17, 24, 39, 0.85);
-  
+
+  /* ============================================================
+     REGISTER GROUND - recording register + session review (Decision 4)
+
+     The participant recording flow (.fh-recording) has always been a fixed
+     cream/hairline/mono surface, ignoring the app theme entirely. This is its
+     dark half: the app's own dark ground/text/border tokens, not a third
+     bespoke palette, so switching theme while a register is open changes
+     nothing about its shape - only which surface it borrows.
+     Redefined under body.theme-light in _themes.css to the FirstHand
+     --fs-* cream values, which is what "promote the cream to the light theme"
+     means: the register's own light half becomes the same --fs-bg the rest
+     of light theme already uses (see --bg-app below), not a copy of it.
+     ============================================================ */
+  --register-bg: var(--bg-app);
+  --register-card: rgba(255, 255, 255, 0.04);
+  --register-ink: var(--text-primary);
+  --register-muted: var(--text-muted);
+  /* Stronger than --border-subtle-dark (0.06, measured 1.12:1 on this ground)
+     on purpose: a hairline is still a UI boundary (WCAG 1.4.11 wants 3:1),
+     not just a decorative tint, so it needs more than the ambient-glass
+     borders elsewhere in dark theme use. */
+  --register-line: rgba(255, 255, 255, 0.18);
+  --register-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+  --register-font-mono: "IBM Plex Mono", var(--font-family-mono);
+  /* Text role, not a fill role: --accent-fill-text-safe (used elsewhere in
+     this file for --accent-strong) is proven >= 4.5:1 UNDER WHITE TEXT, which
+     is a different guarantee from being readable ITSELF on this dark ground -
+     measured 3.41:1 there, below AA. brand-orange-400 measures ~8.6:1 on
+     --bg-app. */
+  --register-accent-text: var(--brand-orange-400);
+
   /* ============================================================
      UNIFIED SURFACE SYSTEM - Carbon Glass Aesthetic
      ============================================================ */
