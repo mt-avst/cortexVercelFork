@@ -16,6 +16,7 @@ import { sessionCookieName } from './utils/hostCookie';
 import { buildCsrfProtection, CSRF_ERROR_CODE } from './middleware/csrf';
 import { sendDueReminders } from './services/reminders';
 import { runFirstHandMaintenance } from './firsthand/maintenance';
+import { autoClosePublishedStudiesPastEndDate } from './utils/opportunityLifecycle';
 import { isPostgresRuntimeConfigured } from './firsthand/runtime-database';
 import authRoutes from './routes/auth';
 import { createAuthLimiter } from './middleware/auth-rate-limit';
@@ -301,6 +302,24 @@ if (
 ) {
   cron.schedule('0 3 * * *', async () => {
     await runFirstHandMaintenance();
+  });
+}
+
+// Close published studies whose end_date has passed (Decision 3). Hourly rather
+// than daily so a study stops advertising itself as live within the hour of the
+// date its author set, not up to a day later. Single-replica deployment; the
+// sweep is a set-based UPDATE that only moves published -> closed, so it is
+// idempotent and safe to re-run. Disable with END_DATE_CLOSE_CRON_DISABLED=true.
+if (
+  process.env.NODE_ENV !== 'test' &&
+  process.env.END_DATE_CLOSE_CRON_DISABLED !== 'true'
+) {
+  cron.schedule('0 * * * *', async () => {
+    try {
+      await autoClosePublishedStudiesPastEndDate();
+    } catch (err) {
+      logger.error('End-date auto-close cron run failed', { error: err });
+    }
   });
 }
 

@@ -470,6 +470,16 @@ export const adminRequestsQuerySchema = z.object({
   status: z.string().optional(),
 });
 
+/**
+ * GET /api/admin/dashboard - the "Show all researchers" scope toggle (Decision
+ * 2). A bare optional string for the SHAPE; the route owns which values mean
+ * what ('all' widens, 'mine' scopes to the caller, anything else is the role
+ * default), so a stray value is inert rather than a 400.
+ */
+export const adminDashboardQuerySchema = z.object({
+  scope: z.string().optional(),
+});
+
 /** DELETE /api/admin/admins - the target user id. */
 export const adminRevokeAdminQuerySchema = z.object({
   id: z.string().optional(),

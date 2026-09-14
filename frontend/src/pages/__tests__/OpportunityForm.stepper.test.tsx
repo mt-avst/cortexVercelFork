@@ -141,49 +141,51 @@ describe('the step strip reports progress, not just position', () => {
       expect.stringContaining('Step 5 of 5'),
     ]);
 
-    // An external poll authors no study, so it has no Consent step and stops
-    // at four - and step 4 of 4 and step 4 of 5 are both real sentences this
-    // strip has to be able to say, for Review on two different shapes.
+    // An external poll is five steps too since WZ-18: its hand-off Consent step
+    // is a short confirmation, but it counts, so the strip reads five whichever
+    // delivery mode the author picks rather than jumping from four to five.
     selectType('poll');
     expect(steps().map((step) => step.textContent)).toEqual([
-      expect.stringContaining('Step 1 of 4'),
-      expect.stringContaining('Step 2 of 4'),
-      expect.stringContaining('Step 3 of 4'),
-      expect.stringContaining('Step 4 of 4'),
+      expect.stringContaining('Step 1 of 5'),
+      expect.stringContaining('Step 2 of 5'),
+      expect.stringContaining('Step 3 of 5'),
+      expect.stringContaining('Step 4 of 5'),
+      expect.stringContaining('Step 5 of 5'),
     ]);
   });
 
-  it("reads step IDENTITY rather than position, so Review's id (5) still reports its true position on shapes shorter than five", () => {
-    // On the two shapes that author a study, id === index + 1 for every step
-    // including Review (id 5, index 4) - a component that read POSITION where
-    // it should read IDENTITY would behave identically on those and only show
-    // the mistake on a shorter shape.
-    //
-    // An external poll is the shortest shape that reaches Review WITH a strip:
-    // [1, 2, 3, 5], length 4 - Review sits at index 3 and reads "Step 4 of 4"
-    // despite carrying id 5. (The still-shorter no-type shape [1, 2, 5] shows
-    // no strip at all now - WZ-18 - so it cannot be the case that pins this.)
+  it('carries an external poll all the way to a fifth Review step, not a fourth, now that every shape has Consent', () => {
+    // Before WZ-18 an external poll was the shortest strip shape - [1, 2, 3, 5],
+    // length 4, Review reading "Step 4 of 4" while carrying id 5 - and this test
+    // used that gap to prove the strip numbers by position, not by id. WZ-18
+    // closes the gap: the hand-off now carries a Consent step, so the poll is
+    // [1, 2, 3, 4, 5] like every other type and Review is the fifth step. That
+    // is the whole point of the union, so it is what this pins - a revert that
+    // dropped the hand-off Consent step would land Review back at "Step 4 of 4"
+    // and fail here.
     renderForm();
     selectType('poll');
 
     const beforeReview = steps();
-    expect(beforeReview).toHaveLength(4);
+    expect(beforeReview).toHaveLength(5);
+    // Step 4 is the hand-off Consent step, between External Link and Review.
+    expect(beforeReview[3]).toHaveTextContent('Consent');
 
     fireEvent.click(beforeReview[2]); // External Link
-
-    // Review's backward control names the step BEFORE it in this shape, which
-    // for a poll is External Link rather than a hard-coded step - asserted
-    // rather than assumed, because it is the label that would be wrong if the
-    // control read a fixed number instead of the list.
+    fireEvent.click(screen.getByRole('button', { name: 'Continue: Consent' }));
+    // Review's backward control names the step BEFORE it, which is now Consent
+    // on the hand-off path too - asserted rather than assumed, because it is the
+    // label that would be wrong if the control read a fixed number instead of
+    // the list.
     fireEvent.click(screen.getByRole('button', { name: 'Continue: Review' }));
 
     const onReview = steps();
-    expect(onReview).toHaveLength(4);
-    expect(onReview[3]).toHaveTextContent('Step 4 of 4');
-    expect(onReview[3]).toHaveTextContent('Review');
-    expect(onReview[3]).toHaveAttribute('aria-current', 'step');
+    expect(onReview).toHaveLength(5);
+    expect(onReview[4]).toHaveTextContent('Step 5 of 5');
+    expect(onReview[4]).toHaveTextContent('Review');
+    expect(onReview[4]).toHaveAttribute('aria-current', 'step');
     expect(
-      screen.getByRole('button', { name: 'Previous: External Link' })
+      screen.getByRole('button', { name: 'Previous: Consent' })
     ).toBeInTheDocument();
   });
 
@@ -310,20 +312,25 @@ describe('the step strip reports progress, not just position', () => {
      */
     await waitFor(() => expect(steps()[1]).toHaveTextContent('Completed'));
 
-    // Its content is on the server; calling steps 2, 3 and Review "Not
-    // started" would be false. Step 1 is the one being looked at, so it reads
-    // Current.
-    const [one, two, three, four] = steps();
+    // An edited external poll is five steps since WZ-18 (basics, content,
+    // External Link, the hand-off Consent step, Review). Its content is on the
+    // server; calling steps 2 to 5 "Not started" would be false. Step 1 is the
+    // one being looked at, so it reads Current.
+    const [one, two, three, four, five] = steps();
+    expect(steps()).toHaveLength(5);
     expect(one).toHaveTextContent('Current step');
     expect(two).toHaveTextContent('Completed');
     expect(three).toHaveTextContent('Completed');
-    // Review too, previously left unasserted here: the edit-mode "mark
-    // everything visited" effect walks the WHOLE shape from `getTabsForType`,
-    // which now includes Review, and a version that stopped one step short of
-    // it would have passed this test while still leaving Review "Not started"
-    // under an author's own content.
-    expect(four).toHaveTextContent('Review');
+    // The hand-off Consent step (index 3): the edit-mode "mark everything
+    // visited" effect walks the WHOLE shape, and this step has nothing to
+    // validate, so a walked edit reads it Completed rather than Not started.
+    expect(four).toHaveTextContent('Consent');
     expect(four).toHaveTextContent('Completed');
+    // Review too: a version that stopped one step short of the end would have
+    // passed while still leaving Review "Not started" under an author's own
+    // content.
+    expect(five).toHaveTextContent('Review');
+    expect(five).toHaveTextContent('Completed');
   });
 });
 
@@ -456,7 +463,8 @@ describe('the strip reports steps other than the first', () => {
     // is still 3, which is exactly why history cannot be held by id.
     selectType('poll');
 
-    expect(steps()).toHaveLength(4);
+    // Five steps since WZ-18 - the poll carries a hand-off Consent step now.
+    expect(steps()).toHaveLength(5);
     expect(steps()[2]).toHaveTextContent('External Link');
     expect(steps()[2]).toHaveTextContent('Not started');
 
@@ -621,14 +629,16 @@ describe('the two backward controls are named apart', () => {
     expect(steps()[2]).toHaveAttribute('aria-current', 'step');
   });
 
-  it("names the step Review's own control returns to, and proves it on two different paths", () => {
+  it("names the step Review's own control returns to, and proves the chain is list-derived on two different paths", () => {
     // An independent mutation pass on this plan's previous step found 18
     // survivors that collapsed to one finding: everything had only ever been
-    // proven for the first tile. Review sits after every shape now, so its
-    // own backward control needs checking on two shapes with two different
-    // previous steps, not one - a version that only ever checked the
-    // authoring path could not tell Review's previous step apart from a
-    // hard-coded "Consent".
+    // proven for the first tile. Since WZ-18 Review's previous is Consent on
+    // every shape, so Review alone no longer distinguishes a list-derived
+    // control from a hard-coded "Consent". What still varies per path is
+    // CONSENT's own previous - Task List on the recorded path, External Link on
+    // the hand-off path - so the two shapes are walked one step further back to
+    // prove the whole chain reads the list, not a number written at the call
+    // site.
     renderForm();
     selectType('unmoderated');
     fillBasics();
@@ -638,13 +648,24 @@ describe('the two backward controls are named apart', () => {
     expect(
       screen.getByRole('button', { name: 'Previous: Consent' })
     ).toBeInTheDocument();
+    // Back onto Consent, whose own previous is the Task List on this path.
+    fireEvent.click(screen.getByRole('button', { name: 'Previous: Consent' }));
+    expect(
+      screen.getByRole('button', { name: 'Previous: Task List' })
+    ).toBeInTheDocument();
 
-    // A poll authors no study, so it has no Consent step at all - Review's
-    // previous here is External Link.
+    // A hand-off poll now has a Consent step too (WZ-18), so Review's previous
+    // is also Consent here - but that Consent step's own previous is External
+    // Link, not Task List, which is the difference a hard-coded chain could not
+    // reproduce.
     fireEvent.click(steps()[0]);
     selectType('poll');
-    fireEvent.click(steps()[2]); // External Link
+    fireEvent.click(steps()[3]); // Consent
     fireEvent.click(screen.getByRole('button', { name: 'Continue: Review' }));
+    expect(
+      screen.getByRole('button', { name: 'Previous: Consent' })
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Previous: Consent' }));
     expect(
       screen.getByRole('button', { name: 'Previous: External Link' })
     ).toBeInTheDocument();

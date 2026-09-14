@@ -274,7 +274,7 @@ test.describe('Accessibility Tests', () => {
         body: JSON.stringify({ id: 'admin-1', name: 'Admin User', email: 'admin@example.com', role: 'researcher_admin' }),
       });
     });
-    await page.route('**/api/admin/dashboard', async (route) => {
+    await page.route('**/api/admin/dashboard**', async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: {} }) });
     });
 
@@ -383,7 +383,7 @@ test.describe('Accessibility Tests', () => {
         body: JSON.stringify({ id: 'admin-1', name: 'Admin User', email: 'admin@example.com', role: 'researcher_admin' }),
       });
     });
-    await page.route('**/api/admin/dashboard', async (route) => {
+    await page.route('**/api/admin/dashboard**', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -1535,7 +1535,7 @@ test.describe('Accessibility Tests', () => {
         body: JSON.stringify({ id: 'admin-1', name: 'Admin User', email: 'admin@example.com', role: 'researcher_admin' }),
       });
     });
-    await page.route('**/api/admin/dashboard', async (route) => {
+    await page.route('**/api/admin/dashboard**', async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: {} }) });
     });
     const types = ['test', 'interview', 'poll', 'survey', 'question', 'unmoderated'];

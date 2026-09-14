@@ -234,10 +234,14 @@ const OpportunityDetail: React.FC = () => {
   // about this study.
   const closingTime = opportunity ? getClosingTime(opportunity) : null;
   // ponytail: client-only refusal - the mint routes (survey-session, recorded
-  // study, poll) check only opportunity status, not end_date, so a stale tab
-  // or a direct request can still start a session for a closed study.
+  // study, poll) check only opportunity status, not end_date. Decision 3's
+  // hourly sweep now flips a published study to closed at its end_date, so the
+  // window where a stale tab or a direct request can still start a session past
+  // the deadline is bounded to that hour rather than indefinite - but it is not
+  // zero, and a mint route gating on end_date directly is the full fix.
   //   -> cto/AdaptaLabs#129, breaks once a participant reaches the endpoint
-  //      after their deadline without reloading the page first.
+  //      after their deadline, within the hour before the sweep, without
+  //      reloading the page first.
   const hasEnded = getTimeRemainingUntil(closingTime).urgency === 'ended';
   const closedOnLabel = formatStudyDate(closingTime?.toISOString());
 

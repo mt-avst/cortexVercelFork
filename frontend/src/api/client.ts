@@ -220,6 +220,9 @@ export const getOpportunities = async (params?: {
   type?: string;
   q?: string;
   status?: string;
+  // Decision 2: 'mine' scopes an admin's studies table to their own studies,
+  // 'all' widens it to every researcher. Ignored for non-admins.
+  scope?: 'mine' | 'all';
 }): Promise<Opportunity[]> => {
   const response = await api.get('/opportunities', { params });
   return response.data;
@@ -701,8 +704,12 @@ export interface DashboardStats {
 /**
  * Get dashboard statistics (admin only)
  */
-export const getDashboardStats = async (): Promise<DashboardStats> => {
-  const response = await api.get('/admin/dashboard');
+export const getDashboardStats = async (
+  // Decision 2: the "Show all researchers" toggle. 'mine' scopes the snapshot
+  // counts to the caller's own studies, 'all' widens them to every researcher.
+  scope?: 'mine' | 'all'
+): Promise<DashboardStats> => {
+  const response = await api.get('/admin/dashboard', { params: scope ? { scope } : undefined });
   return response.data.data;
 };
 

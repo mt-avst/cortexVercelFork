@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -422,5 +422,44 @@ describe('Admin dashboard accessibility (row 13)', () => {
     ).toBeInTheDocument();
     // The glyph is no longer any button's accessible name.
     expect(screen.queryByRole('button', { name: '⋮' })).not.toBeInTheDocument();
+  });
+});
+
+describe('the Show all researchers toggle (Decision 2)', () => {
+  it('loads the studies table and the snapshot scoped to the caller by default', async () => {
+    renderAdmin();
+    // Wait for the toggle, which only renders once the snapshot has loaded.
+    const toggle = await screen.findByRole('button', { name: 'Show all researchers' });
+
+    // Both surfaces are asked for the caller's own studies, together. On main
+    // neither call carries a scope, so both of these fail.
+    expect(vi.mocked(getOpportunities)).toHaveBeenCalledWith({ scope: 'mine' });
+    expect(vi.mocked(getDashboardStats)).toHaveBeenCalledWith('mine');
+    // Off by default: the caller lands on their own work.
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    // And the note tells the truth about that scope.
+    expect(screen.getByText('Your studies only')).toBeInTheDocument();
+  });
+
+  it('widens the studies table and the snapshot together when pressed', async () => {
+    renderAdmin();
+    const toggle = await screen.findByRole('button', { name: 'Show all researchers' });
+
+    vi.mocked(getOpportunities).mockClear();
+    vi.mocked(getDashboardStats).mockClear();
+
+    fireEvent.click(toggle);
+
+    // Both refetch at the widened scope - the table and the snapshot move
+    // together, which is the whole of Decision 2.
+    await waitFor(() =>
+      expect(vi.mocked(getOpportunities)).toHaveBeenCalledWith({ scope: 'all' })
+    );
+    expect(vi.mocked(getDashboardStats)).toHaveBeenCalledWith('all');
+    expect(await screen.findByRole('button', { name: 'Show all researchers' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    expect(screen.getByText('Across every researcher on Cortex')).toBeInTheDocument();
   });
 });

@@ -183,9 +183,20 @@ describe('GET /api/admin/dashboard participant-identity scope', () => {
     // apart. The export handler must not name it at all.
     expect(exportHandler).not.toContain('countsOwnerId');
 
-    // And every count query is still bound to the OTHER constant.
-    const countBindings = src.match(/\[(?:now, )?countsOwnerId(?:, now)?\]/g) ?? [];
+    // And every count query is still bound to the OTHER constant. Decision 2's
+    // toggle widens the counts by deriving `effectiveCountsOwnerId` from
+    // `countsOwnerId`, so that derived value is what the four count queries now
+    // bind - never the identity constant.
+    const countBindings = src.match(/\[(?:now, )?effectiveCountsOwnerId(?:, now)?\]/g) ?? [];
     expect(countBindings).toHaveLength(4);
+    // The widened value is derived from the counts constant and NEVER from the
+    // identity one, so the toggle cannot quietly fold the two scopes together -
+    // the assertion that fails if `effectiveCountsOwnerId` is ever computed from
+    // `participantIdentityOwnerId`.
+    const derivation = dashboardHandler.match(/const effectiveCountsOwnerId =[\s\S]*?;/);
+    expect(derivation).not.toBeNull();
+    expect(derivation![0]).toContain('countsOwnerId');
+    expect(derivation![0]).not.toContain('participantIdentityOwnerId');
   });
 
   it('does not scope a superadmin, who is meant to see the whole platform', async () => {
