@@ -13,29 +13,19 @@
    STUDY LISTING PAGE - Theme Overrides
    ============================================================ */
 
-/* Cool neutral page surface when logged-in home is shown (not warm paper / admin) */
-body.theme-light:has(.study-listing-page) {
-  --surface-page-study-listing: #f8fafc;
-}
-
 /* Dark Mode - Study Listing Background */
 body.theme-dark .study-listing-page {
   background: #030305;
 }
 
-/* Light Mode — slate-neutral field; cards stay white / glass */
+/* Light Mode — one light ground (Decision 4): the study listing page used to
+   carve out its own cool-neutral #f8fafc field via --surface-page-study-listing,
+   the one page that did not sit on the standard cream --bg-app. That token and
+   its three rules are gone; the page (and the App/.main/.container ancestors
+   the old !important rules cleared) now falls through to --bg-app like every
+   other light-theme surface. */
 body.theme-light .study-listing-page {
-  background: var(--surface-page-study-listing);
   min-height: 100vh;
-}
-
-/* Override ALL backgrounds when study listing page is active (light mode) 
-   This eliminates any grey layers or frames */
-body.theme-light:has(.study-listing-page),
-body.theme-light:has(.study-listing-page) .App,
-body.theme-light:has(.study-listing-page) .main,
-body.theme-light:has(.study-listing-page) .main > .container {
-  background: var(--surface-page-study-listing) !important;
 }
 
 /* Stronger tagline contrast on cool-neutral ground (was #B0BEC5 on base) */
@@ -60,6 +50,16 @@ body.theme-light {
   --fs-accent: var(--brand-orange-500);
   --fs-accent-strong: var(--brand-orange-700);
   --fs-shadow: 0 24px 70px rgba(20, 33, 61, 0.08);
+
+  /* Register ground (Decision 4) — the recording register's own light half IS
+     this cream field, not a copy of it: same --fs-* values, one definition. */
+  --register-bg: var(--fs-bg);
+  --register-card: var(--fs-card);
+  --register-ink: var(--fs-ink);
+  --register-muted: var(--fs-muted);
+  --register-line: var(--fs-line);
+  --register-shadow: var(--fs-shadow);
+  --register-font-mono: "IBM Plex Mono", var(--font-family-mono);
 
   /* Typography and the orange ramp are bound once at :root (see _tokens.css)
      and shared by both themes since row 12 - the light block carries colour
@@ -153,7 +153,9 @@ body.theme-light {
   --text-muted: var(--fs-muted);
   --text-on-dark: var(--fs-ink);
 
-  /* Brand — headline navy; primary actions use ink; warm accent for emphasis.
+  /* Brand — headline stays navy ink (A1 row 1: the light landing wordmark
+     reads in --text-primary, deliberately, not the dark theme's orange -
+     unrelated to which colour fills a button and not reopened here).
      --brand-primary is the identity orange (#FF5A1F) here and cannot carry text
      either: white on it is 3.12. Fills that carry text use
      --accent-fill-text-safe above. */
@@ -162,12 +164,17 @@ body.theme-light {
   --brand-secondary: var(--fs-accent-strong);
   --brand-gradient: linear-gradient(135deg, var(--fs-accent) 0%, var(--fs-accent-strong) 100%);
 
-  /* CTA — FirstHand primary: ink fill, white label */
-  --cta-bg: var(--fs-ink);
-  --cta-bg-hover: #0f1729;
+  /* CTA — orange primary in both themes (Decision 5); navy is demoted to
+     secondary/neutral chrome (borders, body text, .btn-secondary's
+     --text-primary) and no longer fills a primary action. Mirrors dark
+     theme's already-orange CTA exactly: --accent-fill-on-light is the same
+     700 step as dark's --brand-orange-700, --brand-orange-800 the same
+     darker hover step as dark's --cta-bg-hover - one convention, not two. */
+  --cta-bg: var(--accent-fill-on-light);
+  --cta-bg-hover: var(--brand-orange-800);
   --cta-text: #ffffff;
   --cta-text-hover: #ffffff;
-  --cta-border: var(--fs-ink);
+  --cta-border: var(--accent-fill-on-light);
 
   /* Links — terracotta at the ramp step that passes as text. 500 is 2.95 on
      the cream page and 3.14 on the cool listing surface; see ACCESSIBLE
@@ -545,7 +552,7 @@ body.theme-light .dropdown-item:not(.text-danger) {
 
 body.theme-light .dropdown-item:hover:not(.text-danger) {
   background: var(--color-slate-50);
-  color: #F97316;
+  color: var(--brand-orange-500);
 }
 
 body.theme-light .dropdown-item i {
@@ -566,7 +573,7 @@ body.theme-light a.dropdown-item:not(.text-danger) {
 
 body.theme-light a.dropdown-item:hover:not(.text-danger) {
   background: var(--color-slate-50);
-  color: #F97316;
+  color: var(--brand-orange-500);
 }
 
 /* Buttons */
@@ -600,7 +607,7 @@ body.theme-light textarea.form-control {
 body.theme-light .form-control:focus,
 body.theme-light .form-select:focus {
   border-color: var(--focus-ring);
-  box-shadow: 0 0 0 3px rgba(232, 108, 36, 0.15);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-orange-500) 15%, transparent);
 }
 
 body.theme-light .form-control::placeholder {
@@ -627,7 +634,7 @@ body.theme-light .admin-dashboard .form-select {
 /* Filter Section */
 body.theme-light .filter-section {
   background: rgba(255, 255, 255, 0.65);
-  border: 1px solid rgba(232, 108, 36, 0.3);
+  border: 1px solid color-mix(in srgb, var(--brand-orange-500) 30%, transparent);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
@@ -1363,7 +1370,7 @@ body.theme-light .admin-action-dropdown button:not(.text-danger) {
 
 body.theme-light .admin-action-dropdown button:hover:not(.text-danger) {
   background: var(--color-slate-50) !important;
-  color: #F97316 !important;
+  color: var(--brand-orange-500) !important;
 }
 
 /* Admin action dropdown - dark mode (explicit) */
@@ -1424,7 +1431,7 @@ body.theme-light .admin-dropdown-item {
 
 body.theme-light .admin-dropdown-item:hover {
   background: var(--color-slate-50) !important;
-  color: #F97316 !important;
+  color: var(--brand-orange-500) !important;
 }
 
 body.theme-light .admin-dropdown-divider {
@@ -1662,7 +1669,7 @@ body.theme-light .admin-tabs .nav-link:hover {
 
 body.theme-light .admin-tabs .nav-link.active {
   color: var(--brand-headline);
-  background: rgba(232, 108, 36, 0.05);
+  background: color-mix(in srgb, var(--brand-orange-500) 5%, transparent);
 }
 
 /* Admin tab buttons - light mode (Cortex Underline Style) */
@@ -2628,11 +2635,11 @@ body.theme-light .my-bookings-page .booking-card:hover {
 
 /* Upcoming Cards - Brand accent on hover */
 body.theme-light .my-bookings-page .booking-card-upcoming {
-  border-color: rgba(232, 108, 36, 0.3);
+  border-color: color-mix(in srgb, var(--brand-orange-500) 30%, transparent);
 }
 
 body.theme-light .my-bookings-page .booking-card-upcoming:hover {
-  border-color: rgba(232, 108, 36, 0.5);
+  border-color: color-mix(in srgb, var(--brand-orange-500) 50%, transparent);
 }
 
 /* Past Cards - Archival state.
@@ -3070,7 +3077,7 @@ body.theme-light .opportunity-form .step-tab__status--notStarted {
 }
 
 body.theme-light .opportunity-form .step-tab__status--current {
-  color: #9A3412;
+  color: var(--brand-orange-800);
 }
 
 body.theme-light .opportunity-form .border-top,
@@ -3157,6 +3164,71 @@ body.theme-light .validation-error {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ============================================================
+   SESSION REVIEW PAGE - register re-skin (Decision 4)
+
+   Session review shares .analytics-page-wrapper and every .cortex-analytics-card
+   with OpportunityAnalytics; .session-review-page (SessionReview.tsx's own
+   marker class, same pattern as .study-listing-page above) scopes every rule
+   below to this page alone, so Analytics keeps its Sci-Fi-glass Momentum look
+   unchanged. --register-* already resolves per theme (_tokens.css / above
+   LIGHT THEME block), so one rule set, not a light/dark pair, carries the
+   cream register into light and its dark half into dark.
+
+   Placed at the end of the file, after every body.theme-dark/body.theme-light
+   .cortex-analytics-card/.cortex-stat-subtitle/.cortex-chart-title override
+   above (same specificity - one class plus one class either way - so source
+   order decides, and this must load last to win). */
+
+.session-review-page {
+  background: var(--register-bg);
+  min-height: 100vh;
+}
+
+/* `body` prefixed on every rule below that also targets .cortex-analytics-card
+   /.cortex-chart-title/.cortex-stat-subtitle/.cortex-page-header: those are
+   contested with body.theme-light/body.theme-dark equivalents above, each at
+   specificity (0,2,1) (one element, two classes). Without the same `body`
+   element this block's (0,2,0) loses on specificity regardless of source
+   order - found by a failing Playwright assertion, not by inspection. */
+body .session-review-page .cortex-analytics-card {
+  background: var(--register-card);
+  border: 1px solid var(--register-line);
+  border-radius: 4px;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  color: var(--register-ink);
+}
+
+body .session-review-page .cortex-analytics-card:hover {
+  border-color: var(--register-line);
+  box-shadow: none;
+  transform: none;
+}
+
+body .session-review-page .cortex-chart-title,
+body .session-review-page .cortex-page-header h1 {
+  color: var(--register-ink);
+  font-family: var(--font-family-display);
+}
+
+/* Field labels ("Participant", "Status", "Started"...) become the register's
+   own mono/uppercase metadata treatment - .meta-label in recording-session.css
+   is the same idea on the participant side of this one system. */
+body .session-review-page .cortex-stat-subtitle {
+  font-family: var(--register-font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--register-muted);
+}
+
+body .session-review-page .cortex-page-header p,
+body .session-review-page .cortex-no-data {
+  color: var(--register-muted);
 }
 
 /* ============================================================

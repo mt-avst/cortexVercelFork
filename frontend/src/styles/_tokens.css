@@ -21,7 +21,28 @@
   --bg-input: rgba(255, 255, 255, 0.05);
   --bg-input-focus: rgba(255, 255, 255, 0.08);
   --bg-glass: rgba(17, 24, 39, 0.85);
-  
+
+  /* ============================================================
+     REGISTER GROUND - recording register + session review (Decision 4)
+
+     The participant recording flow (.fh-recording) has always been a fixed
+     cream/hairline/mono surface, ignoring the app theme entirely. This is its
+     dark half: the app's own dark ground/text/border tokens, not a third
+     bespoke palette, so switching theme while a register is open changes
+     nothing about its shape - only which surface it borrows.
+     Redefined under body.theme-light in _themes.css to the FirstHand
+     --fs-* cream values, which is what "promote the cream to the light theme"
+     means: the register's own light half becomes the same --fs-bg the rest
+     of light theme already uses (see --bg-app below), not a copy of it.
+     ============================================================ */
+  --register-bg: var(--bg-app);
+  --register-card: rgba(255, 255, 255, 0.04);
+  --register-ink: var(--text-primary);
+  --register-muted: var(--text-muted);
+  --register-line: var(--border-subtle-dark);
+  --register-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+  --register-font-mono: "IBM Plex Mono", var(--font-family-mono);
+
   /* ============================================================
      UNIFIED SURFACE SYSTEM - Carbon Glass Aesthetic
      ============================================================ */

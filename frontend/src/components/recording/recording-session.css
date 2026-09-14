@@ -18,20 +18,26 @@
  */
 
 .fh-recording {
-  --bg: #f7f2ea;
-  --card: rgba(255, 251, 246, 0.9);
-  --ink: #14213d;
-  --muted: #5f6b7a;
-  --line: rgba(20, 33, 61, 0.12);
-  --accent: #dd6e42;
-  --accent-strong: #b9552d;
+  /* Register ground, promoted to real tokens (Decision 4/5, _tokens.css and
+     _themes.css): light half is the FirstHand cream this surface always had,
+     dark half is the app's own dark ground - one system, not a third
+     bespoke palette. --accent used to be its own terracotta (#dd6e42), a
+     different orange from the rest of the brand; it is the one ramp colour
+     everywhere now, so the mark reads as one orange on this surface too. */
+  --bg: var(--register-bg);
+  --card: var(--register-card);
+  --ink: var(--register-ink);
+  --muted: var(--register-muted);
+  --line: var(--register-line);
+  --accent: var(--brand-orange-500);
+  --accent-strong: var(--accent-fill-text-safe);
   --success: #2f6f5e;
   --danger: #a63d40;
-  --shadow: 0 24px 70px rgba(20, 33, 61, 0.08);
+  --shadow: var(--register-shadow);
   --radius-btn: 10px;
   --font-display: "Fraunces", Georgia, "Times New Roman", serif;
   --font-sans: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --font-mono: var(--register-font-mono, "IBM Plex Mono"), ui-monospace, "SFMono-Regular", Menlo, monospace;
   color: var(--ink);
   font-family: var(--font-sans), sans-serif;
 }
@@ -128,7 +134,7 @@
 }
 
 .fh-recording .button.secondary {
-  background: rgba(20, 33, 61, 0.08);
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
   color: var(--ink);
 }
 
@@ -160,7 +166,7 @@
   gap: 0.35rem;
   padding: 0.6rem 0.85rem;
   border-radius: 999px;
-  background: rgba(20, 33, 61, 0.06);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
   color: var(--muted);
   font-size: 0.92rem;
 }
@@ -195,7 +201,10 @@
   margin: 0.75rem 0 0;
   font-size: 0.92rem;
   font-weight: 600;
-  color: var(--accent, #c0563a);
+  /* Fallback chains to the real token rather than a literal hex, so it can
+     never drift from --accent's own value again the way it drifted from the
+     retired terracotta before Decision 5. */
+  color: var(--accent, var(--brand-orange-500));
 }
 
 .fh-recording .runner-optional-hint {
@@ -223,7 +232,7 @@
 }
 
 .fh-recording .alert-neutral {
-  background: rgba(20, 33, 61, 0.06);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
 }
 
 .fh-recording .runner-shell {
@@ -254,7 +263,7 @@
   display: grid;
   gap: 1rem;
   padding: 1rem 1.15rem;
-  background: rgba(20, 33, 61, 0.05);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
 }
 
 .fh-recording .recording-callout.is-failed {
@@ -330,8 +339,13 @@
   width: 100%;
   padding: 1rem 1.1rem;
   border-radius: 20px;
-  border: 1px solid rgba(20, 33, 61, 0.16);
-  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid color-mix(in srgb, var(--ink) 16%, transparent);
+  /* Was a literal near-opaque white: correct on cream, but in dark mode
+     --ink is near-white text landing on a near-white field. var(--bg-input)
+     is the app's own theme-aware input surface (light: near-white paper,
+     dark: a translucent light-on-dark field), which is what "white-ish
+     input surface" actually means per theme. */
+  background: var(--bg-input);
   color: var(--ink);
   resize: vertical;
 }
@@ -347,8 +361,10 @@
   gap: 0.8rem;
   padding: 1rem 1.1rem;
   border-radius: 20px;
-  border: 1px solid rgba(20, 33, 61, 0.12);
-  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+  /* Was a literal near-opaque white; see .response-input above for why that
+     breaks in dark mode. */
+  background: color-mix(in srgb, var(--card) 60%, transparent);
   cursor: pointer;
 }
 
@@ -357,8 +373,8 @@
 }
 
 .fh-recording .choice-item.is-selected {
-  border-color: rgba(221, 110, 66, 0.3);
-  background: rgba(221, 110, 66, 0.1);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 @keyframes firsthand-recording-pulse {
@@ -386,14 +402,24 @@
 }
 
 .fh-recording .journey-frame {
+  /* Light half: the prototype-faithful paper/ink pair this frame always had.
+     --j-line-2/--j-line-strong already ride --ink (above), so they cross
+     theme for free; these three are solid fills with no --ink derivation,
+     so they need their own dark half below (Decision 4). */
   --j-card: #fffcf6;
   --j-paper-2: #f1ebe0;
   --j-ink-3: #8b95a3;
-  --j-line-2: rgba(20, 33, 61, 0.22);
-  --j-line-strong: rgba(20, 33, 61, 0.4);
+  --j-line-2: color-mix(in srgb, var(--ink) 22%, transparent);
+  --j-line-strong: color-mix(in srgb, var(--ink) 40%, transparent);
   font-size: 14px;
   line-height: 1.5;
   color: var(--ink);
+}
+
+body.theme-dark .fh-recording .journey-frame {
+  --j-card: var(--register-card);
+  --j-paper-2: color-mix(in srgb, var(--ink) 6%, var(--bg));
+  --j-ink-3: var(--muted);
 }
 
 .fh-recording .journey-app {
@@ -401,7 +427,7 @@
   grid-template-columns: 200px 1fr;
   border: 1.5px solid var(--ink);
   background: var(--bg);
-  box-shadow: 7px 7px 0 rgba(20, 33, 61, 0.08);
+  box-shadow: 7px 7px 0 color-mix(in srgb, var(--ink) 8%, transparent);
 }
 
 .fh-recording .journey-nav {
@@ -582,8 +608,8 @@
   border-radius: 6px;
   background: repeating-linear-gradient(
     45deg,
-    rgba(20, 33, 61, 0.055),
-    rgba(20, 33, 61, 0.055) 7px,
+    color-mix(in srgb, var(--ink) 5.5%, transparent),
+    color-mix(in srgb, var(--ink) 5.5%, transparent) 7px,
     transparent 7px,
     transparent 14px
   );
@@ -656,7 +682,7 @@
 .fh-recording .journey-infocell {
   padding: 13px 14px;
   border-radius: 6px;
-  background: rgba(20, 33, 61, 0.045);
+  background: color-mix(in srgb, var(--ink) 4.5%, transparent);
 }
 
 .fh-recording .journey-infocell h4 {
@@ -696,9 +722,10 @@
   padding: 10px 18px;
   border: 1.5px solid var(--accent-strong);
   border-radius: 4px;
-  /* --accent (#dd6e42) under white text is below AA; --accent-fill-text-safe
-     is the global token already proven >= 4.5:1 under white in both themes
-     (see the accent-fill loop in e2e/accessibility.test.ts). Row 4. */
+  /* --accent (brand-orange-500, #FF5A1F since Decision 5) under white text is
+     below AA; --accent-fill-text-safe is the global token already proven
+     >= 4.5:1 under white in both themes (see the accent-fill loop in
+     e2e/accessibility.test.ts). Row 4. */
   background: var(--accent-fill-text-safe);
   color: #fff;
   font-family: var(--font-mono), monospace;
@@ -717,12 +744,12 @@
 }
 
 .fh-recording .journey-frame .button.secondary:hover:not(:disabled) {
-  background: rgba(20, 33, 61, 0.05);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
 }
 
 .fh-recording .journey-frame .button:disabled {
   border-color: var(--j-line-strong);
-  background: rgba(20, 33, 61, 0.07);
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
   color: var(--j-ink-3);
   cursor: not-allowed;
 }
@@ -763,11 +790,11 @@
   gap: 12px;
   padding: 13px 14px;
   border-radius: 6px;
-  background: rgba(20, 33, 61, 0.045);
+  background: color-mix(in srgb, var(--ink) 4.5%, transparent);
 }
 
 .fh-recording .journey-launch-step.is-active {
-  background: rgba(221, 110, 66, 0.08);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
   outline: 1.5px solid var(--j-line-strong);
 }
 
@@ -836,7 +863,7 @@
   padding: 14px;
   border-radius: 8px;
   border: 1.5px solid var(--j-line-2);
-  background: rgba(20, 33, 61, 0.03);
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
   display: grid;
   gap: 8px;
 }
@@ -1357,7 +1384,7 @@
 
 .fh-recording .journey-frame .alert-neutral {
   border: 1.5px solid var(--line);
-  background: rgba(20, 33, 61, 0.04);
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
 }
 
 .fh-recording .journey-frame .alert-danger {
@@ -1377,7 +1404,9 @@
   padding: 10px 12px;
   border: 1.5px solid var(--j-line-strong);
   border-radius: 6px;
-  background: #fff;
+  /* Was a literal opaque white; the frame's own text colour is --ink, which
+     is near-white in dark mode - white text on a white field. */
+  background: var(--j-card);
   font-size: 13px;
 }
 
@@ -1391,7 +1420,7 @@
 
 .fh-recording .journey-frame .choice-item.is-selected {
   border-color: var(--accent);
-  background: rgba(221, 110, 66, 0.08);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .fh-recording .journey-frame .response-validation {
@@ -1407,7 +1436,10 @@
   display: grid;
   place-items: center;
   padding: 1rem;
-  background: rgba(20, 33, 61, 0.42);
+  /* A dimming scrim, not a surface: stays a literal dark tint regardless of
+     theme (var(--ink) would go near-white in dark mode and stop dimming
+     anything it sits over). */
+  background: rgba(10, 9, 20, 0.55);
   backdrop-filter: blur(8px);
 }
 
@@ -1415,9 +1447,9 @@
   width: min(560px, 100%);
   padding: 1.5rem;
   border-radius: 28px;
-  border: 1px solid rgba(20, 33, 61, 0.12);
-  background: rgba(255, 251, 246, 0.96);
-  box-shadow: 0 24px 70px rgba(20, 33, 61, 0.18);
+  border: 1px solid var(--line);
+  background: var(--card);
+  box-shadow: var(--shadow);
 }
 
 .fh-recording .fh-modal-card h2 {

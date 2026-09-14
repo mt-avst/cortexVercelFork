@@ -406,15 +406,6 @@ describe('orange sweep: a literal orange belongs on the ramp, not typed in (row 
     { file: 'src/components/OrganicNeuralBackground.tsx', match: '#FF6B00', count: 1, reason: 'Same file, same reason as #FF5500 above.' },
     { file: 'src/components/OrganicNeuralBackground.tsx', match: '#CC3300', count: 1, reason: 'Same file, same reason as #FF5500 above.' },
     {
-      file: 'src/components/recording/recording-session.css', match: '#dd6e42', count: 1,
-      reason: 'recording-session.css is Lane A\'s now AND Lane H\'s in Wave 2 (Decision 4/5: ground and primary-colour rework). This is the recording register\'s own --accent token (a deliberate terracotta, not a brand-ramp literal) - Decision 5 replaces the accent with var(--brand-orange-500); this MR does not pre-empt that.',
-    },
-    { file: 'src/components/recording/recording-session.css', match: '#b9552d', count: 1, reason: '--accent-strong, same reason as #dd6e42 above.' },
-    { file: 'src/components/recording/recording-session.css', match: '#c0563a', count: 1, reason: 'A var(--accent, #c0563a) fallback, same reason as #dd6e42 above.' },
-    { file: 'src/components/recording/recording-session.css', match: 'rgba(221, 110, 66, 0.3)', count: 1, reason: 'Tint of --accent (221,110,66 = #dd6e42), same reason as #dd6e42 above.' },
-    { file: 'src/components/recording/recording-session.css', match: 'rgba(221, 110, 66, 0.1)', count: 1, reason: 'Tint of --accent, same reason as #dd6e42 above.' },
-    { file: 'src/components/recording/recording-session.css', match: 'rgba(221, 110, 66, 0.08)', count: 2, reason: 'Tint of --accent, same reason as #dd6e42 above.' },
-    {
       file: 'src/pages/booking-slot-list.css', match: 'rgba(197, 78, 18, 0.10)', count: 1,
       reason: 'Lane B owns booking-slot-list.css (Collision map, row 15\'s own note).',
     },
@@ -422,55 +413,36 @@ describe('orange sweep: a literal orange belongs on the ramp, not typed in (row 
     { file: 'src/pages/booking-slot-list.css', match: 'rgba(255, 122, 51, 0.14)', count: 1, reason: 'Lane B owns booking-slot-list.css - also the deprecated #FF7A33 hue, worth Lane B\'s attention independent of ownership.' },
     { file: 'src/pages/booking-slot-list.css', match: '#fb923c', count: 1, reason: 'Lane B owns booking-slot-list.css.' },
 
-    // _components.css and _themes.css are Lane A's own files, and Lane H's
-    // in Wave 2 for the same Decision 4/5 rework as recording-session.css
-    // above. What is left after this MR's exact ramp-value fixes (every
-    // #FF5A1F/rgba(255,90,31,*) and the deprecated #FF7A33/rgba(255,122,51,*)
-    // literal was moved onto the token or, where no ramp step matches, named
-    // below) is a mix of gamification level-badge colours, a bronze medal
-    // colour, and glow/gradient tints that do not equal any current ramp
-    // step - each needs a judgement call on which step (if any) it should
-    // become, which is a design decision this MR does not make unasked.
-    // Left for Lane H to fold into its own token/ground pass, extending
-    // this same guard.
+    // _components.css and _themes.css are Lane A's own files, and Lane H's in
+    // Wave 2 for the same Decision 4/5 rework as recording-session.css above.
+    // A2 left every entry below as "Lane H judgement call" without making
+    // one; Lane H reviewed each at the site, converted every one that was
+    // really the brand accent drifted onto a different literal (dropdown
+    // hover states, a focus-ring glow, a step-tab current indicator, a
+    // var() fallback, decorative landing-page glows - about 30 occurrences,
+    // onto var(--brand-orange-*) or color-mix() over one), and kept only the
+    // entries below, each now reasoned individually rather than by the
+    // one-line placeholder A2 left.
     { file: 'src/styles/_components.css', match: 'rgba(255, 90, 31, 0.08)', count: 1, reason: 'Deliberate: the @supports color-mix fallback for browsers without it - a color-mix() over the token here would defeat the one job this declaration has. It is var(--brand-orange-500)\'s own current RGB, so it is on-ramp without depending on the feature it exists to work around.' },
-    { file: 'src/styles/_components.css', match: '#FF7A45', count: 1, reason: 'Hero gradient stop with no equivalent ramp token (bespoke light-orange midpoint); Lane H judgement call.' },
-    { file: 'src/styles/_components.css', match: '#FFA070', count: 1, reason: 'Hero gradient stop with no equivalent ramp token; Lane H judgement call.' },
-    { file: 'src/styles/_components.css', match: '#FF5722', count: 3, reason: 'Not a ramp step (Material Deep Orange 500); Lane H judgement call.' },
-    { file: 'src/styles/_components.css', match: '#FB923C', count: 2, reason: 'Not a ramp step (Tailwind orange-400); Lane H judgement call.' },
-    { file: 'src/styles/_components.css', match: '#EA580C', count: 4, reason: 'Not a ramp step (Tailwind orange-600); Lane H judgement call.' },
-    { file: 'src/styles/_components.css', match: '#C2410C', count: 2, reason: 'Not a ramp step (Tailwind orange-700, the same family the .btn-power literal this MR fixed came from) - remaining decorative uses; Lane H judgement call.' },
-    { file: 'src/styles/_components.css', match: 'rgba(197, 78, 18, 0.10)', count: 2, reason: 'Not a ramp step; Lane H judgement call.' },
-    { file: 'src/styles/_components.css', match: 'rgba(255, 171, 145, 0.15)', count: 1, reason: 'Not a ramp step; Lane H judgement call.' },
-    { file: 'src/styles/_components.css', match: '#FFAB91', count: 1, reason: 'Not a ramp step; Lane H judgement call.' },
-    { file: 'src/styles/_components.css', match: '#BF360C', count: 1, reason: 'Not a ramp step (Material Deep Orange 800); Lane H judgement call.' },
-    { file: 'src/styles/_components.css', match: 'rgba(232, 108, 36, 0.2)', count: 1, reason: 'Not a ramp step; Lane H judgement call.' },
-    { file: 'src/styles/_components.css', match: 'rgba(232, 108, 36, 0.15)', count: 1, reason: 'Not a ramp step; Lane H judgement call.' },
-    { file: 'src/styles/_components.css', match: 'rgba(232, 108, 36, 0.3)', count: 2, reason: 'Not a ramp step; Lane H judgement call.' },
-    { file: 'src/styles/_components.css', match: '#FF5500', count: 1, reason: 'Not a ramp step; Lane H judgement call.' },
-    { file: 'src/styles/_components.css', match: 'rgba(255, 85, 0, 0.05)', count: 2, reason: 'Not a ramp step; Lane H judgement call.' },
-    { file: 'src/styles/_components.css', match: 'rgba(255, 85, 0, 0.5)', count: 1, reason: 'Not a ramp step; Lane H judgement call.' },
-    { file: 'src/styles/_components.css', match: 'rgba(255, 85, 0, 0.4)', count: 1, reason: 'Not a ramp step; Lane H judgement call.' },
-    { file: 'src/styles/_components.css', match: 'rgba(255, 85, 0, 0.2)', count: 1, reason: 'Not a ramp step; Lane H judgement call.' },
-    { file: 'src/styles/_components.css', match: 'rgba(255, 85, 0, 0.35)', count: 1, reason: 'Not a ramp step; Lane H judgement call.' },
-    { file: 'src/styles/_components.css', match: '#F97316', count: 1, reason: 'Not a ramp step (Tailwind orange-500); Lane H judgement call.' },
-    { file: 'src/styles/_components.css', match: '#DD6E42', count: 1, reason: 'Pre-#12 terracotta hue, in a comment-adjacent literal outside brand-identity.test.ts\'s _themes.css-only sweep; Lane H judgement call.' },
-    { file: 'src/styles/_components.css', match: '#B4471F', count: 1, reason: 'Not a ramp step; Lane H judgement call.' },
-    { file: 'src/styles/_components.css', match: '#F08A5D', count: 1, reason: 'Not a ramp step; Lane H judgement call.' },
-    { file: 'src/styles/_themes.css', match: '#c2410c', count: 1, reason: 'Not a ramp step; Lane H judgement call.' },
-    { file: 'src/styles/_themes.css', match: 'rgba(234, 88, 12, 0.15)', count: 1, reason: 'Not a ramp step; Lane H judgement call.' },
-    { file: 'src/styles/_themes.css', match: '#b45309', count: 1, reason: 'Not a ramp step (Tailwind amber-700-adjacent); Lane H judgement call.' },
-    { file: 'src/styles/_themes.css', match: '#F97316', count: 4, reason: 'Not a ramp step; Lane H judgement call.' },
-    { file: 'src/styles/_themes.css', match: 'rgba(232, 108, 36, 0.15)', count: 1, reason: 'Not a ramp step; Lane H judgement call.' },
-    { file: 'src/styles/_themes.css', match: 'rgba(232, 108, 36, 0.3)', count: 2, reason: 'Not a ramp step; Lane H judgement call.' },
-    { file: 'src/styles/_themes.css', match: '#ea580c', count: 1, reason: 'Not a ramp step; Lane H judgement call.' },
-    { file: 'src/styles/_themes.css', match: 'rgba(234, 88, 12, 0.1)', count: 1, reason: 'Not a ramp step; Lane H judgement call.' },
-    { file: 'src/styles/_themes.css', match: 'rgba(234, 88, 12, 0.2)', count: 1, reason: 'Not a ramp step; Lane H judgement call.' },
-    { file: 'src/styles/_themes.css', match: 'rgba(232, 108, 36, 0.05)', count: 1, reason: 'Not a ramp step; Lane H judgement call.' },
-    { file: 'src/styles/_themes.css', match: '#B45309', count: 1, reason: 'Not a ramp step; Lane H judgement call.' },
-    { file: 'src/styles/_themes.css', match: 'rgba(232, 108, 36, 0.5)', count: 1, reason: 'Not a ramp step; Lane H judgement call.' },
-    { file: 'src/styles/_themes.css', match: '#9A3412', count: 1, reason: 'Not a ramp step (close to --brand-orange-800 but not exact); Lane H judgement call.' },
-    { file: 'src/styles/_themes.css', match: '#92400E', count: 1, reason: 'Not a ramp step; Lane H judgement call.' },
+    { file: 'src/styles/_components.css', match: '#FF7A45', count: 1, reason: 'Hero gradient stop: a bespoke lightened midpoint between --brand-orange-500 and white with no ramp equivalent - the comment right above this declaration already says so. Reviewed, not deferred: no ramp step sits between 500 and white at this position.' },
+    { file: 'src/styles/_components.css', match: '#FFA070', count: 1, reason: 'Same hero gradient, the next midpoint stop closer to white. Same reasoning as #FF7A45 above.' },
+    { file: 'src/styles/_components.css', match: '#FB923C', count: 2, reason: 'Lane B\'s calendar slot-state system (.calendar-slot-booked/.legend-booked dark-mode border) - a dense, already-shipped, deliberately graduated fill/border/glow hierarchy across several orange shades to keep "booked" and "selected" visually distinct. Redesigning it is a UX decision belonging to Lane B\'s surface, not this token/ground pass.' },
+    { file: 'src/styles/_components.css', match: '#EA580C', count: 4, reason: 'Same calendar slot-state system as #FB923C above (.calendar-slot-selected border, both themes) - Lane B\'s surface.' },
+    { file: 'src/styles/_components.css', match: '#C2410C', count: 2, reason: 'Same calendar slot-state system as #FB923C above - Lane B\'s surface.' },
+    { file: 'src/styles/_components.css', match: 'rgba(255, 171, 145, 0.15)', count: 1, reason: '.booking-badge-poll: one hue in a categorical type-badge palette (test=cyan, poll=deep-orange, survey=green, ...) - a distinct-per-type colour scheme, not the brand accent. Same system as the lozenge tokens below.' },
+    { file: 'src/styles/_components.css', match: '#FFAB91', count: 1, reason: 'Same .booking-badge-poll categorical badge as rgba(255, 171, 145, 0.15) above.' },
+    { file: 'src/styles/_components.css', match: '#BF360C', count: 1, reason: 'Same .booking-badge-poll categorical badge, the light-theme variant.' },
+    { file: 'src/styles/_components.css', match: '#DD6E42', count: 1, reason: '--opportunity-row-urgent, with its own comment at the site explaining it: deliberately NOT the brand accent, so an urgent-row indicator reads as a distinct colour from ordinary brand-orange UI. Reviewed and kept exactly for the reason already given.' },
+    { file: 'src/styles/_components.css', match: '#B4471F', count: 1, reason: '.booking-outcome-rejected (light): paired with .booking-outcome-approved\'s green as a deliberate two-colour outcome semantic. Collapsing "rejected" onto the same brand orange used for primary CTAs would read as an invitation, not a negative outcome.' },
+    { file: 'src/styles/_components.css', match: '#F08A5D', count: 1, reason: 'Same .booking-outcome-rejected semantic as #B4471F above, the dark-theme variant.' },
+    { file: 'src/styles/_themes.css', match: '#c2410c', count: 1, reason: '--lozenge-poll-text: the study-type categorical colour system (Decision 6, Lane E\'s icon-system MR) - a deliberately distinct hue per study type, not the brand accent. Out of Decision 4/5\'s scope.' },
+    { file: 'src/styles/_themes.css', match: 'rgba(234, 88, 12, 0.15)', count: 1, reason: '--lozenge-poll-bg, the tint half of the same Decision 6 token as #c2410c above.' },
+    { file: 'src/styles/_themes.css', match: '#b45309', count: 1, reason: '--lozenge-question-text, the same Decision 6 categorical system as #c2410c above (the question type\'s colour, not poll\'s).' },
+    { file: 'src/styles/_themes.css', match: 'rgba(234, 88, 12, 0.1)', count: 1, reason: '.lozenge-poll text colour source (#ea580c below) and its bg/border tints - the class form of the same Decision 6 --lozenge-poll-* tokens above, not a second system.' },
+    { file: 'src/styles/_themes.css', match: 'rgba(234, 88, 12, 0.2)', count: 1, reason: '.lozenge-poll border tint, same as rgba(234, 88, 12, 0.1) above.' },
+    { file: 'src/styles/_themes.css', match: '#ea580c', count: 1, reason: '.lozenge-poll text colour, same Decision 6 categorical system as #c2410c above.' },
+    { file: 'src/styles/_themes.css', match: '#B45309', count: 1, reason: '.cortex-badge--peak (light mode): an amber "peak" badge, a different semantic from the brand accent (compare .cortex-badge--best\'s green, --info\'s neutral) - not part of the primary-colour system Decision 5 governs.' },
+    { file: 'src/styles/_themes.css', match: '#92400E', count: 1, reason: 'Leaderboard gold-rank score colour (light mode) - the gamification medal palette the header comment above names, a deliberately distinct "gold" semantic rather than the brand accent.' },
   ];
 
   /** Ceiling on the allow-list itself, so it cannot grow to cover
