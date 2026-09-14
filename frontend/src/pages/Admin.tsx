@@ -59,6 +59,10 @@ const Admin: React.FC = () => {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [loadingStats, setLoadingStats] = useState(false);
+  // Decision 2: "Show all researchers" toggle. Off by default, so an admin lands
+  // on their own studies and their own snapshot; on widens both the studies
+  // table and the snapshot counts to every researcher, together.
+  const [showAllResearchers, setShowAllResearchers] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string>('');
   // Counts for the tab badges and the "Needs attention" panel. Fetched here so
   // the badge shows a number without opening the tab; the tab components still
@@ -158,12 +162,16 @@ const Admin: React.FC = () => {
     try {
       setLoadingOpportunities(true);
       setError('');
-      const params: { status?: string; type?: string } = {};
+      const params: { status?: string; type?: string; scope?: 'mine' | 'all' } = {};
       // If forceClearFilter is true, don't apply filters to ensure new items are visible
       if (!forceClearFilter) {
         if (statusFilter) params.status = statusFilter;
         if (typeFilter) params.type = typeFilter;
       }
+      // Decision 2: the owner scope always rides along, even on a forced clear -
+      // it is not a filter chip, it is which researchers' studies the table is
+      // showing, and it must match the snapshot's scope below.
+      params.scope = showAllResearchers ? 'all' : 'mine';
       // Performance: debug logging disabled in production
       const data = await getOpportunities(params);
       // Performance: debug logging disabled in production
@@ -182,12 +190,12 @@ const Admin: React.FC = () => {
     } finally {
       setLoadingOpportunities(false);
     }
-  }, [statusFilter, typeFilter]);
+  }, [statusFilter, typeFilter, showAllResearchers]);
 
   const loadDashboardStats = useCallback(async () => {
     try {
       setLoadingStats(true);
-      const stats = await getDashboardStats();
+      const stats = await getDashboardStats(showAllResearchers ? 'all' : 'mine');
       setDashboardStats(stats);
     } catch (error: unknown) {
       // Deliberately not shown: the dashboard tiles are a summary, and an admin
@@ -202,7 +210,7 @@ const Admin: React.FC = () => {
     } finally {
       setLoadingStats(false);
     }
-  }, []);
+  }, [showAllResearchers]);
 
   // Counts for the tab badges and the approvals attention card. A failure here
   // must not blank the page - it just leaves the badge absent, so warn and move
@@ -455,11 +463,28 @@ const Admin: React.FC = () => {
               <section className="admin-snapshot" aria-labelledby="admin-snapshot-heading">
                 <div className="admin-section-head">
                   <h2 id="admin-snapshot-heading" className="admin-section-title">Operational snapshot</h2>
-                  <span className="stat-scope-note">
-                    {user?.role === 'superadmin'
-                      ? 'Across every researcher on Cortex'
-                      : 'Your studies only'}
-                  </span>
+                  <div className="d-flex align-items-center gap-2">
+                    {/* The scope note now reads the toggle, not the role: it is
+                        the caller's own studies until they widen it, whoever they
+                        are. */}
+                    <span className="stat-scope-note">
+                      {showAllResearchers
+                        ? 'Across every researcher on Cortex'
+                        : 'Your studies only'}
+                    </span>
+                    {/* Decision 2: one toggle for both the snapshot and the
+                        studies table. A pressed toggle button (stable label,
+                        aria-pressed carries the state) rather than a relabelling
+                        button, so a screen reader hears one control change state. */}
+                    <button
+                      type="button"
+                      className="admin-chip"
+                      aria-pressed={showAllResearchers}
+                      onClick={() => setShowAllResearchers((previous) => !previous)}
+                    >
+                      Show all researchers
+                    </button>
+                  </div>
                 </div>
                 <div className="admin-stat-grid mb-3">
                   <div className="stat-card-col">
