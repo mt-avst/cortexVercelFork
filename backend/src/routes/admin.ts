@@ -15,6 +15,7 @@ import {
   validateQuery,
   adminRequestsQuerySchema,
   adminRevokeAdminQuerySchema,
+  adminDashboardQuerySchema,
 } from '../validation/schemas';
 
 const router: Router = Router();
@@ -66,7 +67,7 @@ interface DashboardStats {
  * participant names and emails for up to SESSION_MAX_AGE_MS (24h). No gate could
  * catch that, which is why the fix is the role read rather than another gate.
  */
-router.get('/dashboard', requireAuth, withLiveRole, asyncHandler(async (req: Request, res: Response) => {
+router.get('/dashboard', requireAuth, withLiveRole, validateQuery(adminDashboardQuerySchema), asyncHandler(async (req: Request, res: Response) => {
   const user = req.user!;
 
   // Check admin role - live as of this request, courtesy of `withLiveRole`.
@@ -92,16 +93,35 @@ router.get('/dashboard', requireAuth, withLiveRole, asyncHandler(async (req: Req
   const countsOwnerId = user.role === 'superadmin' ? null : userId;
   const participantIdentityOwnerId = user.role === 'superadmin' ? null : userId;
 
-  // Get opportunity counts (filter by owner unless superadmin)
+  // DECISION 2: the "Show all researchers" toggle. It widens the snapshot COUNTS
+  // to every researcher, and it must move together with the studies table on the
+  // opportunities list route.
+  //
+  //   scope=all  -> null: every researcher's studies count.
+  //   scope=mine -> the caller's own id: their studies only, even a superadmin.
+  //   absent     -> countsOwnerId, the role default above, so a caller that
+  //                 never sends the toggle is completely unchanged.
+  //
+  // This is the COUNTS scope ONLY. `participantIdentityOwnerId` above is left
+  // exactly as the role decided and NEVER follows the toggle: the counts are
+  // aggregate numbers, but recent_bookings carries participant names and emails,
+  // and a widening that reached it would re-open the #38 cross-researcher leak.
+  // That is the whole reason the two are separate constants, and the toggle
+  // keeps them separate.
+  const requestedScope = req.query.scope;
+  const effectiveCountsOwnerId =
+    requestedScope === 'all' ? null : requestedScope === 'mine' ? userId : countsOwnerId;
+
+  // Get opportunity counts (filter by owner unless widened by the toggle)
   const oppCounts = await pool.query(`
-    SELECT 
+    SELECT
       COUNT(*) as total,
       COUNT(*) FILTER (WHERE status = 'published') as published,
       COUNT(*) FILTER (WHERE status = 'draft') as draft,
       COUNT(*) FILTER (WHERE status = 'closed') as closed
     FROM opportunities
     WHERE ($1::uuid IS NULL OR owner_user_id = $1)
-  `, [countsOwnerId]);
+  `, [effectiveCountsOwnerId]);
 
   // Get booking counts
   const now = new Date();
@@ -114,7 +134,7 @@ router.get('/dashboard', requireAuth, withLiveRole, asyncHandler(async (req: Req
     JOIN sessions s ON b.session_id = s.id
     JOIN opportunities o ON s.opportunity_id = o.id
     WHERE ($2::uuid IS NULL OR o.owner_user_id = $2)
-  `, [now, countsOwnerId]);
+  `, [now, effectiveCountsOwnerId]);
 
   // Get unique participants count
   const participantsCount = await pool.query(`
@@ -123,7 +143,7 @@ router.get('/dashboard', requireAuth, withLiveRole, asyncHandler(async (req: Req
     JOIN sessions s ON b.session_id = s.id
     JOIN opportunities o ON s.opportunity_id = o.id
     WHERE ($1::uuid IS NULL OR o.owner_user_id = $1) AND b.status = 'booked'
-  `, [countsOwnerId]);
+  `, [effectiveCountsOwnerId]);
 
   // Get session and slot statistics
   const sessionStats = await pool.query(`
@@ -135,7 +155,7 @@ router.get('/dashboard', requireAuth, withLiveRole, asyncHandler(async (req: Req
     FROM sessions s
     JOIN opportunities o ON s.opportunity_id = o.id
     WHERE ($1::uuid IS NULL OR o.owner_user_id = $1)
-  `, [countsOwnerId, now]);
+  `, [effectiveCountsOwnerId, now]);
 
   // M7: Recent bookings list (with session times) — bookings table uses created_at, not booked_at
   const recentBookingsResult = await pool.query(`

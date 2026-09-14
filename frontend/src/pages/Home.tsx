@@ -35,7 +35,14 @@ const Home: React.FC = memo(() => {
     try {
       setLoading(true);
       setError('');
-      const data = await getOpportunities({});
+      // The participant Home lists only published studies (Decision 3). A
+      // non-admin is scoped to published by the list route regardless, but an
+      // admin viewing the participant Home would otherwise receive their own
+      // drafts and closed studies too - the route returns every status to an
+      // admin when none is named. Asking for 'published' keeps admins seeing
+      // the same live list a participant does, and keeps the "N active studies"
+      // count (which follows the rendered rows) honest as studies auto-close.
+      const data = await getOpportunities({ status: 'published' });
       
       // Ensure data is an array and not HTML
       if (!Array.isArray(data)) {

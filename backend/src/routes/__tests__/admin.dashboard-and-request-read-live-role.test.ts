@@ -215,6 +215,91 @@ describe('GET /api/admin/dashboard reads the live role', () => {
     }
   });
 
+  // DECISION 2: the "Show all researchers" toggle. `?scope=all` widens the
+  // COUNTS to every researcher; `?scope=mine` scopes them to the caller even
+  // for a superadmin. Participant identities NEVER follow the toggle - that is
+  // the whole reason the two owner constants are separate declarations.
+  it('widens a researcher_admin\'s counts to every researcher at scope=all', async () => {
+    database('researcher_admin');
+
+    await request(listening(appAs('researcher_admin', 'admin-1')))
+      .get(`${DASHBOARD}?scope=all`)
+      .expect(200);
+
+    // Every count query loses its owner filter (param bound to null), which is
+    // what the toggle is for. On main scope is ignored, so these stay 'admin-1'.
+    expect(countCalls().length).toBeGreaterThan(0);
+    for (const call of countCalls()) {
+      const params = call[1] as unknown[];
+      const placeholder = String(call[0]).match(/owner_user_id\s*=\s*\$(\d)/);
+      expect(placeholder).not.toBeNull();
+      expect(params[Number(placeholder![1]) - 1]).toBeNull();
+    }
+  });
+
+  it('never widens participant identities with the toggle, even at scope=all', async () => {
+    database('researcher_admin');
+
+    const res = await request(listening(appAs('researcher_admin', 'admin-1')))
+      .get(`${DASHBOARD}?scope=all`)
+      .expect(200);
+
+    // The counts widened in the arm above; the recent-bookings identities must
+    // NOT. A widening that reached this query would put the other researcher's
+    // participant name and email on the wire - the #38 leak, re-opened by a
+    // toggle. So it stays scoped to the caller.
+    expect(emailsOnTheWire(res.body)).toEqual([OWN_PARTICIPANT]);
+    expect(JSON.stringify(res.body)).not.toContain('Rival Participant');
+    expect(identityCall()![1]).toEqual(['admin-1']);
+  });
+
+  it('narrows a superadmin\'s counts to their own studies at scope=mine', async () => {
+    database('superadmin');
+
+    await request(listening(appAs('superadmin', 'root-1')))
+      .get(`${DASHBOARD}?scope=mine`)
+      .expect(200);
+
+    // A superadmin defaults to the whole platform, but the toggle off scopes
+    // their counts to their own studies. On main scope is ignored, so these
+    // stay null (unscoped).
+    expect(countCalls().length).toBeGreaterThan(0);
+    for (const call of countCalls()) {
+      const params = call[1] as unknown[];
+      const placeholder = String(call[0]).match(/owner_user_id\s*=\s*\$(\d)/);
+      expect(placeholder).not.toBeNull();
+      expect(params[Number(placeholder![1]) - 1]).toBe('root-1');
+    }
+  });
+
+  it('keeps the role default when no scope is named, so existing callers are unchanged', async () => {
+    database('researcher_admin');
+
+    await request(listening(appAs('researcher_admin', 'admin-1')))
+      .get(DASHBOARD)
+      .expect(200);
+
+    // Absent scope is today's behaviour: a researcher_admin scoped to their own
+    // studies. This pins that the toggle is additive, not a behaviour change for
+    // a caller that never sends it.
+    for (const call of countCalls()) {
+      const params = call[1] as unknown[];
+      const placeholder = String(call[0]).match(/owner_user_id\s*=\s*\$(\d)/);
+      expect(params[Number(placeholder![1]) - 1]).toBe('admin-1');
+    }
+  });
+
+  it('refuses a repeated scope parameter at the boundary rather than guessing', async () => {
+    database('researcher_admin');
+
+    // The shape refusal `validateQuery` mounts for the toggle: `?scope=a&scope=b`
+    // is a string array, not a string, so it is a 400 before the handler runs -
+    // the behavioural proof for the structural query-validator scan.
+    await request(listening(appAs('researcher_admin', 'admin-1')))
+      .get(`${DASHBOARD}?scope=all&scope=mine`)
+      .expect(400);
+  });
+
   it('refuses an admin whose database role was revoked after login', async () => {
     database('employee');
 

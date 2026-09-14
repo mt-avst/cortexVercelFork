@@ -152,6 +152,7 @@ describe('getTabsForType', () => {
       'Basic Information',
       'Content & Details',
       'External Link',
+      'Consent',
       'Review'
     ]);
   });
@@ -167,17 +168,20 @@ describe('getTabsForType', () => {
   });
 
   /**
-   * The pair that proves C1's scope. A native survey authors a study and gets a
-   * Consent step; the same type delivered externally authors nothing and must
-   * not. `toEqual` on the whole array rather than `toContain`, because the
-   * failure that matters is an EXTRA step appearing, and `toContain` cannot see
-   * one.
+   * WZ-18 (Decision 9): every question-carrying type now carries a Consent step
+   * whichever way it is delivered, so the step count stops jumping between four
+   * and five as the author toggles delivery mode. A native survey's Consent step
+   * edits the wording Cortex will show; an external survey's is a short
+   * confirmation that the tool on the other side of the link carries consent.
+   * `toEqual` on the whole array rather than `toContain`, because the failure
+   * that matters is a MISSING or misplaced step, and `toContain` cannot see one.
    */
-  it('gives an externally delivered survey no consent step, because it has no study', () => {
+  it('gives an externally delivered survey a confirmation Consent step, so the count matches the native shape', () => {
     expect(getTabsForType('survey', 'external').map((tab) => tab.title)).toEqual([
       'Basic Information',
       'Content & Details',
       'External Link',
+      'Consent',
       'Review'
     ]);
   });
@@ -193,16 +197,17 @@ describe('getTabsForType', () => {
   });
 
   /**
-   * The rule changed with #79 and the change IS the finding: consent attaches
-   * where Cortex either runs the study or stores artefacts of it. The
-   * moderated pair now stores artefacts (recording, transcript, acceptance at
-   * booking), so they carry a Consent step; a pure hand-off still does not.
+   * WZ-18 (Decision 9): a handed-off question now carries a Consent step too - a
+   * short confirmation that the external tool holds the consent, so the wizard is
+   * five steps for every question-carrying type rather than four for a hand-off
+   * and five for a native run. `question` defaults to external delivery.
    */
-  it('gives a handed-off question no consent step, because Cortex keeps nothing of it', () => {
+  it('gives a handed-off question a confirmation Consent step, so its count matches the native question', () => {
     expect(getTabsForType('question').map((tab) => tab.title)).toEqual([
       'Basic Information',
       'Content & Details',
       'External Link',
+      'Consent',
       'Review'
     ]);
   });
@@ -240,6 +245,7 @@ describe('getTabsForType', () => {
       'Basic Information',
       'Content & Details',
       'External Link',
+      'Consent',
       'Review'
     ]);
   });
@@ -271,6 +277,62 @@ describe('getTabsForType', () => {
     expect(getTabsForType('unmoderated', 'native').map((tab) => tab.title)).toContain(
       'Task List'
     );
+  });
+});
+
+describe("the hand-off Consent step confirms the external tool's consent (WZ-18)", () => {
+  const openExternalPollConsent = async (
+    user: ReturnType<typeof userEvent.setup>
+  ) => {
+    await user.selectOptions(screen.getByLabelText(/Research Study Type/i), 'poll');
+    await user.type(screen.getByLabelText(/^Title/i), 'How was the export flow');
+    await user.type(
+      screen.getByLabelText(/^Purpose/i),
+      'One quick question after someone exports their data'
+    );
+    await user.click(screen.getByRole('button', { name: /^Continue: Content & Details$/ }));
+    await user.click(screen.getByRole('button', { name: /^Continue: External Link$/ }));
+    await user.click(screen.getByRole('button', { name: /^Continue: Consent$/ }));
+  };
+
+  it('shows a short confirmation, not a consent-wording editor', async () => {
+    const user = userEvent.setup();
+    renderForm();
+    await openExternalPollConsent(user);
+
+    // The confirmation body, keyed by its own testid so it cannot be confused
+    // with the editing ConsentStep the native/moderated shapes render.
+    const step = await screen.findByTestId('external-consent-step');
+    expect(step).toHaveTextContent(/consent is\s+collected there, not in Cortex/i);
+    expect(step).toHaveTextContent(/Confirm the tool.s own\s+consent text is in place before you publish/i);
+    expect(
+      within(step).getByRole('heading', { name: /Consent/i })
+    ).toBeInTheDocument();
+
+    // And NONE of the editor: no wording textarea, no template chooser, no
+    // ConsentStep at all. A hand-off has no wording of its own to edit, and
+    // offering one would imply Cortex governs consent it does not hold.
+    expect(screen.queryByTestId('consent-step')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Consent text/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Customise consent wording/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it('sends nothing consent-shaped when a hand-off is created through the confirmation step', async () => {
+    // The confirmation step writes no consent fields - it only confirms - so a
+    // created external poll must carry no moderated/inline consent wording.
+    const user = userEvent.setup();
+    renderForm();
+    await openExternalPollConsent(user);
+    await user.click(screen.getByRole('button', { name: /^Continue: Review$/ }));
+    await user.click(screen.getByRole('button', { name: /^Create study$/ }));
+
+    await waitFor(() => expect(vi.mocked(createOpportunity)).toHaveBeenCalled());
+    const sent = vi.mocked(createOpportunity).mock.calls[0][0] as unknown as Record<string, unknown>;
+    expect(sent.moderated_consent_text).toBeFalsy();
+    expect(sent.inline_survey_consent_text).toBeFalsy();
+    expect(sent.inline_study_consent_text).toBeFalsy();
   });
 });
 

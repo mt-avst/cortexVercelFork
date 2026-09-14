@@ -513,50 +513,49 @@ export const getTabsForType = (
     });
   }
 
-  // Consent is a step of its own on the paths where Cortex either RUNS the
-  // study or STORES artefacts of it, and on no others.
+  // Consent is a step of its own on every shape that reaches a participant, so
+  // the wizard is the same five steps whichever type and delivery mode the
+  // author picks (WZ-18 / Decision 9). Its body differs by how consent is held:
   //
-  // Two ways in, deliberately distinct:
-  //
-  // - A study-authoring shape (`questions` or `taskList` above) gets Consent
-  //   derived from that step rather than re-tested against `type`, so the two
-  //   cannot disagree - the drift B1 removed. A future type that authors a
-  //   study gets Consent for free.
-  // - The two MODERATED shapes (`sessions` above) get Consent by type (#79).
-  //   This used to be argued the other way - "a booked session has no study,
-  //   so there is no consent for this product to govern" - and that argument
-  //   EXPIRED the moment Cortex began storing a moderated session's recording
-  //   and transcript against the booking. The session still happens on a
-  //   third-party call; what the participant now agrees to at booking time is
-  //   what Cortex may hold afterwards.
-  //
-  // A pure hand-off keeps no artefacts, so it still has no Consent step: what
-  // its participant agrees to lives in the tool on the other side of the link,
-  // and an empty Consent step there would imply Cortex has a say in something
-  // it does not.
-  //
-  // #78 is the "future type" the first bullet predicted, and it arrived for
-  // free: a native `question` gets Consent because it has a `questions` step,
-  // and its external twin does not because it has a link step. Neither outcome
-  // needed a word about `question` here.
+  // - A study-authoring shape (`questions` or `taskList` above) gets a Consent
+  //   step that edits the wording Cortex will show, derived from that step
+  //   rather than re-tested against `type` so the two cannot disagree - the
+  //   drift B1 removed. A future type that authors a study gets it for free.
+  // - The two MODERATED shapes (`sessions` above) get the same editor by type
+  //   (#79): the session happens on a third-party call, but what the
+  //   participant agrees to at booking time is what Cortex may hold afterwards
+  //   (recording, transcript, acceptance).
+  // - A pure hand-off (`externalLink` above) gets a SHORT confirmation Consent
+  //   step instead of an editor: the wording lives in the tool on the other
+  //   side of the link, and this step asks the author to confirm it is in place
+  //   rather than pretending Cortex governs it. Before Decision 9 a hand-off
+  //   had no Consent step at all, which made its wizard four steps to a native
+  //   run's five - the count jumped as the author toggled delivery mode, which
+  //   is the confusion WZ-18 removes. The render keys the confirmation body off
+  //   the `externalLink` step, so the two cannot disagree either.
   const authoringStep = tabs.find(
     (tab) => tab.key === 'questions' || tab.key === 'taskList'
   );
   const moderatedStep = tabs.find((tab) => tab.key === 'sessions');
+  const externalHandoffStep = tabs.find((tab) => tab.key === 'externalLink');
 
-  if (authoringStep || moderatedStep) {
+  if (authoringStep || moderatedStep || externalHandoffStep) {
     tabs.push({
       id: 4,
       key: 'consent',
       title: 'Consent',
-      description: 'What the participant agrees to'
+      description: externalHandoffStep
+        ? 'Confirm the external tool carries it'
+        : 'What the participant agrees to'
     });
   }
 
   /*
-   * Review is last on every shape, and the shapes are not the same length -
-   * two steps before a type is chosen, three for a hand-off or a booked
-   * session, five for the two paths that author a study.
+   * Review is last on every shape. Since WZ-18 every type that shows a strip is
+   * five steps long (basics, content, one type-specific step, Consent, Review),
+   * so id === index + 1 there - but the no-type shape is still just two steps
+   * before it (basics, content, Review), and that is the shape the fixed id
+   * protects.
    *
    * Its id is a FIXED 5 rather than "one past the end", deliberately, and the
    * gaps that leaves are the point. One past the end would give Review id 3 on
@@ -1149,6 +1148,16 @@ const OpportunityForm: React.FC = () => {
     : tabs.some((tab) => tab.key === 'taskList')
     ? 'recorded'
     : null;
+
+  /**
+   * The Consent step is a short confirmation, not an editor, on a pure hand-off
+   * (WZ-18 / Decision 9). Derived from the step set for the same reason
+   * `authoringKind` is: it cannot disagree with `getTabsForType` about which
+   * shape carries an `externalLink` step. `authoringKind` is null on this shape
+   * (no `questions`/`taskList`), so the three Consent render arms below stay
+   * mutually exclusive.
+   */
+  const hasExternalHandoff = tabs.some((tab) => tab.key === 'externalLink');
 
   /**
    * The participant preview, at `<this form's path>/preview`.
@@ -4554,10 +4563,14 @@ const OpportunityForm: React.FC = () => {
     const step = firstStepHoldingError(errors, locateField);
     // Only to a step this shape actually HAS. FIELD_LOCATIONS is a static map
     // over every field in the form, so it names step 4 for consent - and the
-    // shapes with no study have no step 4. Setting one anyway renders no step
-    // body at all, because the render guards key off `currentStep`, which
-    // `tabs.find` returns undefined for: the author would be told to fix a
-    // field and shown a blank page.
+    // no-type shape (basics, content, Review) has no step 4 at all. Since WZ-18
+    // every TYPED shape is five steps, so a hand-off does now carry a step 4 -
+    // but its Consent step is a confirmation with no editable field, so
+    // FIELD_LOCATIONS maps no error to it and `firstStepHoldingError` never
+    // returns 4 for it. Setting a step this shape lacks would render no body at
+    // all, because the render guards key off `currentStep`, which `tabs.find`
+    // returns undefined for: the author would be told to fix a field and shown a
+    // blank page. The guard is what keeps that from happening.
     if (step && tabs.some((candidate) => candidate.id === step)) {
       setActiveTab(step);
     }
@@ -5395,11 +5408,50 @@ const OpportunityForm: React.FC = () => {
                     </>
                   )}
 
+                  {/* Consent for a pure HAND-OFF (WZ-18 / Decision 9): the tool
+                      on the other side of the link collects consent, so this
+                      step confirms that rather than editing wording Cortex does
+                      not own. Keyed off the externalLink step, so a shape with a
+                      link always shows it and no other shape does. */}
+                  {currentStep?.key === 'consent' && hasExternalHandoff && (
+                    <>
+                      <div className="form-section mb-5" data-testid="external-consent-step">
+                        <div className="d-flex align-items-center mb-4 pb-3" style={{ borderBottom: 'none' }}>
+                          <div>
+                            <h2 id="external-consent-heading" tabIndex={-1} className="h4 mb-1 section-title" style={{ fontSize: '1.5rem', lineHeight: '1.3', fontWeight: '600' }}>Consent</h2>
+                            <p className="mb-0 section-description" style={{ fontSize: '0.95rem' }}>
+                              The external tool handles consent
+                            </p>
+                          </div>
+                        </div>
+                        <p className="mb-0" style={{ maxWidth: '48rem' }}>
+                          This study hands off to an external tool, so consent is
+                          collected there, not in Cortex. Confirm the tool&rsquo;s own
+                          consent text is in place before you publish. Cortex records
+                          only that a participant followed the link.
+                        </p>
+                      </div>
+
+                      {continueControl && (
+                      <StepActions
+                        isEdit={isEdit}
+                        onSaveAndExit={handleSaveAndExit}
+                        saving={saving}
+                        disabled={saveControlsDisabled}
+                        justSaved={Boolean(successMessage)}
+                        {...backwardControl}
+                        onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
+                        {...continueControl}
+                      />
+                      )}
+                    </>
+                  )}
+
                   {/* Consent for the MODERATED pair (#79): same step component,
                       third consent home. No study exists here, so none of the
                       study read-only machinery applies - the wording belongs to
                       the opportunity row and only its owner reaches this form. */}
-                  {currentStep?.key === 'consent' && !authoringKind && (
+                  {currentStep?.key === 'consent' && !authoringKind && !hasExternalHandoff && (
                     <>
                       <ConsentStep
                         key={opportunityId ?? 'unsaved-moderated'}
