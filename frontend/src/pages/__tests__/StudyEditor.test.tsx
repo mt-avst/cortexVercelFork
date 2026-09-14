@@ -8,6 +8,7 @@ import StudyEditor, {
   studyMissingTaskPageUrl,
 } from '../StudyEditor';
 import { isStudyReadOnly } from '../../utils/studyOwnership';
+import { NavigationGuardProvider } from '../../contexts/NavigationGuardContext';
 import {
   createFirstHandStudy,
   getFirstHandStudy,
@@ -27,6 +28,12 @@ vi.mock('../../api/firsthand-studies', () => ({
 // AuthProvider, which would fetch /me on mount.
 vi.mock('../../contexts/AuthContext', () => ({
   useAuth: vi.fn(),
+}));
+
+// ConfirmationModal (the unsaved-changes dialog, row 25) reads useTheme; a light
+// stub is enough - the dialog's content, not its palette, is what these assert.
+vi.mock('../../contexts/ThemeContext', () => ({
+  useTheme: () => ({ isDarkMode: false }),
 }));
 
 const mockedCreate = vi.mocked(createFirstHandStudy);
@@ -950,5 +957,73 @@ describe('StudyEditor page', () => {
 
     expect(await screen.findByLabelText('Consent text')).toBeEnabled();
     expect(screen.queryByText('Read only')).not.toBeInTheDocument();
+  });
+});
+
+describe('StudyEditor page - unsaved-changes guard (row 25)', () => {
+  const OWN_STUDY = {
+    id: 'study_abc',
+    title: 'My study',
+    intro_text: 'Intro',
+    consent_text: 'Consent',
+    status: 'draft',
+    owner_user_id: 'user-owner',
+    updated_at: '2026-08-21T09:15:30.123Z',
+  };
+  const OWN_STEPS = [
+    {
+      step_id: 'study_abc_step_001',
+      order: 1,
+      type: 'instruction',
+      prompt: 'Do the thing',
+      target_url: 'https://example.com/checkout',
+    },
+  ];
+
+  // Wrapped in NavigationGuardProvider exactly as AppChromeLayout wraps the real
+  // route, and with a destination route so a clean Back can actually land.
+  const renderGuardedPage = () =>
+    render(
+      <NavigationGuardProvider>
+        <MemoryRouter initialEntries={['/admin/studies/study_abc/edit']}>
+          <Routes>
+            <Route path="/admin/studies/:id/edit" element={<StudyEditor />} />
+            <Route path="/admin/studies" element={<div>Task lists index</div>} />
+          </Routes>
+        </MemoryRouter>
+      </NavigationGuardProvider>
+    );
+
+  beforeEach(() => {
+    mockedUseAuth.mockReturnValue({
+      user: { id: 'user-owner', role: 'researcher_admin' },
+      loading: false,
+    });
+    mockedGet.mockResolvedValue({ study: { ...OWN_STUDY }, steps: [...OWN_STEPS] } as never);
+  });
+
+  it('intercepts Back with a confirm dialog once a field has been edited', async () => {
+    renderGuardedPage();
+
+    const title = await screen.findByLabelText('Title');
+    fireEvent.change(title, { target: { value: 'My study, revised' } });
+
+    fireEvent.click(screen.getByRole('link', { name: 'Back to task lists' }));
+
+    // The dialog appears and the navigation was intercepted - still on the editor.
+    expect(await screen.findByText('Leave without saving?')).toBeInTheDocument();
+    expect(screen.queryByText('Task lists index')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Title')).toBeInTheDocument();
+  });
+
+  it('lets Back navigate straight through on a clean editor', async () => {
+    renderGuardedPage();
+
+    // Wait for the form, then leave without touching anything.
+    await screen.findByLabelText('Title');
+    fireEvent.click(screen.getByRole('link', { name: 'Back to task lists' }));
+
+    expect(await screen.findByText('Task lists index')).toBeInTheDocument();
+    expect(screen.queryByText('Leave without saving?')).not.toBeInTheDocument();
   });
 });

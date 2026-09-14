@@ -231,19 +231,52 @@ describe('buildReviewSummary', () => {
       expect(findItem(withoutLocation, 'Meeting Location')).toBeUndefined();
     });
 
-    it('includes Available from/until only when the dates are set', () => {
+    it('includes Available from/until only when the dates are set, formatted with the product date formatter', () => {
+      // The form stores study-period dates as an ISO timestamp at noon UTC (see
+      // BasicInfoTab.formatDateToISO), so this fixture uses that real shape - a
+      // bare 'YYYY-MM-DD' is not what the summary is ever handed. Review used to
+      // print that raw string; row 26 formats it in the reader's zone the way
+      // every other date in the product is written.
       const withDates = findSection(
         buildReviewSummary(
-          completeInput({ startDate: '2026-09-01', endDate: '2026-09-30' })
+          completeInput({
+            startDate: '2026-08-18T12:00:00.000Z',
+            endDate: '2026-08-30T12:00:00.000Z'
+          })
         ),
         'basics'
       );
       const withoutDates = findSection(buildReviewSummary(completeInput()), 'basics');
 
-      expect(findItem(withDates, 'Available from')?.value).toBe('2026-09-01');
-      expect(findItem(withDates, 'Available until')?.value).toBe('2026-09-30');
+      expect(findItem(withDates, 'Available from')?.value).toBe('Tue 18 Aug 2026');
+      expect(findItem(withDates, 'Available until')?.value).toBe('Sun 30 Aug 2026');
       expect(findItem(withoutDates, 'Available from')).toBeUndefined();
       expect(findItem(withoutDates, 'Available until')).toBeUndefined();
+    });
+
+    it('omits the Study Period on a moderated shape, which has no dates to edit', () => {
+      // test/interview render no Study Period fields in BasicInfoTab (only
+      // poll/survey/question/unmoderated do), so a bookable shape carrying
+      // start/end dates - legacy rows, or a type change - must not show a
+      // Study Period the author cannot reach. Keyed on the `sessions` step, the
+      // same set BasicInfoTab excludes, so it cannot drift from getTabsForType.
+      const moderatedSteps: ReviewStepRef[] = [
+        { id: 1, key: 'basics', title: 'Basic Information' },
+        { id: 3, key: 'sessions', title: 'Session Management' },
+        { id: 5, key: 'review', title: 'Review' }
+      ];
+      const section = findSection(
+        buildReviewSummary(
+          completeInput({
+            steps: moderatedSteps,
+            startDate: '2026-08-18T12:00:00.000Z',
+            endDate: '2026-08-30T12:00:00.000Z'
+          })
+        ),
+        'basics'
+      );
+      expect(findItem(section, 'Available from')).toBeUndefined();
+      expect(findItem(section, 'Available until')).toBeUndefined();
     });
   });
 
@@ -755,6 +788,49 @@ describe('buildReviewSummary', () => {
       expect(item?.missing).toBe(true);
     });
 
+    it('reads an empty moderated consent as "No consent asked", not an unapproved alarm', () => {
+      // Moderated consent (#79) is OPTIONAL - a session that stores nothing
+      // needs none, and emptiness is how the author says so. On the summary
+      // that empty state read "Not set" + "Custom wording, not an approved
+      // template", alarming the author about a choice they made on purpose.
+      const moderatedConsentSteps: ReviewStepRef[] = [
+        { id: 1, key: 'basics', title: 'Basic Information' },
+        { id: 3, key: 'sessions', title: 'Session Management' },
+        { id: 4, key: 'consent', title: 'Consent' },
+        { id: 5, key: 'review', title: 'Review' }
+      ];
+      const section = findSection(
+        buildReviewSummary(
+          completeInput({ steps: moderatedConsentSteps, consentText: '', consentTemplate: null })
+        ),
+        'consent'
+      );
+      const wording = findItem(section, 'Consent wording');
+      expect(wording?.value).toBe('No consent asked');
+      expect(wording?.missing).not.toBe(true);
+      // The "Custom wording, not an approved template" line is not shown for an
+      // empty moderated consent - there is no wording to be unapproved.
+      expect(
+        section?.items.some((item) => /custom wording/i.test(item.value))
+      ).toBe(false);
+    });
+
+    it('still alarms an empty consent on an authoring shape, which is genuinely unset', () => {
+      // The survey/recorded shapes lock consent to an approved template by
+      // default, so an empty one there is a real gap, not a deliberate "none".
+      const item = findItem(
+        findSection(
+          buildReviewSummary(
+            completeInput({ steps: surveyConsentSteps, consentText: '', consentTemplate: null })
+          ),
+          'consent'
+        ),
+        'Consent wording'
+      );
+      expect(item?.value).not.toBe('No consent asked');
+      expect(item?.missing).toBe(true);
+    });
+
     it('does not truncate exactly 160 characters', () => {
       const text = 'a'.repeat(160);
       const item = findItem(
@@ -1051,6 +1127,17 @@ describe('stepForPublishProblem', () => {
     const step = stepForPublishProblem('external_link_required', steps);
     expect(step?.id).toBe(3);
     expect(step?.key).toBe('externalLink');
+  });
+
+  it('sends meeting_location_required to the Basics step, where the venue is set (row 9)', () => {
+    const steps: ReviewStepRef[] = [
+      { id: 1, key: 'basics', title: 'Basic Information' },
+      { id: 3, key: 'sessions', title: 'Session Management' },
+      { id: 5, key: 'review', title: 'Review' }
+    ];
+    const step = stepForPublishProblem('meeting_location_required', steps);
+    expect(step?.id).toBe(1);
+    expect(step?.key).toBe('basics');
   });
 
   it('returns null when the relevant step is not in the list', () => {

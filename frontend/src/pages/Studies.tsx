@@ -6,7 +6,22 @@ import { getFirstHandStudies } from '../api/client';
 import ConsentStateChip from '../components/ConsentStateChip';
 import { Alert, Card, CardBody } from '../components/ui';
 import { isStudyReadOnly } from '../utils/studyOwnership';
+import { formatDateTime } from '../utils/datetime';
 import type { FirstHandStudy } from '../api/types';
+
+/**
+ * The human label for a task list's stored status.
+ *
+ * The raw enum leaked onto the card: a `launched` study read "launched" here
+ * while every participant-facing surface calls that state "Published". Mapped so
+ * the index says the same word as the rest of the product; an unrecognised
+ * status falls back to itself rather than vanishing.
+ */
+const STUDY_STATUS_LABEL: Record<string, string> = {
+  draft: 'Draft',
+  launched: 'Published',
+  archived: 'Archived'
+};
 
 /**
  * Task list index for `/admin/studies`. Lists the task lists a researcher can
@@ -81,7 +96,7 @@ const Studies: React.FC = () => {
           <p className="text-muted mb-0">
             A task list defines the prompt sequence, consent copy and
             recording context participants experience. An unmoderated
-            opportunity references a task list by id.
+            study references a task list by id.
           </p>
         </div>
         <Link className="btn btn-primary" to="/admin/studies/new">
@@ -122,7 +137,7 @@ const Studies: React.FC = () => {
                 <Card padding="md" hoverable={false}>
                   <CardBody>
                     <p className="text-uppercase fw-semibold text-muted mb-1">
-                      {study.status ?? 'draft'}{' '}
+                      {STUDY_STATUS_LABEL[study.status ?? 'draft'] ?? (study.status ?? 'draft')}{' '}
                       <ConsentStateChip templateId={study.consent_template_id} />
                     </p>
                     <strong className="d-block mb-1">{study.title}</strong>
@@ -130,9 +145,7 @@ const Studies: React.FC = () => {
                     {study.updated_at || readOnly ? (
                       <p className="text-muted small mb-3">
                         {study.updated_at
-                          ? `Updated ${new Date(
-                              study.updated_at
-                            ).toLocaleString()}`
+                          ? `Updated ${formatDateTime(study.updated_at) ?? ''}`
                           : null}
                         {study.updated_at && readOnly ? <br /> : null}
                         {readOnly ? 'Owned by another researcher' : null}

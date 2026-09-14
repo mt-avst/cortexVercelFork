@@ -2,6 +2,7 @@ import { OPPORTUNITY_TYPES } from '@shared/constants';
 import type { PublishProblemCode } from '@shared/firsthand/publish-readiness';
 
 import { getParticipantFacingType } from '../../utils/opportunityUtils';
+import { formatStudyDate } from '../../utils/datetime';
 
 /**
  * The check-answers screen, built by walking the same step list the stepper
@@ -347,11 +348,36 @@ const itemsForStep = (step: ReviewStepRef, input: ReviewSummaryInput): ReviewIte
       if (input.meetingLocation) {
         items.push({ label: 'Meeting Location', value: input.meetingLocation });
       }
-      if (input.startDate) {
-        items.push({ label: 'Available from', value: input.startDate });
+      /*
+       * The Study Period, but only on the shapes that can edit it (row 26).
+       *
+       * `BasicInfoTab` renders the Start/End Date inputs for
+       * poll/survey/question/unmoderated and NOT for the moderated pair - a
+       * booked study's window is its slots, not a countdown. So a test or
+       * interview carrying start/end dates (legacy rows, or a type change that
+       * did not clear them) must not show a Study Period the author has no
+       * field for. Gated on the presence of a `sessions` step - the same set
+       * `BasicInfoTab` excludes - so it cannot drift from `getTabsForType`.
+       *
+       * Dates are formatted with the product's one date formatter in the
+       * reader's zone, like every other date in the app; Review used to print
+       * the raw ISO string. `?? value` keeps an unparseable value visible
+       * rather than dropping the row silently.
+       */
+      const editsStudyPeriod = !input.steps.some(
+        (candidate) => candidate.key === 'sessions'
+      );
+      if (editsStudyPeriod && input.startDate) {
+        items.push({
+          label: 'Available from',
+          value: formatStudyDate(input.startDate) ?? input.startDate
+        });
       }
-      if (input.endDate) {
-        items.push({ label: 'Available until', value: input.endDate });
+      if (editsStudyPeriod && input.endDate) {
+        items.push({
+          label: 'Available until',
+          value: formatStudyDate(input.endDate) ?? input.endDate
+        });
       }
       return items;
     }
@@ -457,6 +483,25 @@ const itemsForStep = (step: ReviewStepRef, input: ReviewSummaryInput): ReviewIte
     }
 
     case 'consent': {
+      // The moderated (bookable) shapes carry OPTIONAL consent (#79): a session
+      // that stores nothing to consent to needs no wording, and an empty box is
+      // how the author says so. Detected by the `sessions` step - the same set
+      // that decides moderated consent everywhere else - so an empty one reads
+      // as the deliberate "none" it is, not "Not set" plus a "Custom wording,
+      // not an approved template" alarm about wording that does not exist
+      // (row 26). Authoring shapes (questions/taskList) lock consent to an
+      // approved template by default, so an empty one there is a real gap and
+      // keeps the missing state below.
+      const isModerated = input.steps.some((step) => step.key === 'sessions');
+      if (isModerated && !input.consentText) {
+        return [
+          {
+            label: 'Consent wording',
+            value: 'No consent asked',
+            note: 'A moderated session with no consent wording stores nothing for the participant to agree to.'
+          }
+        ];
+      }
       return [
         {
           label: 'Consent wording',
@@ -529,7 +574,10 @@ const STEP_KEY_FOR_PROBLEM: Record<PublishProblemCode, string> = {
   unmoderated_study_removed: 'taskList',
   native_survey_study_required: 'questions',
   external_link_required: 'externalLink',
-  bookable_slot_required: 'sessions'
+  bookable_slot_required: 'sessions',
+  // The meeting location is a Basics field (row 9), so its refusal sends the
+  // author back to step 1, not to Session Management.
+  meeting_location_required: 'basics'
 };
 
 /**
