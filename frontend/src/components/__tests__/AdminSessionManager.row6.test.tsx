@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -148,8 +148,8 @@ describe('Row 6 defect 5 - the list is the default view and shows existing sessi
   });
 });
 
-describe('Row 6 defect 5 - the list can remove sessions', () => {
-  it('removes an unbooked real session server-side and drops it from the list', async () => {
+describe('Row 2 - slot removal is a deferred, undoable commit', () => {
+  it('does not delete a removed slot until the undo window expires, then fires the DELETE', async () => {
     const onSessionsChange = vi.fn();
     renderManager({
       onSessionsChange,
@@ -157,16 +157,79 @@ describe('Row 6 defect 5 - the list can remove sessions', () => {
     });
     await settle();
 
-    fireEvent.click(screen.getByRole('button', { name: /Remove session on/i }));
-    await settle();
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(screen.getByRole('button', { name: /Remove session on/i }));
 
-    expect(vi.mocked(deleteSession)).toHaveBeenCalledWith('s1');
-    expect(onSessionsChange).toHaveBeenCalledWith([]);
+      // Optimistic hide + an undo toast, but the server is NOT touched yet.
+      expect(vi.mocked(deleteSession)).not.toHaveBeenCalled();
+      expect(screen.getByRole('button', { name: /^Undo/i })).toBeInTheDocument();
+
+      // The undo window is at least 8 seconds: still nothing at 7.9s.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(7900);
+      });
+      expect(vi.mocked(deleteSession)).not.toHaveBeenCalled();
+
+      // Past the window: the DELETE fires and the parent is told.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(200);
+      });
+      expect(vi.mocked(deleteSession)).toHaveBeenCalledWith('s1');
+      expect(onSessionsChange).toHaveBeenCalledWith([]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
-  it('refuses to remove a booked session - the button is disabled', async () => {
+  it('moves focus to Undo when a slot is removed, so the affordance is reachable', async () => {
+    renderManager({
+      sessions: [sessionRow('s1', '2027-03-01T10:00:00.000Z', '2027-03-01T10:30:00.000Z')] as never,
+    });
+    await settle();
+
+    // Removing unmounts the Remove button it was clicked from, so without a
+    // focus move a keyboard/SR user would be dropped to <body>.
+    fireEvent.click(screen.getByRole('button', { name: /Remove session on/i }));
+    const undo = await screen.findByRole('button', { name: /^Undo/i });
+    expect(undo).toHaveFocus();
+
+    // Cancel so no pending timer dangles past the test.
+    fireEvent.click(undo);
+  });
+
+  it('cancels the pending DELETE when Undo is pressed inside the window', async () => {
     const onSessionsChange = vi.fn();
     renderManager({
+      onSessionsChange,
+      sessions: [sessionRow('s1', '2027-03-01T10:00:00.000Z', '2027-03-01T10:30:00.000Z')] as never,
+    });
+    await settle();
+
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(screen.getByRole('button', { name: /Remove session on/i }));
+      fireEvent.click(screen.getByRole('button', { name: /^Undo/i }));
+
+      // Let any timer that would have fired go by; it must have been cancelled.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10000);
+      });
+
+      expect(vi.mocked(deleteSession)).not.toHaveBeenCalled();
+      expect(onSessionsChange).not.toHaveBeenCalled();
+      // The row is back.
+      expect(
+        screen.getByRole('button', { name: /Remove session on/i })
+      ).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('shows a booked slot\'s refusal reason as visible text, not a title on a disabled button', async () => {
+    const onSessionsChange = vi.fn();
+    const { container } = renderManager({
       onSessionsChange,
       sessions: [
         sessionRow('booked', '2027-03-01T10:00:00.000Z', '2027-03-01T10:30:00.000Z', {
@@ -177,12 +240,63 @@ describe('Row 6 defect 5 - the list can remove sessions', () => {
     });
     await settle();
 
-    const remove = screen.getByRole('button', { name: /Remove session on/i });
-    expect(remove).toBeDisabled();
-    // And nothing is deleted even if a click is forced past the disabled state.
-    fireEvent.click(remove);
+    // The reason is readable text in the row, not hidden in a `title` attribute
+    // on a disabled control.
+    expect(screen.getByText(/Cannot remove: 1 booking/i)).toBeInTheDocument();
+    // No remove control is offered for a booked slot, so nothing can be deleted.
+    expect(
+      screen.queryByRole('button', { name: /Remove session on/i })
+    ).not.toBeInTheDocument();
     expect(vi.mocked(deleteSession)).not.toHaveBeenCalled();
     expect(onSessionsChange).not.toHaveBeenCalled();
+    // Not merely a tooltip: the reason is in the DOM as text.
+    expect(container.textContent).toMatch(/Cannot remove: 1 booking/i);
+  });
+});
+
+describe('Row 2 - the footer matches every other step (StepActions)', () => {
+  it('renders the shared StepActions row, including Save and exit', async () => {
+    renderManager({
+      onContinue: vi.fn(),
+      onContinueLabel: 'Review',
+      onBack: vi.fn(),
+      onBackLabel: 'Consent',
+      onSaveAndExit: vi.fn(),
+      isEdit: true,
+      saving: false,
+    } as never);
+    await settle();
+
+    // "Save and exit" is the StepActions marker - the bespoke footer never had
+    // one, so its presence proves the shared row is what renders here now.
+    expect(
+      screen.getByRole('button', { name: /Save and exit/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Previous: Consent' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Continue: Review' })
+    ).toBeInTheDocument();
+  });
+});
+
+describe('Row 2 - the step tells the truth about saving on an existing study', () => {
+  it('says slots save immediately when editing a real (already-saved) study', async () => {
+    renderManager({
+      isTemporary: false,
+      sessions: [sessionRow('s1', '2027-03-01T10:00:00.000Z', '2027-03-01T10:30:00.000Z')] as never,
+    });
+    await settle();
+
+    expect(screen.getByText(/saved (as soon as|the moment)/i)).toBeInTheDocument();
+  });
+
+  it('does not claim immediate saving while the study is still temporary (new)', async () => {
+    renderManager({ isTemporary: true });
+    await settle();
+
+    expect(screen.queryByText(/saved (as soon as|the moment)/i)).not.toBeInTheDocument();
   });
 });
 
@@ -270,5 +384,30 @@ describe('Row 6 defects 3 & 4 - the pending-selection footer', () => {
     expect(
       screen.getByRole('button', { name: 'Confirm & continue: Review' })
     ).toBeInTheDocument();
+  });
+});
+
+describe('Existing Sessions table headers name their scope (row 12)', () => {
+  it('gives every header in the Existing Sessions table scope="col"', async () => {
+    // A source-of-truth attribute assertion, NOT a role query: jsdom maps a bare
+    // <th> to role columnheader, so getByRole('columnheader') is green on main
+    // and blind to a missing scope. A real AT (and Chromium) needs the explicit
+    // scope to tie a header to its column.
+    const { container } = renderManager({
+      sessions: [
+        sessionRow('s1', '2027-03-01T10:00:00.000Z', '2027-03-01T10:30:00.000Z'),
+      ] as never,
+    });
+    await settle();
+
+    const table = container.querySelector('.momentum-table-container table');
+    expect(table).not.toBeNull();
+    const headers = [...table!.querySelectorAll('th')];
+    // The seven columns of the Existing Sessions table, so an empty list cannot
+    // pass this vacuously.
+    expect(headers).toHaveLength(7);
+    for (const th of headers) {
+      expect(th.getAttribute('scope')).toBe('col');
+    }
   });
 });

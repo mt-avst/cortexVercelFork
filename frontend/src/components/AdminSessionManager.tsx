@@ -10,6 +10,13 @@ import { formatDateTime, formatClockTime, formatStudyDate } from '../utils/datet
  * Safely convert a potentially Date or string value to ISO string
  * This handles runtime type inconsistencies from API responses
  */
+/**
+ * How long a removed slot waits, hidden, before its DELETE actually fires
+ * (row 2). At least eight seconds so the undo toast is genuinely reachable -
+ * long enough to read "Slot removed" and reach for Undo.
+ */
+const REMOVAL_UNDO_MS = 8000;
+
 const toISOString = (value: string | Date | unknown): string => {
   if (typeof value === 'string') return value;
   if (value instanceof Date) return value.toISOString();
@@ -29,11 +36,13 @@ import {
   Trash2, 
   LayoutGrid, 
   List, 
-  RefreshCw, 
+  RefreshCw,
   ArrowLeft,
   ArrowRight,
-  Plus
+  Plus,
+  Undo2
 } from 'lucide-react';
+import StepActions from './OpportunityForm/StepActions';
 
 /*
  * `resolveSaveOutcome` and `OpportunitySaveOutcome` were deleted here, not
@@ -72,6 +81,20 @@ interface AdminSessionManagerProps {
    */
   onContinue?: () => void;
   onContinueLabel?: string;
+  /*
+   * The step's footer is the shared `StepActions` row now, matching every other
+   * step (row 2). These carry the save controls the parent owns so the row can
+   * render Save Changes / Save and exit the same way it does elsewhere. All
+   * optional: an isolated render of this component (its own test harness) simply
+   * gets a footer with only the navigation controls it was given.
+   */
+  onSaveAndExit?: () => void;
+  onSave?: () => void;
+  isEdit?: boolean;
+  saving?: boolean;
+  justSaved?: boolean;
+  /** Disables the save controls only, computed once by the form. */
+  saveControlsDisabled?: boolean;
 }
 
 interface CalendarViewProps {
@@ -1405,12 +1428,17 @@ const CalendarView: React.FC<CalendarViewProps> = ({
 
                   // Blocked or past: not the researcher's to act on. A static,
                   // named chip that still states why in its accessible name.
+                  // `role="img"` (V-6): an aria-label on a bare <span> is a
+                  // name on a generic element, which assistive tech exposes
+                  // inconsistently; role="img" makes the name - which carries
+                  // the blocked/past state - a first-class label.
                   if (status.isBlocked || status.isPast) {
                     return (
                       <span
                         key={slotKeyOf(slot)}
                         className={`admin-chip ${status.isPast ? 'admin-chip-past' : 'admin-chip-blocked'}`}
                         title={title}
+                        role="img"
                         aria-label={aria}
                       >
                         <Lock size={12} aria-hidden="true" />
@@ -1432,6 +1460,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                         key={slotKeyOf(slot)}
                         className="admin-chip admin-chip-created"
                         title={title}
+                        role="img"
                         aria-label={aria}
                       >
                         <CheckSquare size={12} aria-hidden="true" />
@@ -1537,17 +1566,26 @@ const ListView: React.FC<{
   disabled: boolean;
   loading: boolean;
   /**
+   * The id of a slot whose removal is pending an undo window (row 2). It is
+   * hidden OPTIMISTICALLY here - dropped from the rendered list the moment the
+   * author asks to remove it - while the actual DELETE waits on the toast in the
+   * parent. Undo brings it straight back because it never left `sessions`.
+   */
+  pendingRemovalId?: string;
+  /**
    * True when the list sits BENEATH the table picker (its default home now),
    * where adding slots is done inline above it - so its own "Add slots" button
    * and its zero-sessions prompt are redundant and hidden.
    */
   embedded?: boolean;
-}> = ({ sessions, isTemporary, onRemove, onAddSlots, disabled, loading, embedded = false }) => {
+}> = ({ sessions, isTemporary, onRemove, onAddSlots, disabled, loading, pendingRemovalId, embedded = false }) => {
   // A NEW array before sorting - the prop is owned by the parent, and sorting
-  // it in place would be a mutation of shared state (coding-style).
-  const orderedSessions = [...sessions].sort(
-    (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
-  );
+  // it in place would be a mutation of shared state (coding-style). The
+  // optimistically-removed slot is filtered out here, not in the parent's
+  // `sessions`, so Undo restores it without a refetch.
+  const orderedSessions = [...sessions]
+    .filter((session) => session.id !== pendingRemovalId)
+    .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
 
   return (
     <div className="list-view">
@@ -1653,13 +1691,13 @@ const ListView: React.FC<{
               <table className="table">
                 <thead>
                   <tr>
-                    <th>Start Time</th>
-                    <th>End Time</th>
-                    <th>Capacity</th>
-                    <th>Booked</th>
-                    <th>Remaining</th>
-                    <th>Location/Link</th>
-                    <th className="text-end">Actions</th>
+                    <th scope="col">Start Time</th>
+                    <th scope="col">End Time</th>
+                    <th scope="col">Capacity</th>
+                    <th scope="col">Booked</th>
+                    <th scope="col">Remaining</th>
+                    <th scope="col">Location/Link</th>
+                    <th scope="col" className="text-end">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1668,9 +1706,11 @@ const ListView: React.FC<{
                     // reason Reset All refuses them: dropping a booked slot
                     // would strand the participant who booked it.
                     const hasBookings = session.booked_count > 0;
-                    const removeTitle = hasBookings
-                      ? `Cannot remove: ${session.booked_count} booking${session.booked_count === 1 ? '' : 's'}`
-                      : 'Remove this session';
+                    // Row 2: a booked slot cannot be removed, and the reason is
+                    // stated as VISIBLE text in the cell rather than hidden in a
+                    // `title` on a disabled button (which a keyboard or screen-
+                    // reader user never reaches).
+                    const cannotRemoveReason = `Cannot remove: ${session.booked_count} booking${session.booked_count === 1 ? '' : 's'}`;
                     return (
                       <tr key={session.id}>
                         <td>{formatDateTime(session.start_time)}</td>
@@ -1693,16 +1733,22 @@ const ListView: React.FC<{
                           )}
                         </td>
                         <td className="text-end">
-                          <button
-                            type="button"
-                            className="btn btn-outline-danger btn-sm"
-                            onClick={() => onRemove(session)}
-                            disabled={disabled || loading || hasBookings}
-                            title={removeTitle}
-                            aria-label={`Remove session on ${formatDateTime(session.start_time)}`}
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                          {hasBookings ? (
+                            <span className="text-danger small d-inline-flex align-items-center gap-1">
+                              <Lock size={14} aria-hidden="true" />
+                              {cannotRemoveReason}
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn btn-outline-danger btn-sm"
+                              onClick={() => onRemove(session)}
+                              disabled={disabled || loading}
+                              aria-label={`Remove session on ${formatDateTime(session.start_time)}`}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );
@@ -1727,11 +1773,36 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
   onBack,
   onBackLabel,
   onContinue,
-  onContinueLabel
+  onContinueLabel,
+  onSaveAndExit,
+  onSave,
+  isEdit = false,
+  saving = false,
+  justSaved = false,
+  saveControlsDisabled = false
 }) => {
   const { id: urlId } = useParams<{ id: string }>();
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [availableSlots, setAvailableSlots] = useState<AvailableSlot[]>([]);
+
+  /**
+   * A slot whose removal is committed after an undo window (row 2), or null.
+   *
+   * Removal is a two-step commit: the row is hidden the instant the author asks
+   * (it is filtered out of the list by this id), an undo toast is shown, and the
+   * real DELETE fires only when the window lapses. Undo cancels the timer and
+   * the row - which never left `sessions` - reappears. A single pending removal:
+   * asking to remove a second slot while one is pending COMMITS the first
+   * immediately (see `handleRemoveSession`), so nothing is silently lost.
+   */
+  const [pendingRemoval, setPendingRemoval] = useState<Session | null>(null);
+  const removalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The undo affordance must be reachable (row 2). Removing a slot unmounts the
+  // Remove button it was clicked from, so focus would fall to the body and a
+  // keyboard or screen-reader user would have to blind-tab from the top of the
+  // page to find Undo before its window lapses. Focus is moved onto the toast's
+  // Undo control the moment it appears instead.
+  const undoButtonRef = useRef<HTMLButtonElement>(null);
 
   /**
    * Whether this researcher's own calendar could be read (cto/AdaptaLabs#89).
@@ -1820,6 +1891,15 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
    */
   const backLabel = onBackLabel ? `Previous: ${onBackLabel}` : 'Previous step';
   const continueLabel = onContinueLabel ? `Continue: ${onContinueLabel}` : 'Continue';
+  /**
+   * The backward half of the StepActions footer (row 2), built as ONE value so
+   * the compiler sees its two props as correlated - `StepActions` types them as
+   * a present-or-absent pair, and a conditional spread would widen `onPrevious`
+   * to `(() => void) | undefined`, which the union rejects.
+   */
+  const footerBackward = onBack
+    ? { onPrevious: onBack, previousLabel: onBackLabel ?? 'the previous step' }
+    : {};
   /**
    * The forward control shown WHILE a selection is pending. It names its
    * commit, because it does one - "Continue" alone here is exactly what
@@ -2794,48 +2874,27 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
   };
 
   /**
-   * Remove ONE session from the list (row 6).
+   * The latest `sessions` prop, for the deferred removal below.
    *
-   * The list is a management surface now, not a read-only table, so it needs a
-   * per-row removal - it is also the only removal that reaches a session the
-   * grid cannot draw (an off-hours one, cto/AdaptaLabs#95) without hunting for
-   * its gutter chip. Refuses a booked session for the same reason Reset All
-   * does: deleting it would strand the participant who booked it. A real
-   * session is deleted server-side; a temporary one (not yet saved) is just
-   * dropped from the array.
+   * The DELETE fires from a timer set up to eight seconds earlier, so it must
+   * filter the CURRENT list, not the one captured when the timer was scheduled -
+   * otherwise committing one removal would resurrect a slot added in between, or
+   * drop it. A ref reads through to the latest value without re-scheduling.
    */
-  const handleRemoveSession = useCallback(async (session: Session) => {
-    setError('');
-    if (session.booked_count > 0) {
-      setError(
-        `That session has ${session.booked_count} booking${session.booked_count === 1 ? '' : 's'} ` +
-        `and cannot be removed. Cancel the booking${session.booked_count === 1 ? '' : 's'} first.`
-      );
-      return;
-    }
+  const sessionsRef = useRef(sessions);
+  useEffect(() => {
+    sessionsRef.current = sessions;
+  }, [sessions]);
 
-    const isTemp = session.id.startsWith('temp-session-');
-    if (!isTemp) {
-      try {
-        setLoading(true);
-        const { deleteSession } = await import('../api/client');
-        await deleteSession(session.id);
-      } catch (error: unknown) {
-        const err = error as { response?: { data?: { error?: string }; status?: number } };
-        const message = err.response?.data?.error
-          ?? (error instanceof Error ? error.message : 'Failed to remove the session. Please try again.');
-        logger.error('Error removing session', { error: err, statusCode: err.response?.status, message });
-        setError(message);
-        return;
-      } finally {
-        setLoading(false);
-      }
-    }
+  /**
+   * Drop a slot from the list and clear any ghost of it in the grid's sets.
+   *
+   * Shared by the immediate temp-slot drop and the committed real-slot delete.
+   * Reads `sessionsRef` so a deferred commit filters the live list.
+   */
+  const dropSessionLocally = useCallback((session: Session) => {
+    onSessionsChange(sessionsRef.current.filter(s => s.id !== session.id));
 
-    onSessionsChange(sessions.filter(s => s.id !== session.id));
-
-    // Drop any lingering selection/confirmation/manual key for this slot, so a
-    // removed session cannot linger as a ghost in the grid's confirmed set.
     const slotKey = `${toISOString(session.start_time)}|${toISOString(session.end_time)}`;
     setSelectedSlots(prev => {
       if (!prev.has(slotKey)) return prev;
@@ -2849,7 +2908,121 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       if (!prev.has(slotKey)) return prev;
       const next = new Set(prev); next.delete(slotKey); persistManualSlotKeys(next); return next;
     });
-  }, [sessions, onSessionsChange, persistSelectedSlots, persistConfirmedSlots, persistManualSlotKeys]);
+  }, [onSessionsChange, persistSelectedSlots, persistConfirmedSlots, persistManualSlotKeys]);
+
+  /**
+   * Fire the real DELETE for a slot whose undo window has lapsed (or is being
+   * flushed early), then drop it from the list. On failure the row comes back -
+   * it never left `sessions`, only the optimistic filter - and the reason shows.
+   */
+  const commitRemoval = useCallback(async (session: Session) => {
+    removalTimerRef.current = null;
+    setPendingRemoval(null);
+    try {
+      setLoading(true);
+      const { deleteSession } = await import('../api/client');
+      await deleteSession(session.id);
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { error?: string }; status?: number } };
+      const message = err.response?.data?.error
+        ?? (error instanceof Error ? error.message : 'Failed to remove the session. Please try again.');
+      logger.error('Error removing session', { error: err, statusCode: err.response?.status, message });
+      setError(message);
+      return;
+    } finally {
+      setLoading(false);
+    }
+    dropSessionLocally(session);
+  }, [dropSessionLocally]);
+
+  /**
+   * Remove ONE session from the list (row 6, made undoable in row 2).
+   *
+   * The list is a management surface now, not a read-only table, so it needs a
+   * per-row removal - it is also the only removal that reaches a session the
+   * grid cannot draw (an off-hours one, cto/AdaptaLabs#95) without hunting for
+   * its gutter chip. A booked session is not removable here at all (its row
+   * shows the reason instead of a control), so this is a safety guard only.
+   *
+   * A TEMPORARY slot (not yet on the server) has no DELETE to defer, so it is
+   * dropped at once. A REAL slot is hidden optimistically and its DELETE is held
+   * for an undo window; asking to remove a second slot while one is still
+   * pending COMMITS the first immediately, so a removal is never silently lost.
+   */
+  const handleRemoveSession = useCallback((session: Session) => {
+    setError('');
+    if (session.booked_count > 0) {
+      setError(
+        `That session has ${session.booked_count} booking${session.booked_count === 1 ? '' : 's'} ` +
+        `and cannot be removed. Cancel the booking${session.booked_count === 1 ? '' : 's'} first.`
+      );
+      return;
+    }
+
+    if (session.id.startsWith('temp-session-')) {
+      dropSessionLocally(session);
+      return;
+    }
+
+    // Flush any removal still pending before starting a new window, so its
+    // DELETE is not dropped when this one replaces it.
+    if (removalTimerRef.current) {
+      clearTimeout(removalTimerRef.current);
+      removalTimerRef.current = null;
+      if (pendingRemoval) {
+        void commitRemoval(pendingRemoval);
+      }
+    }
+
+    setPendingRemoval(session);
+    removalTimerRef.current = setTimeout(() => {
+      void commitRemoval(session);
+    }, REMOVAL_UNDO_MS);
+  }, [dropSessionLocally, commitRemoval, pendingRemoval]);
+
+  /** Cancel a pending removal: the slot, which never left `sessions`, returns. */
+  const undoRemoval = useCallback(() => {
+    if (removalTimerRef.current) {
+      clearTimeout(removalTimerRef.current);
+      removalTimerRef.current = null;
+    }
+    setPendingRemoval(null);
+  }, []);
+
+  // Move focus onto Undo when the toast appears (see the ref's note). Guarded on
+  // a non-null pending removal, so it does not steal focus when the toast is
+  // dismissed; `pendingRemoval` changes identity on every removal, so a second
+  // removal while one is pending re-lands focus on the fresh toast.
+  useEffect(() => {
+    if (pendingRemoval) {
+      undoButtonRef.current?.focus();
+    }
+  }, [pendingRemoval]);
+
+  /**
+   * On unmount, flush a still-pending removal rather than abandon it. The author
+   * saw the row go; navigating away must not silently keep the slot. Both the
+   * pending slot and the commit function are read through mirror refs so this
+   * cleanup runs ONLY on unmount (empty deps) rather than on every re-render.
+   */
+  const pendingRemovalRef = useRef<Session | null>(null);
+  useEffect(() => {
+    pendingRemovalRef.current = pendingRemoval;
+  }, [pendingRemoval]);
+  const commitRemovalRef = useRef(commitRemoval);
+  useEffect(() => {
+    commitRemovalRef.current = commitRemoval;
+  }, [commitRemoval]);
+  useEffect(() => () => {
+    if (removalTimerRef.current) {
+      clearTimeout(removalTimerRef.current);
+      removalTimerRef.current = null;
+      const pending = pendingRemovalRef.current;
+      if (pending) {
+        void commitRemovalRef.current(pending);
+      }
+    }
+  }, []);
 
   const handleResetAllSessions = () => {
     // Always allow reset if there are any visual states or sessions
@@ -2920,46 +3093,62 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
 
   return (
     <div className="admin-session-manager border-none">
-      <style>
-        {`
-          .admin-session-manager .form-control,
-          .admin-session-manager .form-select,
-          .admin-session-manager .form-control-sm {
-            background-color: rgba(255, 255, 255, 0.05) !important;
-            border: 1px solid rgba(255, 255, 255, 0.1) !important;
-            color: #E0E0E0 !important;
-          }
-          .admin-session-manager .form-control:focus,
-          .admin-session-manager .form-select:focus {
-            background-color: rgba(255, 255, 255, 0.08) !important;
-            border-color: #FF4E50 !important;
-            color: #E0E0E0 !important;
-            box-shadow: 0 0 0 0.2rem rgba(255, 78, 80, 0.25) !important;
-          }
-          .admin-session-manager .form-control::placeholder {
-            color: rgba(224, 224, 224, 0.5) !important;
-          }
-          .admin-session-manager .form-select option {
-            background-color: #0A091A !important;
-            color: #E0E0E0 !important;
-          }
-          .admin-session-manager .text-muted {
-            color: rgba(224, 224, 224, 0.7) !important;
-          }
-          .admin-session-manager .card {
-            background-color: rgba(255, 255, 255, 0.05) !important;
-            border: 1px solid rgba(255, 255, 255, 0.1) !important;
-          }
-          .admin-session-manager .card-body {
-            background-color: transparent !important;
-          }
-        `}
-      </style>
+      {/*
+        Row 3: the unconditional dark-theme `<style>` block that used to sit here
+        is gone. It forced `.text-muted`, the form controls, the card fills and a
+        red focus border to dark values (with hard overrides) REGARDLESS of the
+        active theme, so on the light theme it painted near-white text on a light
+        ground - the three ghost strings the author could not read. The controls
+        now inherit the app's theme-aware tokens, which render correctly in both
+        themes; the two remaining `<style>` blocks above (the slot picker and the
+        momentum table) are already token-based and stay. The source guard in
+        AdminSessionManager.inline-style.test.ts keeps the override from creeping
+        back, so this note names no CSS literal.
+      */}
 
       {error && (
         <div className="alert alert-danger" role="alert">
           <AlertTriangle size={18} className="me-2" />
           {error}
+        </div>
+      )}
+
+      {/*
+        Row 2: the step told half a truth. On a study that already exists (an
+        edit, whether draft or published), a slot is a real DB row the moment it
+        is confirmed and gone the moment its undo window lapses - there is no
+        separate Save for this step, and the footer's Save controls save the
+        rest of the study, not the slots. Say so, so the author is not left
+        pressing Save to "commit" changes that already committed. `isTemporary`
+        is the new-opportunity case, where slots ARE held until Review, so the
+        banner is shown only for a real study.
+      */}
+      {!isTemporary && (
+        <div className="alert alert-info d-flex align-items-center gap-2" role="status">
+          <Info size={18} aria-hidden="true" />
+          <span>Time slots are saved as soon as you add or remove them. The Save controls below save the rest of the study, not the slots.</span>
+        </div>
+      )}
+
+      {/*
+        Row 2: the undo window for a removed slot. The row is already hidden; the
+        DELETE has not fired yet. `role="status"` so it is announced, and the
+        Undo control cancels the pending delete.
+      */}
+      {pendingRemoval && (
+        <div className="alert alert-warning d-flex align-items-center justify-content-between gap-2" role="status">
+          <span>
+            Slot on {formatDateTime(pendingRemoval.start_time)} removed.
+          </span>
+          <button
+            ref={undoButtonRef}
+            type="button"
+            className="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1"
+            onClick={undoRemoval}
+          >
+            <Undo2 size={14} aria-hidden="true" />
+            Undo
+          </button>
         </div>
       )}
 
@@ -3421,6 +3610,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                         onAddSlots={() => setViewMode('grid')}
                         disabled={disabled}
                         loading={loading}
+                        pendingRemovalId={pendingRemoval?.id}
                         embedded
                       />
                     </div>
@@ -3510,38 +3700,40 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
           )}
 
           {/*
-            The step's own action row when no slots are selected.
-            Both controls, not just Back: an author who booked their slots
-            earlier, or who means to come back to them, still has to be able to
-            reach Review - and while this step was terminal there was nothing
-            here but Back.
+            The step's own action row when no slots are selected (row 2).
+            It is the SHARED `StepActions` row now, so this step's footer matches
+            every other step - Previous, the Save controls, and Continue, in one
+            consistent row - instead of the bespoke pair it used to carry. The
+            pending-selection panel above keeps its own "Confirm & continue",
+            which commits the selection before advancing and has no equivalent
+            here. When there is a next step (always, in the form: Review follows)
+            StepActions renders; the Back-only fallback below is only for an
+            isolated render of this component with no forward step.
           */}
-          {!selectedSlots.size && (onBack || onContinue) && (
-            <div className="mt-4 d-flex justify-content-between align-items-center gap-2">
-              {onBack ? (
-                <button
-                  type="button"
-                  className="btn btn-outline-secondary px-5 py-2 fw-semibold"
-                  onClick={onBack}
-                  disabled={disabled || loading}
-                >
-                  <ArrowLeft size={16} className="me-2" />
-                  {backLabel}
-                </button>
-              ) : (
-                <div style={{ flex: 1 }}></div>
-              )}
-              {onContinue && (
-                <button
-                  type="button"
-                  className="btn btn-primary px-5 py-2 fw-semibold"
-                  onClick={onContinue}
-                  disabled={disabled || loading}
-                >
-                  {continueLabel}
-                  <ArrowRight size={16} className="ms-2" />
-                </button>
-              )}
+          {!selectedSlots.size && onContinue && (
+            <StepActions
+              isEdit={isEdit}
+              saving={saving}
+              disabled={saveControlsDisabled}
+              justSaved={justSaved}
+              onSaveAndExit={onSaveAndExit}
+              onSave={onSave}
+              {...footerBackward}
+              onNext={onContinue}
+              nextLabel={continueLabel}
+            />
+          )}
+          {!selectedSlots.size && !onContinue && onBack && (
+            <div className="border-top mt-4 pt-4">
+              <button
+                type="button"
+                className="btn btn-outline-secondary px-5 py-2 fw-semibold"
+                onClick={onBack}
+                disabled={disabled || loading}
+              >
+                <ArrowLeft size={16} className="me-2" />
+                {backLabel}
+              </button>
             </div>
           )}
         </div>

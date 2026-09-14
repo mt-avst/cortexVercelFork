@@ -1,7 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
+import React, { useEffect, useRef, useState } from 'react';
+import { Navigate, useNavigate, useParams } from 'react-router-dom';
 
 import { useAuth } from '../contexts/AuthContext';
+import {
+  GuardedLink,
+  useOptionalNavigationGuard,
+} from '../contexts/NavigationGuardContext';
+import ConfirmationModal from '../components/ConfirmationModal';
 import {
   createFirstHandStudy,
   getFirstHandStudy,
@@ -373,6 +378,76 @@ export function StudyEditorForm({
   // sequence; a survey never had that sequence to lose.
   const missingTaskPageUrl = !isSurvey && studyMissingTaskPageUrl(steps);
 
+  /**
+   * Unsaved-changes guarding (row 25).
+   *
+   * The editor had none: its Back link was a plain `<Link>` and it registered no
+   * guard, so an author who had typed into it lost the lot on one click - the
+   * `beforeunload` browser gate never fires on an in-app route change either.
+   *
+   * `isDirty` compares a signature of the live fields against the FIRST render's,
+   * which equals the loaded study because the state above is seeded from
+   * `initialStudy`. A read-only viewer cannot change anything, so it never
+   * guards; a create form guards only once its default has actually been typed
+   * into. The signature is a string comparison, not deep equality, so it costs
+   * nothing per render.
+   */
+  const currentEditSignature = JSON.stringify({
+    title,
+    introText,
+    consentText,
+    brandName,
+    durationMinutes,
+    locale,
+    status,
+    steps,
+  });
+  const openingEditSignatureRef = useRef<string | null>(null);
+  if (openingEditSignatureRef.current === null) {
+    openingEditSignatureRef.current = currentEditSignature;
+  }
+  const isDirty = !readOnly && currentEditSignature !== openingEditSignatureRef.current;
+
+  const { registerGuard } = useOptionalNavigationGuard();
+  const [pendingExit, setPendingExit] = useState<string | null>(null);
+
+  // The browser gate, armed only while there is something to lose - an
+  // unconditional handler is the dialog everyone learns to dismiss unread.
+  useEffect(() => {
+    if (!isDirty) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      // Chrome/Safari still gate the dialog on returnValue, deprecated as it is.
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [isDirty]);
+
+  /**
+   * The in-app cousin of the browser gate (WZ-13 pattern, as OpportunityForm).
+   *
+   * The Back link and the Header's own links navigate straight through
+   * react-router, so a dirty author who clicks one bypasses `beforeunload`. The
+   * page registers this guard on the shared `NavigationGuardProvider` (mounted
+   * above both the page's Back link and the Header in `AppChromeLayout`); a
+   * `GuardedLink` consults it and, when it intercepts, the confirmation below
+   * owns what happens next. A thin wrapper over a ref keeps the registration
+   * stable while always seeing the latest dirty state.
+   */
+  const latestGuardRef = useRef<(destination: string) => boolean>(() => false);
+  latestGuardRef.current = (destination: string): boolean => {
+    if (isDirty) {
+      setPendingExit(destination);
+      return true;
+    }
+    return false;
+  };
+  useEffect(() => {
+    registerGuard((destination) => latestGuardRef.current(destination));
+    return () => registerGuard(null);
+  }, [registerGuard]);
+
   const addStep = () => {
     setSteps((current) => [
       ...current,
@@ -601,6 +676,7 @@ export function StudyEditorForm({
   };
 
   return (
+    <>
     <form onSubmit={handleSubmit}>
       {error ? (
         <Alert variant="danger" className="mb-4">
@@ -1050,6 +1126,34 @@ export function StudyEditorForm({
         </div>
       </fieldset>
     </form>
+
+    {/*
+      Row 25: the confirmation the in-app guard opens. `pendingExit` holds the
+      exact destination the intercepted link was heading to, so confirming sends
+      the author there rather than to a recomputed guess. Staying just closes it.
+
+      Mounted only when there is a pending exit, so an idle editor does not carry
+      the modal's theme dependency - it is offscreen work with nothing to show.
+    */}
+    {pendingExit !== null && (
+      <ConfirmationModal
+        show
+        title="Leave without saving?"
+        message="This task list has changes that have not been saved. Leaving now discards them."
+        confirmLabel="Discard and leave"
+        cancelLabel="Stay on this form"
+        variant="warning"
+        onConfirm={() => {
+          const destination = pendingExit;
+          setPendingExit(null);
+          if (destination) {
+            navigate(destination);
+          }
+        }}
+        onCancel={() => setPendingExit(null)}
+      />
+    )}
+    </>
   );
 }
 
@@ -1131,9 +1235,17 @@ const StudyEditor: React.FC = () => {
 
   return (
     <div className="py-4">
-      <Link className="btn btn-link px-0 mb-3" to="/admin/studies">
+      {/*
+        A GuardedLink, not a plain Link (row 25): the editor form registers an
+        unsaved-changes guard on the shared NavigationGuardProvider, and this
+        link - which lives on the page, above the form - consults it so a dirty
+        author is asked to confirm before it navigates away, the same way the
+        Header's own links are. A clean editor registers no guard, so it behaves
+        exactly like a plain Link.
+      */}
+      <GuardedLink className="btn btn-link px-0 mb-3" to="/admin/studies">
         Back to task lists
-      </Link>
+      </GuardedLink>
 
       <p className="text-uppercase fw-semibold text-muted mb-1">
         Researcher workspace

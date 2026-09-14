@@ -284,6 +284,25 @@ describe('Continue can never pass what Submit refuses', () => {
     expect(summarisedErrorKeys()).toEqual(['external_link_optional']);
   });
 
+  it('lets a draft test leave Basics with no meeting location, which is a publish requirement now (row 9)', () => {
+    // The venue used to be required at step 1, blocking a draft author who had
+    // not booked a room yet. It moves to the publish gate: a draft advances,
+    // and the refusal is reasserted only when the study is published.
+    renderForm();
+    selectType('test');
+    setTitle('A perfectly serviceable title');
+    setPurpose('Find out where people stall in the checkout flow');
+    // Meeting Location deliberately left empty.
+
+    continueForward();
+
+    // Advanced off Basic Information (to Content & Details, step 2 of the
+    // five-step test shape) rather than being held on step 1 by the empty venue.
+    expect(currentStepName()).not.toMatch(/Basic Information/i);
+    expect(currentStepName()).toMatch(/Content & Details/i);
+    expect(queryErrorSummary()).toBeNull();
+  });
+
   it('keeps `type` in scope, because it decides the shape', () => {
     // Type is required before the form advances at all. The strip is hidden
     // until a type is chosen (WZ-18), so an author cannot click past Basic
