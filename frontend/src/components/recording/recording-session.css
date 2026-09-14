@@ -30,7 +30,12 @@
   --muted: var(--register-muted);
   --line: var(--register-line);
   --accent: var(--brand-orange-500);
+  /* Fill/border role - AA-safe UNDER WHITE TEXT (a fill promise), not
+     necessarily AA-safe AS text on --bg. --accent-text below is the text
+     role; do not read copy off --accent-strong (measured 3.41:1 on the dark
+     register ground - code-reviewer finding, row 15/Decision 4/5). */
   --accent-strong: var(--accent-fill-text-safe);
+  --accent-text: var(--register-accent-text);
   --success: #2f6f5e;
   --danger: #a63d40;
   --shadow: var(--register-shadow);
@@ -201,10 +206,11 @@
   margin: 0.75rem 0 0;
   font-size: 0.92rem;
   font-weight: 600;
-  /* Fallback chains to the real token rather than a literal hex, so it can
-     never drift from --accent's own value again the way it drifted from the
-     retired terracotta before Decision 5. */
-  color: var(--accent, var(--brand-orange-500));
+  /* --accent-text, not --accent: this is copy, and --accent (the identity
+     500 step) fails AA as text in both themes (3.03 dark on this ground,
+     2.95 light on cream) - the same reasoning as --accent-strong's text
+     uses below, not the fill/border role. */
+  color: var(--accent-text, var(--brand-orange-500));
 }
 
 .fh-recording .runner-optional-hint {
@@ -896,7 +902,7 @@ body.theme-dark .fh-recording .journey-frame {
   font-family: var(--font-mono), monospace;
   font-size: 10.5px;
   letter-spacing: 0.02em;
-  color: var(--accent-strong);
+  color: var(--accent-text);
 }
 
 .fh-recording .task-window-float {
@@ -966,7 +972,7 @@ body.theme-dark .fh-recording .journey-frame {
 }
 
 .fh-recording .pip-trust-rec.is-live {
-  color: var(--accent-strong);
+  color: var(--accent-text);
 }
 
 .fh-recording .pip-trust-rec.is-stopped {
@@ -1088,7 +1094,7 @@ body.theme-dark .fh-recording .journey-frame {
 
 .fh-recording .journey-checkrow.is-warning .journey-cbx {
   border-color: var(--accent-strong);
-  color: var(--accent-strong);
+  color: var(--accent-text);
 }
 
 .fh-recording .journey-cname {

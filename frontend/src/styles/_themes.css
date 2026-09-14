@@ -13,7 +13,11 @@
    STUDY LISTING PAGE - Theme Overrides
    ============================================================ */
 
-/* Dark Mode - Study Listing Background */
+/* Dark Mode - Study Listing Background. Named "one light ground" because
+   Decision 4 is a light-theme decision - #030305 is its own bespoke
+   near-black, not --bg-app (#0A091A) or the body ground (#020617), and stays
+   that way: a genuine mirror-image carve-out on the dark side, left as a
+   deliberate deferral rather than folded in unasked. */
 body.theme-dark .study-listing-page {
   background: #030305;
 }
@@ -28,7 +32,11 @@ body.theme-light .study-listing-page {
   min-height: 100vh;
 }
 
-/* Stronger tagline contrast on cool-neutral ground (was #B0BEC5 on base) */
+/* Stronger tagline contrast than the base #B0BEC5. Originally written against
+   the cool-neutral #f8fafc ground this page had before Decision 4 deleted
+   --surface-page-study-listing; measured against the cream --bg-app ground
+   it sits on now, --text-muted still clears AA (~4.8:1), so the override
+   stays, just on a different ground than the name once implied. */
 body.theme-light:has(.study-listing-page) .home-intro-tagline {
   color: var(--text-muted);
 }
@@ -60,6 +68,11 @@ body.theme-light {
   --register-line: var(--fs-line);
   --register-shadow: var(--fs-shadow);
   --register-font-mono: "IBM Plex Mono", var(--font-family-mono);
+  /* Text role (see _tokens.css dark half for why this is a separate token
+     from --accent-strong/--accent-fill-text-safe): --accent-text-on-light is
+     already the AA-checked step for orange-as-text on this cream ground
+     (5.18:1), defined below. */
+  --register-accent-text: var(--accent-text-on-light);
 
   /* Typography and the orange ramp are bound once at :root (see _tokens.css)
      and shared by both themes since row 12 - the light block carries colour
@@ -3177,10 +3190,17 @@ body.theme-light .validation-error {
    LIGHT THEME block), so one rule set, not a light/dark pair, carries the
    cream register into light and its dark half into dark.
 
-   Placed at the end of the file, after every body.theme-dark/body.theme-light
-   .cortex-analytics-card/.cortex-stat-subtitle/.cortex-chart-title override
-   above (same specificity - one class plus one class either way - so source
-   order decides, and this must load last to win). */
+   Placed after every body.theme-dark/body.theme-light .cortex-analytics-card/
+   .cortex-stat-subtitle/.cortex-chart-title override above, and prefixed with
+   `body` on every selector, so it ties their specificity - (0,2,1), one
+   element plus two classes - and wins on source order rather than losing to
+   (0,2,0). Checked (2026-09-14, code-reviewer gate): no rule for any of
+   these classes anywhere in frontend/src/**/*.css sits after this block, and
+   none of the contested rules on either side carries `!important` - the
+   layer-priority trap that bit Lane E does not apply here. Not literally the
+   last rule in the file (the @media (prefers-contrast: high) blocks follow,
+   deliberately last for their own reason) - "wins by specificity, checked
+   against everything at its own layer" is the actual invariant, not position. */
 
 .session-review-page {
   background: var(--register-bg);
@@ -3209,8 +3229,13 @@ body .session-review-page .cortex-analytics-card:hover {
   transform: none;
 }
 
-body .session-review-page .cortex-chart-title,
-body .session-review-page .cortex-page-header h1 {
+/* Not .cortex-page-header h1: that element already carries .cortex-brand-title,
+   Lane A1's deliberate per-theme logotype colour (near-black in light, white
+   in dark) - (0,2,2) beats this scope's own .cortex-brand-title rules
+   (0,2,1), so adding it here would have silently recoloured the wordmark by
+   a few points of navy/off-white (code-reviewer finding, row 15/Decision 4/5)
+   for a font-family declaration Analytics already computes anyway. */
+body .session-review-page .cortex-chart-title {
   color: var(--register-ink);
   font-family: var(--font-family-display);
 }
@@ -3227,7 +3252,8 @@ body .session-review-page .cortex-stat-subtitle {
 }
 
 body .session-review-page .cortex-page-header p,
-body .session-review-page .cortex-no-data {
+body .session-review-page .cortex-no-data,
+body .session-review-page .cortex-no-data p {
   color: var(--register-muted);
 }
 

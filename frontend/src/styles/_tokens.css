@@ -39,9 +39,19 @@
   --register-card: rgba(255, 255, 255, 0.04);
   --register-ink: var(--text-primary);
   --register-muted: var(--text-muted);
-  --register-line: var(--border-subtle-dark);
+  /* Stronger than --border-subtle-dark (0.06, measured 1.12:1 on this ground)
+     on purpose: a hairline is still a UI boundary (WCAG 1.4.11 wants 3:1),
+     not just a decorative tint, so it needs more than the ambient-glass
+     borders elsewhere in dark theme use. */
+  --register-line: rgba(255, 255, 255, 0.18);
   --register-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
   --register-font-mono: "IBM Plex Mono", var(--font-family-mono);
+  /* Text role, not a fill role: --accent-fill-text-safe (used elsewhere in
+     this file for --accent-strong) is proven >= 4.5:1 UNDER WHITE TEXT, which
+     is a different guarantee from being readable ITSELF on this dark ground -
+     measured 3.41:1 there, below AA. brand-orange-400 measures ~8.6:1 on
+     --bg-app. */
+  --register-accent-text: var(--brand-orange-400);
 
   /* ============================================================
      UNIFIED SURFACE SYSTEM - Carbon Glass Aesthetic

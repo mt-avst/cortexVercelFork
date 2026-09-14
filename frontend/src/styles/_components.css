@@ -5417,11 +5417,11 @@ body.theme-dark .booking-popover-time {
 }
 
 .booking-popover-confirm:hover {
-  background-color: #EA580C; /* orange-600 */
+  background-color: var(--brand-orange-600);
 }
 
 .booking-popover-confirm:active {
-  background-color: #C2410C; /* orange-700 */
+  background-color: var(--brand-orange-700);
 }
 
 /* Secondary Button - Ghost style */
@@ -10105,7 +10105,7 @@ body.theme-light .landing-find-out {
 }
 
 body.theme-light .landing-tagline {
-  color: #C2410C;
+  color: var(--accent-text-on-light);
   text-shadow: none;
 }
 

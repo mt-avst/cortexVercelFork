@@ -70,22 +70,152 @@ const mockSessionReview = async (page: import('@playwright/test').Page) => {
   });
 };
 
+interface AxeNode {
+  target: unknown[];
+  html?: string;
+  any?: { message?: string }[];
+}
+interface AxeViolation {
+  id: string;
+  nodes: AxeNode[];
+}
+
+/** Relative luminance and WCAG contrast ratio - the same formula axe itself
+ * uses, run here by hand for a node axe declined to measure. */
+function relativeLuminance([r, g, b]: [number, number, number]): number {
+  const f = (c: number) => {
+    c /= 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+}
+function contrastRatio(a: [number, number, number], b: [number, number, number]): number {
+  const [l1, l2] = [relativeLuminance(a), relativeLuminance(b)].sort((x, y) => y - x);
+  return (l1 + 0.05) / (l2 + 0.05);
+}
+
+/**
+ * Direct measurement for the one node axe's gradient-flattening gap (see
+ * expectContrastActuallyMeasured below) leaves genuinely unmeasured: composes
+ * the actual rendered colours (read from the page, not guessed) the way axe
+ * would if it could see through `.App`'s gradient background-image, so this
+ * does not silently trust an "it looked fine in a screenshot" judgement call.
+ */
+async function expectNoDataParagraphMeasuresAA(page: import('@playwright/test').Page, label: string): Promise<void> {
+  const parseRgb = (css: string): [number, number, number] | null => {
+    const m = css.match(/rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)/);
+    return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+  };
+  const measured = await page.evaluate(() => {
+    const p = document.querySelector('.cortex-no-data p, .session-review-page .cortex-no-data');
+    const card = document.querySelector('.session-review-page .cortex-analytics-card');
+    const app = document.querySelector('.App');
+    if (!p || !card || !app) return null;
+    const textColor = getComputedStyle(p).color;
+    const cardBg = getComputedStyle(card).backgroundColor;
+    // .App's own background-image gradient - its first stop is the
+    // representative page ground colour behind a card near the top of the
+    // document, which .cortex-no-data is.
+    const appGradient = getComputedStyle(app).backgroundImage;
+    const stopMatch = appGradient.match(/rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)/);
+    return { textColor, cardBg, appStop: stopMatch ? stopMatch[0] : null };
+  });
+  if (!measured || !measured.appStop) {
+    throw new Error(`${label}: could not read the elements needed to measure .cortex-no-data p directly`);
+  }
+  const text = parseRgb(measured.textColor);
+  const card = parseRgb(measured.cardBg) ?? [0, 0, 0];
+  const cardAlphaMatch = measured.cardBg.match(/,\s*([\d.]+)\)$/);
+  const cardAlpha = cardAlphaMatch ? Number(cardAlphaMatch[1]) : 1;
+  const appBg = parseRgb(measured.appStop);
+  if (!text || !appBg) {
+    throw new Error(`${label}: could not parse colours from "${measured.textColor}" / "${measured.appStop}"`);
+  }
+  const composited: [number, number, number] = [0, 1, 2].map(
+    (i) => card[i] * cardAlpha + appBg[i] * (1 - cardAlpha)
+  ) as [number, number, number];
+  const ratio = contrastRatio(text, composited);
+  expect(ratio, `${label}: .cortex-no-data text ${measured.textColor} on composited ${JSON.stringify(composited)} must clear AA (4.5:1)`).toBeGreaterThanOrEqual(4.5);
+}
+
 test.describe('Session Review page - register re-skin (Decision 4)', () => {
   /**
    * SessionReview's own heading structure (an <h1> page title followed
    * directly by SessionSummaryCard's <h5>) skips levels regardless of theme -
    * a pre-existing structural gap in a component-logic file this lane does
    * not own (session-review/*.tsx is Lane D's), not something Decision 4
-   * introduced or can fix from a styles-only pass. Named and excluded here
-   * rather than silently loosened, so a NEW heading-order violation this lane
-   * does cause still fails.
+   * introduced or can fix from a styles-only pass. Named to the exact node
+   * rather than excluding the whole rule id, so a heading-order fault
+   * anywhere else on this page this lane DOES cause still fails (code-reviewer
+   * finding: filtering the bare rule id was too wide).
    */
-  const HEADING_ORDER_PRE_EXISTING = 'heading-order';
+  const isPreExistingHeadingOrder = (v: AxeViolation) =>
+    v.id === 'heading-order' &&
+    v.nodes.every((n) => (n.html ?? '').includes('cortex-chart-title'));
+
+  /**
+   * axe puts a node it cannot compute a background for into `incomplete`, not
+   * `violations` - `expectBookingContrastActuallyMeasured` in
+   * accessibility.test.ts exists because a real failure hid there once
+   * already on this same app, and the instinct to check this bucket here is
+   * the same (code-reviewer finding).
+   *
+   * What is actually IN this bucket on this page is different from that
+   * precedent, though: every reason given is "background color could not be
+   * determined due to a background gradient" - `.App`'s own
+   * --bg-app-gradient-top/bottom (defined in _themes.css, owned by this
+   * lane's ground work but pre-existing on every light-theme page, not new
+   * here), with nothing opaque between it and any translucent card on this
+   * route to flatten through. That is a structural gap in
+   * .analytics-page-wrapper's own light-mode stacking this page inherits
+   * from OpportunityAnalytics, not something Decision 4 introduced - this is
+   * the first axe coverage this page has ever had. Verified NOT a real
+   * failure below by compositing the actual computed colours by hand
+   * (measured 5.24:1 for .cortex-no-data p, the specific node this lane's
+   * own specificity fix targets); logged, not hard-failed, so a genuinely
+   * NEW reason for a node landing here still shows up for a human to read.
+   */
+  const expectContrastActuallyMeasured = (
+    results: { incomplete: AxeViolation[] },
+    label: string
+  ): void => {
+    const deferred = results.incomplete
+      .filter((rule) => rule.id === 'color-contrast')
+      .flatMap((rule) =>
+        rule.nodes.map((node) => ({
+          target: node.target.map(String).join(' '),
+          reason: (node.any ?? []).map((c: { message?: string }) => c.message).join('; '),
+        }))
+      )
+      .filter((n) => /cortex-|session-review-page/.test(n.target));
+    // `.cortex-no-data > p` sits alongside `.empty-icon` (a pre-existing,
+    // absolutely-positioned sibling in _components.css, nothing this lane
+    // touches) which axe's overlap heuristic reads as covering the text -
+    // the same false-overlap shape the codebase's own precedent for this
+    // bucket already names for a different element. Directly measured by
+    // expectNoDataParagraphMeasuresAA above rather than trusted blind.
+    const isKnownGap = (n: { target: string; reason: string }) =>
+      /background gradient/.test(n.reason) ||
+      (n.target === '.cortex-no-data > p' && /overlapped by another element/.test(n.reason));
+    const unexplained = deferred.filter((n) => !isKnownGap(n));
+    if (deferred.length > 0) {
+      console.log(
+        `\n${label}: axe declined to measure ${deferred.length} register node(s) (gradient-flattening gap, see comment above)\n  ${deferred.map((n) => n.target).join('\n  ')}\n`
+      );
+    }
+    expect(unexplained, 'a node deferred for a reason OTHER than the known gradient gap').toEqual([]);
+  };
 
   test('carries the register look and is accessible in light mode', async ({ page }) => {
     await mockSessionReview(page);
     await page.goto('/admin/opportunities/opp-1/sessions/session-1/review');
     await page.waitForLoadState('load');
+    // The card-mount transition (.cortex-analytics-card's `transition:
+    // transform 0.2s, box-shadow 0.25s...`) leaves nearly every node
+    // mid-transition at `load`, and axe defers colour-contrast on anything
+    // still animating - settle before scanning, same wait the rest of this
+    // suite uses.
+    await page.waitForTimeout(500);
     await expect(page.locator('.session-review-page')).toHaveCount(1);
     await expect(page.locator('.cortex-analytics-card').first()).toBeVisible();
 
@@ -97,8 +227,11 @@ test.describe('Session Review page - register re-skin (Decision 4)', () => {
     const boxShadow = await card.evaluate((el) => getComputedStyle(el).boxShadow);
     expect(boxShadow, 'register card must not carry the analytics glass shadow').toBe('none');
 
+    await expectNoDataParagraphMeasuresAA(page, 'light');
+
     const results = await new AxeBuilder({ page }).analyze();
-    expect(results.violations.filter((v) => v.id !== HEADING_ORDER_PRE_EXISTING)).toEqual([]);
+    expect(results.violations.filter((v) => !isPreExistingHeadingOrder(v))).toEqual([]);
+    expectContrastActuallyMeasured(results, 'Session Review (light)');
   });
 
   test('carries the register look and is accessible in dark mode', async ({ page }) => {
@@ -106,11 +239,15 @@ test.describe('Session Review page - register re-skin (Decision 4)', () => {
     await page.addInitScript(() => localStorage.setItem('theme', 'dark'));
     await page.goto('/admin/opportunities/opp-1/sessions/session-1/review');
     await page.waitForLoadState('load');
+    await page.waitForTimeout(500);
     await expect(page.locator('body.theme-dark')).toHaveCount(1);
     await expect(page.locator('.session-review-page')).toHaveCount(1);
 
+    await expectNoDataParagraphMeasuresAA(page, 'dark');
+
     const results = await new AxeBuilder({ page }).analyze();
-    expect(results.violations.filter((v) => v.id !== HEADING_ORDER_PRE_EXISTING)).toEqual([]);
+    expect(results.violations.filter((v) => !isPreExistingHeadingOrder(v))).toEqual([]);
+    expectContrastActuallyMeasured(results, 'Session Review (dark)');
   });
 
   test('does not leak into OpportunityAnalytics, which shares the same card classes', async ({ page }) => {
@@ -149,6 +286,16 @@ test.describe('Session Review page - register re-skin (Decision 4)', () => {
     await page.goto('/admin/opportunities/opp-1/analytics');
     await page.waitForLoadState('load');
     await expect(page.locator('.session-review-page')).toHaveCount(0);
+
+    // The marker's absence alone would pass even if the scoping rules were
+    // deleted outright - this is the actual positive control (code-reviewer
+    // finding): Analytics must still carry its own glass shadow, which the
+    // register re-skin explicitly zeroes out on session-review-page.
+    const shadow = await page
+      .locator('.cortex-analytics-card')
+      .first()
+      .evaluate((el) => getComputedStyle(el).boxShadow);
+    expect(shadow, 'Analytics must keep its own glass shadow, not the register\'s flat card').not.toBe('none');
   });
 });
 
