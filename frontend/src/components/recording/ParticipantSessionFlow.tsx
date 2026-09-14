@@ -41,6 +41,7 @@ import {
 } from "../../lib/recording/setup-checks";
 import { PipStandbyCard } from "./PipStandbyCard";
 import { StudyRunner } from "./StudyRunner";
+import { StepMarker } from "./StepMarker";
 
 type ParticipantSessionFlowProps = {
   attemptNumber: number;
@@ -813,9 +814,7 @@ export function ParticipantSessionFlow({
                       }`}
                       key={label}
                     >
-                      <span aria-hidden="true" className="journey-vtick">
-                        ✓
-                      </span>
+                      <StepMarker done={isTicked} index={index + 1} variant="tick" />
                       {label}
                     </div>
                   );
@@ -1369,9 +1368,7 @@ function TaskLaunch({
             taskPageOpened ? " is-done" : canStart ? " is-active" : ""
           }`}
         >
-          <span aria-hidden="true" className="journey-launch-num">
-            {taskPageOpened ? "✓" : "1"}
-          </span>
+          <StepMarker done={taskPageOpened} index={1} variant="numbered" />
           <div className="journey-launch-body">
             <h4 className="journey-launch-title">Open the task page</h4>
             {taskPageOpened ? (
@@ -1428,9 +1425,7 @@ function TaskLaunch({
             taskPageOpened ? " is-active" : " is-locked"
           }`}
         >
-          <span aria-hidden="true" className="journey-launch-num">
-            2
-          </span>
+          <StepMarker done={false} index={2} variant="numbered" />
           <div className="journey-launch-body">
             <h4 className="journey-launch-title">
               Start recording and share the task page

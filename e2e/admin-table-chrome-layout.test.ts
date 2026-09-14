@@ -56,5 +56,30 @@ test.describe('Admin Research Studies table - chrome layout at 768-1220', () => 
       );
       expect(clipped).toEqual([]);
     });
+
+    // Lane E (icon system, row 24) added a lucide glyph plus a gap to the
+    // Type column's `.lozenge` badge, widening it in the same fixed-layout,
+    // percentage-width table the status pill test above exists for. Not
+    // caught by that test, which only ever looked at `.admin-study-status`.
+    test(`every type lozenge contains its own label and glyph at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.waitForTimeout(200);
+
+      const lozengeCount = await page.locator('td.col-type .lozenge').count();
+      expect(lozengeCount).toBeGreaterThan(0);
+
+      const offenders = await page.evaluate(() =>
+        [...document.querySelectorAll('td.col-type .lozenge')]
+          .filter((el) => {
+            const cell = el.closest('td');
+            const clipped = el.scrollWidth > el.clientWidth + 1;
+            const overflowsCell =
+              !!cell && el.getBoundingClientRect().right > cell.getBoundingClientRect().right + 1;
+            return clipped || overflowsCell;
+          })
+          .map((el) => ({ text: el.textContent, scrollWidth: el.scrollWidth, clientWidth: el.clientWidth }))
+      );
+      expect(offenders).toEqual([]);
+    });
   }
 });

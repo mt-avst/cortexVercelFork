@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
 
 import { useAuth } from "../contexts/AuthContext";
 import { getApiBaseUrl } from "../config/api";
@@ -7,6 +8,7 @@ import type { SessionPayload } from "@shared/firsthand/contract";
 import { SurveyRunner } from "../components/survey/SurveyRunner";
 import useDocumentTitle from "../hooks/useDocumentTitle";
 import { buildParticipantReturnUrl } from "../lib/recording/participant-return";
+import { Icon } from "../components/ui";
 
 /**
  * The participant surface for a native poll or survey, at `/survey/:token`.
@@ -104,7 +106,8 @@ export default function SurveySession() {
           {error}
         </div>
         <Link to="/" className="btn btn-outline-secondary mt-3">
-          ← Back to Cortex
+          <Icon icon={ArrowLeft} size={16} aria-hidden="true" className="me-1" />
+          Back to Cortex
         </Link>
       </main>
     );
@@ -144,7 +147,8 @@ export default function SurveySession() {
           </a>
         ) : (
           <Link to="/" className="btn btn-outline-secondary">
-            ← Back to Cortex
+            <Icon icon={ArrowLeft} size={16} aria-hidden="true" className="me-1" />
+          Back to Cortex
           </Link>
         )}
       </main>
@@ -158,7 +162,8 @@ export default function SurveySession() {
           fall back on, and unlike the recording surface this page is not
           meant to trap anyone. */}
       <Link to="/" className="btn btn-outline-secondary mb-3">
-        ← Back to Cortex
+        <Icon icon={ArrowLeft} size={16} aria-hidden="true" className="me-1" />
+          Back to Cortex
       </Link>
       <SurveyRunner payload={payload} onComplete={() => setComplete(true)} />
     </main>

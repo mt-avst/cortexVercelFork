@@ -6,6 +6,7 @@ import ConfirmationModal from './ConfirmationModal';
 import { AppError } from '../utils/errorHandler';
 import { logger } from '../utils/logger';
 import { AlertTriangle, RefreshCw, Download, Inbox, ChevronRight, Trash2, X, Calendar, Link2, ChevronLeft } from 'lucide-react';
+import { SortCaret } from './ui';
 
 import { formatDateTime } from '../utils/datetime';
 const AdminFeedback: React.FC = () => {
@@ -492,19 +493,19 @@ const AdminFeedback: React.FC = () => {
                 <th className="sortable" scope="col" aria-sort={ariaSortFor('created_at')} style={{ width: '150px' }}>
                   <button type="button" className="feedback-th-sort" onClick={() => handleSort('created_at')}>
                     Date
-                    <span aria-hidden="true">{sortField === 'created_at' ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}</span>
+                    <SortCaret active={sortField === 'created_at'} direction={sortDirection} />
                   </button>
                 </th>
                 <th className="sortable" scope="col" aria-sort={ariaSortFor('category')} style={{ width: '130px' }}>
                   <button type="button" className="feedback-th-sort" onClick={() => handleSort('category')}>
                     Category
-                    <span aria-hidden="true">{sortField === 'category' ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}</span>
+                    <SortCaret active={sortField === 'category'} direction={sortDirection} />
                   </button>
                 </th>
                 <th className="sortable" scope="col" aria-sort={ariaSortFor('user_name')} style={{ width: '180px' }}>
                   <button type="button" className="feedback-th-sort" onClick={() => handleSort('user_name')}>
                     User
-                    <span aria-hidden="true">{sortField === 'user_name' ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}</span>
+                    <SortCaret active={sortField === 'user_name'} direction={sortDirection} />
                   </button>
                 </th>
                 <th scope="col">Feedback</th>

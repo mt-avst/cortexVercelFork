@@ -3,6 +3,7 @@ import { OpportunityBookingRow, ResearcherNotesResponse } from '../../api/types'
 import { VALIDATION } from '@shared/constants';
 import BookingArtifactsSection from './BookingArtifactsSection';
 import { BookingArtifactsController } from './useBookingArtifacts';
+import { SortCaret } from '../ui';
 
 /**
  * The same ceiling the server enforces. Held here so the researcher is told
@@ -275,9 +276,7 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
                 >
                   <button type="button" className="admin-th-sort" onClick={() => handleSort('participant')}>
                     Participant
-                    <span className="admin-th-sort-caret" aria-hidden="true">
-                      {sortField === 'participant' ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}
-                    </span>
+                    <SortCaret active={sortField === 'participant'} direction={sortDirection} />
                   </button>
                 </th>
                 <th scope="col" style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>Session</th>
@@ -288,9 +287,7 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
                 >
                   <button type="button" className="admin-th-sort" onClick={() => handleSort('status')}>
                     Status
-                    <span className="admin-th-sort-caret" aria-hidden="true">
-                      {sortField === 'status' ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}
-                    </span>
+                    <SortCaret active={sortField === 'status'} direction={sortDirection} />
                   </button>
                 </th>
                 <th scope="col" style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500, width: '45%' }}>Researcher notes</th>

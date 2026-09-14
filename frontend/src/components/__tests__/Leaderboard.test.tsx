@@ -147,3 +147,40 @@ describe('Leaderboard - row identity', () => {
     }
   });
 });
+
+/**
+ * A review gate on the medal-icon replacement (row 24) found that the icon
+ * carries `aria-hidden`, and nothing else in the row states the rank - a
+ * screen-reader user would hear the name and score with no rank at all,
+ * which the medal EMOJI it replaced did not do (emoji are announced).
+ */
+describe('Leaderboard - medal accessibility', () => {
+  it('names the rank in text for a top-three row, even though the medal icon is decorative', async () => {
+    vi.mocked(gamificationApi.getLeaderboard).mockResolvedValue(TIED_ROWS);
+    vi.mocked(gamificationApi.getMonthlyLeaderboard).mockResolvedValue(TIED_ROWS);
+
+    const { getByText, container } = render(<Leaderboard />);
+    await vi.waitFor(() => {
+      expect(container.querySelectorAll('.leaderboard-row')).toHaveLength(3);
+    });
+
+    expect(getByText('Rank 1')).toBeTruthy();
+    expect(getByText('Rank 2')).toBeTruthy();
+    expect(getByText('Rank 3')).toBeTruthy();
+  });
+
+  it('renders no medal emoji and no bare unicode rank glyph', async () => {
+    vi.mocked(gamificationApi.getLeaderboard).mockResolvedValue(TIED_ROWS);
+    vi.mocked(gamificationApi.getMonthlyLeaderboard).mockResolvedValue(TIED_ROWS);
+
+    const { container } = render(<Leaderboard />);
+    await vi.waitFor(() => {
+      expect(container.querySelectorAll('.leaderboard-row')).toHaveLength(3);
+    });
+
+    for (const medal of ['🥇', '🥈', '🥉']) {
+      expect(container.textContent).not.toContain(medal);
+    }
+    expect(container.querySelectorAll('.leaderboard-row-medal svg')).toHaveLength(3);
+  });
+});

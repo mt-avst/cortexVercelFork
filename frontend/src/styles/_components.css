@@ -1147,6 +1147,7 @@ body.theme-light .badge--question {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 4px;
   padding: 6px 12px;
   font-size: 0.65rem;
   font-weight: 600;
@@ -1159,6 +1160,13 @@ body.theme-light .badge--question {
   transition: background-color 0.2s ease, color 0.2s ease, transform 0.15s ease;
   /* Technical label style - subtle and refined */
   border: 1px solid transparent;
+}
+
+/* Decision 6: one glyph per study type, coloured through the same
+   `currentColor` the lozenge text already uses, so a type's icon and label
+   are always the same hue without a second colour declaration. */
+.lozenge__glyph {
+  flex-shrink: 0;
 }
 
 /* Lozenge Type Variants - Dark Mode (default) */
@@ -1293,10 +1301,13 @@ body.theme-light .badge--question {
   border: 1px solid var(--border-card);
   border-radius: var(--input-radius);
   appearance: none;
+  /* The chevron's own 16x16 viewBox squashed to a 16x12 box (below) reads as
+     a compressed, flattened arrow rather than lucide's chevron-down
+     proportions the path is drawn to match. */
   background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23E0E0E0' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
   background-repeat: no-repeat;
   background-position: right 0.75rem center;
-  background-size: 16px 12px;
+  background-size: 16px 16px;
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
@@ -3571,14 +3582,16 @@ body.theme-dark .admin-data-table td.col-date {
   color: var(--text-muted);
 }
 
-/* STRICT MONOCHROME DISCIPLINE - No colored icons */
+/* STRICT MONOCHROME DISCIPLINE - No colored icons. The `!important` plus a
+   0.5 opacity dim used to land these icons at ~1.92:1 against the card, well
+   under the 3:1 WCAG floor for non-text graphics. Monochrome does not
+   require dim: `--text-secondary` is neutral and reads at full strength;
+   the hover state now shifts colour instead of opacity to keep the "wake
+   up" cue without depending on a contrast-losing dim as the resting state. */
 .stat-icon {
   font-size: 1.25rem;
-  color: var(--color-slate-400) !important;
-  opacity: 0.5;
-  filter: grayscale(100%);
-  -webkit-filter: grayscale(100%);
-  transition: opacity 0.2s ease;
+  color: var(--text-secondary);
+  transition: color var(--transition-fast, 0.2s ease);
 }
 
 /* Icon wrapper - neutral background using glass surface */
@@ -3594,18 +3607,13 @@ body.theme-dark .admin-data-table td.col-date {
 }
 
 .stat-icon-wrapper .stat-icon {
-  color: var(--color-slate-400) !important;
-  opacity: 0.6;
-  filter: grayscale(100%);
-  -webkit-filter: grayscale(100%);
+  color: var(--text-secondary);
 }
 
-/* Interactive: Icons "wake up" on card hover */
+/* Interactive: icons brighten to the primary text colour on card hover. */
 .admin-stat-card:hover .stat-icon,
 .admin-stat-card:hover .stat-icon-wrapper .stat-icon {
-  opacity: 0.9;
-  filter: grayscale(100%);
-  -webkit-filter: grayscale(100%);
+  color: var(--text-primary);
 }
 
 @media (max-width: 991px) {
@@ -5685,6 +5693,18 @@ body.theme-dark .legend-label-past {
   border-radius: 2px;
 }
 
+/* The caret used to be a `' ↑'`/`' ↓'` text node, which stayed
+   inline by default. `_reset.css` sets `svg { display: block }`, so the
+   lucide glyph SortCaret now renders breaks the inline flow and drops onto
+   its own line unless told otherwise; `margin-inline-start` replaces the
+   leading space the old string carried. */
+.admin-th-sort-caret {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: -0.15em;
+  margin-inline-start: 4px;
+}
+
 .admin-th-title {
   cursor: pointer;
   user-select: none;
@@ -5710,14 +5730,12 @@ body.theme-dark .legend-label-past {
 
 /* Admin action button (kebab menu) */
 .admin-action-btn-kebab {
-  font-size: 18px;
-  font-weight: bold;
   padding: 4px 10px;
 }
 
 /* The shared Dropdown marks its trigger `.dropdown-toggle`, which paints a
-   caret via ::after. The kebab is a bare ⋮ glyph and wants none - suppress it
-   just for this trigger (#117). */
+   caret via ::after. The kebab is a lucide MoreVertical icon and wants none -
+   suppress it just for this trigger (#117). */
 .admin-action-btn-kebab.dropdown-toggle::after {
   content: none;
 }
@@ -6519,14 +6537,14 @@ body.theme-light .atmospheric-orb-secondary {
   color: var(--color-slate-400);
 }
 
-/* Card header icons - STRICT MONOCHROME DISCIPLINE */
+/* Card header icons - STRICT MONOCHROME DISCIPLINE. The `!important` plus a
+   0.4 opacity dim used to land these icons at ~1.92:1 against the card,
+   under the 3:1 WCAG floor for non-text graphics. Monochrome does not
+   require dim: full-strength `--text-secondary` stays neutral. */
 .cortex-analytics-card-icon {
   font-size: 1.125rem;
-  color: var(--color-slate-400) !important;
-  opacity: 0.4;
-  filter: grayscale(100%);
-  -webkit-filter: grayscale(100%);
-  transition: opacity 0.2s ease;
+  color: var(--text-secondary);
+  transition: color var(--transition-fast, 0.2s ease);
 }
 
 /* Force neutral on any SVG/icon child elements */
@@ -6543,12 +6561,10 @@ body.theme-light .atmospheric-orb-secondary {
   stroke: currentColor;
 }
 
-/* Interactive "waking up" effect - icons brighten on card hover */
+/* Interactive "waking up" effect - icons brighten to the primary text
+   colour on card hover, instead of an opacity dim that also dims contrast. */
 .cortex-analytics-card:hover .cortex-analytics-card-icon {
-  opacity: 0.8;
-  /* Keep grayscale - only opacity changes */
-  filter: grayscale(100%);
-  -webkit-filter: grayscale(100%);
+  color: var(--text-primary);
 }
 
 /* Card content area */
@@ -10919,6 +10935,27 @@ body.theme-light .admin-subtitle {
   line-height: 1;
 }
 
+/* The medal used to be emoji text, so the rank-gold/-silver/-bronze
+   `font-size` overrides below already scaled it per rank. A lucide icon
+   does not scale with font-size on its own; sizing it in `em` keeps that
+   same per-rank scale without the icon call site needing to know the rank. */
+.leaderboard-row-medal svg {
+  width: 1em;
+  height: 1em;
+}
+
+.leaderboard-row-medal--gold {
+  color: #D4AF37; /* gold */
+}
+
+.leaderboard-row-medal--silver {
+  color: #A8A9AD; /* silver */
+}
+
+.leaderboard-row-medal--bronze {
+  color: #CD7F32; /* bronze */
+}
+
 .leaderboard-row-name {
   flex: 1;
   font-size: 0.95rem;
@@ -11293,7 +11330,16 @@ body.theme-light .admin-subtitle {
 body.theme-dark .form-control,
 body.theme-dark .form-select,
 body.theme-dark textarea.form-control {
-  background: rgba(255, 255, 255, 0.03) !important; /* Subtle glass fill */
+  /* `background-color`, not the `background` shorthand: the shorthand resets
+     every unspecified sub-property, including background-image, to its
+     initial value. With `!important` in the `components` cascade layer -
+     earlier than `themes`, and CSS reverses layer priority for `!important`
+     declarations so an earlier layer's `!important` wins - that silently
+     deleted the `themes`-layer chevron fix on every dark-mode select, in
+     BOTH the plain form-select and the admin-dashboard/opportunity-form
+     variants. Found by measuring the live page: the source-level fix and
+     its test read as correct, and the chevron was still invisible. */
+  background-color: rgba(255, 255, 255, 0.03) !important; /* Subtle glass fill */
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
   color: #E2E8F0 !important; /* Off-white text */
   transition: all 0.2s ease;
@@ -11303,7 +11349,9 @@ body.theme-dark textarea.form-control {
 body.theme-dark .form-control:focus,
 body.theme-dark .form-select:focus,
 body.theme-dark textarea.form-control:focus {
-  background: rgba(255, 255, 255, 0.05) !important;
+  /* background-color, not the shorthand: see the rest-state rule above for
+     why the shorthand silently deletes the select chevron on focus. */
+  background-color: rgba(255, 255, 255, 0.05) !important;
   border-color: var(--color-brand-orange) !important;
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-orange-500) 20%, transparent) !important; /* Orange glow */
   outline: none;
