@@ -178,7 +178,7 @@ body.theme-light {
 
   /* Focus — terracotta ring on navy-friendly field */
   --focus-ring: var(--fs-accent);
-  --focus-ring-color: rgba(255, 90, 31, 0.28);
+  --focus-ring-color: color-mix(in srgb, var(--brand-orange-500) 28%, transparent);
 
   /* Accent */
   --accent-coral: var(--fs-accent);
@@ -268,7 +268,7 @@ body.theme-light::before {
   width: 100%;
   height: 100%;
   background:
-    radial-gradient(circle at 50% 0%, rgba(255, 90, 31, 0.06) 0%, transparent 72%),
+    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--brand-orange-500) 6%, transparent) 0%, transparent 72%),
     radial-gradient(circle at 90% 25%, rgba(20, 33, 61, 0.04) 0%, transparent 48%),
     radial-gradient(circle at 10% 80%, rgba(255, 251, 246, 0.9) 0%, transparent 45%);
   pointer-events: none;
@@ -286,7 +286,7 @@ body.theme-light .momentum-card {
 }
 
 body.theme-light .card:hover {
-  border-color: rgba(255, 90, 31, 0.35);
+  border-color: color-mix(in srgb, var(--brand-orange-500) 35%, transparent);
   box-shadow: var(--shadow-card-hover);
 }
 
@@ -360,7 +360,7 @@ body.theme-dark .spotlight-card:hover {
   /* Depth-2 shadow with brand glow accent */
   box-shadow: 
     var(--depth-2),
-    0 0 24px rgba(255, 122, 51, 0.12),
+    0 0 24px color-mix(in srgb, var(--brand-orange-500) 12%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
@@ -530,11 +530,20 @@ body.theme-light .dropdown-header {
   color: var(--text-primary);
 }
 
-body.theme-light .dropdown-item {
+/* :not(.text-danger): this rule is NORMAL importance in the themes layer -
+   the LAST layer declared in main.css, so among normal declarations it beats
+   an earlier layer's .text-danger override regardless of specificity. But
+   cascade layers reverse for `!important`: an EARLIER layer's `!important`
+   declaration beats a LATER layer's. That distinction did not bite here (see
+   the two `.admin-action-dropdown button` fixes below, which ARE
+   `!important` and needed a different explanation) - this is how the Delete
+   menu item rendered the same grey as View/Edit/Copy in light mode (row 15
+   "Then"). */
+body.theme-light .dropdown-item:not(.text-danger) {
   color: var(--text-body);
 }
 
-body.theme-light .dropdown-item:hover {
+body.theme-light .dropdown-item:hover:not(.text-danger) {
   background: var(--color-slate-50);
   color: #F97316;
 }
@@ -551,11 +560,11 @@ body.theme-light .dropdown-divider {
   border-color: rgba(0, 0, 0, 0.1);
 }
 
-body.theme-light a.dropdown-item {
+body.theme-light a.dropdown-item:not(.text-danger) {
   color: var(--text-body);
 }
 
-body.theme-light a.dropdown-item:hover {
+body.theme-light a.dropdown-item:hover:not(.text-danger) {
   background: var(--color-slate-50);
   color: #F97316;
 }
@@ -941,7 +950,7 @@ body.theme-light .admin-page-bg::before {
   width: 100%;
   height: 100%;
   background:
-    radial-gradient(circle at 50% 0%, rgba(255, 90, 31, 0.06) 0%, transparent 72%),
+    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--brand-orange-500) 6%, transparent) 0%, transparent 72%),
     radial-gradient(circle at 85% 30%, rgba(20, 33, 61, 0.035) 0%, transparent 50%);
   pointer-events: none;
   z-index: 0;
@@ -1306,12 +1315,23 @@ body.theme-dark .dropdown-menu button.dropdown-item.text-danger:hover {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7) !important;
 }
 
-.admin-action-dropdown button {
+/* :not(.text-danger): this base rule has no body.theme-* qualifier, so it
+   always applies. It is `!important`, and `!important` beats a normal
+   declaration outright regardless of layer or specificity - so without this
+   exception it would have painted Delete too, no matter how specific or
+   `!important` a same-tier .text-danger rule elsewhere tried to be, UNLESS
+   that other rule were ALSO `!important` in a layer higher in cascade-layer
+   order for important declarations (which reverses: an earlier layer's
+   `!important` wins over a later layer's). The dark .text-danger override a
+   few lines up is exactly that case, in the same layer, so it wins there on
+   specificity once importance ties - see the light-mode sibling below for
+   the case where no such rule exists and the exception is load-bearing. */
+.admin-action-dropdown button:not(.text-danger) {
   color: #E0E0E0 !important;
   background: transparent !important;
 }
 
-.admin-action-dropdown button:hover {
+.admin-action-dropdown button:hover:not(.text-danger) {
   background: rgba(255, 78, 80, 0.2) !important;
   color: #FFFFFF !important;
 }
@@ -1323,11 +1343,25 @@ body.theme-light .admin-action-dropdown {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15) !important;
 }
 
-body.theme-light .admin-action-dropdown button {
+/* :not(.text-danger): row 15 "Then" - Delete rendered this grey instead of
+   red. This rule and its :hover sibling below are `!important`; the
+   components-layer "Danger item styling (Light Mode)" rule
+   (_components.css, `color: #DC2626`) is NOT `!important`, so it never had a
+   chance against these two regardless of how many classes it chained
+   together or which layer either lived in - `!important` beats normal,
+   full stop, before layers are even consulted. With Delete excepted here,
+   the cascade falls through to the next rule that still targets it: the
+   generic `.text-danger` UTILITY (also normal importance, but in the
+   utilities layer, declared after components), which is what actually
+   colours Delete in light mode now. The dark-theme equivalent a few lines up
+   never had this bug: its .text-danger override IS `!important`, in the
+   SAME layer as the button rule it competes with, so it wins on specificity
+   once importance ties. */
+body.theme-light .admin-action-dropdown button:not(.text-danger) {
   color: #374151 !important;
 }
 
-body.theme-light .admin-action-dropdown button:hover {
+body.theme-light .admin-action-dropdown button:hover:not(.text-danger) {
   background: var(--color-slate-50) !important;
   color: #F97316 !important;
 }
@@ -1784,7 +1818,7 @@ body.theme-light .admin-data-table th {
 body.theme-light .badge--poll,
 body.theme-light .badge--interview,
 body.theme-light .badge--test {
-  background: rgba(255, 122, 51, 0.1);
+  background: color-mix(in srgb, var(--brand-orange-500) 10%, transparent);
   color: var(--accent-text-on-light);
 }
 
@@ -2501,13 +2535,13 @@ body.theme-dark .my-bookings-page .booking-card:hover {
 
 /* Upcoming Cards - Brand accent border */
 body.theme-dark .my-bookings-page .booking-card-upcoming {
-  border-color: rgba(255, 122, 51, 0.4);
-  box-shadow: 0 0 16px rgba(255, 122, 51, 0.1), 0 4px 12px rgba(0, 0, 0, 0.25);
+  border-color: color-mix(in srgb, var(--brand-orange-500) 40%, transparent);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--brand-orange-500) 10%, transparent), 0 4px 12px rgba(0, 0, 0, 0.25);
 }
 
 body.theme-dark .my-bookings-page .booking-card-upcoming:hover {
-  border-color: rgba(255, 122, 51, 0.6);
-  box-shadow: 0 0 24px rgba(255, 122, 51, 0.15), 0 6px 16px rgba(0, 0, 0, 0.3);
+  border-color: color-mix(in srgb, var(--brand-orange-500) 60%, transparent);
+  box-shadow: 0 0 24px color-mix(in srgb, var(--brand-orange-500) 15%, transparent), 0 6px 16px rgba(0, 0, 0, 0.3);
 }
 
 /* Past Cards - Muted state.
@@ -2779,7 +2813,7 @@ body.theme-dark .opportunity-form .opportunity-form-tab {
 }
 
 body.theme-dark .opportunity-form .opportunity-form-tab.active {
-  background-color: rgba(255, 122, 51, 0.05);
+  background-color: color-mix(in srgb, var(--brand-orange-500) 5%, transparent);
   border-bottom: 2px solid var(--color-brand-orange);
   color: var(--color-brand-orange);
 }
@@ -2793,7 +2827,7 @@ body.theme-dark .opportunity-form .opportunity-form-tab .tab-description {
 }
 
 body.theme-dark .opportunity-form .opportunity-form-tab.active .tab-description {
-  color: rgba(255, 122, 51, 0.8);
+  color: color-mix(in srgb, var(--brand-orange-500) 80%, transparent);
 }
 
 body.theme-dark .opportunity-form .opportunity-form-tab:hover:not(.active) {
@@ -3011,7 +3045,7 @@ body.theme-light .opportunity-form .opportunity-form-tab:hover {
 }
 
 body.theme-light .opportunity-form .opportunity-form-tab.active {
-  background-color: rgba(255, 122, 51, 0.05);
+  background-color: color-mix(in srgb, var(--brand-orange-500) 5%, transparent);
   border-bottom: 2px solid var(--color-brand-orange);
   color: var(--accent-text-on-light);
   font-weight: 600;
