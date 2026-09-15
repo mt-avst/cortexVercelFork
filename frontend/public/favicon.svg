@@ -1,13 +1,20 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="4 0 40 40">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="6.8 3.05 34.4 34.4">
   <!--
     Tab-icon rendering of the Cortex "Neuron" mark (see CortexMark.tsx for the
-    canonical 48x48 geometry, same coordinates, no redraw). currentColor
-    cannot resolve on a standalone favicon, so the fill is the brand orange
-    (brand-orange-500 token, hex FF5A1F) baked in directly. The viewBox is
-    tightened to the mark's own bounding box (plus even padding) rather than
-    the component's full 48x48 artboard, so the glyph reads at 16px
-    browser-tab scale instead of sitting small and centered in empty margin
-    (row 13).
+    canonical geometry, same coordinates, no redraw). currentColor cannot
+    resolve on a standalone favicon, so the fill is the brand orange
+    (brand-orange-500 token, hex FF5A1F) baked in directly.
+
+    The viewBox is now IDENTICAL to the component's. It used to be
+    "4 0 40 40" - tightened by eye rather than onto the ink, which left the
+    glyph filling 81% of its box while the component filled 68% of a different
+    box. Two files, two artboards, one mark. Both are now the ink's bounding
+    box (x 7.8-40.2, y 4.8-35.7) squared off with one unit of margin: 94% fill.
+
+    cortex-mark-assets.test.ts asserts this file's viewBox and every coordinate
+    against CortexMark.tsx, so the two cannot drift. That matters more here
+    than anywhere else - a stale favicon is invisible inside the app and only
+    shows up in the browser tab.
   -->
   <g stroke="#FF5A1F" stroke-width="4.8" stroke-linecap="round" fill="none">
     <path d="M24 24 24 9" />
