@@ -73,6 +73,21 @@ const Landing: React.FC = memo(() => {
 
       {/* Main Layout Container - Full-screen Flexbox */}
       <div className="landing-layout-container">
+        {/* Light mode's field: a static cortex that fills the right of the hero
+            and fades toward the copy - the light twin of dark mode's animated
+            field above. Sits at the hero-box level so it spans the full hero
+            height and bleeds to the viewport edge - see landing-node-graphic. */}
+        {!isDark && (
+          <img
+            // Cache-bust on every regeneration - the filename is stable but the
+            // content isn't, and this asset has been served stale once.
+            src="/images/landing-network-static.svg?v=13"
+            alt=""
+            aria-hidden="true"
+            className="landing-node-graphic"
+          />
+        )}
+
         {/* Top Spacer - for navbar clearance */}
         <div style={{ flexShrink: 0, height: '1px' }} />
 
@@ -80,24 +95,6 @@ const Landing: React.FC = memo(() => {
         <div className="landing-hero-stack">
           {/* Shadow Shield - tight behind text only */}
           <div className="landing-shadow-shield" />
-
-          {/* Light mode only: a compact irregular node-blob, sitting beside
-              the text and above the doors - a metaphor for the company
-              (many connected people), not a decorative field. Anchored to
-              this column so it stays "beside the text" regardless of the
-              text's own height. Dark mode's node motif is the animated field
-              above, so the static graphic would double up and is omitted. */}
-          {!isDark && (
-            <img
-              // Cache-bust on every regeneration - the filename is stable but
-              // the content isn't, and this asset has already been served
-              // stale from a browser cache once.
-              src="/images/landing-network-static.svg?v=9"
-              alt=""
-              aria-hidden="true"
-              className="landing-node-graphic"
-            />
-          )}
 
           {/* Eyebrow */}
           <span className="landing-parent-brand">ADAPTAVIST</span>
