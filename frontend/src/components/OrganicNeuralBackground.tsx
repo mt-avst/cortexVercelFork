@@ -563,10 +563,20 @@ const OrganicNeuralBackground: React.FC = () => {
       style={{ background: '#030305' }}
     >
       {/* Vignette overlay - darkens corners for focus */}
-      <div 
+      <div
         className="absolute inset-0 pointer-events-none z-10"
         style={{
           background: 'radial-gradient(circle at center, transparent 30%, rgba(3,3,5,0.6) 55%, rgba(3,3,5,0.85) 75%, #030305 100%)',
+        }}
+      />
+      {/* Downward fade - dissolves the field into the page's dark ground toward
+          the bottom so the animation blends into the content below instead of
+          ending on a hard edge. #030305 matches the canvas + wrapper ground. */}
+      <div
+        className="absolute inset-x-0 bottom-0 pointer-events-none z-10"
+        style={{
+          height: '62%',
+          background: 'linear-gradient(to bottom, transparent 0%, rgba(3,3,5,0.55) 40%, rgba(3,3,5,0.9) 72%, #030305 90%)',
         }}
       />
       <Canvas

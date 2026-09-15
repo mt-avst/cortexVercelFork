@@ -465,6 +465,23 @@ body.theme-light .landing-page .header {
   box-shadow: none;
 }
 
+/* Scrolled state - the fixed landing header gains a solid ground once the page
+   scrolls, so content passing under it doesn't collide with the header text.
+   Transparent at the very top (over the hero) is still the resting look. */
+body.theme-dark.landing-page .header--scrolled,
+body.theme-dark .landing-page .header--scrolled {
+  background: #030305;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+}
+
+body.theme-light.landing-page .header--scrolled,
+body.theme-light .landing-page .header--scrolled {
+  background: #fffefb;
+  border-bottom: 1px solid rgba(20, 33, 61, 0.08);
+  box-shadow: 0 4px 24px rgba(20, 33, 61, 0.08);
+}
+
 /* Landing is full-bleed: the global .main vertical padding (spacing-8) leaves a
    band at each edge where the white landing wrapper stops and the App's cream
    background shows through as a darker beige strip. Zero both edges so the
