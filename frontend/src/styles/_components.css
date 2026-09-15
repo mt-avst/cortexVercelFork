@@ -12997,7 +12997,9 @@ body.theme-light .recorded-study-expectations__item {
 .opportunity-index {
   list-style: none;
   margin: 0;
-  padding: 8px 0;
+  /* Horizontal padding insets the rows from the panel edge so the list gets the
+     same breathing room the admin card has, rather than sitting flush. */
+  padding: 16px 24px;
   max-width: 900px;
   /* ONE ground for the whole index, not one per row.
      Removing the cards exposed the animated neural background, whose lines and
