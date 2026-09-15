@@ -27,10 +27,17 @@ vi.mock('../../api/client', () => ({
   demoAdminLogin: vi.fn(),
   demoSuperadminLogin: vi.fn(),
 }));
+// Switchable so a single test can flip to dark; defaults light and is reset in
+// beforeEach so every other test keeps the light assumption it was written for.
+let mockTheme: 'light' | 'dark' = 'light';
 vi.mock('../../contexts/ThemeContext', () => ({
-  useTheme: () => ({ theme: 'light', isDarkMode: false }),
+  useTheme: () => ({ theme: mockTheme, isDarkMode: mockTheme === 'dark' }),
 }));
-vi.mock('../../components/OrganicNeuralBackground', () => ({ default: () => null }));
+// The animated node field is a heavy three.js canvas; stub it with a marker so a
+// test can assert it mounts in dark (and only dark) without rendering WebGL.
+vi.mock('../../components/OrganicNeuralBackground', () => ({
+  default: () => <div data-testid="neural-bg" />,
+}));
 
 /** The hero copy in reading order. Literals, so a reworded line fails here. */
 const HERO_LINES = [
@@ -53,6 +60,7 @@ const hero = (container: HTMLElement): HTMLElement => {
 describe('Landing hero', () => {
   beforeEach(() => {
     vi.mocked(oidcLogin).mockClear();
+    mockTheme = 'light';
   });
 
   it('keeps the lockup as the one h1', () => {
@@ -148,5 +156,28 @@ describe('Landing hero', () => {
     // A second click cannot fire a second sign-in.
     fireEvent.click(cta);
     expect(oidcLogin).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * The dark hero runs the animated node field; the light hero uses the compact
+ * static node graphic beside the copy. They are mutually exclusive - the static
+ * graphic would double up on the animated one - so pin which appears per theme.
+ */
+describe('Landing background by theme', () => {
+  it('light: static node graphic, no animated field', () => {
+    mockTheme = 'light';
+    const { container, queryByTestId } = render(<Landing />);
+    const img = container.querySelector<HTMLImageElement>('img.landing-node-graphic');
+    expect(img).not.toBeNull();
+    expect(img!.getAttribute('src')).toContain('/images/landing-network-static.svg');
+    expect(queryByTestId('neural-bg')).toBeNull();
+  });
+
+  it('dark: animated field, no static node graphic', () => {
+    mockTheme = 'dark';
+    const { container, getByTestId } = render(<Landing />);
+    expect(getByTestId('neural-bg')).toBeInTheDocument();
+    expect(container.querySelector('img.landing-node-graphic')).toBeNull();
   });
 });
