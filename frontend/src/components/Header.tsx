@@ -1,4 +1,4 @@
-import React, { useState, memo } from 'react';
+import React, { useState, useEffect, memo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -48,6 +48,17 @@ const Header: React.FC = memo(() => {
   const [requestingAdmin, setRequestingAdmin] = useState(false);
   const [adminRequestMessage, setAdminRequestMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+
+  // The landing header is fixed and transparent over the hero; once the page
+  // scrolls, content would pass under it and collide. Flag scroll so the header
+  // can gain a solid, blurred background below the very top.
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const onScroll = (): void => setScrolled(window.scrollY > 8);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   const isAdmin = user?.role === 'researcher_admin' || user?.role === 'superadmin';
 
@@ -266,7 +277,7 @@ const Header: React.FC = memo(() => {
   );
 
   return (
-    <header className="header">
+    <header className={scrolled ? 'header header--scrolled' : 'header'}>
       <div className="container">
         <div className="header-content">
           <Link to={logoLink} className="logo" aria-label="Cortex home">

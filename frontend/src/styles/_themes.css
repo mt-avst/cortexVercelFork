@@ -331,8 +331,6 @@ body.theme-light .spotlight-card {
 body.theme-light .bento-grid .card:hover,
 body.theme-light .study-listing-page .bento-grid .card:hover,
 body.theme-light .spotlight-card:hover {
-  /* Physical lift - translate up */
-  transform: translateY(-4px);
   /* Stronger border on hover */
   border-color: var(--dynamic-hover-color, var(--border-strong-current));
   /* Keep surface background on hover */
@@ -374,8 +372,6 @@ body.theme-dark .spotlight-card {
 body.theme-dark .bento-grid .card:hover,
 body.theme-dark .study-listing-page .bento-grid .card:hover,
 body.theme-dark .spotlight-card:hover {
-  /* Lift effect with subtle scale */
-  transform: translateY(-4px) scale(1.01);
   /* Emphasis border on hover */
   border-color: var(--border-strength-emphasis);
   /* Elevated glass surface */
@@ -448,6 +444,12 @@ body.theme-dark .header {
   background: transparent;
 }
 
+/* Header - Light Mode (transparent so the body wash shows through; an opaque
+   --bg-app painted above the ::before gradient as a visible flat strip) */
+body.theme-light .header {
+  background: transparent;
+}
+
 /* Landing Page Header - Dark Mode (fully transparent, no blur) */
 body.theme-dark.landing-page .header,
 body.theme-dark .landing-page .header {
@@ -466,6 +468,23 @@ body.theme-light .landing-page .header {
   -webkit-backdrop-filter: none;
   border-bottom: none;
   box-shadow: none;
+}
+
+/* Scrolled state - the fixed landing header gains a solid, blurred ground once
+   the page scrolls, so content passing under it doesn't collide with the header
+   text. Transparent at the very top (over the hero) is still the resting look. */
+body.theme-dark.landing-page .header--scrolled,
+body.theme-dark .landing-page .header--scrolled {
+  background: #030305;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+}
+
+body.theme-light.landing-page .header--scrolled,
+body.theme-light .landing-page .header--scrolled {
+  background: #fffefb;
+  border-bottom: 1px solid rgba(20, 33, 61, 0.08);
+  box-shadow: 0 4px 24px rgba(20, 33, 61, 0.08);
 }
 
 /* Landing is full-bleed: the global .main vertical padding (spacing-8) leaves a
@@ -1087,7 +1106,6 @@ body.theme-dark .admin-stat-card {
 }
 
 body.theme-dark .admin-stat-card:hover {
-  transform: translateY(-2px);
   border-color: var(--border-strength-strong);
   box-shadow: var(--depth-2), inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
@@ -1900,7 +1918,6 @@ body.theme-dark .cortex-analytics-card {
 }
 
 body.theme-dark .cortex-analytics-card:hover {
-  transform: translateY(-4px);
   border-color: rgba(255, 255, 255, 0.15);
   /* Depth-2 on hover */
   box-shadow: 
@@ -2535,7 +2552,6 @@ body.theme-dark .my-bookings-page .booking-card-upcoming {
 body.theme-dark .my-bookings-page .booking-card-upcoming:hover {
   border-color: rgba(255, 122, 51, 0.6);
   box-shadow: 0 0 24px rgba(255, 122, 51, 0.15), 0 6px 16px rgba(0, 0, 0, 0.3);
-  transform: translateY(-2px);
 }
 
 /* Past Cards - Muted state.
@@ -2635,7 +2651,6 @@ body.theme-light .my-bookings-page .booking-card-upcoming {
 
 body.theme-light .my-bookings-page .booking-card-upcoming:hover {
   border-color: rgba(232, 108, 36, 0.5);
-  transform: translateY(-2px);
 }
 
 /* Past Cards - Archival state.

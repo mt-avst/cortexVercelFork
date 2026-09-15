@@ -245,7 +245,6 @@
 }
 
 .card-shell--interactive:hover {
-  transform: translateY(-2px);
   border-color: var(--border-strong-current);
 }
 
@@ -405,8 +404,6 @@
 
 .card:hover {
   border-color: var(--brand-headline);
-  /* Enhanced lift with subtle scale */
-  transform: translateY(-3px) scale(1.01);
   box-shadow: var(--shadow-card-hover);
 }
 
@@ -604,7 +601,6 @@
 }
 
 .opportunity-card:hover {
-  transform: translateY(-2px);
   box-shadow: var(--shadow-card-hover);
 }
 
@@ -2050,10 +2046,11 @@ body.landing-page .header .text-muted,
 }
 
 /* On the dark signed-out landing the header sits on a dark ground, so the
-   ink wordmark flips to white (mirrors the landing's button treatment). */
-body:has(.cortex-landing) .header .logo-word,
-body.landing-page .header .logo-word,
-.landing-page .header .logo-word {
+   ink wordmark flips to white (mirrors the landing's button treatment). Gated to
+   dark mode - the light-mode landing is cream, so the wordmark stays ink there. */
+body.theme-dark:has(.cortex-landing) .header .logo-word,
+body.theme-dark.landing-page .header .logo-word,
+body.theme-dark .landing-page .header .logo-word {
   color: #ffffff;
 }
 
@@ -5979,9 +5976,8 @@ body.theme-light .study-summary-line {
 .bento-grid .card.card-clickable:hover,
 .card.card-clickable:hover {
   border-color: var(--dynamic-hover-color, var(--brand-headline)) !important;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15), 
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15),
               0 0 0 1px var(--dynamic-hover-color, transparent) !important;
-  transform: translateY(-4px);
 }
 
 /* Light mode: use text color for crisp, high-contrast hover borders */
@@ -6445,7 +6441,6 @@ body.theme-light .atmospheric-orb-secondary {
 }
 
 .cortex-analytics-card:hover {
-  transform: translateY(-2px);
   border-color: rgba(255, 255, 255, 0.12);
   box-shadow: 0 8px 32px -1px rgba(0, 0, 0, 0.3);
 }
@@ -6996,7 +6991,6 @@ body.theme-light .atmospheric-orb-secondary {
 }
 
 .booking-card-upcoming:hover {
-  transform: translateY(-2px);
   box-shadow: 0 0 16px rgba(255, 78, 80, 0.25);
 }
 
@@ -9664,9 +9658,75 @@ body.landing-page {
   overflow-x: hidden;
 }
 
-/* Dark mode: solid dark background */
+/* Landing content is left-pinned inside the shared 1200px container. Above 1200
+   the container centres and the inset grows naturally (~136px at 1440), which
+   reads well. Below 1200 the container fills the viewport, so the inset collapses
+   to the 20px --container-padding base and the hero hugs the left edge. Override
+   the shared token on the landing only (so the header mark, hero and narrative
+   move together and stay on one spine) with a fluid gutter across the sub-1200
+   range. Other pages, and desktop landing, are untouched. */
+/* Landing left-rail gutter. The header mark, hero and narrative all read their
+   inset from --container-padding, and their containers share max-width:1200px +
+   margin:auto - so inset = centre-margin + this padding.
+
+   Below 1200 the containers fill the viewport (no centre-margin), so the padding
+   is the whole gutter: ramp it with the viewport so the hero never hugs the edge.
+   Above 1200 the centre-margin grows by (100vw-1200)/2; taper the padding back
+   down by the same amount so the total inset holds at ~56px until the centre-
+   margin alone exceeds it (~1272px), after which the natural centred inset takes
+   over (140px at 1440, unchanged from before). Continuous across 1200 - no dip.
+   Ramp is deliberately assertive (7vw, 32px floor -> 80px hold): a heavy serif
+   wordmark against the open right-hand field needs a confident left margin or it
+   reads as pinned to the edge rather than placed. */
+@media (max-width: 1200px) {
+  body.landing-page {
+    --container-padding: clamp(2rem, 7vw, 5rem); /* 32px floor -> 80px cap */
+  }
+}
+
+@media (min-width: 1201px) {
+  body.landing-page {
+    --container-padding: max(1.25rem, calc(5rem - (100vw - 1200px) / 2));
+  }
+}
+
+/* The narrative sections stacked their own hardcoded gutter (.sales-section pad
+   + .sales-section-inner pad = 32px) instead of the shared token, so they sat
+   off the hero/header spine (~16px out even on desktop) and did not follow the
+   gutter override above. Drive their inset from --container-padding too so the
+   header mark, hero and "SEE HOW IT WORKS" line up on one spine at every width.
+   Scoped to the landing; other uses of .sales-section keep their own spacing. */
+body.landing-page .sales-section {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+body.landing-page .sales-section-inner {
+  padding-left: var(--container-padding);
+  padding-right: var(--container-padding);
+}
+
+/* Dark mode: near-black ground carrying a warm radial glow behind the hero over
+   a faint orange grid (the grid mirrors the light theme). These live in the
+   wrapper's own background, so they paint below the animated node field (a
+   -z-10 opaque canvas child) and are hidden while it runs - and show through as
+   the static no-motion fallback when prefers-reduced-motion makes that component
+   render nothing. The glow layer is sized to one viewport height and pinned to
+   the top so it sits behind the hero, not halfway down the tall wrapper. */
 body.theme-dark .landing-page-wrapper {
-  background: #030305;
+  background-color: #030305;
+  background-image:
+    radial-gradient(
+      62% 60% at 34% 42%,
+      rgba(255, 85, 0, 0.17) 0%,
+      rgba(255, 85, 0, 0.05) 38%,
+      transparent 68%
+    ),
+    linear-gradient(to right, rgba(255, 85, 0, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 85, 0, 0.045) 1px, transparent 1px);
+  background-size: 100% 100vh, 24px 24px, 24px 24px;
+  background-position: center top, 0 0, 0 0;
+  background-repeat: no-repeat, repeat, repeat;
 }
 
 /* Light mode: orange grid pattern on pure white */
@@ -9678,45 +9738,50 @@ body.theme-light .landing-page-wrapper {
   background-size: 24px 24px;
 }
 
-/* Light mode's node graphic - compact, anchored to the hero-stack column
-   (not the viewport), so "beside the text, above the doors" holds regardless
-   of the text block's own height. Hidden by default; only shown once the
-   viewport is wide enough for a real quadrant to open up beside the text. */
+/* Light mode's node graphic - the static stand-in for dark mode's animated
+   field. Hidden by default; only shown once the viewport is wide enough for a
+   real column to open up beside the text (below 900 the hero is single-column
+   and there is no room). */
 .landing-node-graphic {
   display: none;
 }
 
-/* Sits beside the copy, straddling the copy column's right edge in the open
-   space to its right. The graphic is absolutely positioned inside the hero
-   stack, whose left edge is the copy column's - so all horizontal maths is
-   relative to that one edge. The copy column's width is --copy-col-w (defined
-   on .landing-hero-stack), so its right edge sits at that distance from the
-   shared left edge; `left` centres the graphic (its own width --ng-w) on that
-   edge - half over the column's ragged-right whitespace, half in the free space
-   beyond. Anchoring to the same variable the column uses means the two cannot
-   drift apart; --ng-w binds the centring maths to the rendered width likewise.
+/* Light mode's cortex FIELD - the light twin of dark mode's animated field.
+   A right-anchored band that fills the full hero height and bleeds to the
+   viewport edge, drawn with object-fit: cover so it always fills regardless of
+   the band's aspect, and faded on its inner (left) edge with a mask so it melts
+   toward the copy instead of clashing with the text. Big and substantial at
+   every width from 900 up (below that the hero is single-column, so it's hidden).
 
-   Re-anchored for the single-CTA hero (cto/AdaptaLabs#120): the previous maths
-   centred it on a right-hand door that no longer exists.
-
-   Breakpoint 900px, not the old 1180: it now shows on narrower laptop and
-   tablet-landscape windows, not just wide ones. It stays hidden below 900
-   because that is where its right edge would clip past the viewport (measured:
-   ~2px over at 850, ~46px over at 800), never on mobile. Verified by DOM
-   measurement across 900-1440px: the graphic clears the copy, the CTA and the
-   section below. */
-@media (min-width: 900px) {
+   right = pulls the band out past the 1200 content box to the viewport edge
+           (centring margin + gutter), so the field reaches the frame like dark.
+   height:100% + top:0 fill the hero box vertically. The layout container drops
+   overflow:hidden in light mode (below) so the band can bleed to the edge.
+   Shown from small screens up too (it's a faded backdrop, so it coexists with
+   the single-column hero rather than needing its own column). */
+@media (min-width: 480px) {
   .landing-node-graphic {
-    --ng-w: min(23.5vw, 337px);
     display: block;
     position: absolute;
-    top: 4.5rem;
-    left: calc(var(--copy-col-w) - var(--ng-w) / 2);
-    width: var(--ng-w);
-    height: auto;
+    top: 0;
+    height: 100%;
+    right: calc(
+      -1 * (var(--container-padding) + max(0px, (100vw - var(--container-max-width)) / 2))
+    );
+    width: min(60vw, 60rem);
+    object-fit: cover;
+    object-position: center;
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 48%);
+    mask-image: linear-gradient(to right, transparent 0%, #000 48%);
     z-index: 0;
     pointer-events: none;
   }
+}
+
+/* Let the field bleed to the viewport edge on light mode (dark mode keeps its
+   clip; its field is a separate fixed canvas). */
+body.theme-light .landing-layout-container {
+  overflow: visible;
 }
 
 /* Layout container - full-screen flexbox
@@ -9737,9 +9802,22 @@ body.theme-light .landing-page-wrapper {
      grows the box past this floor on short screens. */
   min-height: calc(100vh - 24rem);
   min-height: calc(100dvh - 24rem); /* Dynamic viewport height for mobile */
+  /* Single source of truth for the page's left rail: the hero content shares
+     the exact centred content column the header (.container) and the narrative
+     sections use, so the mark, the hero and "SEE HOW IT WORKS" line up on one
+     spine at every width. The full-bleed .landing-page-wrapper still carries
+     the background art edge to edge; only the content is constrained here.
+     Replaces a viewport-relative --hero-inset that rode a different coordinate
+     system to the header and drifted 130-185px out of line across desktop. */
   width: 100%;
-  --hero-inset: clamp(1.5rem, 6vw, 5rem);
-  padding: 4rem 0 2rem;
+  max-width: var(--container-max-width);
+  margin-inline: auto;
+  /* ponytail: content rides the wrapper's 100vw breakout, so below 1200px with a
+     classic scrollbar the hero sits ~scrollbar/2 (4px at an 8px bar, 0 on macOS
+     overlay bars) left of the header, which centres in clientWidth. Exact parity
+     needs the full-bleed background split off the content grid onto its own
+     fixed layer. Taste ceiling, not correctness - comment-only per AGENTS.md. */
+  padding: 4rem var(--container-padding) 2rem;
   /* Optical centering: lifts content above mathematical center to account for
      visual weight of browser chrome/taskbar. Kept small so the gap to the
      narrative below stays tight. */
@@ -9768,7 +9846,9 @@ body.theme-light .landing-page-wrapper {
      the same value (see .landing-node-graphic). */
   --copy-col-w: min(85vw, 36rem);
   max-width: var(--copy-col-w);
-  margin-left: var(--hero-inset);
+  /* Left edge is the shared content column's edge (set on
+     .landing-layout-container), not a bespoke inset. */
+  margin-left: 0;
   padding: 2rem 0;
 }
 
@@ -10118,15 +10198,6 @@ body.theme-light .landing-tagline {
   box-shadow: none;
 }
 
-/* Desktop: shift the whole hard-left column further right, about 2 inches
-   (192px) at typical laptop/desktop widths. Scoped to >=768px, where there
-   is room - the tighter mobile/tablet inset below is untouched. */
-@media (min-width: 768px) {
-  .landing-layout-container {
-    --hero-inset: clamp(11rem, 19vw, 17rem);
-  }
-}
-
 /* Mobile: give the hero stack room to breathe. The desktop asymmetry (narrow
    copy column) has no room to work with on a phone, so the copy widens back
    out - it keeps the shared left inset, but stops being deliberately narrower
@@ -10149,9 +10220,11 @@ body.theme-light .landing-tagline {
    Note: Most sizing is now handled by clamp() functions above.
    These media queries handle layout adjustments only. */
 @media (max-width: 480px) {
-  /* Extra small screens: tighter sides and top; the bottom keeps the 640px value */
+  /* Extra small screens: tighter top; horizontal padding comes from the shared
+     content column (.landing-layout-container), so the hero adds none of its
+     own or it would sit inside the logo's rail. */
   .landing-hero-stack {
-    padding: 0 1rem var(--spacing-4);
+    padding: 0 0 var(--spacing-4);
   }
 }
 
@@ -12013,7 +12086,6 @@ body.theme-light .col-actions .dropdown-menu .dropdown-divider {
 }
 
 .sales-promise-card:hover {
-  transform: translateY(-2px);
   border-color: var(--border-strong-current);
 }
 
@@ -12872,8 +12944,11 @@ body.theme-light .recorded-study-expectations__item {
 .opportunity-index {
   list-style: none;
   margin: 0;
-  padding: 8px 0;
-  max-width: 900px;
+  /* Fills the content column and carries the admin card's 40px side padding, so
+     the list reads as the same well-padded surface as the admin dashboard rather
+     than a narrow box shoved to the left with an empty gutter beside it. */
+  padding: 24px 40px;
+  max-width: none;
   /* ONE ground for the whole index, not one per row.
      Removing the cards exposed the animated neural background, whose lines and
      dots ran straight through the titles. The fix is a single field for the
@@ -13436,7 +13511,6 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
 .admin-attention__card:focus-visible {
   border-color: var(--color-cortex-orange);
   box-shadow: var(--shadow-card-current);
-  transform: translateY(-1px);
   outline: none;
 }
 
