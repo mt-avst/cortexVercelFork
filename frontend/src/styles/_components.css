@@ -9691,12 +9691,12 @@ body.theme-dark .landing-page-wrapper {
   background-image:
     radial-gradient(
       62% 60% at 34% 42%,
-      rgba(255, 85, 0, 0.17) 0%,
-      rgba(255, 85, 0, 0.05) 38%,
+      color-mix(in srgb, var(--brand-orange-500) 17%, transparent) 0%,
+      color-mix(in srgb, var(--brand-orange-500) 5%, transparent) 38%,
       transparent 68%
     ),
-    linear-gradient(to right, rgba(255, 85, 0, 0.045) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 85, 0, 0.045) 1px, transparent 1px);
+    linear-gradient(to right, color-mix(in srgb, var(--brand-orange-500) 5%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--brand-orange-500) 5%, transparent) 1px, transparent 1px);
   background-size: 100% 100vh, 24px 24px, 24px 24px;
   background-position: center top, 0 0, 0 0;
   background-repeat: no-repeat, repeat, repeat;
