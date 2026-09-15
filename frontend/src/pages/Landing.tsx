@@ -62,9 +62,13 @@ const Landing: React.FC = memo(() => {
 
   return (
     <div className="landing-page-wrapper">
-      {/* Dark mode keeps the animated node field, full-screen. Light mode's
-          equivalent is a compact static image anchored to the text column
-          below, not a full-viewport background - see landing-node-graphic. */}
+      {/* Dark mode runs the full-screen animated node field. Its canvas is
+          opaque, so it covers the wrapper's static dark ground (grid + warm
+          glow, set in CSS); when prefers-reduced-motion is set the component
+          renders nothing and that same static ground shows through as the
+          no-motion fallback - never the flat #030305 void. Light mode's
+          equivalent is a compact static image anchored to the text column below,
+          not a full-viewport background - see landing-node-graphic. */}
       {isDark && <OrganicNeuralBackground />}
 
       {/* Main Layout Container - Full-screen Flexbox */}
@@ -81,7 +85,8 @@ const Landing: React.FC = memo(() => {
               the text and above the doors - a metaphor for the company
               (many connected people), not a decorative field. Anchored to
               this column so it stays "beside the text" regardless of the
-              text's own height. */}
+              text's own height. Dark mode's node motif is the animated field
+              above, so the static graphic would double up and is omitted. */}
           {!isDark && (
             <img
               // Cache-bust on every regeneration - the filename is stable but
