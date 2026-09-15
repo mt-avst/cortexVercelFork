@@ -9679,9 +9679,27 @@ body.landing-page {
   overflow-x: hidden;
 }
 
-/* Dark mode: solid dark background */
+/* Dark mode: near-black ground carrying a warm radial glow behind the hero over
+   a faint orange grid (the grid mirrors the light theme). These live in the
+   wrapper's own background, so they paint below the animated node field (a
+   -z-10 opaque canvas child) and are hidden while it runs - and show through as
+   the static no-motion fallback when prefers-reduced-motion makes that component
+   render nothing. The glow layer is sized to one viewport height and pinned to
+   the top so it sits behind the hero, not halfway down the tall wrapper. */
 body.theme-dark .landing-page-wrapper {
-  background: #030305;
+  background-color: #030305;
+  background-image:
+    radial-gradient(
+      62% 60% at 34% 42%,
+      color-mix(in srgb, var(--brand-orange-500) 17%, transparent) 0%,
+      color-mix(in srgb, var(--brand-orange-500) 5%, transparent) 38%,
+      transparent 68%
+    ),
+    linear-gradient(to right, color-mix(in srgb, var(--brand-orange-500) 5%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--brand-orange-500) 5%, transparent) 1px, transparent 1px);
+  background-size: 100% 100vh, 24px 24px, 24px 24px;
+  background-position: center top, 0 0, 0 0;
+  background-repeat: no-repeat, repeat, repeat;
 }
 
 /* Light mode: orange grid pattern on pure white */
@@ -9752,9 +9770,22 @@ body.theme-light .landing-page-wrapper {
      grows the box past this floor on short screens. */
   min-height: calc(100vh - 24rem);
   min-height: calc(100dvh - 24rem); /* Dynamic viewport height for mobile */
+  /* Single source of truth for the page's left rail: the hero content shares
+     the exact centred content column the header (.container) and the narrative
+     sections use, so the mark, the hero and "SEE HOW IT WORKS" line up on one
+     spine at every width. The full-bleed .landing-page-wrapper still carries
+     the background art edge to edge; only the content is constrained here.
+     Replaces a viewport-relative --hero-inset that rode a different coordinate
+     system to the header and drifted 130-185px out of line across desktop. */
   width: 100%;
-  --hero-inset: clamp(1.5rem, 6vw, 5rem);
-  padding: 4rem 0 2rem;
+  max-width: var(--container-max-width);
+  margin-inline: auto;
+  /* ponytail: content rides the wrapper's 100vw breakout, so below 1200px with a
+     classic scrollbar the hero sits ~scrollbar/2 (4px at an 8px bar, 0 on macOS
+     overlay bars) left of the header, which centres in clientWidth. Exact parity
+     needs the full-bleed background split off the content grid onto its own
+     fixed layer. Taste ceiling, not correctness - comment-only per AGENTS.md. */
+  padding: 4rem var(--container-padding) 2rem;
   /* Optical centering: lifts content above mathematical center to account for
      visual weight of browser chrome/taskbar. Kept small so the gap to the
      narrative below stays tight. */
@@ -9783,7 +9814,9 @@ body.theme-light .landing-page-wrapper {
      the same value (see .landing-node-graphic). */
   --copy-col-w: min(85vw, 36rem);
   max-width: var(--copy-col-w);
-  margin-left: var(--hero-inset);
+  /* Left edge is the shared content column's edge (set on
+     .landing-layout-container), not a bespoke inset. */
+  margin-left: 0;
   padding: 2rem 0;
 }
 
@@ -10133,15 +10166,6 @@ body.theme-light .landing-tagline {
   box-shadow: none;
 }
 
-/* Desktop: shift the whole hard-left column further right, about 2 inches
-   (192px) at typical laptop/desktop widths. Scoped to >=768px, where there
-   is room - the tighter mobile/tablet inset below is untouched. */
-@media (min-width: 768px) {
-  .landing-layout-container {
-    --hero-inset: clamp(11rem, 19vw, 17rem);
-  }
-}
-
 /* Mobile: give the hero stack room to breathe. The desktop asymmetry (narrow
    copy column) has no room to work with on a phone, so the copy widens back
    out - it keeps the shared left inset, but stops being deliberately narrower
@@ -10164,9 +10188,11 @@ body.theme-light .landing-tagline {
    Note: Most sizing is now handled by clamp() functions above.
    These media queries handle layout adjustments only. */
 @media (max-width: 480px) {
-  /* Extra small screens: tighter sides and top; the bottom keeps the 640px value */
+  /* Extra small screens: tighter top; horizontal padding comes from the shared
+     content column (.landing-layout-container), so the hero adds none of its
+     own or it would sit inside the logo's rail. */
   .landing-hero-stack {
-    padding: 0 1rem var(--spacing-4);
+    padding: 0 0 var(--spacing-4);
   }
 }
 
