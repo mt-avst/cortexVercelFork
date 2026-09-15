@@ -9711,45 +9711,44 @@ body.theme-light .landing-page-wrapper {
   background-size: 24px 24px;
 }
 
-/* Light mode's node graphic - compact, anchored to the hero-stack column
-   (not the viewport), so "beside the text, above the doors" holds regardless
-   of the text block's own height. Hidden by default; only shown once the
-   viewport is wide enough for a real quadrant to open up beside the text. */
+/* Light mode's cortex FIELD - the light twin of dark mode's animated field.
+   A right-anchored band that fills the full hero height and bleeds to the
+   viewport edge, drawn with object-fit: cover so it always fills regardless of
+   the band's aspect, and faded on its inner (left) edge with a mask so it melts
+   toward the copy instead of clashing with the text. Hidden by default. */
 .landing-node-graphic {
   display: none;
 }
 
-/* Sits beside the copy, straddling the copy column's right edge in the open
-   space to its right. The graphic is absolutely positioned inside the hero
-   stack, whose left edge is the copy column's - so all horizontal maths is
-   relative to that one edge. The copy column's width is --copy-col-w (defined
-   on .landing-hero-stack), so its right edge sits at that distance from the
-   shared left edge; `left` centres the graphic (its own width --ng-w) on that
-   edge - half over the column's ragged-right whitespace, half in the free space
-   beyond. Anchoring to the same variable the column uses means the two cannot
-   drift apart; --ng-w binds the centring maths to the rendered width likewise.
-
-   Re-anchored for the single-CTA hero (cto/AdaptaLabs#120): the previous maths
-   centred it on a right-hand door that no longer exists.
-
-   Breakpoint 900px, not the old 1180: it now shows on narrower laptop and
-   tablet-landscape windows, not just wide ones. It stays hidden below 900
-   because that is where its right edge would clip past the viewport (measured:
-   ~2px over at 850, ~46px over at 800), never on mobile. Verified by DOM
-   measurement across 900-1440px: the graphic clears the copy, the CTA and the
-   section below. */
-@media (min-width: 900px) {
+/* right = pulls the band out past the 1200 content box to the viewport edge
+   (centring margin + gutter), so the field reaches the frame like dark mode.
+   height:100% + top:0 fill the hero box vertically. The light layout container
+   drops overflow:hidden (below) so the band can bleed to the edge. Shown from
+   small screens up too - it's a faded backdrop, so it coexists with the
+   single-column hero rather than needing its own column. */
+@media (min-width: 480px) {
   .landing-node-graphic {
-    --ng-w: min(23.5vw, 337px);
     display: block;
     position: absolute;
-    top: 4.5rem;
-    left: calc(var(--copy-col-w) - var(--ng-w) / 2);
-    width: var(--ng-w);
-    height: auto;
+    top: 0;
+    height: 100%;
+    right: calc(
+      -1 * (var(--container-padding) + max(0px, (100vw - var(--container-max-width)) / 2))
+    );
+    width: min(60vw, 60rem);
+    object-fit: cover;
+    object-position: center;
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 48%);
+    mask-image: linear-gradient(to right, transparent 0%, #000 48%);
     z-index: 0;
     pointer-events: none;
   }
+}
+
+/* Let the field bleed to the viewport edge on light mode (dark mode keeps its
+   clip; its field is a separate fixed canvas). */
+body.theme-light .landing-layout-container {
+  overflow: visible;
 }
 
 /* Layout container - full-screen flexbox
