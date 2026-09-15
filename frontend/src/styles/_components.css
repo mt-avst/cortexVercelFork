@@ -12997,10 +12997,11 @@ body.theme-light .recorded-study-expectations__item {
 .opportunity-index {
   list-style: none;
   margin: 0;
-  /* Horizontal padding insets the rows from the panel edge so the list gets the
-     same breathing room the admin card has, rather than sitting flush. */
-  padding: 16px 24px;
-  max-width: 900px;
+  /* Fills the content column and carries the admin card's 40px side padding, so
+     the list reads as the same well-padded surface as the admin dashboard rather
+     than a narrow box shoved to the left with an empty gutter beside it. */
+  padding: 24px 40px;
+  max-width: none;
   /* ONE ground for the whole index, not one per row.
      Removing the cards exposed the animated neural background, whose lines and
      dots ran straight through the titles. The fix is a single field for the
