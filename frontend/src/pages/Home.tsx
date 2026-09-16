@@ -5,16 +5,22 @@ import { getOpportunities, updateMyProfile } from '../api/client';
 import { Opportunity } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
 import {
+  deriveFacetOptions,
+  EMPTY_FACET_SELECTION,
+  facetSelectionCount,
   filterOpportunitiesForPresentationListing,
-  getParticipantFacingType,
+  isAtPublishedListCap,
   opportunityMatchesRoles,
+  opportunityPassesFacets,
+  PUBLISHED_LIST_CAP,
   resolveActiveMatchRoles,
   sortByClosingSoonest,
+  type StudyFacetSelection,
 } from '../utils/opportunityUtils';
 import { logger } from '../utils/logger';
 import Landing from './Landing';
 import ErrorState from '../components/ErrorState';
-import StudyFilters from '../components/StudyFilters';
+import StudyFacets from '../components/StudyFacets';
 import { OpportunityRow } from '../components/OpportunityRow';
 import RoleProfilePanel from '../components/RoleProfilePanel';
 import { CheckCircle, Inbox, Filter } from 'lucide-react';
@@ -42,7 +48,9 @@ const Home: React.FC = memo(() => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
   const [showBookingSuccess, setShowBookingSuccess] = useState(false);
-  const [selectedType, setSelectedType] = useState<string>('all');
+  // Multi-select facets (phase 2): every axis narrows the already-loaded set.
+  // Empty selection = the full list, exactly as before facets existed.
+  const [facetSelection, setFacetSelection] = useState<StudyFacetSelection>(EMPTY_FACET_SELECTION);
 
   // The transient "browse as..." override: client state only, never persisted,
   // resets on reload (it is not seeded from storage). null -> matching falls back
@@ -138,13 +146,6 @@ const Home: React.FC = memo(() => {
     }
   }, [presentationListing]);
 
-  // Avoid empty "App Testing" view when presentation mode hides test-type studies
-  useEffect(() => {
-    if (presentationListing && selectedType === 'test') {
-      setSelectedType('all');
-    }
-  }, [presentationListing, selectedType]);
-
   // Consolidated effect to load opportunities - prevents duplicate API calls
   useEffect(() => {
     // Only load if we're on the home page
@@ -196,24 +197,40 @@ const Home: React.FC = memo(() => {
 
   // Memoized status badge class getter
 
-  // Memoized filtered and sorted opportunities
-  const filteredOpportunities = useMemo(() => {
-    const safeOpportunities = Array.isArray(opportunities) ? opportunities : [];
+  const safeOpportunities = useMemo(
+    () => (Array.isArray(opportunities) ? opportunities : []),
+    [opportunities]
+  );
 
-    // Filter by type
-    const filteredByType = selectedType === 'all'
-      ? safeOpportunities
-      : safeOpportunities.filter(opp => {
-          const baseType = opp.type?.toLowerCase().replace(/published|draft|closed$/, '') || '';
-          return baseType === selectedType.toLowerCase();
-        });
+  // The facet options actually present across the loaded set, with the viewer's
+  // own profile roles surfaced first on the role axis.
+  const facetOptions = useMemo(
+    () => deriveFacetOptions(safeOpportunities, profileRoles),
+    [safeOpportunities, profileRoles]
+  );
+
+  const activeFacetCount = facetSelectionCount(facetSelection);
+
+  // Memoized filtered and sorted opportunities. Facets narrow the already-loaded
+  // set (AND across axes, OR within); an empty selection is the full list.
+  const filteredOpportunities = useMemo(() => {
+    const narrowed =
+      activeFacetCount === 0
+        ? safeOpportunities
+        : safeOpportunities.filter((opp) => opportunityPassesFacets(opp, facetSelection));
 
     // Closing soonest first. The list used to sort tests to the top and put the
     // study with "4 days left" twelfth, so it rendered urgency and then sorted
     // against it. The bento arrangement that followed - interleaving
     // double-width rows into a three-column grid - went with the grid.
-    return sortByClosingSoonest(filteredByType);
-  }, [opportunities, selectedType]);
+    return sortByClosingSoonest(narrowed);
+  }, [safeOpportunities, facetSelection, activeFacetCount]);
+
+  // At the list endpoint's cap the client cannot see studies it dropped, so the
+  // facets stop being authoritative (see PUBLISHED_LIST_CAP). During the beta the
+  // published count is a tiny fraction of the cap, so this never shows now - it is
+  // the guard that keeps a silent "no more matches" from ever reading as truth.
+  const atListCap = isAtPublishedListCap(safeOpportunities.length);
 
   // The active role set drives highlighting/sort: browse-as override, else saved
   // profile, else none. Matching is advisory - it partitions the ALREADY-FILTERED
@@ -295,22 +312,32 @@ const Home: React.FC = memo(() => {
                 />
               )}
 
-              {/* Study summary and type filter chips */}
+              {/* Study summary and facet panel */}
               {!loading && !error && opportunities.length > 0 && (
                 <>
-                  {/* Counts what is on screen, and names the filter the way the
-                      chip does. It read "12 active studies · Showing unmoderated"
-                      over a two-row list, one line above a chip reading
-                      "Recorded study". */}
+                  {/* Counts what is on screen; names the active filter count so a
+                      narrowed list never reads as the whole set. */}
                   <p className="study-summary-line">
                     {filteredOpportunities.length} active{' '}
                     {filteredOpportunities.length === 1 ? 'study' : 'studies'}
-                    {selectedType !== 'all' &&
-                      ` · ${getParticipantFacingType(selectedType)}`}
+                    {activeFacetCount > 0 &&
+                      ` · ${activeFacetCount} ${activeFacetCount === 1 ? 'filter' : 'filters'}`}
                   </p>
-                  <StudyFilters 
-                    currentFilter={selectedType} 
-                    onFilterChange={setSelectedType} 
+
+                  {/* At the list cap the client can't see dropped studies, so the
+                      facets below are no longer authoritative - say so rather than
+                      let a filtered view read as complete. */}
+                  {atListCap && (
+                    <p className="study-cap-notice" role="status">
+                      Showing the most recent {PUBLISHED_LIST_CAP} studies. Filters here apply only to
+                      these - refine your search on the server for the full set.
+                    </p>
+                  )}
+
+                  <StudyFacets
+                    options={facetOptions}
+                    selection={facetSelection}
+                    onChange={setFacetSelection}
                   />
                 </>
               )}
@@ -340,12 +367,12 @@ const Home: React.FC = memo(() => {
                 <div className="empty-state">
                   <Filter size={48} className="empty-state-icon" />
                   <h4 className="empty-state-title">No studies found</h4>
-                  <p className="mb-2">No studies match the selected filter.</p>
-                  <button 
-                    className="btn btn-outline-primary mt-3" 
-                    onClick={() => setSelectedType('all')}
+                  <p className="mb-2">No studies match your filters.</p>
+                  <button
+                    className="btn btn-outline-primary mt-3"
+                    onClick={() => setFacetSelection(EMPTY_FACET_SELECTION)}
                   >
-                    Show All Types
+                    Clear filters
                   </button>
                 </div>
               )}

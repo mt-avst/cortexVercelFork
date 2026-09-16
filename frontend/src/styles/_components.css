@@ -13368,6 +13368,100 @@ body.theme-dark {
   color: var(--opportunity-row-meta);
 }
 
+/* Browse facet panel (phase 2). Grouped multi-select chips above the list. */
+.study-facets {
+  margin: 0 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.study-facets__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.study-facets__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--opportunity-row-kind);
+}
+
+.study-facets__count {
+  /* Per-theme brand accent via the row's AA-safe token, so no hard-coded
+     per-theme hex (accent-fill policy). */
+  color: var(--opportunity-row-urgent);
+}
+
+.study-facets__clear {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  font-size: 0.85rem;
+  color: var(--opportunity-row-meta);
+}
+
+.study-facets__group {
+  display: grid;
+  grid-template-columns: 88px 1fr;
+  align-items: start;
+  gap: 8px 12px;
+}
+
+.study-facets__group-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--opportunity-row-meta);
+  padding-top: 7px;
+}
+
+.study-facets__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Facet chips carry no per-type colour (that taxonomy lives on the rows), so the
+   base .filter-chip has no un-modified active state. Give the selected facet a
+   clear, AA-safe filled state via the accent token. */
+.study-facets .filter-chip.is-active {
+  background: var(--accent-fill-text-safe);
+  border-color: var(--accent-fill-text-safe);
+  color: #fff;
+  font-weight: 600;
+}
+
+@media (max-width: 560px) {
+  .study-facets__group {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .study-facets__group-label {
+    padding-top: 0;
+  }
+}
+
+/* Cap-awareness notice: shown only when the loaded set is at the list cap. */
+.study-cap-notice {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  color: var(--opportunity-row-purpose);
+  background: color-mix(in srgb, var(--brand-orange-500) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--brand-orange-500) 22%, var(--opportunity-row-rule));
+}
+
 /* Same place on every row. Reads as a button, is not one - it lives inside the
    row's link, and a real button there would be a second tab stop for the same
    destination. */
