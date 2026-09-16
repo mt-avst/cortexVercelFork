@@ -1296,18 +1296,25 @@ test.describe('Accessibility Tests', () => {
   });
 
   /**
-   * Fix-first row 1. The signed-out landing wordmark used to flip to a flat
-   * white on `.landing-page`/`.cortex-landing` alone, regardless of theme -
-   * so the LIGHT landing (white ground) painted a near-white wordmark on a
-   * near-white ground (~1.1:1). The fix scopes the override to
-   * `body.theme-dark`. This measures the real rendered colors rather than the
-   * token source, in both themes, on the actual signed-out landing.
+   * Fix-first row 1 (migrated). The signed-out landing's brand wordmark is now
+   * the hero `<h1 class="landing-product-name">`, not a header wordmark: the
+   * header states the brand once via its mark and drops the wordmark when signed
+   * out (the hero carries the name), so this asserts no header wordmark is present
+   * and measures the hero instead. The original defect was a near-white wordmark
+   * on the near-white LIGHT ground (~1.1:1); this still measures the REAL rendered
+   * ink against the landing ground in both themes:
+   *   - light: a solid #0f172a fill on the #FFFFFF ground
+   *   - dark:  a white -> #D4D4D4 gradient the text is clipped to, so
+   *            `-webkit-text-fill-color` is transparent and getComputedStyle().color
+   *            does not describe what is on screen - read every gradient stop and
+   *            take the worst contrast.
+   * `.landing-page-wrapper` is the opaque, full-height, z-index:50 ground each
+   * theme paints solid (#030305 dark / #FFFFFF light, per _components.css).
    */
   for (const theme of ['light', 'dark'] as const) {
-    test(`Landing wordmark meets AA contrast in ${theme} mode (row 1)`, async ({ page }) => {
-      // Override the beforeEach's blanket /api/me mock (a logged-in employee)
-      // with a genuine 401 - Home only renders Landing (and its dark-ground
-      // header) when signed out, which is exactly the state row 1 is about.
+    test(`Landing hero wordmark meets AA contrast in ${theme} mode (row 1)`, async ({ page }) => {
+      // A genuine 401 - Home only renders Landing when signed out, the state
+      // row 1 is about.
       await page.route('**/api/me', (route) => route.fulfill({ status: 401, contentType: 'application/json', body: '{}' }));
       await page.goto('/');
       await page.evaluate((t) => localStorage.setItem('theme', t), theme);
@@ -1316,31 +1323,37 @@ test.describe('Accessibility Tests', () => {
       await expect(page.locator(`body.theme-${theme}`)).toHaveCount(1);
       await expect(page.locator('body.landing-page')).toHaveCount(1);
 
-      const wordmark = page.locator('.header .logo-word').first();
+      // Signed out, the header carries only its mark - the wordmark is dropped so
+      // the hero is the single place the brand name is stated.
+      await expect(page.locator('.header .logo-word')).toHaveCount(0);
+
+      const wordmark = page.locator('.landing-product-name').first();
       await expect(wordmark).toBeVisible();
 
-      // .header itself is transparent on the landing page in BOTH themes (a
-      // separate, pre-existing fact discovered while writing this test: the
-      // "header paints an opaque ground" comment above the row-1 CSS fix did
-      // not hold on landing, and has since been corrected). <Header> is a
-      // DOM SIBLING of <main> (App.tsx), not an ancestor of anything the
-      // routed page renders, so no ancestor walk from the wordmark can ever
-      // reach the landing page's own content. What's actually visible behind
-      // the fixed header is .landing-page-wrapper - an opaque, full-height,
-      // z-index:50 sibling of the header that each theme paints solid
-      // (#030305 dark / #FFFFFF light, per _components.css) - so measure that
-      // element directly instead of guessing an ancestor.
-      const fg = await wordmark.evaluate((el) => getComputedStyle(el).color);
+      // The visible ink: a solid fill in light; in dark the gradient the text is
+      // clipped to (the fill is transparent there). Collect every candidate colour.
+      const inks: string[] = await wordmark.evaluate((el) => {
+        const cs = getComputedStyle(el);
+        const fill = cs.getPropertyValue('-webkit-text-fill-color') || cs.color;
+        const clip = cs.getPropertyValue('-webkit-background-clip') || cs.backgroundClip;
+        const isTransparent = fill === 'transparent' || /,\s*0\s*\)$/.test(fill.replace(/\s+/g, ''));
+        if (isTransparent && clip === 'text' && cs.backgroundImage && cs.backgroundImage !== 'none') {
+          const stops = cs.backgroundImage.match(/rgba?\([^)]*\)/g);
+          if (stops && stops.length) return stops;
+        }
+        return [fill];
+      });
       const bg = await page.locator('.landing-page-wrapper').evaluate((el) => getComputedStyle(el).backgroundColor);
       const toRgbTuple = (rgb: string): [number, number, number] => {
         const parts = rgb.match(/[\d.]+/g);
         if (!parts || parts.length < 3) throw new Error(`not a color: ${rgb}`);
         return [Number(parts[0]), Number(parts[1]), Number(parts[2])];
       };
-      const ratio = contrastRatio(toRgbTuple(fg), toRgbTuple(bg));
+      const bgTuple = toRgbTuple(bg);
+      const worst = Math.min(...inks.map((c) => contrastRatio(toRgbTuple(c), bgTuple)));
       expect(
-        ratio,
-        `.logo-word (${fg}) on .landing-page-wrapper (${bg}) measures ${ratio.toFixed(2)} in ${theme} mode, below the 4.5 AA threshold`
+        worst,
+        `.landing-product-name ink [${inks.join(', ')}] on .landing-page-wrapper (${bg}) measures ${worst.toFixed(2)} in ${theme} mode, below the 4.5 AA threshold`
       ).toBeGreaterThanOrEqual(4.5);
     });
   }
