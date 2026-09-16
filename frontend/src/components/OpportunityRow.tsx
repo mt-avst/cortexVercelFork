@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Check, Clock, Users } from 'lucide-react';
+import { ArrowRight, Check, Clock, Tag, Users } from 'lucide-react';
 
 import type { Opportunity, User } from '../api/types';
 import {
@@ -61,6 +61,19 @@ export function OpportunityRow({ opportunity, role }: OpportunityRowProps) {
   // Shared with the detail page: this reasoning used to live only here, and the
   // detail page reached the opposite conclusion and printed "Any".
   const eligibility = getEligibilityNote(opportunity);
+
+  // Roles/skills wanted (display-only): the advertised audience, so the right
+  // people self-select from the list before opening. Summarised to keep the row
+  // compact - the full set is on the detail page. Describes; does not gate.
+  const targetRoles = Array.isArray(opportunity.target_roles)
+    ? opportunity.target_roles
+    : [];
+  const targetRolesSummary =
+    targetRoles.length === 0
+      ? ''
+      : targetRoles.length <= 2
+      ? targetRoles.join(', ')
+      : `${targetRoles.slice(0, 2).join(', ')} +${targetRoles.length - 2}`;
 
   // The viewer's own completion of a native survey/poll/one-question (audit row
   // 10). Only those types ever carry `completion`, so the flag alone is a safe
@@ -129,6 +142,13 @@ export function OpportunityRow({ opportunity, role }: OpportunityRowProps) {
               <li className="opportunity-row__meta-item">
                 <Users size={14} aria-hidden="true" />
                 {eligibility}
+              </li>
+            )}
+
+            {targetRolesSummary && (
+              <li className="opportunity-row__meta-item">
+                <Tag size={14} aria-hidden="true" />
+                {targetRolesSummary}
               </li>
             )}
           </ul>

@@ -167,6 +167,9 @@ const PERMITTED: Record<string, unknown> = {
       },
     ],
   },
+  // Roles/skills wanted (JSONB, display-only). The PATCH loop emits
+  // `target_roles = $n::jsonb`, the same handling as the screener.
+  target_roles: ['Product Manager', 'ScriptRunner admin'],
   status: 'draft',
   start_date: '2030-01-01T10:00:00.000Z',
   end_date: '2030-01-02T10:00:00.000Z',
@@ -356,7 +359,7 @@ describe('PATCH /api/opportunities/:id column allow-list', () => {
     // compared them to the schema, so a mutation that added a sixteenth name to
     // the real allow-list passed all 22 tests. A pin that restates a policy
     // cannot see the policy change.
-    it('permits exactly the nineteen columns, and no more', () => {
+    it('permits exactly the twenty columns, and no more', () => {
       expect([...UPDATABLE_OPPORTUNITY_COLUMNS].sort()).toEqual(Object.keys(PERMITTED).sort());
     });
 
