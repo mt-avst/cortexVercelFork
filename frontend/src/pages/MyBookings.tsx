@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import useDocumentTitle from '../hooks/useDocumentTitle';
 import { useNavigate } from 'react-router-dom';
 // rescheduleBooking is deliberately not imported: the control was removed
 // (it shipped permanently disabled) and the endpoint stays live and guarded
@@ -20,6 +21,7 @@ import { ArrowLeft, RefreshCw, ExternalLink, CalendarX, Monitor } from 'lucide-r
 import { isPublishableExternalLink } from '@shared/firsthand/url-safety';
 
 const MyBookings: React.FC = () => {
+  useDocumentTitle('My bookings · Cortex');
   const navigate = useNavigate();
   const { user } = useAuth();
   const [bookings, setBookings] = useState<{ upcoming: BookingWithDetails[]; past: BookingWithDetails[] }>({ upcoming: [], past: [] });
@@ -278,7 +280,7 @@ const MyBookings: React.FC = () => {
           </Button>
           <div className="my-bookings-header-content">
             <div className="my-bookings-title-row">
-              <h1 className="my-bookings-title cortex-brand-title">Cortex<span className="cortex-admin-separator">|</span><span className="cortex-admin-suffix">Bookings</span></h1>
+              <h1 className="my-bookings-title cortex-page-title">My bookings</h1>
               <Button
                 variant="outline-primary"
                 className="my-bookings-refresh-btn"
@@ -290,7 +292,7 @@ const MyBookings: React.FC = () => {
                 Refresh
               </Button>
             </div>
-            <p className="my-bookings-subtitle">Manage your Cortex study bookings</p>
+            <p className="my-bookings-subtitle">Manage your study bookings</p>
           </div>
         </header>
 

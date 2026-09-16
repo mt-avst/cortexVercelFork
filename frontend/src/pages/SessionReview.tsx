@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams, useLocation, Navigate } from 'react-router-dom';
+import useDocumentTitle from '../hooks/useDocumentTitle';
 import { useAuth } from '../contexts/AuthContext';
 import { getSessionOutputs, getOpportunitySessionEvents } from '../api/client';
 import { FirstHandSessionOutputs } from '../api/types';
@@ -25,6 +26,7 @@ function errorMessageForStatus(status: number | undefined): string {
 }
 
 const SessionReviewPage: React.FC = () => {
+  useDocumentTitle('Session review · Cortex');
   const navigate = useNavigate();
   const location = useLocation();
   const { id, sessionId } = useParams<{ id: string; sessionId: string }>();
@@ -163,9 +165,7 @@ const SessionReviewPage: React.FC = () => {
 
         <div className="cortex-page-header">
           <div className="cortex-title-block">
-            <h1 className="cortex-brand-title">
-              Cortex<span className="cortex-admin-separator">|</span><span className="cortex-admin-suffix">Session Review</span>
-            </h1>
+            <h1 className="cortex-page-title">Session review</h1>
             <p>
               Participant: <span className="cortex-highlight-orange">{outputs.session.participant.display_name}</span>
             </p>

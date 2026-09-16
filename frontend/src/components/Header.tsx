@@ -283,7 +283,14 @@ const Header: React.FC = memo(() => {
         <div className="header-content">
           <GuardedLink to={logoLink} className="logo" aria-label="Cortex home">
             <CortexMark className="logo-mark" />
-            <span className="logo-word">Cortex</span>
+            {/* The wordmark is the brand's home, shown once. On the signed-out
+                landing the hero already carries "Cortex", so a header wordmark
+                there would state the brand twice - drop it once signed-out is
+                confirmed (!user && initialAuthCheck), keeping only the mark.
+                Through the pre-resolution cold-load window it stays, matching
+                the signed-in majority, so there is no first-paint flicker -
+                the same CB-26 reasoning as the theme toggle below. */}
+            {(user || !initialAuthCheck) && <span className="logo-word">Cortex</span>}
           </GuardedLink>
 
           <nav className="nav" aria-label="Main navigation">

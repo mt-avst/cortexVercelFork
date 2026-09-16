@@ -49,15 +49,41 @@ describe('Header Component', () => {
     expect(container.firstChild).toBeInTheDocument();
   });
 
-  it('should render the Cortex mark + wordmark lockup', () => {
+  it('renders the mark + home link but drops the wordmark once signed-out is confirmed', () => {
+    // Resolved signed-out is the default (user null, initialAuthCheck true). The
+    // signed-out landing hero already carries "Cortex", so the header states the
+    // brand once here: the mark inside the home link, no wordmark text.
+    const { getByRole, queryByText } = render(
+      <BrowserRouter>
+        <Header />
+      </BrowserRouter>
+    );
+    expect(getByRole('link', { name: 'Cortex home' })).toBeInTheDocument();
+    expect(queryByText('Cortex')).not.toBeInTheDocument();
+  });
+
+  it('shows the Cortex wordmark when signed in', () => {
+    // Signed in, the header is the brand's home, so the mark + Fraunces "Cortex"
+    // wordmark lockup renders inside the home link.
+    auth.user = { name: 'A Person', role: 'employee' };
     const { getByRole, getByText } = render(
       <BrowserRouter>
         <Header />
       </BrowserRouter>
     );
-    // The lockup is the mark (decorative SVG) plus the Fraunces "Cortex"
-    // wordmark, inside the home link - replacing the old adaptalogo PNG.
     expect(getByRole('link', { name: 'Cortex home' })).toBeInTheDocument();
+    expect(getByText('Cortex')).toBeInTheDocument();
+  });
+
+  it('keeps the wordmark through the pre-resolution cold-load window', () => {
+    // Before auth resolves (user null, initialAuthCheck false) the wordmark stays,
+    // matching the signed-in majority, so there is no first-paint flicker (CB-26).
+    auth.initialAuthCheck = false;
+    const { getByText } = render(
+      <BrowserRouter>
+        <Header />
+      </BrowserRouter>
+    );
     expect(getByText('Cortex')).toBeInTheDocument();
   });
 
