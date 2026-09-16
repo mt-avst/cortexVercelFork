@@ -1,6 +1,7 @@
 import React from 'react';
 import { OpportunityFormData } from '../../api/types';
 import FieldError from './FieldError';
+import TargetRolesInput from './TargetRolesInput';
 
 /** Form field value type for opportunity form handlers */
 type FormFieldValue = string | number | boolean | undefined;
@@ -10,13 +11,16 @@ interface ContentDetailsTabProps {
   validationErrors: Record<string, string>;
   handleInputChange: (field: string, value: FormFieldValue) => void;
   handleBlur?: (field: string) => void;
+  /** Roles/skills wanted is an array, so it takes its own setter (not the scalar handler). */
+  onTargetRolesChange: (roles: string[]) => void;
 }
 
 const ContentDetailsTab: React.FC<ContentDetailsTabProps> = ({
   formData,
   validationErrors,
   handleInputChange,
-  handleBlur
+  handleBlur,
+  onTargetRolesChange
 }) => {
   return (
     <div className="tab-pane active">
@@ -141,6 +145,15 @@ const ContentDetailsTab: React.FC<ContentDetailsTabProps> = ({
                 )}
               </div>
             )}
+          </div>
+        </div>
+
+        <div className="row">
+          <div className="col-12">
+            <TargetRolesInput
+              value={formData.target_roles ?? []}
+              onChange={onTargetRolesChange}
+            />
           </div>
         </div>
       </div>

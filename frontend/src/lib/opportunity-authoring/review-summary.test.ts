@@ -36,6 +36,7 @@ const completeInput = (
   defaultDurationMinutes: 30,
   participantType: 'any',
   participantTypeDetails: '',
+  targetRoles: [],
   startDate: '',
   endDate: '',
   externalLink: '',
@@ -357,6 +358,26 @@ describe('buildReviewSummary', () => {
         'Must own a Jira licence'
       );
       expect(findItem(withoutDetails, 'Specific Criteria')).toBeUndefined();
+    });
+
+    it('includes the roles/skills wanted only when some are set, joined', () => {
+      const withRoles = findSection(
+        buildReviewSummary(
+          completeInput({
+            steps: contentSteps,
+            targetRoles: ['Product Manager', 'ScriptRunner admin']
+          })
+        ),
+        'content'
+      );
+      const withoutRoles = findSection(
+        buildReviewSummary(completeInput({ steps: contentSteps, targetRoles: [] })),
+        'content'
+      );
+      expect(findItem(withRoles, 'Roles or skills wanted')?.value).toBe(
+        'Product Manager, ScriptRunner admin'
+      );
+      expect(findItem(withoutRoles, 'Roles or skills wanted')).toBeUndefined();
     });
   });
 

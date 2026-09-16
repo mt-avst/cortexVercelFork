@@ -10,6 +10,7 @@ import {
   isSafeMeetingLocation
 } from '../../../shared/firsthand/url-safety';
 import { screenerSchema } from '../../../shared/screener';
+import { targetRolesSchema } from '../../../shared/target-roles';
 import type { Opportunity, Screener } from '../../../shared/types';
 
 // Base schemas
@@ -56,6 +57,16 @@ export const DELIVERY_MODE_MATCHES_SHARED_CONTRACT: MutuallyAssignable<
 export const SCREENER_MATCHES_SHARED_CONTRACT: MutuallyAssignable<
   z.infer<typeof screenerSchema>,
   Screener
+> = true;
+
+/**
+ * Same guard for the display-only roles/skills field. The zod shape
+ * (targetRolesSchema, in shared/target-roles) and the shared field type are
+ * declared separately; this fails the build if they ever disagree.
+ */
+export const TARGET_ROLES_MATCHES_SHARED_CONTRACT: MutuallyAssignable<
+  z.infer<typeof targetRolesSchema>,
+  NonNullable<Opportunity['target_roles']>
 > = true;
 
 // Trimmed BEFORE the length checks, not after.
@@ -156,6 +167,10 @@ export const CreateOpportunitySchema = z.object({
   consent_template_version: z.number().int().min(1).optional().nullable(),
   participant_type_required: ParticipantTypeSchema.optional(),
   participant_type_specific_details: z.string().optional(),
+  // Structured, display-only advertised audience ("roles/skills wanted").
+  // Trimmed, capped and deduped by targetRolesSchema. Public - no redaction.
+  // Stored as JSONB on the opportunity.
+  target_roles: targetRolesSchema.optional(),
   // Eligibility screener. Absent means no screener; when present it must pass
   // screenerSchema (at least one question, a way to pass each, a screen-out
   // somewhere). The handler stores it as JSONB on the opportunity.
@@ -219,6 +234,9 @@ export const UpdateOpportunitySchema = z.object({
   consent_template_version: z.number().int().min(1).optional().nullable(),
   participant_type_required: ParticipantTypeSchema.optional(),
   participant_type_specific_details: z.string().optional(),
+  // Structured, display-only advertised audience ("roles/skills wanted"). Null
+  // clears it; an array replaces it wholesale after passing targetRolesSchema.
+  target_roles: targetRolesSchema.optional().nullable(),
   // Eligibility screener. Null clears it (removes the screener); an object
   // replaces it wholesale after passing screenerSchema.
   screener: screenerSchema.optional().nullable(),

@@ -183,6 +183,10 @@ export const UPDATABLE_OPPORTUNITY_COLUMNS: ReadonlySet<string> = new Set([
   // Eligibility screener (JSONB). The PATCH field loop stringifies it for the
   // jsonb column (see the screener branch in the loop); null clears it.
   'screener',
+  // Roles/skills wanted (JSONB): the structured, display-only advertised
+  // audience. Same JSONB handling as the screener in the PATCH loop; null or an
+  // empty list clears it. Public - no redaction, unlike the screener.
+  'target_roles',
   // Moderated consent (#79): live sessions and interviews only. Allow-listed
   // here - which both enforcement sites read - and additionally type-gated by
   // resolveModeratedConsentWrite, because membership in this Set says a column
@@ -1788,6 +1792,10 @@ router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOp
       external_link_optional: data.external_link_optional?.trim() || null,
       participant_type_required: data.participant_type_required || 'any',
       participant_type_specific_details: data.participant_type_specific_details?.trim() || null,
+      // Roles/skills wanted: validated and deduped upstream; an empty list is
+      // stored as null, matching the database path.
+      target_roles:
+        data.target_roles && data.target_roles.length > 0 ? data.target_roles : null,
       start_date: data.start_date || null,
       end_date: data.end_date || null,
       created_at: new Date(),
@@ -1932,8 +1940,9 @@ router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOp
       product_optional, meeting_location_optional, default_duration_minutes, status,
       owner_user_id, external_link_optional, firsthand_study_id, participant_type_required,
       participant_type_specific_details, start_date, end_date, delivery_mode,
-      consent_text, consent_template_id, consent_template_version, screener
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20::jsonb)
+      consent_text, consent_template_id, consent_template_version, screener,
+      target_roles
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20::jsonb, $21::jsonb)
     RETURNING *
   `;
 
@@ -2076,7 +2085,13 @@ router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOp
     consentColumns?.consent_template_version ?? null,
     // Eligibility screener (JSONB, $20::jsonb). Validated by screenerSchema;
     // serialise to a JSON string for the jsonb param, or null for no screener.
-    data.screener ? JSON.stringify(data.screener) : null
+    data.screener ? JSON.stringify(data.screener) : null,
+    // Roles/skills wanted (JSONB, $21::jsonb). Validated and deduped by
+    // targetRolesSchema; serialise the array for the jsonb param. An empty or
+    // absent list stores null - the study advertises no specific audience.
+    data.target_roles && data.target_roles.length > 0
+      ? JSON.stringify(data.target_roles)
+      : null
   ];
 
   let result;
@@ -2919,11 +2934,19 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
         // it is not run through the string-trim branch below.
         updateFields.push(`${key} = $${paramCount}::jsonb`);
         values.push(value === null ? null : JSON.stringify(value));
+      } else if (key === 'target_roles') {
+        // JSONB column, same as the screener. Validated and deduped by
+        // targetRolesSchema; an empty list (or null) clears it, so the read-back
+        // matches create (null for no advertised audience).
+        updateFields.push(`${key} = $${paramCount}::jsonb`);
+        const roles = value as string[] | null;
+        values.push(roles && roles.length > 0 ? JSON.stringify(roles) : null);
       } else {
         updateFields.push(`${key} = $${paramCount}`);
-        // `screener` (the only non-primitive column) is handled in the branch
-        // above, so every value reaching here is a primitive; the cast records
-        // that the key guard narrows what TypeScript on its own cannot.
+        // `screener` and `target_roles` (the non-primitive JSONB columns) are
+        // handled in the branches above, so every value reaching here is a
+        // primitive; the cast records that the key guard narrows what TypeScript
+        // on its own cannot.
         values.push(typeof value === 'string' ? value.trim() : (value as string | number | Date | null));
       }
     }

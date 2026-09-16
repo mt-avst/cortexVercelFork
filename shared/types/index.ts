@@ -174,6 +174,13 @@ export interface Opportunity {
   meeting_location_optional?: string;
   participant_type_required?: 'any' | 'internal' | 'external' | 'specific';
   participant_type_specific_details?: string;
+  /**
+   * The structured, DISPLAY-ONLY audience this study advertises so the right
+   * people self-select ("Product Manager", "ScriptRunner admin"). PUBLIC - no
+   * owner-only part and no redaction seam. It DESCRIBES the audience; the
+   * screener is what gates. Validated by targetRolesSchema (shared/target-roles.ts).
+   */
+  target_roles?: string[];
   start_date?: string; // Study start date for external link types
   end_date?: string; // Study end date for countdown display
   // Moderated consent (#79). On every response (SELECT * / RETURNING *), and
@@ -254,6 +261,8 @@ export interface CreateOpportunityRequest {
   meeting_location_optional?: string;
   participant_type_required?: 'any' | 'internal' | 'external' | 'specific';
   participant_type_specific_details?: string;
+  // Structured, display-only advertised audience (see Opportunity.target_roles).
+  target_roles?: string[];
   status?: 'draft' | 'published';
   start_date?: string;
   end_date?: string;
@@ -283,6 +292,9 @@ export interface UpdateOpportunityRequest {
   meeting_location_optional?: string;
   participant_type_required?: 'any' | 'internal' | 'external' | 'specific';
   participant_type_specific_details?: string;
+  // Structured, display-only advertised audience (see Opportunity.target_roles).
+  // null clears it on update, an array replaces it wholesale.
+  target_roles?: string[] | null;
   start_date?: string;
   end_date?: string;
   // Moderated consent (#79). Null clears the wording, and the handler nulls
@@ -543,6 +555,8 @@ export interface OpportunityFormData {
   meeting_location_optional?: string;
   participant_type_required?: 'any' | 'internal' | 'external' | 'specific';
   participant_type_specific_details?: string;
+  // Structured, display-only advertised audience (see Opportunity.target_roles).
+  target_roles?: string[];
 
   // External Link Tab
   external_link_optional?: string;

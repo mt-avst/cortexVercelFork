@@ -89,6 +89,16 @@ export const VALIDATION = {
   SCREENER_MAX_PROMPT_CHARS: 300,
   SCREENER_MAX_OPTION_LABEL_CHARS: 120,
   SCREENER_MAX_MESSAGE_CHARS: 1000,
+  /**
+   * "Roles/skills wanted" ceilings - the structured, display-only audience an
+   * author advertises on an opportunity ("Product Manager", "ScriptRunner admin
+   * experience"). Policy numbers, kept small so the field stays a light set of
+   * chips - pinned as literals in
+   * backend/src/validation/__tests__/target-roles-schema.test.ts, refuse over
+   * them, never truncate.
+   */
+  TARGET_ROLES_MAX_COUNT: 10,
+  TARGET_ROLE_MAX_CHARS: 60,
   /** Email validation regex */
   EMAIL_REGEX: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
   /** URL validation regex */
