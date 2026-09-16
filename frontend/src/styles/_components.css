@@ -13218,13 +13218,12 @@ body.theme-dark {
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--accent-text-on-light);
-  background: color-mix(in srgb, var(--brand-orange-500) 12%, transparent);
-}
-
-body.theme-dark .opportunity-row__match {
-  color: #f0a988;
-  background: color-mix(in srgb, #dd6e42 18%, transparent);
+  /* --opportunity-row-urgent is the row's per-theme brand accent, already AA-safe
+     in each theme (light: darkened token; dark: the brand value). Reused here so
+     the pill needs no hard-coded per-theme hex, which the accent-fill policy
+     forbids. */
+  color: var(--opportunity-row-urgent);
+  background: color-mix(in srgb, var(--brand-orange-500) 14%, transparent);
 }
 
 .opportunity-row__match svg {
@@ -13283,13 +13282,11 @@ body.theme-dark .opportunity-row__match {
 }
 
 .role-profile-panel__prompt-icon {
-  color: var(--accent-text-on-light);
+  /* Per-theme brand accent via the row's AA-safe token, so no hard-coded
+     per-theme hex (accent-fill policy). */
+  color: var(--opportunity-row-urgent);
   flex-shrink: 0;
   margin-top: 2px;
-}
-
-body.theme-dark .role-profile-panel__prompt-icon {
-  color: #f0a988;
 }
 
 .role-profile-panel__prompt-title {
