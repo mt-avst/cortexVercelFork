@@ -306,6 +306,64 @@ export const sortByClosingSoonest = <T extends Opportunity>(opportunities: T[]):
 };
 
 /**
+ * ROLE/SKILLS MATCHING - browse discovery, advisory only.
+ *
+ * A study "matches" a viewer when the study's advertised audience
+ * (`target_roles`) and the viewer's active role set share at least one entry,
+ * compared case-insensitively and after trimming, so "Jira admin" matches
+ * "jira admin". This DESCRIBES fit; it never gates - matching changes highlight
+ * and sort order only, never visibility, and it is independent of the screener
+ * and participant_type gates (a matched study can still screen you out).
+ *
+ * Both sides use the one shared vocabulary (shared/target-roles.ts), which is
+ * what keeps this a plain intersection rather than a fuzzy compare.
+ */
+export const rolesIntersect = (
+  a: readonly string[] | null | undefined,
+  b: readonly string[] | null | undefined
+): boolean => {
+  if (!a || !b || a.length === 0 || b.length === 0) {
+    return false;
+  }
+  const lowerA = new Set(a.map((role) => role.trim().toLowerCase()));
+  return b.some((role) => lowerA.has(role.trim().toLowerCase()));
+};
+
+/**
+ * The role set that drives match highlighting, with the precedence pinned in one
+ * place so the transient override can never accidentally persist:
+ *
+ *   1. the transient "browse as..." override (client state, resets on reload), else
+ *   2. the saved profile (`user.profile_roles`), else
+ *   3. none - no matching, the browse list still works fully.
+ *
+ * Kept pure and separate from any PATCH so a test can prove browse-as only feeds
+ * matching and never writes.
+ */
+export const resolveActiveMatchRoles = (
+  browseAs: readonly string[] | null | undefined,
+  profileRoles: readonly string[] | null | undefined
+): string[] => {
+  if (browseAs && browseAs.length > 0) {
+    return [...browseAs];
+  }
+  if (profileRoles && profileRoles.length > 0) {
+    return [...profileRoles];
+  }
+  return [];
+};
+
+/**
+ * Does this study's advertised audience intersect the active role set? A thin
+ * wrapper over `rolesIntersect` so the row, the sort and the "For you" partition
+ * all ask the question the same way.
+ */
+export const opportunityMatchesRoles = (
+  opportunity: Pick<Opportunity, 'target_roles'>,
+  activeRoles: readonly string[]
+): boolean => rolesIntersect(opportunity.target_roles, activeRoles);
+
+/**
  * The countdown for a known closing time.
  *
  * Exists so the row can derive its countdown from the SAME value the sort uses.

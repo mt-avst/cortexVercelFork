@@ -80,6 +80,17 @@ export async function runMigrations() {
       )
     `);
 
+    // The participant's OWN roles/skills profile (browse discovery, display-only).
+    // A structured JSONB array using the SAME vocabulary as an opportunity's
+    // target_roles, so matching a study to a viewer is a case-insensitive
+    // intersection. Self-only data: it rides on the user row, is read/written
+    // solely through the caller's /api/me, and never appears on another user's
+    // payload, an admin roster or an opportunity. Absent/null means no profile.
+    // Idempotent add so existing databases gain the column.
+    await client.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_roles JSONB
+    `);
+
     // Create notification_preferences table
     await client.query(`
       CREATE TABLE IF NOT EXISTS notification_preferences (

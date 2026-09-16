@@ -99,3 +99,6 @@ demo/*.d.ts.map
 
 # GitLab CI npm download cache (see .test-base in .gitlab-ci.yml)
 .npm/
+
+# Per-developer Claude Code local dev-server launch config (untracked)
+.claude/launch.json

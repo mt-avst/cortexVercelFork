@@ -529,6 +529,8 @@ const ROUTES_DIR = path.join(__dirname, '..');
 const EXPECTED_AUTHORISATION: Record<string, Verdict> = {
   // api.ts - the root of everything under /api
   'GET /api/me': 'session',
+  // Self-only: writes the caller's own profile_roles, keyed on the session user id.
+  'PATCH /api/me/profile': 'session',
   'GET /api/me/session-events': 'session',
 
   // opportunities.ts
@@ -688,7 +690,7 @@ const EXPECTED_AUTHORISATION: Record<string, Verdict> = {
  * guards cannot notice the table changing - which is the whole point of a
  * count here.
  */
-const EXPECTED_ROUTE_COUNT = 97;
+const EXPECTED_ROUTE_COUNT = 98;
 
 /** Every router file in `src/routes`, read off disk rather than listed. */
 const ROUTER_FILES = fs

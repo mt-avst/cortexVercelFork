@@ -171,6 +171,19 @@ export const getMe = async (): Promise<User> => {
   return response.data;
 };
 
+/**
+ * Update the signed-in user's OWN roles/skills profile (browse discovery).
+ * `null` or an empty list clears it. Self-only on the server (keyed on the
+ * session user id); the caller cannot address another user's profile. Returns
+ * the read-back profile (null -> []).
+ */
+export const updateMyProfile = async (
+  profileRoles: string[] | null
+): Promise<{ profile_roles: string[] }> => {
+  const response = await api.patch('/me/profile', { profile_roles: profileRoles });
+  return response.data;
+};
+
 export const logout = async (): Promise<void> => {
   // Use auth endpoint for logout (separate axios call, so attach the CSRF
   // token explicitly rather than relying on the api instance interceptor)
