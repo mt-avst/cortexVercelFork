@@ -13,9 +13,16 @@ import {
 } from '../lib/opportunity-authoring/answer-counts';
 import { getPrimaryTargetUrl } from '../lib/recording/task-target';
 import {
+  withClientIds,
   withoutClientIds,
   type WithClientId
 } from '../lib/opportunity-authoring/client-ids';
+import {
+  collectScreenerErrors,
+  emptyScreenerQuestions,
+  SCREENER_MESSAGE_KEY,
+  SCREENER_QUESTIONS_KEY
+} from '../lib/opportunity-authoring/screener';
 import { remapAuthoringErrors } from '../lib/opportunity-authoring/authoring-errors';
 import {
   buildErrorSummary,
@@ -92,7 +99,7 @@ import {
 import type { FirstHandStudyWithSteps } from '../api/firsthand-studies';
 import { logger } from '../utils/logger';
 import AdminSessionManager from '../components/AdminSessionManager';
-import { BasicInfoTab, ConsentStep, ContentDetailsTab, ErrorSummary, ExternalLinkTab, FirstHandStudyTab, ReviewStep, StepActions, StepNav, SurveyQuestionsTab } from '../components/OpportunityForm';
+import { BasicInfoTab, ConsentStep, ContentDetailsTab, ErrorSummary, ExternalLinkTab, FirstHandStudyTab, ReviewStep, ScreenerStep, StepActions, StepNav, SurveyQuestionsTab } from '../components/OpportunityForm';
 import ConfirmationModal from '../components/ConfirmationModal';
 import { RATING_SCALE_BOUNDS } from '@shared/firsthand/contract';
 import {
@@ -125,7 +132,7 @@ import {
 import { isSafeTargetUrl } from '@shared/firsthand/url-safety';
 import { normaliseTargetUrl } from '../utils/targetUrl';
 
-import { CreateOpportunityRequest, UpdateOpportunityRequest, Opportunity, Session } from '../api/types';
+import { CreateOpportunityRequest, UpdateOpportunityRequest, Opportunity, Session, Screener, ScreenerQuestion } from '../api/types';
 import { TrendingUp, UserCircle, AlertTriangle, CheckCircle, LogOut } from 'lucide-react';
 
 /**
@@ -250,24 +257,34 @@ export const FIELD_LOCATIONS: Record<string, { tab: number; control?: string }> 
   // "add at least one task" is about the list, and the list may be empty, so
   // there is no input to land on.
   inline_study_steps: { tab: 3, control: 'inline_study_steps' },
-  // Step 4 on the two authoring paths, and there is no other kind of
-  // opportunity that can produce this error: only an unmoderated study carries
-  // a task list, and only an unmoderated study has a Consent step. Same for its
-  // survey twin below. A type with no study never sets either key -
-  // clearTypeConditionalErrors deletes them on a type change - so a fixed 4 is
-  // unambiguous here in a way it would not be for a field two shapes share.
+  // The screener step (MR2) took id 4, so Consent moved to step 5 on every
+  // authoring path, and there is no other kind of opportunity that can produce
+  // this error: only an unmoderated study carries a task list, and only an
+  // unmoderated study has a Consent step. Same for its survey twin below. A type
+  // with no study never sets either key - clearTypeConditionalErrors deletes
+  // them on a type change - so a fixed 5 is unambiguous here in a way it would
+  // not be for a field two shapes share.
   //
   // The HEADING again, and for a sharper reason: consent is locked to the
   // approved wording by default, and while it is locked the textarea carrying
   // the field id is not rendered at all. C3 found this by driving the form.
-  inline_study_consent_text: { tab: 4, control: 'inline_study_consent_text-heading' },
+  inline_study_consent_text: { tab: 5, control: 'inline_study_consent_text-heading' },
   inline_survey_questions: { tab: 3, control: 'inline_survey_questions' },
   inline_survey_duration_minutes: {
     tab: 3,
     control: 'inline_survey_duration_minutes'
   },
-  inline_survey_consent_text: { tab: 4, control: 'inline_survey_consent_text-heading' },
-  moderated_consent_text: { tab: 4, control: 'moderated_consent_text-heading' },
+  inline_survey_consent_text: { tab: 5, control: 'inline_survey_consent_text-heading' },
+  moderated_consent_text: { tab: 5, control: 'moderated_consent_text-heading' },
+  // The screener (MR2) is step 4 on every shape that has a Consent step. The
+  // top-level key carries the "needs a question" / "needs a screen-out answer"
+  // refusals and lands on the step heading (an id + tabIndex={-1}, like the
+  // consent and sessions headings). Per-question keys
+  // (`screener_questions.<i>.*`) are routed to tab 4 by `locateField` below and
+  // open the step without a per-control caret, the same smaller promise the
+  // task and survey lists keep.
+  screener_questions: { tab: 4, control: 'screener_questions-heading' },
+  screener_message: { tab: 4, control: 'screener_message' },
   // Audit row 15: the Session Management step (tab 3 for test/interview). Like
   // `inline_study_steps`, the slots are a list with no single input to land on,
   // so the summary link lands on the step HEADING (id + tabIndex={-1}).
@@ -370,6 +387,14 @@ export const locateField = (key: string): { tab: number; control?: string } => {
   if (/^inline_survey_questions\.\d+\./.test(key)) {
     return { tab: 3 };
   }
+
+  // Per-question and per-answer screener errors (MR2) all live on the Screener
+  // step. Routed here rather than by a FIELD_LOCATIONS entry per index, the same
+  // way the two lists above are, and to tab 4 - where getTabsForType puts the
+  // Screener step on every shape that has one.
+  if (/^screener_questions\.\d+\./.test(key)) {
+    return { tab: 4 };
+  }
   // `Object.hasOwn` would read better but needs the es2022 lib, and widening
   // the compiler target for one call is not a trade worth making.
   return Object.prototype.hasOwnProperty.call(FIELD_LOCATIONS, key)
@@ -417,6 +442,7 @@ export type StepKey =
   | 'questions'
   | 'externalLink'
   | 'taskList'
+  | 'screener'
   | 'consent'
   | 'sessions'
   | 'review';
@@ -436,8 +462,13 @@ export interface FormStep {
  * refusal-routing guard needed it; it does not, and nothing imported this at
  * all until the tests did - a justification for an export that no reader had
  * is the kind of nearly-right premise this plan keeps paying for.
+ *
+ * 6 since MR2 inserted the Screener step before Consent. Every type that shows
+ * a strip is now six steps long (basics, content, one type-specific step,
+ * Screener, Consent, Review), and the no-type shape is still three (basics,
+ * content, Review) - a fixed id past both keeps Review off any lower step's id.
  */
-export const REVIEW_STEP_ID = 5;
+export const REVIEW_STEP_ID = 6;
 
 /**
  * Where to send an author standing on a step the current shape does not have.
@@ -539,9 +570,21 @@ export const getTabsForType = (
   const moderatedStep = tabs.find((tab) => tab.key === 'sessions');
   const externalHandoffStep = tabs.find((tab) => tab.key === 'externalLink');
 
+  // The Screener and Consent steps travel together, on exactly the shapes that
+  // reach a participant (MR2). Screener is FIRST - eligibility is decided before
+  // the participant is asked to agree to anything - and both are pushed under
+  // the one condition so a shape can never have consent without a screener step
+  // to author the gate the participant will meet. The screener itself is
+  // optional; the STEP is always present so the invariant below holds.
   if (authoringStep || moderatedStep || externalHandoffStep) {
     tabs.push({
       id: 4,
+      key: 'screener',
+      title: 'Screener',
+      description: 'Who can take part'
+    });
+    tabs.push({
+      id: 5,
       key: 'consent',
       title: 'Consent',
       description: externalHandoffStep
@@ -551,22 +594,22 @@ export const getTabsForType = (
   }
 
   /*
-   * Review is last on every shape. Since WZ-18 every type that shows a strip is
-   * five steps long (basics, content, one type-specific step, Consent, Review),
-   * so id === index + 1 there - but the no-type shape is still just two steps
-   * before it (basics, content, Review), and that is the shape the fixed id
-   * protects.
+   * Review is last on every shape. Since MR2 inserted the Screener step, every
+   * type that shows a strip is six steps long (basics, content, one
+   * type-specific step, Screener, Consent, Review), so id === index + 1 there -
+   * but the no-type shape is still just two steps before it (basics, content,
+   * Review), and that is the shape the fixed id protects.
    *
-   * Its id is a FIXED 5 rather than "one past the end", deliberately, and the
+   * Its id is a FIXED 6 rather than "one past the end", deliberately, and the
    * gaps that leaves are the point. One past the end would give Review id 3 on
    * a form with no type chosen - and id 3 is already Task List, Questions,
    * External Link or Session Management depending on the type. Making it also
    * mean Review is the same collision that had the strip reporting "External
    * Link: Completed" for a step nobody had opened.
    *
-   * A fixed 5 also leaves `FIELD_LOCATIONS`' hardcoded `tab: 4` for consent
-   * exactly where it was, which is the other thing a renumber would have
-   * broken.
+   * The Screener step takes the old consent id 4, Consent moves to 5, and this
+   * fixed 6 sits past both - so `FIELD_LOCATIONS` routes screener errors to
+   * tab 4 and consent errors to tab 5, matching where each control now lives.
    */
   tabs.push({
     id: REVIEW_STEP_ID,
@@ -723,7 +766,15 @@ const OpportunityForm: React.FC = () => {
     // two are what the note on screen says, and are display-only.
     copied_from_study_id: '' as string,
     copied_from_title: '' as string,
-    copied_from_at: '' as string
+    copied_from_at: '' as string,
+    // The eligibility screener (MR2). Off by default - most studies want
+    // everyone signed in. `has_screener` is the opt-in; `screener_questions`
+    // carry a client key that never leaves the browser. Hydration below fills
+    // these from a loaded opportunity's `screener` (the ADMIN response, which
+    // still carries the owner-only `disqualifies` flags).
+    has_screener: false,
+    screener_questions: [] as WithClientId<ScreenerQuestion>[],
+    screener_message: '' as string
   });
 
   // Whether the opportunity already pointed at a study when it loaded.
@@ -1572,6 +1623,22 @@ const OpportunityForm: React.FC = () => {
         setActiveTab((shape.find((step) => step.key === 'sessions') ?? shape[0]).id);
       }
 
+      // The screener as the ROW holds it (MR2). The ADMIN response carries the
+      // full `Screener` with the owner-only `disqualifies` flags - that is the
+      // shape the owner edits - so the cast is safe here in a way it would not
+      // be on the participant page, which receives the redacted view. `null`
+      // hydrates as "no screener": has_screener false, no questions. The client
+      // key is minted fresh per question by withClientIds; the stored `id`
+      // stays as the row holds it, so a save round-trips the same ids.
+      const storedScreener = (opportunity.screener as Screener | null) ?? null;
+      const screenerFields = {
+        has_screener: Boolean(storedScreener),
+        screener_questions: storedScreener
+          ? withClientIds(storedScreener.questions)
+          : ([] as WithClientId<ScreenerQuestion>[]),
+        screener_message: storedScreener?.screenedOutMessage ?? ''
+      };
+
       setFormData({
         type: opportunity.type,
         title: opportunity.title,
@@ -1599,6 +1666,8 @@ const OpportunityForm: React.FC = () => {
           opportunity.consent_template_version ?? null,
         // Read from the linked study rather than defaulted. See authoredFields.
         ...authoredFields,
+        // The screener as the row holds it - see screenerFields above.
+        ...screenerFields,
         // Read from the row rather than defaulted, so editing a native survey
         // does not silently switch it back to an external handoff on save.
         delivery_mode: opportunity.delivery_mode ?? 'external'
@@ -1642,6 +1711,10 @@ const OpportunityForm: React.FC = () => {
         // like none. Deep-copied, so editing a step in formData cannot mutate
         // the baseline it is compared against.
         ...structuredClone(authoredFields),
+        // Screener baseline, deep-copied for the same reason - so a screener
+        // edit registers as an unsaved change and a revert to the stored value
+        // clears it.
+        ...structuredClone(screenerFields),
         // Read from the row rather than defaulted, so editing a native survey
         // does not silently switch it back to an external handoff on save.
         delivery_mode: opportunity.delivery_mode ?? 'external'
@@ -2259,6 +2332,26 @@ const OpportunityForm: React.FC = () => {
       }
     }
 
+    // The screener (MR2). Validated only on a shape that HAS the Screener step -
+    // the field-travels-with-its-control rule - and only when a screener is
+    // turned on; `collectScreenerErrors` returns nothing otherwise, so a
+    // half-built screener left behind by "Remove screener" never blocks a save.
+    // It reuses the shared message constants, so the form refuses exactly what
+    // the API's `screenerSchema` refuses, in the same words.
+    const shapeHasScreener = getTabsForType(formData.type, deliveryMode).some(
+      (step) => step.key === 'screener'
+    );
+    if (shapeHasScreener) {
+      Object.assign(
+        errors,
+        collectScreenerErrors({
+          hasScreener: formData.has_screener,
+          questions: formData.screener_questions,
+          message: formData.screener_message
+        })
+      );
+    }
+
     return errors;
     // Memoised so that everything derived from it - `liveErrorSteps`, and
     // `statusOfStep` through it - is stable across renders that did not change
@@ -2513,6 +2606,11 @@ const OpportunityForm: React.FC = () => {
     deliveryMode,
     questionCount: formData.inline_survey_questions.length,
     taskCount: formData.inline_study_steps.length,
+    // 0 when the screener is off - the review renders that as "No screener"
+    // rather than an unfinished gap, because a screener is optional.
+    screenerQuestionCount: formData.has_screener
+      ? formData.screener_questions.length
+      : 0,
     // What the PARTICIPANT will be told, which is the author's own number when
     // they have set one and the estimate only while it is still automatic.
     estimatedMinutes:
@@ -2819,6 +2917,14 @@ const OpportunityForm: React.FC = () => {
       (formData.end_date || '') !== (originalFormData.end_date || '') ||
       formData.study_source !== originalFormData.study_source ||
       formData.copied_from_study_id !== originalFormData.copied_from_study_id ||
+      // The screener (MR2). Turning it on or off, editing the not-a-match
+      // message, or changing any question/answer must all offer a save from the
+      // first two tabs, the same as the study fields above. Questions compared
+      // without their client ids, for the reason the two arrays above are.
+      formData.has_screener !== originalFormData.has_screener ||
+      formData.screener_message.trim() !== originalFormData.screener_message.trim() ||
+      JSON.stringify(withoutClientIds(formData.screener_questions)) !==
+        JSON.stringify(withoutClientIds(originalFormData.screener_questions)) ||
       sessions.some(session => session.id.startsWith('temp-session-'))
     );
   };
@@ -4508,6 +4614,60 @@ const OpportunityForm: React.FC = () => {
     );
   };
 
+  const handleScreenerQuestionsChange = (
+    questions: WithClientId<ScreenerQuestion>[]
+  ) => {
+    const previous = formData.screener_questions;
+    setFormData(prev => ({ ...prev, screener_questions: questions }));
+    // Same reasoning as handleStepsChange: errors follow their question by
+    // client id, and the list-level `screener_questions` key is dropped because
+    // a structural change may have just resolved "add a question" or "add a
+    // screen-out answer".
+    setValidationErrors(prev =>
+      remapAuthoringErrors(prev, 'screener_questions', previous, questions)
+    );
+  };
+
+  /**
+   * Turn a screener on, seeded with one empty question.
+   *
+   * A screener that exists must always be able to gate, so it starts as a valid
+   * SHAPE (one qualify, one screen-out) waiting for wording rather than as an
+   * empty object - see emptyScreenerQuestions.
+   */
+  const handleScreenerEnable = () => {
+    setFormData(prev => ({
+      ...prev,
+      has_screener: true,
+      screener_questions:
+        prev.screener_questions.length > 0
+          ? prev.screener_questions
+          : emptyScreenerQuestions()
+    }));
+  };
+
+  /**
+   * Remove the screener. The questions are kept in state (not wiped) so an
+   * accidental removal can be undone by turning it back on, but has_screener
+   * false means the save sends `screener: null` and the validator ignores them.
+   * Any screener errors are cleared, since there is now nothing to refuse.
+   */
+  const handleScreenerRemove = () => {
+    setFormData(prev => ({ ...prev, has_screener: false }));
+    setValidationErrors(prev => {
+      const next = { ...prev };
+      Object.keys(next)
+        .filter(
+          (key) =>
+            key === SCREENER_QUESTIONS_KEY ||
+            key === SCREENER_MESSAGE_KEY ||
+            key.startsWith('screener_questions.')
+        )
+        .forEach((key) => delete next[key]);
+      return next;
+    });
+  };
+
   // One place that turns a refusal on, so every path reports it identically.
   const showRefusal = () => {
     setRefusalShown(true);
@@ -5316,6 +5476,41 @@ const OpportunityForm: React.FC = () => {
                         {...backwardControl}
                         onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
                         {...continueControl}
+                      />
+                      )}
+                    </>
+                  )}
+
+                  {/* Screener (MR2) - before Consent, on every shape that
+                      reaches a participant. Optional: the step leads with an
+                      opt-in gate, and the whole thing can be removed. */}
+                  {currentStep?.key === 'screener' && (
+                    <>
+                      <ScreenerStep
+                        hasScreener={formData.has_screener}
+                        questions={formData.screener_questions}
+                        message={formData.screener_message}
+                        validationErrors={validationErrors}
+                        onEnable={handleScreenerEnable}
+                        onRemove={handleScreenerRemove}
+                        onQuestionsChange={handleScreenerQuestionsChange}
+                        onMessageChange={(value) =>
+                          handleInputChange('screener_message', value)
+                        }
+                        onBlurField={handleBlur}
+                      />
+
+                      {continueControl && (
+                      <StepActions
+                        isEdit={isEdit}
+                        onSaveAndExit={handleSaveAndExit}
+                        saving={saving}
+                        disabled={saveControlsDisabled}
+                        justSaved={Boolean(successMessage)}
+                        {...backwardControl}
+                        onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
+                        {...continueControl}
+                        onNext={() => continueFromStep(continueControl.onNext)}
                       />
                       )}
                     </>

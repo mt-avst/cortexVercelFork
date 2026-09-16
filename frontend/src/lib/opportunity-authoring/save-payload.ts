@@ -8,7 +8,7 @@ import { QUESTION_CARRYING_TYPES } from '@shared/firsthand/delivery';
 import type { InlineSurvey as InlineSurveyPayload, SurveyQuestion } from '@shared/firsthand/survey-authoring';
 import type { InlineStudy as InlineStudyPayload, InlineStudyStep } from '@shared/firsthand/inline-study';
 import { normaliseTargetUrl } from '../../utils/targetUrl';
-import type { CreateOpportunityRequest } from '../../api/types';
+import type { CreateOpportunityRequest, Screener, ScreenerQuestion } from '../../api/types';
 import type { WithClientId } from './client-ids';
 
 /**
@@ -81,6 +81,11 @@ export interface SavePayloadFormState {
   moderated_consent_text: string;
   moderated_consent_template_id: string;
   moderated_consent_template_version: number | null;
+  // The eligibility screener (MR2). `has_screener` is the opt-in; the questions
+  // carry a client key that never leaves the browser.
+  has_screener: boolean;
+  screener_questions: WithClientId<ScreenerQuestion>[];
+  screener_message: string;
 }
 
 export interface SavePayloadInput {
@@ -101,7 +106,7 @@ export interface SavePayloadInput {
   staleStudyUpdatedAt: string | null;
 }
 
-export type SavePayload = Partial<Omit<CreateOpportunityRequest, 'consent_text'> & {
+export type SavePayload = Partial<Omit<CreateOpportunityRequest, 'consent_text' | 'screener'> & {
   inline_study?: InlineStudyPayload;
   inline_survey?: InlineSurveyPayload;
   delivery_mode?: 'native' | 'external';
@@ -109,6 +114,9 @@ export type SavePayload = Partial<Omit<CreateOpportunityRequest, 'consent_text'>
   // Null is a deliberate CLEAR on the update path; the create interface only
   // knows string, so the widening lives here where both shapes are built.
   consent_text?: string | null;
+  // Same widening for the screener: null clears it on the update path, an
+  // object replaces it, and it is omitted when there is nothing to say.
+  screener?: Screener | null;
 }>;
 
 /**
@@ -142,9 +150,11 @@ export const buildSavePayload = ({
   linkedStudyUpdatedAt,
   staleStudyUpdatedAt
 }: SavePayloadInput): SavePayload => {
-  const data: Partial<Omit<CreateOpportunityRequest, 'consent_text'> & {
+  const data: Partial<Omit<CreateOpportunityRequest, 'consent_text' | 'screener'> & {
     // Null is a deliberate CLEAR on the update path - see SavePayload.
     consent_text?: string | null;
+    // Same widening for the screener - see SavePayload.
+    screener?: Screener | null;
     inline_study?: InlineStudyPayload;
     // Same reason as inline_study: the survey contract cannot be imported
     // into the flattened shared types, so it is added at the call site.
@@ -372,6 +382,42 @@ export const buildSavePayload = ({
     // handoff cannot carry authored questions. A defensive assignment here
     // was dead code, and the mutation proved it - the test asserting their
     // absence passes without it, because the absence is structural.
+  }
+
+  // The eligibility screener (MR2). Sent only on a shape whose step list has
+  // the Screener step - the same field-travels-with-its-control rule as the
+  // external link and moderated consent above, so a stale screener left in
+  // state by a type change cannot ride out on a shape with no screener control
+  // to repair it.
+  //
+  // An empty not-a-match message is omitted, not sent empty: `screenerSchema`
+  // takes it optional. Removing the screener sends an explicit null on the
+  // update path when the row HAD one - the durationToSend rule, applied to the
+  // whole screener - and silence on create, where there is no stored row to
+  // clear. `_clientId` is the React key and is deliberately NOT spread across:
+  // each question and option is rebuilt field by field, so the key never
+  // reaches the wire (the server schema is strict and would refuse it).
+  if (tabs.some((step) => step.key === 'screener')) {
+    if (formData.has_screener) {
+      const screener: Screener = {
+        questions: formData.screener_questions.map((question) => ({
+          id: question.id,
+          prompt: question.prompt.trim(),
+          options: question.options.map((option) => ({
+            id: option.id,
+            label: option.label.trim(),
+            disqualifies: option.disqualifies
+          }))
+        }))
+      };
+      const message = formData.screener_message.trim();
+      if (message) {
+        screener.screenedOutMessage = message;
+      }
+      data.screener = screener;
+    } else if (isEdit && originalFormData?.has_screener) {
+      data.screener = null;
+    }
   }
 
   // The optimistic-concurrency precondition, and the only thing this
