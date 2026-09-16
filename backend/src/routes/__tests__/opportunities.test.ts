@@ -1130,7 +1130,9 @@ describe('Opportunities API', () => {
         // Resolution stores custom/null for wording that is no template's.
         consent_text: 'A distinct consent wording for the census',
         consent_template_id: 'custom',
-        consent_template_version: null
+        consent_template_version: null,
+        // No screener in the request body, so the create binds null for it.
+        screener: null
       };
 
       for (const [column, value] of Object.entries(expected)) {
@@ -1141,6 +1143,55 @@ describe('Opportunities API', () => {
       // nothing and this test still passes.
       expect(columns.slice().sort()).toEqual(Object.keys(expected).sort());
       expect(values).toHaveLength(columns.length);
+    });
+
+    it('binds a populated screener to the insert as JSON that round-trips to the object', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{
+          id: '12', type: 'interview',
+          created_at: new Date(), updated_at: new Date(),
+          start_date: null, end_date: null
+        }]
+      });
+      const screener = {
+        questions: [
+          {
+            id: 'role',
+            prompt: 'Which best describes your role?',
+            options: [
+              { id: 'eng', label: 'Engineer', disqualifies: false },
+              { id: 'sales', label: 'Sales', disqualifies: true },
+            ],
+          },
+        ],
+      };
+
+      await request(listening(app))
+        .post('/api/opportunities')
+        .send({
+          type: 'interview',
+          title: 'A study with a screener',
+          purpose_one_liner: 'A purpose long enough to satisfy the minimum length rule',
+          screener,
+        })
+        .expect(201);
+
+      const insert = mockQuery.mock.calls.find((call: unknown[]) =>
+        String(call[0]).includes('INSERT INTO opportunities')
+      );
+      const sql = String(insert![0]);
+      const columns = sql
+        .slice(sql.indexOf('('), sql.indexOf(') VALUES'))
+        .split(',')
+        .map((column: string) => column.replace(/[()\s]/g, ''));
+      const values = insert![1] as unknown[];
+      const bound = values[columns.indexOf('screener')];
+
+      // The $20::jsonb param is the validated screener serialised to a JSON
+      // string, not the raw object, and it round-trips.
+      expect(typeof bound).toBe('string');
+      expect(JSON.parse(bound as string)).toEqual(screener);
     });
 
     it('stores external when the request says nothing, rather than leaving it to chance', async () => {

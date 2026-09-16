@@ -9,7 +9,8 @@ import {
   isPublishableExternalLink,
   isSafeMeetingLocation
 } from '../../../shared/firsthand/url-safety';
-import type { Opportunity } from '../../../shared/types';
+import { screenerSchema } from '../../../shared/screener';
+import type { Opportunity, Screener } from '../../../shared/types';
 
 // Base schemas
 export const UUIDSchema = z.string().uuid();
@@ -45,6 +46,16 @@ type MutuallyAssignable<A, B> = [A] extends [B]
 export const DELIVERY_MODE_MATCHES_SHARED_CONTRACT: MutuallyAssignable<
   DeliveryMode,
   SharedDeliveryMode
+> = true;
+
+/**
+ * Same guard for the screener. The zod shape (screenerSchema, in shared/screener)
+ * and the shared Screener interface are declared separately and this assertion
+ * fails the build if the two ever disagree.
+ */
+export const SCREENER_MATCHES_SHARED_CONTRACT: MutuallyAssignable<
+  z.infer<typeof screenerSchema>,
+  Screener
 > = true;
 
 // Trimmed BEFORE the length checks, not after.
@@ -145,6 +156,10 @@ export const CreateOpportunitySchema = z.object({
   consent_template_version: z.number().int().min(1).optional().nullable(),
   participant_type_required: ParticipantTypeSchema.optional(),
   participant_type_specific_details: z.string().optional(),
+  // Eligibility screener. Absent means no screener; when present it must pass
+  // screenerSchema (at least one question, a way to pass each, a screen-out
+  // somewhere). The handler stores it as JSONB on the opportunity.
+  screener: screenerSchema.optional(),
   status: z.enum(['draft', 'published']).optional(),
   start_date: z.string().datetime().optional().nullable(),
   end_date: z.string().datetime().optional().nullable(),
@@ -204,6 +219,9 @@ export const UpdateOpportunitySchema = z.object({
   consent_template_version: z.number().int().min(1).optional().nullable(),
   participant_type_required: ParticipantTypeSchema.optional(),
   participant_type_specific_details: z.string().optional(),
+  // Eligibility screener. Null clears it (removes the screener); an object
+  // replaces it wholesale after passing screenerSchema.
+  screener: screenerSchema.optional().nullable(),
   status: OpportunityStatusSchema.optional(),
   start_date: z.string().datetime().optional().nullable(),
   end_date: z.string().datetime().optional().nullable(),

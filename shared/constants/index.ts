@@ -76,6 +76,19 @@ export const VALIDATION = {
    * opportunities.moderated-consent.test.ts.
    */
   MAX_MODERATED_CONSENT_CHARS: 10000,
+  /**
+   * Screener shape ceilings (the eligibility questions an author sets on an
+   * opportunity). Policy numbers, kept deliberately small so the screener stays
+   * light - pinned as literals in backend/src/validation/__tests__/screener-schema.test.ts,
+   * refuse over them, never truncate.
+   */
+  SCREENER_MIN_QUESTIONS: 1,
+  SCREENER_MAX_QUESTIONS: 5,
+  SCREENER_MIN_OPTIONS: 2,
+  SCREENER_MAX_OPTIONS: 6,
+  SCREENER_MAX_PROMPT_CHARS: 300,
+  SCREENER_MAX_OPTION_LABEL_CHARS: 120,
+  SCREENER_MAX_MESSAGE_CHARS: 1000,
   /** Email validation regex */
   EMAIL_REGEX: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
   /** URL validation regex */

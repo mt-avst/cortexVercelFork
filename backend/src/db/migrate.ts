@@ -289,8 +289,43 @@ export async function runMigrations() {
     // Create trigger for opportunities updated_at
     await client.query(`
       DROP TRIGGER IF EXISTS update_opportunities_updated_at ON opportunities;
-      CREATE TRIGGER update_opportunities_updated_at 
-      BEFORE UPDATE ON opportunities 
+      CREATE TRIGGER update_opportunities_updated_at
+      BEFORE UPDATE ON opportunities
+      FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
+    `);
+
+    // Screener eligibility (opportunity-level). The definition rides on the
+    // opportunity as JSONB: authored and read as one blob with the study, never
+    // queried across studies. Absent/null means no screener. Idempotent add so
+    // existing databases gain the column.
+    await client.query(`
+      ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS screener JSONB
+    `);
+
+    // Per-participant screener verdicts - the enforcement key. The three apply
+    // chokepoints refuse anyone without a 'qualified' row here. questions_snapshot
+    // records the screener as it was evaluated, so editing the opportunity's
+    // screener later cannot flip an existing verdict (mirrors consent_text_snapshot).
+    // UNIQUE(opportunity_id, user_id) is both the one-verdict-per-person rule and
+    // the index the enforcement lookup uses.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS opportunity_screener_responses (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        opportunity_id UUID NOT NULL REFERENCES opportunities(id) ON DELETE CASCADE,
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        outcome TEXT NOT NULL CHECK (outcome IN ('qualified', 'screened_out')),
+        answers JSONB NOT NULL,
+        questions_snapshot JSONB NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (opportunity_id, user_id)
+      )
+    `);
+
+    await client.query(`
+      DROP TRIGGER IF EXISTS update_opportunity_screener_responses_updated_at ON opportunity_screener_responses;
+      CREATE TRIGGER update_opportunity_screener_responses_updated_at
+      BEFORE UPDATE ON opportunity_screener_responses
       FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
     `);
 
