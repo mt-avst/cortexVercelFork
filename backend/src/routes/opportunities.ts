@@ -47,7 +47,9 @@ import {
   updateStudy,
   type StudyRequester
 } from '../firsthand/studies-repository';
-import type { RecordedStudyBrief } from '../../../shared/types';
+import type { RecordedStudyBrief, Screener, ScreenerSubmitResponse } from '../../../shared/types';
+import { parseScreenerAnswers, evaluateScreener } from '../../../shared/screener';
+import { assertScreenerPassed, getScreenerStatus, upsertScreenerResponse, hasScreener, SCREENER_NONE_TO_ANSWER } from '../services/screener';
 import type { StudyStep } from '../../../shared/firsthand/contract';
 import { toStudySteps, type InlineStudy } from '../../../shared/firsthand/inline-study';
 import { stepKeysAreComplete } from '../../../shared/firsthand/step-identity';
@@ -178,6 +180,9 @@ export const UPDATABLE_OPPORTUNITY_COLUMNS: ReadonlySet<string> = new Set([
   'firsthand_study_id',
   'participant_type_required',
   'participant_type_specific_details',
+  // Eligibility screener (JSONB). The PATCH field loop stringifies it for the
+  // jsonb column (see the screener branch in the loop); null clears it.
+  'screener',
   // Moderated consent (#79): live sessions and interviews only. Allow-listed
   // here - which both enforcement sites read - and additionally type-gated by
   // resolveModeratedConsentWrite, because membership in this Set says a column
@@ -258,6 +263,19 @@ const opportunityWriteLimiter = perUserLimiter(
 );
 
 /**
+ * The screener submission is a light DB upsert (one row per participant per
+ * opportunity, bounded by the unique key), so this is a backstop against a
+ * scripted loop rather than a quota - a participant answers a few questions
+ * once, and retaking is allowed but rare. 30 a minute is far above that. It
+ * brings the one non-admin opportunity write into line with every sibling write
+ * (create/patch and the two mint paths), which the security checklist asks for.
+ */
+const screenerSubmitLimiter = perUserLimiter(
+  30,
+  'Too many screener submissions in a short time. Wait a minute and try again.'
+);
+
+/**
  * Clears both limiters for one caller. A test seam, and only that.
  *
  * The counters live in an in-process MemoryStore that outlives an individual
@@ -278,6 +296,7 @@ export function resetParticipantRouteLimits(userId: string): void {
   participantSessionMintLimiter.resetKey(userId);
   surveyResultsLimiter.resetKey(userId);
   opportunityWriteLimiter.resetKey(userId);
+  screenerSubmitLimiter.resetKey(userId);
 }
 
 /**
@@ -1707,7 +1726,23 @@ router.get('/:id', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req:
         }
       : opportunity;
 
-  res.json(isAdmin ? withCompletion : toPublicOpportunity(withCompletion));
+  if (isAdmin) {
+    // Admin/owner payload: the full screener (with disqualifies flags) so it can
+    // be edited. No screenerStatus - that is a participant concern.
+    res.json(withCompletion);
+    return;
+  }
+
+  // Participant payload: toPublicOpportunity redacts the screener's owner-only
+  // flags; attach the signed-in participant's own verdict so the page knows
+  // whether to show the screener, the booking action, or the not-a-match state.
+  // row.screener is the RAW screener, used only server-side to decide whether a
+  // screener exists and to key the verdict lookup - it is never returned here.
+  const publicOpportunity = toPublicOpportunity(withCompletion);
+  const screenerStatus = req.user
+    ? await getScreenerStatus(pool, String(row.id), req.user.id, row.screener as Screener | null)
+    : undefined;
+  res.json(screenerStatus ? { ...publicOpportunity, screenerStatus } : publicOpportunity);
 }));
 
 // POST /api/opportunities - Create opportunity
@@ -1888,8 +1923,8 @@ router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOp
       product_optional, meeting_location_optional, default_duration_minutes, status,
       owner_user_id, external_link_optional, firsthand_study_id, participant_type_required,
       participant_type_specific_details, start_date, end_date, delivery_mode,
-      consent_text, consent_template_id, consent_template_version
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+      consent_text, consent_template_id, consent_template_version, screener
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20::jsonb)
     RETURNING *
   `;
 
@@ -2029,7 +2064,10 @@ router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOp
     deliveryMode,
     consentColumns?.consent_text ?? null,
     consentColumns?.consent_template_id ?? null,
-    consentColumns?.consent_template_version ?? null
+    consentColumns?.consent_template_version ?? null,
+    // Eligibility screener (JSONB, $20::jsonb). Validated by screenerSchema;
+    // serialise to a JSON string for the jsonb param, or null for no screener.
+    data.screener ? JSON.stringify(data.screener) : null
   ];
 
   let result;
@@ -2865,8 +2903,20 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
         ]);
       }
       paramCount++;
-      updateFields.push(`${key} = $${paramCount}`);
-      values.push(typeof value === 'string' ? value.trim() : value);
+      if (key === 'screener') {
+        // JSONB column: serialise the validated object (or null to clear the
+        // screener) and cast the text param so Postgres stores jsonb, not a
+        // JSON string. The screener is already validated by screenerSchema, so
+        // it is not run through the string-trim branch below.
+        updateFields.push(`${key} = $${paramCount}::jsonb`);
+        values.push(value === null ? null : JSON.stringify(value));
+      } else {
+        updateFields.push(`${key} = $${paramCount}`);
+        // `screener` (the only non-primitive column) is handled in the branch
+        // above, so every value reaching here is a primitive; the cast records
+        // that the key guard narrows what TypeScript on its own cannot.
+        values.push(typeof value === 'string' ? value.trim() : (value as string | number | Date | null));
+      }
     }
   });
   
@@ -3103,14 +3153,14 @@ router.get('/:id/recorded-study-brief', recordedStudyBriefLimiter, optionalAuth,
  */
 async function loadMintableOpportunity(id: string): Promise<{
   canonicalOpportunityId: string | null;
-  row: { id: unknown; type: string; status: string; delivery_mode?: string | null; firsthand_study_id: string | null };
+  row: { id: unknown; type: string; status: string; delivery_mode?: string | null; firsthand_study_id: string | null; screener?: Screener | null };
 } | null> {
   if (!(await isDatabaseAvailable())) {
     return null;
   }
 
   const result = await pool.query(
-    'SELECT id, type, firsthand_study_id, status, delivery_mode FROM opportunities WHERE id = $1',
+    'SELECT id, type, firsthand_study_id, status, delivery_mode, screener FROM opportunities WHERE id = $1',
     [id]
   );
 
@@ -3149,6 +3199,59 @@ function mintParticipant(
   };
 }
 
+// POST /api/opportunities/:id/screener - Submit screener answers and get the
+// verdict. Auto-evaluated, one verdict per participant per opportunity, latest
+// answer wins (a screened-out participant may retake). The verdict is what the
+// three apply chokepoints (book, recorded-session, survey-session) enforce
+// against, so this is the only way past a screener. Body: { answers: { [questionId]: optionId } }.
+router.post('/:id/screener', requireAuth, screenerSubmitLimiter, asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  if (!(await isDatabaseAvailable())) {
+    throw new AppError('Database not available. Please set up PostgreSQL to take screeners.', 503);
+  }
+
+  const { id } = req.params;
+  const result = await pool.query(
+    'SELECT id, screener FROM opportunities WHERE id = $1',
+    [id]
+  );
+  if (result.rows.length === 0) {
+    throw new NotFoundError('Study');
+  }
+
+  // The id Postgres parsed, so the verdict is keyed to the same canonical id the
+  // enforcement lookup uses, whatever spelling the caller sent.
+  const opportunityId = String(result.rows[0].id);
+  const screener = result.rows[0].screener as Screener | null;
+
+  if (!hasScreener(screener)) {
+    throw new ValidationError(SCREENER_NONE_TO_ANSWER);
+  }
+
+  const parsed = parseScreenerAnswers(screener, req.body?.answers);
+  if (!parsed.ok) {
+    throw new ValidationError(parsed.message);
+  }
+
+  const outcome = evaluateScreener(screener, parsed.answers);
+
+  // Snapshot the questions evaluated against, so a later edit to the screener
+  // cannot rewrite this verdict.
+  await upsertScreenerResponse(pool, {
+    opportunityId,
+    userId: req.user.id,
+    outcome,
+    answers: parsed.answers,
+    questionsSnapshot: screener.questions,
+  });
+
+  const body: ScreenerSubmitResponse = { outcome };
+  return res.json(body);
+}));
+
 // POST /api/opportunities/:id/recorded-study-session - Create a recorded-study session for this opportunity.
 // The legacy path /:id/firsthand-handoff is kept as a deprecated-for-removal alias so a cached SPA can
 // still POST it after the backend rolls; remove the alias once no client references the old path.
@@ -3180,6 +3283,10 @@ router.post(['/:id/recorded-study-session', '/:id/firsthand-handoff'], requireAu
     if (loaded.row.status !== 'published') {
       return res.status(403).json({ error: 'Study is not published' });
     }
+    // Screener gate: refuse anyone without a stored 'qualified' verdict before
+    // minting a recorded session. Keyed to the canonical opportunity id, the
+    // same id the screener verdict was stored against.
+    await assertScreenerPassed(pool, loaded.canonicalOpportunityId ?? id, req.user.id, loaded.row.screener);
     studyId = loaded.row.firsthand_study_id;
     canonicalOpportunityId = loaded.canonicalOpportunityId;
   }
@@ -3306,6 +3413,10 @@ router.post('/:id/survey-session', requireAuth, participantSessionMintLimiter, p
     if (row.status !== 'published') {
       return res.status(403).json({ error: 'Study is not published' });
     }
+
+    // Screener gate: refuse anyone without a stored 'qualified' verdict before
+    // minting a native survey session.
+    await assertScreenerPassed(pool, loaded.canonicalOpportunityId ?? id, req.user.id, row.screener);
 
     studyId = row.firsthand_study_id;
     canonicalOpportunityId = loaded.canonicalOpportunityId;

@@ -272,7 +272,7 @@ Do **not** widen `authorableStepTypes` to do it; that set is the vocabulary of a
 
 - Targeting by segment (e.g. by team/product) for invitations.
 - CSV export or advanced reporting (beyond in-app analytics).
-- Screeners or complex eligibility logic.
+- Complex eligibility logic - quotas, researcher review of applicants, scored or multi-select screeners, and audience targeting (internal/partner/customer). A LIGHT per-study screener - up to five single-choice questions, auto qualify or screen out, enforced before the study starts - IS in scope (ADR-0007).
 - Full incentives management (beyond AdaptaBits and monthly recognition).
 
 ---
