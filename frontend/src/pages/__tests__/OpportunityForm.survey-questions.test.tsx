@@ -152,6 +152,7 @@ describe('getTabsForType', () => {
       'Basic Information',
       'Content & Details',
       'External Link',
+      'Screener',
       'Consent',
       'Review'
     ]);
@@ -162,6 +163,7 @@ describe('getTabsForType', () => {
       'Basic Information',
       'Content & Details',
       'Questions',
+      'Screener',
       'Consent',
       'Review'
     ]);
@@ -181,6 +183,7 @@ describe('getTabsForType', () => {
       'Basic Information',
       'Content & Details',
       'External Link',
+      'Screener',
       'Consent',
       'Review'
     ]);
@@ -191,6 +194,7 @@ describe('getTabsForType', () => {
       'Basic Information',
       'Content & Details',
       'Task List',
+      'Screener',
       'Consent',
       'Review'
     ]);
@@ -207,6 +211,7 @@ describe('getTabsForType', () => {
       'Basic Information',
       'Content & Details',
       'External Link',
+      'Screener',
       'Consent',
       'Review'
     ]);
@@ -219,6 +224,7 @@ describe('getTabsForType', () => {
         'Basic Information',
         'Content & Details',
         'Session Management',
+        'Screener',
         'Consent',
         'Review'
       ]);
@@ -245,6 +251,7 @@ describe('getTabsForType', () => {
       'Basic Information',
       'Content & Details',
       'External Link',
+      'Screener',
       'Consent',
       'Review'
     ]);
@@ -256,6 +263,7 @@ describe('getTabsForType', () => {
       'Content & Details',
       // Singular. The type's whole promise is that there is one.
       'Question',
+      'Screener',
       'Consent',
       'Review'
     ]);
@@ -292,6 +300,7 @@ describe("the hand-off Consent step confirms the external tool's consent (WZ-18)
     );
     await user.click(screen.getByRole('button', { name: /^Continue: Content & Details$/ }));
     await user.click(screen.getByRole('button', { name: /^Continue: External Link$/ }));
+    await user.click(screen.getByRole('button', { name: /^Continue: Screener$/ }));
     await user.click(screen.getByRole('button', { name: /^Continue: Consent$/ }));
   };
 
@@ -559,6 +568,7 @@ describe('authoring a native survey', () => {
       'How easy was that?'
     );
 
+    await user.click(screen.getByRole('button', { name: /^Continue: Screener$/i }));
     await user.click(screen.getByRole('button', { name: /^Continue: Consent$/i }));
     await user.click(
       screen.getByRole('button', { name: /Customise consent wording/i })
@@ -595,6 +605,7 @@ describe('authoring a native survey', () => {
 
     await user.click(screen.getByRole('button', { name: /Questions/i }));
     await user.click(screen.getByRole('button', { name: /^Add question$/i }));
+    await user.click(screen.getByRole('button', { name: /^Continue: Screener$/i }));
     await user.click(screen.getByRole('button', { name: /^Continue: Consent$/i }));
 
     expect(await screen.findByTestId('consent-template-state')).toHaveTextContent(
@@ -1209,6 +1220,7 @@ describe('starting a survey from an existing set of questions', () => {
     await user.click(
       screen.getByRole('radio', { name: /Start from an existing set of questions/i })
     );
+    await user.click(screen.getByRole('button', { name: /^Continue: Screener$/i }));
     await user.click(screen.getByRole('button', { name: /^Continue: Consent$/i }));
 
     expect(await screen.findByTestId('consent-step')).toBeInTheDocument();
@@ -1236,6 +1248,7 @@ describe('starting a survey from an existing set of questions', () => {
       await screen.findByRole('button', { name: /^Start from this Onboarding pulse$/ })
     );
     await screen.findByText(/Copied from/i);
+    await user.click(screen.getByRole('button', { name: /^Continue: Screener$/i }));
     await user.click(screen.getByRole('button', { name: /^Continue: Consent$/i }));
 
     // The source's wording is nobody's approved wording, and the copy inherits
@@ -1796,6 +1809,7 @@ describe('the forward control on the Questions tab', () => {
 
     const user = userEvent.setup();
     await openQuestionsTab(user);
+    await user.click(screen.getByRole('button', { name: /^Continue: Screener$/i }));
     await user.click(screen.getByRole('button', { name: /^Continue: Consent$/i }));
 
     expect(await screen.findByTestId('consent-template-state')).toHaveTextContent(
@@ -1836,6 +1850,7 @@ describe('the forward control on the Questions tab', () => {
 
     const user = userEvent.setup();
     await openQuestionsTab(user);
+    await user.click(screen.getByRole('button', { name: /^Continue: Screener$/i }));
     await user.click(screen.getByRole('button', { name: /^Continue: Consent$/i }));
 
     expect(screen.queryByRole('button', { name: /Save Changes/i })).toBeNull();
@@ -1864,6 +1879,7 @@ describe('the forward control on the Questions tab', () => {
 
     const user = userEvent.setup();
     await openQuestionsTab(user);
+    await user.click(screen.getByRole('button', { name: /^Continue: Screener$/i }));
     await user.click(screen.getByRole('button', { name: /^Continue: Consent$/i }));
 
     const unlock = screen.queryByRole('button', { name: /Customise consent wording/i });
@@ -1891,6 +1907,7 @@ describe('the forward control on the Questions tab', () => {
     await user.click(
       await screen.findByRole('radio', { name: /Start from an existing set of questions/i })
     );
+    await user.click(screen.getByRole('button', { name: /^Continue: Screener$/i }));
     await user.click(screen.getByRole('button', { name: /^Continue: Consent$/i }));
 
     const back = await screen.findByRole('button', { name: /Go back to Questions/i });
@@ -1921,13 +1938,17 @@ describe('the forward control on the Questions tab', () => {
       ).toHaveLength(0);
     };
 
-    // Checked on all THREE steps that lead to the terminal control, because
-    // C1 moved the terminal control onto Consent, a step that did not exist
-    // when this rule was written, and C3 moved it again onto Review. Checking
-    // only where the control now lives would let a step it left behind
+    // Checked on all FOUR steps that lead to the terminal control, because
+    // C1 moved the terminal control onto Consent, C3 moved it again onto
+    // Review, and MR2 inserted a Screener step between Questions and Consent.
+    // Checking only where the control now lives would let a step it left behind
     // reacquire one - and checking only a step it left behind would test
     // nothing at all, which is precisely what this test did the moment
     // Consent was added.
+    await screen.findByRole('button', { name: /^Continue: Screener$/i });
+    expectNoImplicitSubmit();
+
+    await user.click(screen.getByRole('button', { name: /^Continue: Screener$/i }));
     await screen.findByRole('button', { name: /^Continue: Consent$/i });
     expectNoImplicitSubmit();
 

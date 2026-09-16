@@ -6,6 +6,7 @@ export { default as FieldError } from './FieldError';
 export { default as ExternalLinkTab } from './ExternalLinkTab';
 export { default as FirstHandStudyTab } from './FirstHandStudyTab';
 export { default as ReviewStep } from './ReviewStep';
+export { default as ScreenerStep } from './ScreenerStep';
 export { default as SurveyQuestionsTab } from './SurveyQuestionsTab';
 export { default as StepActions } from './StepActions';
 export { default as StepNav } from './StepNav';

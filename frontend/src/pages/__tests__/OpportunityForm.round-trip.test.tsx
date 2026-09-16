@@ -213,6 +213,13 @@ beforeEach(() => {
  * which does that for it) instead.
  */
 const goToConsentStep = () => {
+  // MR2 inserted a Screener step between the authoring step and Consent, so the
+  // walk is one longer than it was. Guarded so this still works from a step that
+  // is already past the Screener.
+  const toScreener = screen.queryByRole('button', { name: /^Continue: Screener$/i });
+  if (toScreener) {
+    fireEvent.click(toScreener);
+  }
   fireEvent.click(screen.getByRole('button', { name: /^Continue: Consent$/i }));
 };
 
@@ -1131,6 +1138,9 @@ describe('reopening an opportunity that has a task list', () => {
     expect(consentField().value).toBe(
       'The bespoke wording this researcher actually wrote'
     );
+    // Back through the Screener step, which MR2 put between Consent and the Task
+    // List, to reach the Task List and confirm its content survived the trip.
+    fireEvent.click(screen.getByRole('button', { name: /^Previous: Screener$/i }));
     fireEvent.click(screen.getByRole('button', { name: /^Previous: Task List$/i }));
     expect(
       (screen.getByLabelText(/Starting URL/i) as HTMLInputElement).value
@@ -1921,14 +1931,14 @@ describe('when the linked study cannot be read', () => {
 
     expect(await screen.findByRole('button', { name: /^Previous: Content & Details$/i })).toBeEnabled();
 
-    // And onward to Consent, then Review - the step C3 added, which is now
-    // the one holding the save control - so it is the step an over-broad
-    // `disabled` would strand the author on, with no way back.
+    // And onward through Screener to Consent, then Review - the step C3 added,
+    // which is now the one holding the save control - so these are steps an
+    // over-broad `disabled` would strand the author on, with no way back.
     expect(
-      screen.getByRole('button', { name: /^Continue: Consent$/i })
+      screen.getByRole('button', { name: /^Continue: Screener$/i })
     ).toBeEnabled();
     goToConsentStep();
-    expect(await screen.findByRole('button', { name: /^Previous: Task List$/i })).toBeEnabled();
+    expect(await screen.findByRole('button', { name: /^Previous: Screener$/i })).toBeEnabled();
 
     expect(
       screen.getByRole('button', { name: /^Continue: Review$/i })
@@ -2158,6 +2168,8 @@ describe('the Save button appearing for a change that only touches authored cont
     goToConsentStep();
     expect(screen.queryByRole('button', { name: /Save Changes/i })).not.toBeInTheDocument();
 
+    // Back through the Screener step (MR2) to the Task List.
+    fireEvent.click(screen.getByRole('button', { name: /^Previous: Screener$/i }));
     fireEvent.click(screen.getByRole('button', { name: /^Previous: Task List$/i }));
     await openAllCards();
     fireEvent.change(screen.getAllByLabelText(/What the participant sees/i)[0], {
