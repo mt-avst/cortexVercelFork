@@ -177,7 +177,7 @@ describe('Admin page', () => {
     fireEvent.click(screen.getByRole('button', { name: /Actions for Checkout usability test/i }));
 
     // The row actions are now a real menu (#117): items carry role="menuitem".
-    const item = screen.getByRole('menuitem', { name: 'Analytics' });
+    const item = await screen.findByRole('menuitem', { name: 'Analytics' });
     expect(item).toBeInTheDocument();
     // The fixture study is owned by the acting admin, so it is live, not disabled.
     expect(item).not.toBeDisabled();
@@ -195,7 +195,7 @@ describe('Admin page', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Actions for Checkout usability test/i }));
 
-    const item = screen.getByRole('menuitem', { name: 'Analytics' });
+    const item = await screen.findByRole('menuitem', { name: 'Analytics' });
     expect(item).toBeDisabled();
     expect(item.getAttribute('title')).toContain('Dana Owner');
   });
@@ -214,7 +214,7 @@ describe('Admin page', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Actions for Checkout usability test/i }));
 
-    expect(screen.getByRole('menuitem', { name: 'Analytics' })).not.toBeDisabled();
+    expect(await screen.findByRole('menuitem', { name: 'Analytics' })).not.toBeDisabled();
   });
 
   it('states the truncation when Recent bookings is capped below the total (register #16)', async () => {
@@ -320,7 +320,7 @@ describe('Admin page', () => {
     await screen.findByText('Checkout usability test');
 
     fireEvent.click(screen.getByRole('button', { name: /Actions for Checkout usability test/i }));
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
 
     // Scoped to the dialog: a document-wide /analytics/i would also match the
     // row menu's "Analytics" item if the menu ever stayed mounted alongside
@@ -353,7 +353,7 @@ describe('Admin page', () => {
     await screen.findByText('Checkout usability test');
 
     fireEvent.click(screen.getByRole('button', { name: /Actions for Checkout usability test/i }));
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
 
     const dialogEl = screen.getByRole('dialog');
     const describedBy = dialogEl.getAttribute('aria-describedby') ?? '';
