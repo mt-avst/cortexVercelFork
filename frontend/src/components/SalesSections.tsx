@@ -425,7 +425,7 @@ const VoiceSection: React.FC = () => (
           friction at a convenient time. It makes this all as easy as possible and it scales with us.
         </p>
       </blockquote>
-      <p className="sales-voice-sig">Dr Nick Fine, Office of the CTO</p>
+      <p className="sales-voice-sig">Nick Fine, Office of the CTO</p>
     </div>
   </section>
 );
