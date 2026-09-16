@@ -1728,8 +1728,17 @@ router.get('/:id', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req:
 
   if (isAdmin) {
     // Admin/owner payload: the full screener (with disqualifies flags) so it can
-    // be edited. No screenerStatus - that is a participant concern.
-    res.json(withCompletion);
+    // be edited. It ALSO carries the viewer's OWN verdict (#134): in the beta
+    // CORTEX_BETA_ALL_ADMIN lifts every employee to admin, so without this the
+    // frontend screener gate never clears for the internal cohort and the modal
+    // re-opens on every load. screenerStatus is only the viewer's own
+    // {answered, outcome} - it exposes nothing owner-only, and getScreenerStatus
+    // returns undefined when there is no screener, so the no-screener admin shape
+    // is unchanged.
+    const screenerStatus = req.user
+      ? await getScreenerStatus(pool, String(row.id), req.user.id, row.screener as Screener | null)
+      : undefined;
+    res.json(screenerStatus ? { ...withCompletion, screenerStatus } : withCompletion);
     return;
   }
 

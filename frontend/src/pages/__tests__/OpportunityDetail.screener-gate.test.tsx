@@ -336,14 +336,15 @@ describe('an opportunity the participant has already qualified for', () => {
   });
 });
 
-describe('the admin/owner payload shape (screener present, no screenerStatus)', () => {
+describe('the admin/owner payload shape (screener present, screenerStatus absent)', () => {
   it('still gates, because the server enforces the screener for admins too', async () => {
-    // The admin/owner opportunity payload carries the full screener but omits
-    // `screenerStatus` (a participant field). `assertScreenerPassed` 403s admins
-    // just like anyone else, so the gate MUST fire for this shape - otherwise an
-    // admin (every internal beta tester, via CORTEX_BETA_ALL_ADMIN) clicks
-    // straight to a server 403 with no modal to answer through. Keyed on screener
-    // presence, not screenerStatus presence, deliberately (cto/AdaptaLabs#134).
+    // Since #134 the admin/owner payload DOES carry `screenerStatus`, but this
+    // test pins the fail-closed property for the case where it is absent: the
+    // gate keys on screener PRESENCE, not status presence, so it must still fire.
+    // `assertScreenerPassed` 403s admins just like anyone else, so the gate MUST
+    // fire for this shape - otherwise an admin (every internal beta tester, via
+    // CORTEX_BETA_ALL_ADMIN) clicks straight to a server 403 with no modal to
+    // answer through. Keyed on screener presence, deliberately (cto/AdaptaLabs#134).
     vi.mocked(getOpportunity).mockResolvedValue(
       base({
         type: 'survey',
