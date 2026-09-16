@@ -37,3 +37,28 @@ describe('recording journey-frame primary button fill (row 4)', () => {
     expect(block).toMatch(/border:\s*1\.5px solid var\(--accent-strong\);/);
   });
 });
+
+/**
+ * Base primary button fill - the rule the FLOATING PANEL actually gets.
+ *
+ * PipStandbyCard and StudyRunner's in-pane task card are portalled into the
+ * Document PiP window's own document, OUTSIDE `.journey-frame`, so the orange
+ * `.journey-frame .button` fill never reaches them - only this base rule does.
+ * It filled with `var(--ink)` (the light surface foreground, ~#f0f0f0) under
+ * white text, so the pane's "Open the task page" / "Start recording" CTAs
+ * rendered white-on-near-white: present and clickable, but invisible. The
+ * journey-frame test above cannot see this - it reads a different selector -
+ * which is exactly how the pane regressed while that test stayed green.
+ */
+describe('recording base primary button fill (PiP panel)', () => {
+  it('fills with --accent-fill-text-safe, never the invisible var(--ink)', () => {
+    const block = blockFor('.fh-recording .button');
+    expect(block).toMatch(/background:\s*var\(--accent-fill-text-safe\);/);
+    expect(block).not.toMatch(/background:\s*var\(--ink\);/);
+  });
+
+  it('keeps white text on the fill', () => {
+    const block = blockFor('.fh-recording .button');
+    expect(block).toMatch(/color:\s*white;/);
+  });
+});
