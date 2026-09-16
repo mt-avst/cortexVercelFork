@@ -42,6 +42,7 @@ const completeInput = (
   deliveryMode: 'native',
   questionCount: 0,
   taskCount: 0,
+  screenerQuestionCount: 0,
   estimatedMinutes: null,
   targetUrl: '',
   consentText: '',
@@ -64,6 +65,7 @@ const allKeysSteps: ReviewStepRef[] = [
   // would have passed under an implementation reading POSITION - the exact
   // coincidence this fixture exists to defeat, still present inside it.
   { id: 11, key: 'externalLink', title: 'External Link' },
+  { id: 10, key: 'screener', title: 'Screener' },
   { id: 12, key: 'consent', title: 'Consent' },
   { id: 5, key: 'review', title: 'Review' }
 ];
@@ -1147,5 +1149,47 @@ describe('stepForPublishProblem', () => {
     ];
     expect(stepForPublishProblem('external_link_required', steps)).toBeNull();
     expect(stepForPublishProblem('native_survey_study_required', steps)).toBeNull();
+  });
+});
+
+describe('the screener section', () => {
+  const screenerSteps: ReviewStepRef[] = [
+    { id: 1, key: 'basics', title: 'Basic Information' },
+    { id: 9, key: 'taskList', title: 'Task List' },
+    { id: 10, key: 'screener', title: 'Screener' },
+    { id: 12, key: 'consent', title: 'Consent' },
+    { id: 5, key: 'review', title: 'Review' }
+  ];
+
+  it('reads "No screener" for a study with no screener, and does NOT flag it missing', () => {
+    // 0 questions is the deliberate "no screener" state - a screener is
+    // optional - so unlike an empty sessions or questions count it must not be
+    // dressed up as an unfinished gap.
+    const section = findSection(
+      buildReviewSummary(completeInput({ steps: screenerSteps, screenerQuestionCount: 0 })),
+      'screener'
+    );
+    const item = findItem(section, 'Screener');
+    expect(item?.value).toBe('No screener');
+    expect(item?.missing).not.toBe(true);
+  });
+
+  it('counts the screener questions when there is a screener', () => {
+    const section = findSection(
+      buildReviewSummary(completeInput({ steps: screenerSteps, screenerQuestionCount: 3 })),
+      'screener'
+    );
+    const item = findItem(section, 'Screener questions');
+    expect(item?.value).toBe('3 questions');
+    expect(item?.missing).not.toBe(true);
+  });
+
+  it('focuses the screener step heading from its Edit link', () => {
+    const section = findSection(
+      buildReviewSummary(completeInput({ steps: screenerSteps, screenerQuestionCount: 2 })),
+      'screener'
+    );
+    expect(section?.focusFieldId).toBe('screener_questions-heading');
+    expect(section?.stepId).toBe(10);
   });
 });

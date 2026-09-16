@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { getOpportunity, bookSession, trackOpportunityClick, getMyCalendarEvents, getMyBookings, getRecordedStudyBrief, startRecordedStudySession, startSurveySession } from '../api/client';
-import type { RecordedStudyBrief } from '@shared/types';
+import { getOpportunity, bookSession, trackOpportunityClick, getMyCalendarEvents, getMyBookings, getRecordedStudyBrief, startRecordedStudySession, startSurveySession, submitScreener } from '../api/client';
+import type { ParticipantScreener, RecordedStudyBrief, ScreenerOutcome } from '@shared/types';
 import { formatStudyDate, formatTimeRange, formatTimeZoneLabel, formatClockTime, formatDateTime } from '../utils/datetime';
 import { describeCalendarClash } from '../utils/calendarClash';
 import './booking-slot-list.css';
@@ -11,6 +11,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import useDocumentTitle from '../hooks/useDocumentTitle';
 import CalendarGrid, { CALENDAR_LEGEND_ITEMS } from '../components/CalendarGrid';
 import ConfirmationModal from '../components/ConfirmationModal';
+import ScreenerCheck from '../components/ScreenerCheck';
 import ShareOpportunityLink from '../components/ShareOpportunityLink';
 import { RecordedStudyExpectations } from '../components/RecordedStudyExpectations';
 import { getParticipantFacingType, getEligibilityNote, getTypeBadgeClass, getCardHoverColor, getClosingTime, getTimeRemainingUntil } from '../utils/opportunityUtils';
@@ -160,7 +161,7 @@ const OpportunityDetail: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const isSessionCompleted = searchParams.get('completed') === '1';
-  const { user, login } = useAuth();
+  const { user } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
@@ -268,7 +269,9 @@ const OpportunityDetail: React.FC = () => {
   // most of its height on empty hours. Calendar stays one click away.
   const [viewMode, setViewMode] = useState<'table' | 'calendar'>('table');
   const [userCalendarEvents, setUserCalendarEvents] = useState<CalendarEvent[]>([]);
-  const [loadingCalendar, setLoadingCalendar] = useState(false);
+  // Only the setter is read - the loading flag drives no UI here (the calendar
+  // renders its own state), so the value slot is left unbound.
+  const [, setLoadingCalendar] = useState(false);
   // BK-3: which of this opportunity's sessions the participant has already
   // booked, so the table view's slot chips can show "Booked" instead of
   // collapsing into the generic "Full" chip a booked-out slot also matches.
@@ -283,6 +286,13 @@ const OpportunityDetail: React.FC = () => {
   // participant's consent decision. Both booking surfaces funnel through
   // handleBookSession, so one gate covers them both.
   const [consentGate, setConsentGate] = useState<{ show: boolean; sessionId: string | null }>({ show: false, sessionId: null });
+  // The screener gate (MR2): the take-part action waiting on the participant's
+  // eligibility check. `book` carries the session to resume; `takePart` covers
+  // the single survey/recorded/external button.
+  const [screenerGate, setScreenerGate] = useState<{
+    show: boolean;
+    pending: { kind: 'book'; sessionId: string } | { kind: 'takePart' } | null;
+  }>({ show: false, pending: null });
   const errorBannerRef = useRef<HTMLDivElement | null>(null);
 
   /**
@@ -597,6 +607,34 @@ const OpportunityDetail: React.FC = () => {
     ? bookingConsentText(opportunity.type, opportunity.consent_text)
     : '';
 
+  // The screener gate (MR2). The participant response carries the REDACTED
+  // screener (no `disqualifies` flags) and the participant's own status. A
+  // screener gates every take-part path until the participant has QUALIFIED: a
+  // not-yet-answered participant is sent through the check, and so is one who was
+  // previously screened out, because a screen-out can be retaken (latest answer
+  // wins, server side). Only a stored `qualified` verdict skips the gate.
+  //
+  // Keyed on the screener's PRESENCE, not on `screenerStatus`'s presence, and
+  // that is deliberate. `assertScreenerPassed` (backend) enforces for EVERY
+  // user with a screener and no stored qualified verdict - it does not exempt
+  // the owner or an admin - so the client gate must fire for exactly that set to
+  // mirror it. The admin/owner opportunity payload omits `screenerStatus`
+  // (that is a participant field), so gating on `screenerStatus` presence would
+  // let an admin click straight through to a server 403 with no modal to answer
+  // through. During the internal beta CORTEX_BETA_ALL_ADMIN makes every employee
+  // an admin, so that set is the whole internal cohort: they must be able to
+  // answer. The one wart is that the admin payload does not carry their verdict
+  // back, so the check re-appears on each fresh load; the real fix is a
+  // server-side verdict readback for admins - cto/AdaptaLabs#134, out of MR2's
+  // frontend scope. Genuine (external) participants always receive
+  // `screenerStatus`, so for them presence-of-screener and presence-of-status
+  // are the same shape.
+  const participantScreener =
+    (opportunity?.screener as ParticipantScreener | null | undefined) ?? null;
+  const screenerGates =
+    !!participantScreener &&
+    opportunity?.screenerStatus?.outcome !== 'qualified';
+
   /**
    * Books a session and owns the message shown when that fails.
    *
@@ -606,7 +644,7 @@ const OpportunityDetail: React.FC = () => {
    * two guards below have to reject rather than return - a guard that returned
    * quietly would leave the slot looking booked with nothing behind it.
    */
-  const handleBookSession = async (sessionId: string) => {
+  const handleBookSession = async (sessionId: string, opts?: { skipScreener?: boolean }) => {
     if (!user) {
       setError('Please log in to book sessions');
       throw new Error('Not signed in');
@@ -616,6 +654,18 @@ const OpportunityDetail: React.FC = () => {
     if (!user.id) {
       setError('User session invalid. Please log in again.');
       throw new Error('User session invalid');
+    }
+
+    // The screener gate (MR2), BEFORE consent: eligibility is decided before the
+    // participant is asked to agree to anything. Fails closed - a screener that
+    // exists always gates until the participant has qualified. Detours through
+    // the check and resumes in its qualify handler; thrown rather than returned
+    // so CalendarGrid unwinds its optimistic "booked" mark while they answer.
+    // `skipScreener` is set only by that resume, so the re-run walks past this to
+    // the consent gate below rather than re-opening the check it just cleared.
+    if (!opts?.skipScreener && screenerGates) {
+      setScreenerGate({ show: true, pending: { kind: 'book', sessionId } });
+      throw new Error('Screener decision pending');
     }
 
     // The consent gate (#79 step 1b; baseline extended in audit row 9). A
@@ -643,7 +693,7 @@ const OpportunityDetail: React.FC = () => {
       setError('');
       setBookingSuccess(null);
 
-      const bookingResult = await bookSession(sessionId, {
+      await bookSession(sessionId, {
         consentAccepted,
         // The wording THIS page displayed, echoed so the server can refuse an
         // acceptance of text the participant never saw. The resolved booking
@@ -727,6 +777,125 @@ const OpportunityDetail: React.FC = () => {
       throw err;
     } finally {
       setBookingLoading(null);
+    }
+  };
+
+  /**
+   * Start the study on the single take-part button: a native survey / poll /
+   * one-question run, a recorded study, or a window.open hand-off to an external
+   * tool.
+   *
+   * Extracted from the button's onClick so the screener gate can re-run it
+   * verbatim once the participant qualifies - one definition, so the resumed
+   * path and the direct click cannot drift.
+   */
+  const runTakePart = async () => {
+    if (!opportunity) return;
+    if (isNativeSurvey && opportunity.firsthand_study_id) {
+      setFirstHandLoading(true);
+      try {
+        await trackOpportunityClick(opportunity.id, 'action');
+        const { session_url } = await startSurveySession(opportunity.id);
+        window.location.assign(session_url);
+      } catch (err: unknown) {
+        const status = (err as { response?: { status?: number } }).response?.status;
+        // 404 is the API's answer for every "this is not a runnable native
+        // survey" case - wrong type, external delivery, a task list linked by
+        // mistake. The participant cannot act on any of them, so they get one
+        // honest sentence.
+        if (status === 404) {
+          setError('This survey is not available. Please contact your research team.');
+        } else if (status === 403) {
+          setError('This study is not yet available. Please try again later.');
+        } else if (status === 409) {
+          // The backend refuses a second mint once a session is completed or
+          // uploading, rather than resetting it - re-answering would silently
+          // overwrite the stored responses, and the survey runtime keeps no
+          // history of what they were.
+          setError('You have already answered this survey.');
+        } else {
+          setError('Could not open the survey. Please try again or contact support.');
+        }
+      } finally {
+        setFirstHandLoading(false);
+      }
+    } else if (opportunity.type === 'unmoderated' && opportunity.firsthand_study_id) {
+      setFirstHandLoading(true);
+      try {
+        await trackOpportunityClick(opportunity.id, 'action');
+        const { session_url } = await startRecordedStudySession(opportunity.id);
+        window.location.assign(session_url);
+      } catch (err: unknown) {
+        const status = (err as { response?: { status?: number } }).response?.status;
+        const code = (err as { response?: { data?: { code?: string } } }).response?.data?.code;
+        // A database outage and an unconfigured study both answer 503; only the
+        // second is the research team's to fix, so key on the code before the
+        // status.
+        if (code === 'DB_CONNECTION_FAILED' || code === 'DB_NOT_CONFIGURED') {
+          setError('Temporarily unavailable. Please try again shortly.');
+        } else if (status === 503) {
+          setError('This study is not yet configured. Please contact your research team.');
+        } else if (status === 403) {
+          setError('This study is not yet available. Please try again later.');
+        } else {
+          setError('Could not start session. Please try again or contact support.');
+        }
+      } finally {
+        setFirstHandLoading(false);
+      }
+    } else if (externalLinkIsUsable) {
+      // Guarded on the SCHEME, not on the string being non-empty. `window.open`
+      // is a navigation like any other, and a stored `javascript:` URL is
+      // exactly what must not reach it.
+      //
+      // ponytail: the screener gate on this external hand-off is CLIENT-ONLY.
+      // window.open leaves Cortex and the server never sees the navigation, so a
+      // determined participant can open external_link_optional directly and skip
+      // the check. handleTakePartClick refuses the in-app path here, which is all
+      // the client can enforce; ADR-0007 records this ceiling as accepted.
+      //   -> cto/AdaptaLabs#133, breaks if a participant reaches the external
+      //      link without going through this button
+      await trackOpportunityClick(opportunity.id, 'action');
+      window.open(opportunity.external_link_optional, '_blank', 'noopener,noreferrer');
+    }
+  };
+
+  /**
+   * The take-part button, gated on the screener (MR2).
+   *
+   * Fails closed: a screener that exists sends the participant through the check
+   * before any of the four paths runs, and resumes only on a qualify.
+   */
+  const handleTakePartClick = () => {
+    if (screenerGates) {
+      setScreenerGate({ show: true, pending: { kind: 'takePart' } });
+      return;
+    }
+    void runTakePart();
+  };
+
+  /**
+   * Resume the pending take-part action once the participant qualifies.
+   *
+   * Optimistically marks the screener cleared so the resumed action does not
+   * re-open the gate it just passed: the closures below still hold the
+   * pre-submit status, so the booking path is resumed with `skipScreener` rather
+   * than by re-reading it. The next loadOpportunity confirms the verdict from
+   * the server.
+   */
+  const resumeAfterScreener = () => {
+    const pending = screenerGate.pending;
+    setScreenerGate({ show: false, pending: null });
+    setOpportunity((previous) =>
+      previous
+        ? { ...previous, screenerStatus: { answered: true, outcome: 'qualified' } }
+        : previous
+    );
+    if (!pending) return;
+    if (pending.kind === 'book') {
+      void handleBookSession(pending.sessionId, { skipScreener: true }).catch(() => undefined);
+    } else {
+      void runTakePart();
     }
   };
 
@@ -1549,71 +1718,7 @@ const OpportunityDetail: React.FC = () => {
                         <>
                         <button
                           className="btn btn-primary w-100 mission-cta-btn"
-                          onClick={async () => {
-                            if (isNativeSurvey && opportunity.firsthand_study_id) {
-                              setFirstHandLoading(true);
-                              try {
-                                await trackOpportunityClick(opportunity.id, 'action');
-                                const { session_url } = await startSurveySession(opportunity.id);
-                                window.location.assign(session_url);
-                              } catch (err: unknown) {
-                                const status = (err as { response?: { status?: number } }).response?.status;
-                                // 404 is the API's answer for every "this is
-                                // not a runnable native survey" case - wrong
-                                // type, external delivery, a task list linked
-                                // by mistake. The participant cannot act on any
-                                // of them, so they get one honest sentence.
-                                if (status === 404) {
-                                  setError('This survey is not available. Please contact your research team.');
-                                } else if (status === 403) {
-                                  setError('This study is not yet available. Please try again later.');
-                                } else if (status === 409) {
-                                  // The backend refuses a second mint once a
-                                  // session is completed or uploading, rather
-                                  // than resetting it - re-answering would
-                                  // silently overwrite the stored responses,
-                                  // and the survey runtime keeps no history of
-                                  // what they were.
-                                  setError('You have already answered this survey.');
-                                } else {
-                                  setError('Could not open the survey. Please try again or contact support.');
-                                }
-                              } finally {
-                                setFirstHandLoading(false);
-                              }
-                            } else if (opportunity.type === 'unmoderated' && opportunity.firsthand_study_id) {
-                              setFirstHandLoading(true);
-                              try {
-                                await trackOpportunityClick(opportunity.id, 'action');
-                                const { session_url } = await startRecordedStudySession(opportunity.id);
-                                window.location.assign(session_url);
-                              } catch (err: unknown) {
-                                const status = (err as { response?: { status?: number } }).response?.status;
-                                const code = (err as { response?: { data?: { code?: string } } }).response?.data?.code;
-                                // A database outage and an unconfigured study both
-                                // answer 503; only the second is the research team's
-                                // to fix, so key on the code before the status.
-                                if (code === 'DB_CONNECTION_FAILED' || code === 'DB_NOT_CONFIGURED') {
-                                  setError('Temporarily unavailable. Please try again shortly.');
-                                } else if (status === 503) {
-                                  setError('This study is not yet configured. Please contact your research team.');
-                                } else if (status === 403) {
-                                  setError('This study is not yet available. Please try again later.');
-                                } else {
-                                  setError('Could not start session. Please try again or contact support.');
-                                }
-                              } finally {
-                                setFirstHandLoading(false);
-                              }
-                            } else if (externalLinkIsUsable) {
-                              // Guarded on the SCHEME, not on the string being
-                              // non-empty. `window.open` is a navigation like
-                              // any other, and a stored `javascript:` URL is
-                              // exactly what must not reach it.
-                              await trackOpportunityClick(opportunity.id, 'action');
-                              window.open(opportunity.external_link_optional, '_blank', 'noopener,noreferrer');
-                            }
-                          }}
+                          onClick={handleTakePartClick}
                           disabled={
                             firstHandLoading || !hasStartablePath
                           }
@@ -1669,15 +1774,41 @@ const OpportunityDetail: React.FC = () => {
                         )}
                         </>
                       ) : externalLinkIsUsable && opportunity.external_link_optional ? (
-                        // DT-8: one hand-off pattern that names where the click
-                        // goes. This button used to say only "Participate" and
-                        // never showed the host - the destination is disclosed
-                        // here the way the recording task page and the bookings
-                        // meeting link already disclose theirs.
-                        <ExternalHandoff
-                          url={opportunity.external_link_optional}
-                          actionLabel={opportunity.type === 'question' ? 'Answer Question' : 'Participate'}
-                        />
+                        screenerGates ? (
+                          // The screener gate on the external hand-off (MR2).
+                          // This branch is the external `question` type, which
+                          // can carry a screener but is not one of the four
+                          // paths gated above - a raw <a href> here would let a
+                          // participant navigate straight to the tool with no
+                          // eligibility check. Routed through the same
+                          // handleTakePartClick as the external poll/survey
+                          // button, so a qualify opens the link (runTakePart's
+                          // window.open) and a screen-out blocks it. Still the
+                          // client-only ceiling recorded in #133, but the check
+                          // is now shown rather than skipped entirely.
+                          <>
+                            <button
+                              type="button"
+                              className="btn btn-primary w-100 mission-cta-btn"
+                              onClick={handleTakePartClick}
+                              disabled={firstHandLoading || !hasStartablePath}
+                              aria-label={opportunity.type === 'question' ? 'Answer Question' : 'Participate'}
+                            >
+                              {opportunity.type === 'question' ? 'Answer Question' : 'Participate'}
+                            </button>
+                            <ExternalDestinationNote url={opportunity.external_link_optional} />
+                          </>
+                        ) : (
+                          // DT-8: one hand-off pattern that names where the click
+                          // goes. This button used to say only "Participate" and
+                          // never showed the host - the destination is disclosed
+                          // here the way the recording task page and the bookings
+                          // meeting link already disclose theirs.
+                          <ExternalHandoff
+                            url={opportunity.external_link_optional}
+                            actionLabel={opportunity.type === 'question' ? 'Answer Question' : 'Participate'}
+                          />
+                        )
                       ) : (
                         /*
                           No anchor at all when the stored link is not a web
@@ -1762,6 +1893,21 @@ const OpportunityDetail: React.FC = () => {
         }}
         onCancel={() => setConsentGate({ show: false, sessionId: null })}
       />
+
+      {/* The screener gate (MR2): the eligibility check a participant answers
+          before any take-part path runs. Reads the REDACTED screener, submits
+          for the server's verdict, and resumes the pending action on a qualify.
+          Cancel or a screen-out books/starts nothing. */}
+      {screenerGate.show && participantScreener && opportunity && (
+        <ScreenerCheck
+          screener={participantScreener}
+          onSubmit={async (answers): Promise<ScreenerOutcome> =>
+            (await submitScreener(opportunity.id, answers)).outcome
+          }
+          onQualified={resumeAfterScreener}
+          onClose={() => setScreenerGate({ show: false, pending: null })}
+        />
+      )}
     </div>
   );
 };

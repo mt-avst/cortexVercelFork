@@ -94,6 +94,14 @@ export interface ReviewSummaryInput {
   questionCount: number;
   /** Authored recorded tasks. */
   taskCount: number;
+  /**
+   * Authored screener questions, or 0 when the study has no screener.
+   *
+   * 0 is the "no screener" state, not a gap: a screener is optional, so an
+   * empty count reads as "anyone can take part", never as something unfinished
+   * (unlike sessions, where 0 slots blocks booking).
+   */
+  screenerQuestionCount: number;
   /** Minutes the participant is likely to need, or null when unknown. */
   estimatedMinutes: number | null;
   /** The page a recorded study opens. */
@@ -482,6 +490,28 @@ const itemsForStep = (step: ReviewStepRef, input: ReviewSummaryInput): ReviewIte
       ];
     }
 
+    case 'screener': {
+      // 0 is "no screener", a valid choice, so it is NOT flagged missing the
+      // way an empty sessions or questions count is - a screener is optional,
+      // and an author who wants everyone through leaves it off on purpose.
+      if (input.screenerQuestionCount === 0) {
+        return [
+          {
+            label: 'Screener',
+            value: 'No screener',
+            note: 'Anyone signed in can take part - no eligibility questions are asked.'
+          }
+        ];
+      }
+      return [
+        {
+          label: 'Screener questions',
+          value: pluralise(input.screenerQuestionCount, 'question'),
+          note: 'Anyone who does not qualify is shown the not-a-match message and cannot take part.'
+        }
+      ];
+    }
+
     case 'consent': {
       // The moderated (bookable) shapes carry OPTIONAL consent (#79): a session
       // that stores nothing to consent to needs no wording, and an empty box is
@@ -529,7 +559,8 @@ const FOCUS_FIELD_BY_KEY: Record<string, string | undefined> = {
   questions: 'inline_survey_questions',
   taskList: 'inline_study_steps',
   externalLink: 'external_link_optional',
-  sessions: undefined
+  sessions: undefined,
+  screener: 'screener_questions-heading'
 };
 
 /**

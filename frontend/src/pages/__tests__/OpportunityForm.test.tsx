@@ -153,6 +153,12 @@ beforeEach(() => {
  * which does that for it) instead.
  */
 const goToConsentStep = () => {
+  // MR2 inserted a Screener step between the authoring step and Consent, so the
+  // walk is one longer. Guarded so this still works from a step already past it.
+  const toScreener = screen.queryByRole('button', { name: /^Continue: Screener$/i });
+  if (toScreener) {
+    fireEvent.click(toScreener);
+  }
   fireEvent.click(screen.getByRole('button', { name: /^Continue: Consent$/i }));
 };
 
@@ -1676,11 +1682,17 @@ describe('locateField', () => {
     expect(locateField('title').tab).toBe(1);
     expect(locateField('participant_type_specific_details').tab).toBe(2);
     expect(locateField('external_link_optional').tab).toBe(3);
-    // Step 4, since C1: consent is its own step at the end of the two authoring
-    // paths. Asserted for BOTH keys, not one - the recorded and survey consent
-    // fields are a twin pair and pinning one has twice let the other drift.
-    expect(locateField('inline_study_consent_text').tab).toBe(4);
-    expect(locateField('inline_survey_consent_text').tab).toBe(4);
+    // Step 5, since MR2: the Screener step took id 4, so consent is its own step
+    // at 5 on the two authoring paths. Asserted for BOTH keys, not one - the
+    // recorded and survey consent fields are a twin pair and pinning one has
+    // twice let the other drift.
+    expect(locateField('inline_study_consent_text').tab).toBe(5);
+    expect(locateField('inline_survey_consent_text').tab).toBe(5);
+    // The screener (MR2) is step 4. Both its top-level keys, and a per-question
+    // key routed by the regex branch, land there.
+    expect(locateField('screener_questions').tab).toBe(4);
+    expect(locateField('screener_message').tab).toBe(4);
+    expect(locateField('screener_questions.0.options.1.label').tab).toBe(4);
     // Still step 3, and asserted here because "the consent field moved" and
     // "everything on that step moved" are different changes: the content the
     // consent is about stayed where it was.
@@ -1756,10 +1768,22 @@ describe('FIELD_LOCATIONS completeness', () => {
   // Resolved from the vitest root (frontend/), because import.meta.url is not
   // a file: URL under the jsdom environment.
   const source = readFileSync(resolve(process.cwd(), 'src/pages/OpportunityForm.tsx'), 'utf8');
+  // The screener validator lives in its own module (`collectScreenerErrors`),
+  // merged into the form's error map, so its two non-indexed keys are produced
+  // THERE rather than by an `errors.X =` line in this file. Read from the
+  // `SCREENER_*_KEY` constants it both assigns and this file routes, so the map
+  // is still held to a source of truth in both directions. The indexed screener
+  // keys (`screener_questions.<i>.*`) are routed by locateField's regex, not by
+  // a FIELD_LOCATIONS entry, so they are deliberately not counted here.
+  const screenerSource = readFileSync(
+    resolve(process.cwd(), 'src/lib/opportunity-authoring/screener.ts'),
+    'utf8'
+  );
   const produced = [
-    ...new Set(
-      [...source.matchAll(/(?:errors|fieldErrors)\.([a-z_]+)\s*=/g)].map((match) => match[1])
-    ),
+    ...new Set([
+      ...[...source.matchAll(/(?:errors|fieldErrors)\.([a-z_]+)\s*=/g)].map((match) => match[1]),
+      ...[...screenerSource.matchAll(/SCREENER_\w+_KEY\s*=\s*'([a-z_]+)'/g)].map((match) => match[1]),
+    ]),
   ].sort();
 
   it('finds the validation keys it is meant to be checking', () => {
