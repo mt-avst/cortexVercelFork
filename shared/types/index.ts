@@ -193,9 +193,13 @@ export interface Opportunity {
    */
   screener?: Screener | ParticipantScreener | null;
   /**
-   * The signed-in participant's own screener verdict for this opportunity.
-   * Present only on the participant-facing payload and only when the opportunity
-   * has a screener. Absent on admin responses and when there is no screener.
+   * The signed-in viewer's own screener verdict for this opportunity. Present on
+   * BOTH the participant-facing and the admin/owner payload whenever the
+   * opportunity has a screener and the request is authenticated - it is the
+   * viewer's own {answered, outcome} and carries nothing owner-only (#134). It
+   * is the admin's verdict readback that clears the frontend screener gate for
+   * the internal beta cohort (CORTEX_BETA_ALL_ADMIN). Absent when there is no
+   * screener, or on an unauthenticated request.
    */
   screenerStatus?: ScreenerStatus;
   created_at: string;
