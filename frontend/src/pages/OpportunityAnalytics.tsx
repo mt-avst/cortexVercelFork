@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import useDocumentTitle from '../hooks/useDocumentTitle';
 import {
   Eye, CheckCircle2, Percent, Users,
   BarChart3, Calendar, History, Activity,
@@ -208,6 +209,9 @@ const OpportunityAnalyticsPage: React.FC = () => {
   const { user, loading } = useAuth();
 
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
+  // Tab leads with the study (matching the on-page title), then the "· Cortex"
+  // lock-up; falls back to the section name before the study has loaded.
+  useDocumentTitle(opportunity?.title ? `${opportunity.title} · Cortex` : 'Analytics · Cortex');
   const [analytics, setAnalytics] = useState<OpportunityAnalytics | null>(null);
   const [loadingOpportunity, setLoadingOpportunity] = useState(true);
   const [loadingAnalytics, setLoadingAnalytics] = useState(true);
@@ -620,12 +624,8 @@ const OpportunityAnalyticsPage: React.FC = () => {
       {/* Header - Cortex Page Header Structure */}
       <div className="cortex-page-header">
         <div className="cortex-title-block">
-          <h1 className="cortex-brand-title">
-            Cortex<span className="cortex-admin-separator">|</span><span className="cortex-admin-suffix">Analytics</span>
-          </h1>
-          <p>
-            Context: <span className="cortex-highlight-orange">{opportunity.title}</span>
-          </p>
+          <span className="cortex-page-kicker">Analytics</span>
+          <h1 className="cortex-page-title">{opportunity.title}</h1>
           {/* Say which zone the day boundaries are in. These charts are quoted
               at other people, so they are cut in ONE organisation zone rather
               than reshaping themselves for whoever opened them - and a reader

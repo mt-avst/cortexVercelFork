@@ -1214,17 +1214,9 @@ body.theme-dark .admin-stat-card .stat-icon-wrapper {
   border: 1px solid var(--border-subtle-current);
 }
 
-/* Cortex Brand Title - Dark Mode */
-body.theme-dark .cortex-brand-title {
-  color: #FFFFFF; /* Cortex in bright white */
-}
-
-body.theme-dark .cortex-brand-title .cortex-admin-suffix {
-  color: rgba(255, 255, 255, 0.6); /* Admin/Analytics in muted grey */
-}
-
-body.theme-dark .cortex-brand-title .cortex-admin-separator {
-  color: rgba(255, 255, 255, 0.3);
+/* Page title - Dark Mode: near-white, Lane A1's deliberate value. */
+body.theme-dark .cortex-page-title {
+  color: #FFFFFF;
 }
 
 /* (Dark mode table container defined above with cyan accent) */
@@ -1814,17 +1806,9 @@ body.theme-light .admin-stat-card .stat-icon-wrapper {
   border: 1px solid var(--border-subtle-current);
 }
 
-/* Cortex Brand Title - Light Mode */
-body.theme-light .cortex-brand-title {
-  color: #1A1A1A; /* Cortex in near-black */
-}
-
-body.theme-light .cortex-brand-title .cortex-admin-suffix {
-  color: #6B7280; /* Admin/Analytics in muted grey */
-}
-
-body.theme-light .cortex-brand-title .cortex-admin-separator {
-  color: rgba(0, 0, 0, 0.25);
+/* Page title - Light Mode: near-black, Lane A1's deliberate value. */
+body.theme-light .cortex-page-title {
+  color: #1A1A1A;
 }
 
 /* Admin table glass container - light mode (uses panel surface system) */
@@ -3291,12 +3275,12 @@ body .session-review-page .cortex-analytics-card:hover {
   transform: none;
 }
 
-/* Not .cortex-page-header h1: that element already carries .cortex-brand-title,
-   Lane A1's deliberate per-theme logotype colour (near-black in light, white
-   in dark) - (0,2,2) beats this scope's own .cortex-brand-title rules
-   (0,2,1), so adding it here would have silently recoloured the wordmark by
-   a few points of navy/off-white (code-reviewer finding, row 15/Decision 4/5)
-   for a font-family declaration Analytics already computes anyway. */
+/* Not .cortex-page-header h1: that element already carries .cortex-page-title,
+   Lane A1's deliberate per-theme colour (near-black in light, white in dark) -
+   (0,2,2) beats this scope's own .cortex-page-title rules (0,2,1), so adding it
+   here would have silently recoloured the title by a few points of navy/off-white
+   (code-reviewer finding, row 15/Decision 4/5) for a font-family declaration
+   Analytics already computes anyway. */
 body .session-review-page .cortex-chart-title {
   color: var(--register-ink);
   font-family: var(--font-family-display);
@@ -3639,7 +3623,7 @@ body.theme-dark .sales-section + .sales-section {
    logo, where nothing has to be read off it.
 
    Deliberately not listed here, and still on 500:
-     .cortex-brand-title, .landing-parent-brand  - logotype
+     .landing-parent-brand                       - logotype
      .adaptabits-page-title svg, .section-icon   - icons, not text
      .cortex-stat-value                         - 40px, so WCAG large-text
        applies and 3.14 already clears the 3:1 threshold
