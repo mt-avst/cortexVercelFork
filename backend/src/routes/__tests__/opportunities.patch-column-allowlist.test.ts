@@ -154,6 +154,19 @@ const PERMITTED: Record<string, unknown> = {
   firsthand_study_id: 'study-1',
   participant_type_required: 'internal',
   participant_type_specific_details: 'Finance team only',
+  // Eligibility screener (JSONB). The PATCH loop emits `screener = $n::jsonb`.
+  screener: {
+    questions: [
+      {
+        id: 'q1',
+        prompt: 'Which team are you in?',
+        options: [
+          { id: 'o1', label: 'Engineering', disqualifies: false },
+          { id: 'o2', label: 'Sales', disqualifies: true },
+        ],
+      },
+    ],
+  },
   status: 'draft',
   start_date: '2030-01-01T10:00:00.000Z',
   end_date: '2030-01-02T10:00:00.000Z',
@@ -343,7 +356,7 @@ describe('PATCH /api/opportunities/:id column allow-list', () => {
     // compared them to the schema, so a mutation that added a sixteenth name to
     // the real allow-list passed all 22 tests. A pin that restates a policy
     // cannot see the policy change.
-    it('permits exactly the eighteen columns, and no more', () => {
+    it('permits exactly the nineteen columns, and no more', () => {
       expect([...UPDATABLE_OPPORTUNITY_COLUMNS].sort()).toEqual(Object.keys(PERMITTED).sort());
     });
 

@@ -544,6 +544,7 @@ const EXPECTED_AUTHORISATION: Record<string, Verdict> = {
   'POST /api/opportunities/:id/firsthand-handoff': 'session',
   'GET /api/opportunities/:id/recorded-study-brief': 'optional-session+live-role',
   'POST /api/opportunities/:id/recorded-study-session': 'session',
+  'POST /api/opportunities/:id/screener': 'session',
   'GET /api/opportunities/:id/session-events': 'admin',
   'GET /api/opportunities/:id/sessions': 'optional-session+live-role',
   'POST /api/opportunities/:id/sessions': 'admin',
@@ -687,7 +688,7 @@ const EXPECTED_AUTHORISATION: Record<string, Verdict> = {
  * guards cannot notice the table changing - which is the whole point of a
  * count here.
  */
-const EXPECTED_ROUTE_COUNT = 96;
+const EXPECTED_ROUTE_COUNT = 97;
 
 /** Every router file in `src/routes`, read off disk rather than listed. */
 const ROUTER_FILES = fs

@@ -83,6 +83,73 @@ export interface Setting {
 // OPPORTUNITY TYPES
 // ============================================================================
 
+/**
+ * SCREENER - the eligibility questions a researcher can set on an opportunity so
+ * only the right people can take part. Absent (screener null/undefined) means no
+ * screener: anyone signed in may take part. When present it has at least one
+ * single-choice question, and the shape is validated by
+ * shared/screener.ts (which owns the zod and the evaluation). These
+ * are plain interfaces because shared/types carries no zod - the assertion in
+ * backend/src/validation/schemas.ts fails the build if the zod ever drifts from
+ * them.
+ *
+ * `disqualifies` is OWNER-ONLY. A participant who could see which answer screens
+ * them out could game the screener, so the participant-facing payload is the
+ * redacted ParticipantScreener below - the flag is stripped in
+ * backend/src/utils/publicOpportunity.ts.
+ */
+export interface ScreenerOption {
+  id: string;
+  label: string;
+  disqualifies: boolean;
+}
+
+export interface ScreenerQuestion {
+  id: string;
+  prompt: string;
+  options: ScreenerOption[];
+}
+
+export interface Screener {
+  questions: ScreenerQuestion[];
+  screenedOutMessage?: string;
+}
+
+/** The redacted screener a participant sees - no `disqualifies` flags. */
+export interface ParticipantScreenerOption {
+  id: string;
+  label: string;
+}
+
+export interface ParticipantScreenerQuestion {
+  id: string;
+  prompt: string;
+  options: ParticipantScreenerOption[];
+}
+
+export interface ParticipantScreener {
+  questions: ParticipantScreenerQuestion[];
+  screenedOutMessage?: string;
+}
+
+export type ScreenerOutcome = 'qualified' | 'screened_out';
+
+/**
+ * The signed-in participant's own screener state for an opportunity, present on
+ * the participant-facing opportunity payload. `answered` false means they have
+ * not taken the screener yet; when true, `outcome` is their stored verdict.
+ * Absent when the opportunity has no screener.
+ */
+export interface ScreenerStatus {
+  answered: boolean;
+  outcome?: ScreenerOutcome;
+}
+
+/** The response body of `POST /api/opportunities/:id/screener`. */
+export interface ScreenerSubmitResponse {
+  outcome: ScreenerOutcome;
+}
+
 export interface Opportunity {
   id: string;
   type: 'test' | 'poll' | 'survey' | 'question' | 'interview' | 'unmoderated';
@@ -115,6 +182,22 @@ export interface Opportunity {
   consent_text?: string | null;
   consent_template_id?: string | null;
   consent_template_version?: number | null;
+  /**
+   * The eligibility screener, or null/absent for an opportunity that has none.
+   * On the ADMIN/owner response this is the full `Screener` (with the
+   * `disqualifies` flags, so the owner can edit it). On the PARTICIPANT response
+   * it is the redacted `ParticipantScreener` - the type widens to both because
+   * the same field name carries both shapes on the wire, and the redaction seam
+   * (publicOpportunity.ts) decides which. A participant must never receive the
+   * `disqualifies` flags.
+   */
+  screener?: Screener | ParticipantScreener | null;
+  /**
+   * The signed-in participant's own screener verdict for this opportunity.
+   * Present only on the participant-facing payload and only when the opportunity
+   * has a screener. Absent on admin responses and when there is no screener.
+   */
+  screenerStatus?: ScreenerStatus;
   created_at: string;
   updated_at: string;
   /**
@@ -176,6 +259,9 @@ export interface CreateOpportunityRequest {
   consent_text?: string;
   consent_template_id?: string | null;
   consent_template_version?: number | null;
+  // The eligibility screener. Absent means no screener. Validated by
+  // screenerSchema (shared/screener.ts) wired into the create schema.
+  screener?: Screener;
 }
 
 export interface UpdateOpportunityRequest {
@@ -200,6 +286,10 @@ export interface UpdateOpportunityRequest {
   consent_text?: string | null;
   consent_template_id?: string | null;
   consent_template_version?: number | null;
+  // The eligibility screener. Null clears it (removes the screener); an object
+  // replaces it wholesale. Validated by screenerSchema wired into the update
+  // schema.
+  screener?: Screener | null;
 }
 
 // ============================================================================

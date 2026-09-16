@@ -2417,5 +2417,37 @@
     "spec": "src/firsthand/runtime-participant-completion-scope-postgres.test.ts",
     "test": "scopes each participant's completions to their own sessions",
     "needsDatabase": true
+  },
+  {
+    "id": "screener-gate-refuses-a-non-qualified-participant",
+    "why": "The screener's entire value is that the three apply chokepoints refuse anyone without a stored 'qualified' verdict, and this throw in assertScreenerPassed IS that refusal. Turning it into a plain return lets a participant who never took the screener, or who was screened out, book or mint a session anyway. The mocked-pool route tests cannot see it: the verdict lookup only ever runs against a real database. The named real-Postgres test seeds a published opportunity that has a screener and NO verdict for the participant, and asserts the booking answers 403. Proven by mutation before entry: throw->return reds the named test, which answers 201 instead.",
+    "file": "backend/src/services/screener.ts",
+    "anchor": "    throw new ForbiddenError(SCREENER_NOT_PASSED);",
+    "mutation": "    return;",
+    "runner": "vitest",
+    "spec": "src/routes/__tests__/screener-enforcement-postgres.test.ts",
+    "test": "refuses a booking when a screener exists and the participant has no verdict",
+    "needsDatabase": true
+  },
+  {
+    "id": "screener-redaction-strips-the-disqualifies-flag",
+    "why": "The screener's disqualifies flags are owner-only: a participant who could see which answer screens them out could game the screener. toParticipantScreenerField reduces the screener to its participant-facing shape at the public serialiser, and this is the line that strips the flag. Returning the raw screener instead publishes it to every participant on the browse and detail pages, since those routes select the whole row and this deny-list file publishes new columns by default. The named jest test asserts the serialised participant payload carries no disqualifies anywhere. Proven by mutation before entry: returning the raw screener reds the named test.",
+    "file": "backend/src/utils/publicOpportunity.ts",
+    "anchor": "    return redactScreenerForParticipant(screener as Screener);",
+    "mutation": "    return screener;",
+    "runner": "jest",
+    "spec": "src/utils/__tests__/publicOpportunity.screener.test.ts",
+    "test": "strips the owner-only disqualifies flag from every option"
+  },
+  {
+    "id": "screener-gate-wired-into-the-survey-session-mint",
+    "why": "The shared assertScreenerPassed guard is only load-bearing where it is actually called, and the survey-session mint is one of the three chokepoints it must gate. The guard-internal canary is exercised by the booking test and cannot see this call site removed; without an entry here, deleting or no-oping this line lets a screened-out participant mint a native survey/poll session and the suite stays green. The gate fires before the linked-study check, so the named real-Postgres test seeds a published native survey with a screener and NO verdict and asserts 403. Proven by mutation before entry: replacing the call with an inert await reds the named test, which answers 400 (no study linked) instead of 403.",
+    "file": "backend/src/routes/opportunities.ts",
+    "anchor": "    await assertScreenerPassed(pool, loaded.canonicalOpportunityId ?? id, req.user.id, row.screener);",
+    "mutation": "    await Promise.resolve();",
+    "runner": "vitest",
+    "spec": "src/routes/__tests__/screener-enforcement-postgres.test.ts",
+    "test": "refuses to mint a native survey session when the participant has no verdict",
+    "needsDatabase": true
   }
 ]
