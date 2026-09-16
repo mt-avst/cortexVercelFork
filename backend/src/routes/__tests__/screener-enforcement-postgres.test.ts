@@ -395,4 +395,57 @@ describe.skipIf(skipDbTests)("screener enforcement against real Postgres", () =>
       expect(response.body.screenerStatus).toBeUndefined();
     });
   });
+
+  describe("admin/owner screener status on the opportunity payload (#134)", () => {
+    // In the beta CORTEX_BETA_ALL_ADMIN lifts every employee to admin, so the
+    // whole internal cohort hits the admin branch. Without their own verdict on
+    // the payload the frontend screener gate never clears and the modal re-opens
+    // on each load. The admin payload keeps the full editable screener AND now
+    // carries the viewer's own {answered, outcome}.
+    const getAsAdmin = (opportunityId: string, userId: string) =>
+      request(listening(app))
+        .get(`/api/opportunities/${opportunityId}`)
+        .set("x-test-user-id", userId)
+        .set("x-test-user-role", "researcher_admin");
+
+    it("attaches the admin's own qualified verdict while keeping the full editable screener", async () => {
+      const admin = await seedUser("researcher_admin");
+      const opportunity = await seedOpportunity({ ownerId: admin, screener: SCREENER });
+      await setVerdict(opportunity, admin, "qualified");
+
+      const response = await getAsAdmin(opportunity, admin).expect(200);
+      expect(response.body.screenerStatus).toEqual({ answered: true, outcome: "qualified" });
+      // The admin payload is NOT redacted: the owner-only flags remain so the
+      // screener stays editable. This is the seam that must not regress.
+      expect(JSON.stringify(response.body.screener)).toContain("disqualifies");
+    });
+
+    it("attaches an admin's stored screened-out verdict, which keeps the gate up", async () => {
+      const admin = await seedUser("researcher_admin");
+      const opportunity = await seedOpportunity({ ownerId: admin, screener: SCREENER });
+      await setVerdict(opportunity, admin, "screened_out");
+
+      const response = await getAsAdmin(opportunity, admin).expect(200);
+      // A non-qualified verdict comes back so the frontend gate does NOT clear on
+      // outcome - the middle case the gate interaction depends on.
+      expect(response.body.screenerStatus).toEqual({ answered: true, outcome: "screened_out" });
+    });
+
+    it("reports answered:false for an admin who has not taken a present screener", async () => {
+      const admin = await seedUser("researcher_admin");
+      const opportunity = await seedOpportunity({ ownerId: admin, screener: SCREENER });
+
+      const response = await getAsAdmin(opportunity, admin).expect(200);
+      expect(response.body.screenerStatus).toEqual({ answered: false });
+      expect(JSON.stringify(response.body.screener)).toContain("disqualifies");
+    });
+
+    it("omits screenerStatus for an admin on an opportunity with no screener", async () => {
+      const admin = await seedUser("researcher_admin");
+      const opportunity = await seedOpportunity({ ownerId: admin });
+
+      const response = await getAsAdmin(opportunity, admin).expect(200);
+      expect(response.body.screenerStatus).toBeUndefined();
+    });
+  });
 });

@@ -618,17 +618,15 @@ const OpportunityDetail: React.FC = () => {
   // that is deliberate. `assertScreenerPassed` (backend) enforces for EVERY
   // user with a screener and no stored qualified verdict - it does not exempt
   // the owner or an admin - so the client gate must fire for exactly that set to
-  // mirror it. The admin/owner opportunity payload omits `screenerStatus`
-  // (that is a participant field), so gating on `screenerStatus` presence would
-  // let an admin click straight through to a server 403 with no modal to answer
-  // through. During the internal beta CORTEX_BETA_ALL_ADMIN makes every employee
-  // an admin, so that set is the whole internal cohort: they must be able to
-  // answer. The one wart is that the admin payload does not carry their verdict
-  // back, so the check re-appears on each fresh load; the real fix is a
-  // server-side verdict readback for admins - cto/AdaptaLabs#134, out of MR2's
-  // frontend scope. Genuine (external) participants always receive
-  // `screenerStatus`, so for them presence-of-screener and presence-of-status
-  // are the same shape.
+  // mirror it. Keying on screener presence also stays correct now the admin
+  // payload DOES carry `screenerStatus` (#134, server-side verdict readback for
+  // admins): a qualified admin's status clears the gate below, and an admin who
+  // has not answered still sees the modal. During the internal beta
+  // CORTEX_BETA_ALL_ADMIN makes every employee an admin, so that set is the
+  // whole internal cohort. Both admin and external participants now receive
+  // `screenerStatus` when a screener exists, so presence-of-screener and
+  // presence-of-status are the same shape - but this gate keys on the screener
+  // regardless, so it fails closed even if a status is ever absent.
   const participantScreener =
     (opportunity?.screener as ParticipantScreener | null | undefined) ?? null;
   const screenerGates =
