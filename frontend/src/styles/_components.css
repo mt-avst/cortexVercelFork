@@ -9751,6 +9751,43 @@ body.theme-light .landing-layout-container {
   overflow: visible;
 }
 
+/* Landing left-rail gutter. The header mark, hero and narrative all read their
+   inset from --container-padding, and their containers share max-width:1200 +
+   margin:auto - so inset = centre-margin + this padding. The base 20px hugs the
+   edge on tablet/phone, so widen it here (landing only):
+   - below 1200 the containers fill the viewport (no centre-margin), so the
+     padding is the whole gutter: ramp it with the viewport.
+   - above 1200 the centre-margin grows by (100vw-1200)/2; taper the padding back
+     by the same amount so the inset holds ~80px until the centre-margin alone
+     exceeds it (~1320px), after which the natural centred inset takes over
+     (unchanged desktop). Continuous across 1200 - no dip. */
+@media (max-width: 1200px) {
+  body.landing-page {
+    --container-padding: clamp(2rem, 7vw, 5rem); /* 32px floor -> 80px cap */
+  }
+}
+
+@media (min-width: 1201px) {
+  body.landing-page {
+    --container-padding: max(1.25rem, calc(5rem - (100vw - 1200px) / 2));
+  }
+}
+
+/* The narrative sections stacked their own hardcoded gutter (.sales-section pad
+   + .sales-section-inner pad) instead of the shared token, so they sat off the
+   hero/header spine and did not follow the gutter above. Drive their inset from
+   --container-padding too so the header mark, hero and "SEE HOW IT WORKS" line
+   up on one spine at every width. Scoped to the landing. */
+body.landing-page .sales-section {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+body.landing-page .sales-section-inner {
+  padding-left: var(--container-padding);
+  padding-right: var(--container-padding);
+}
+
 /* Layout container - full-screen flexbox
    Hard left, not left-of-centre: the column sits at a fixed inset and stays
    there regardless of viewport width, instead of centring as a unit. The
