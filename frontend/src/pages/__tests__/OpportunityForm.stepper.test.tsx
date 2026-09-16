@@ -134,56 +134,56 @@ describe('the step strip reports progress, not just position', () => {
     // once the strip is on screen.
     selectType('unmoderated');
     expect(steps().map((step) => step.textContent)).toEqual([
-      expect.stringContaining('Step 1 of 5'),
-      expect.stringContaining('Step 2 of 5'),
-      expect.stringContaining('Step 3 of 5'),
-      expect.stringContaining('Step 4 of 5'),
-      expect.stringContaining('Step 5 of 5'),
+      expect.stringContaining('Step 1 of 6'),
+      expect.stringContaining('Step 2 of 6'),
+      expect.stringContaining('Step 3 of 6'),
+      expect.stringContaining('Step 4 of 6'),
+      expect.stringContaining('Step 5 of 6'),
+      expect.stringContaining('Step 6 of 6'),
     ]);
 
-    // An external poll is five steps too since WZ-18: its hand-off Consent step
-    // is a short confirmation, but it counts, so the strip reads five whichever
-    // delivery mode the author picks rather than jumping from four to five.
+    // An external poll is six steps too since MR2: it gains the Screener step
+    // before Consent like every other shape that reaches a participant, so the
+    // strip reads six whichever delivery mode the author picks.
     selectType('poll');
     expect(steps().map((step) => step.textContent)).toEqual([
-      expect.stringContaining('Step 1 of 5'),
-      expect.stringContaining('Step 2 of 5'),
-      expect.stringContaining('Step 3 of 5'),
-      expect.stringContaining('Step 4 of 5'),
-      expect.stringContaining('Step 5 of 5'),
+      expect.stringContaining('Step 1 of 6'),
+      expect.stringContaining('Step 2 of 6'),
+      expect.stringContaining('Step 3 of 6'),
+      expect.stringContaining('Step 4 of 6'),
+      expect.stringContaining('Step 5 of 6'),
+      expect.stringContaining('Step 6 of 6'),
     ]);
   });
 
-  it('carries an external poll all the way to a fifth Review step, not a fourth, now that every shape has Consent', () => {
-    // Before WZ-18 an external poll was the shortest strip shape - [1, 2, 3, 5],
-    // length 4, Review reading "Step 4 of 4" while carrying id 5 - and this test
-    // used that gap to prove the strip numbers by position, not by id. WZ-18
-    // closes the gap: the hand-off now carries a Consent step, so the poll is
-    // [1, 2, 3, 4, 5] like every other type and Review is the fifth step. That
-    // is the whole point of the union, so it is what this pins - a revert that
-    // dropped the hand-off Consent step would land Review back at "Step 4 of 4"
-    // and fail here.
+  it('carries an external poll all the way to a sixth Review step, through Screener and Consent', () => {
+    // Since MR2 an external poll is [1, 2, 3, 4, 5, 6] - basics, content,
+    // External Link, Screener, Consent, Review - like every other shape that
+    // reaches a participant, and Review is the sixth step. A revert that dropped
+    // the Screener step would land Review back at "Step 5 of 5" and fail here.
     renderForm();
     selectType('poll');
 
     const beforeReview = steps();
-    expect(beforeReview).toHaveLength(5);
-    // Step 4 is the hand-off Consent step, between External Link and Review.
-    expect(beforeReview[3]).toHaveTextContent('Consent');
+    expect(beforeReview).toHaveLength(6);
+    // Step 4 is the Screener, step 5 the hand-off Consent, between External Link
+    // and Review.
+    expect(beforeReview[3]).toHaveTextContent('Screener');
+    expect(beforeReview[4]).toHaveTextContent('Consent');
 
     fireEvent.click(beforeReview[2]); // External Link
+    fireEvent.click(screen.getByRole('button', { name: 'Continue: Screener' }));
     fireEvent.click(screen.getByRole('button', { name: 'Continue: Consent' }));
-    // Review's backward control names the step BEFORE it, which is now Consent
-    // on the hand-off path too - asserted rather than assumed, because it is the
-    // label that would be wrong if the control read a fixed number instead of
-    // the list.
+    // Review's backward control names the step BEFORE it, which is Consent -
+    // asserted rather than assumed, because it is the label that would be wrong
+    // if the control read a fixed number instead of the list.
     fireEvent.click(screen.getByRole('button', { name: 'Continue: Review' }));
 
     const onReview = steps();
-    expect(onReview).toHaveLength(5);
-    expect(onReview[4]).toHaveTextContent('Step 5 of 5');
-    expect(onReview[4]).toHaveTextContent('Review');
-    expect(onReview[4]).toHaveAttribute('aria-current', 'step');
+    expect(onReview).toHaveLength(6);
+    expect(onReview[5]).toHaveTextContent('Step 6 of 6');
+    expect(onReview[5]).toHaveTextContent('Review');
+    expect(onReview[5]).toHaveAttribute('aria-current', 'step');
     expect(
       screen.getByRole('button', { name: 'Previous: Consent' })
     ).toBeInTheDocument();
@@ -193,17 +193,21 @@ describe('the step strip reports progress, not just position', () => {
     renderForm();
     selectType('unmoderated');
 
-    const [one, two, three, four, five] = steps();
+    const [one, two, three, four, five, six] = steps();
     expect(one).toHaveTextContent('Current step');
     expect(two).toHaveTextContent('Not started');
     expect(three).toHaveTextContent('Not started');
+    // Screener (step 4): a blank form has decided nothing about it either.
+    expect(four).toHaveTextContent('Screener');
     expect(four).toHaveTextContent('Not started');
+    expect(five).toHaveTextContent('Consent');
+    expect(five).toHaveTextContent('Not started');
     // Review, unasserted here before: a blank form has decided nothing about
     // it either, and it must read Not started rather than defaulting to some
     // other word because it is also the step that commits.
-    expect(five).toHaveTextContent('Review');
-    expect(five).toHaveTextContent('Not started');
-    // Not "Completed": nothing has been decided about steps 2 to 5, and the
+    expect(six).toHaveTextContent('Review');
+    expect(six).toHaveTextContent('Not started');
+    // Not "Completed": nothing has been decided about steps 2 to 6, and the
     // validator has nothing to object to on any of them yet.
     expect(screen.queryByText('Completed')).not.toBeInTheDocument();
   });
@@ -237,12 +241,12 @@ describe('the step strip reports progress, not just position', () => {
     renderForm();
     selectType('unmoderated');
 
-    fireEvent.click(steps()[3]);
+    fireEvent.click(steps()[4]);
 
     expect(steps()[0]).toHaveTextContent('Needs attention');
     // Forward navigation is information, not a gate - the author is standing on
-    // the last step with the first one failing, and that is allowed.
-    expect(steps()[3]).toHaveTextContent('Current step');
+    // a later step with the first one failing, and that is allowed.
+    expect(steps()[4]).toHaveTextContent('Current step');
     expect(screen.getByRole('heading', { name: /Consent/i })).toBeInTheDocument();
   });
 
@@ -257,6 +261,7 @@ describe('the step strip reports progress, not just position', () => {
       null,
       null,
       null,
+      null,
     ]);
   });
 
@@ -266,12 +271,12 @@ describe('the step strip reports progress, not just position', () => {
 
     const region = screen.getByRole('status');
     fireEvent.click(steps()[2]);
-    expect(region).toHaveTextContent('Step 3 of 5: Task List. Current step.');
+    expect(region).toHaveTextContent('Step 3 of 6: Task List. Current step.');
 
     fireEvent.click(steps()[0]);
     // Announces the step it ARRIVED at, not the one it left, and reports the
     // state that step is actually in.
-    expect(region).toHaveTextContent('Step 1 of 5: Basic Information. Needs attention.');
+    expect(region).toHaveTextContent('Step 1 of 6: Basic Information. Needs attention.');
   });
 
   it('treats an opportunity being edited as already walked, not as three untouched steps', async () => {
@@ -312,25 +317,28 @@ describe('the step strip reports progress, not just position', () => {
      */
     await waitFor(() => expect(steps()[1]).toHaveTextContent('Completed'));
 
-    // An edited external poll is five steps since WZ-18 (basics, content,
-    // External Link, the hand-off Consent step, Review). Its content is on the
-    // server; calling steps 2 to 5 "Not started" would be false. Step 1 is the
+    // An edited external poll is six steps since MR2 (basics, content, External
+    // Link, Screener, the hand-off Consent step, Review). Its content is on the
+    // server; calling steps 2 to 6 "Not started" would be false. Step 1 is the
     // one being looked at, so it reads Current.
-    const [one, two, three, four, five] = steps();
-    expect(steps()).toHaveLength(5);
+    const [one, two, three, four, five, six] = steps();
+    expect(steps()).toHaveLength(6);
     expect(one).toHaveTextContent('Current step');
     expect(two).toHaveTextContent('Completed');
     expect(three).toHaveTextContent('Completed');
-    // The hand-off Consent step (index 3): the edit-mode "mark everything
-    // visited" effect walks the WHOLE shape, and this step has nothing to
-    // validate, so a walked edit reads it Completed rather than Not started.
-    expect(four).toHaveTextContent('Consent');
+    // The Screener step (index 3): the edit-mode "mark everything visited"
+    // effect walks the WHOLE shape, and an opportunity with no screener has
+    // nothing to validate here, so a walked edit reads it Completed.
+    expect(four).toHaveTextContent('Screener');
     expect(four).toHaveTextContent('Completed');
+    // The hand-off Consent step (index 4): nothing to validate, so Completed.
+    expect(five).toHaveTextContent('Consent');
+    expect(five).toHaveTextContent('Completed');
     // Review too: a version that stopped one step short of the end would have
     // passed while still leaving Review "Not started" under an author's own
     // content.
-    expect(five).toHaveTextContent('Review');
-    expect(five).toHaveTextContent('Completed');
+    expect(six).toHaveTextContent('Review');
+    expect(six).toHaveTextContent('Completed');
   });
 });
 
@@ -380,12 +388,11 @@ describe('the strip reports steps other than the first', () => {
     selectType('unmoderated');
     fillBasics();
 
-    // Straight from step 1 to Consent - no longer the last step, but still
-    // reached with steps 2 and 3 UNVISITED, which is the only state the
-    // reported-errors map is load-bearing for - and on to Review, the step
-    // that now carries the submit control AND the Status choice (#111).
-    fireEvent.click(steps()[3]);
-    fireEvent.click(screen.getByRole('button', { name: 'Continue: Review' }));
+    // Straight from step 1 to Review - reached with steps 2 and 3 UNVISITED,
+    // which is the only state the reported-errors map is load-bearing for.
+    // Review is the step that carries the submit control AND the Status choice
+    // (#111), and the strip is clickable, so this jumps there directly.
+    fireEvent.click(steps()[5]);
     // Review's Status control has no `<label htmlFor="status">` - only an
     // `<h3>Status</h3>` heading - so it is found by role, scoped to Review,
     // rather than by name.
@@ -433,19 +440,21 @@ describe('the strip reports steps other than the first', () => {
     // This does not weaken the assertion: a regression that never marks
     // Consent complete times out here and fails exactly as it did before. The
     // rest are read after the wait, when the strip has settled.
-    await waitFor(() => expect(steps()[3]).toHaveTextContent('Completed'));
+    await waitFor(() => expect(steps()[4]).toHaveTextContent('Completed'));
 
     const rendered = steps();
-    expect(rendered).toHaveLength(5);
-    expect(rendered[3]).toHaveTextContent('Step 4 of 5');
+    expect(rendered).toHaveLength(6);
+    // Consent is step 5 on the native survey shape (Screener took step 4).
+    expect(rendered[4]).toHaveTextContent('Consent');
+    expect(rendered[4]).toHaveTextContent('Step 5 of 6');
     expect(rendered[2]).toHaveTextContent('Completed');
-    // Review, previously left out of this test entirely: the fifth slot is
+    // Review, previously left out of this test entirely: the sixth slot is
     // exactly the one an id-keyed (rather than key-keyed) history tracker
-    // could get right for four steps and wrong for the fifth, since Review's
-    // id (5) matches neither the native nor the external shape's step 4.
-    expect(rendered[4]).toHaveTextContent('Step 5 of 5');
-    expect(rendered[4]).toHaveTextContent('Review');
-    expect(rendered[4]).toHaveTextContent('Completed');
+    // could get right for five steps and wrong for the sixth, since Review's
+    // id (6) matches neither the native nor the external shape's step count.
+    expect(rendered[5]).toHaveTextContent('Step 6 of 6');
+    expect(rendered[5]).toHaveTextContent('Review');
+    expect(rendered[5]).toHaveTextContent('Completed');
   });
 
   it('does not carry one step 3 history over to a different step 3', () => {
@@ -463,8 +472,9 @@ describe('the strip reports steps other than the first', () => {
     // is still 3, which is exactly why history cannot be held by id.
     selectType('poll');
 
-    // Five steps since WZ-18 - the poll carries a hand-off Consent step now.
-    expect(steps()).toHaveLength(5);
+    // Six steps since MR2 - the poll carries a Screener and a hand-off Consent
+    // step now.
+    expect(steps()).toHaveLength(6);
     expect(steps()[2]).toHaveTextContent('External Link');
     expect(steps()[2]).toHaveTextContent('Not started');
 
@@ -482,7 +492,7 @@ describe('the strip reports steps other than the first', () => {
 
     const region = screen.getByRole('status');
     const announced = region.textContent;
-    expect(announced).toContain('Step 2 of 5');
+    expect(announced).toContain('Step 2 of 6');
 
     // Typing flips step 1 from Needs attention to Completed, which re-renders
     // the strip. The region must not re-announce: it reports step CHANGES.
@@ -518,14 +528,13 @@ describe('the strip reports steps other than the first', () => {
 
     fireEvent.click(steps()[2]);
     fireEvent.click(screen.getByRole('button', { name: /Add question/i }));
-    fireEvent.click(steps()[3]);
 
     // Through a REFUSED SAVE, so the error lands in the reported map and not
     // only in the live rules. The live rules re-evaluate against a form that
     // no longer holds any questions and clear themselves; the reported map
-    // does not, and that is the half that strands. The submit control lives
-    // on Review now, one step further on than Consent.
-    fireEvent.click(screen.getByRole('button', { name: 'Continue: Review' }));
+    // does not, and that is the half that strands. The submit control lives on
+    // Review (step 6 since MR2), reached directly through the clickable strip.
+    fireEvent.click(steps()[5]);
     fireEvent.click(screen.getByRole('button', { name: /Create study/i }));
     expect(steps()[2]).toHaveTextContent('Needs attention');
 
@@ -633,39 +642,48 @@ describe('the two backward controls are named apart', () => {
     // An independent mutation pass on this plan's previous step found 18
     // survivors that collapsed to one finding: everything had only ever been
     // proven for the first tile. Since WZ-18 Review's previous is Consent on
-    // every shape, so Review alone no longer distinguishes a list-derived
-    // control from a hard-coded "Consent". What still varies per path is
-    // CONSENT's own previous - Task List on the recorded path, External Link on
-    // the hand-off path - so the two shapes are walked one step further back to
-    // prove the whole chain reads the list, not a number written at the call
-    // site.
+    // every shape, and since MR2 Consent's previous is the Screener on every
+    // shape - so neither Review nor Consent alone distinguishes a list-derived
+    // control from a hard-coded label. What still varies per path is the
+    // SCREENER's own previous - Task List on the recorded path, External Link
+    // on the hand-off path - so the two shapes are walked back through
+    // Review -> Consent -> Screener to prove the whole chain reads the list,
+    // not a number written at the call site.
     renderForm();
     selectType('unmoderated');
     fillBasics();
 
-    fireEvent.click(steps()[3]); // Consent
+    fireEvent.click(steps()[4]); // Consent
     fireEvent.click(screen.getByRole('button', { name: 'Continue: Review' }));
     expect(
       screen.getByRole('button', { name: 'Previous: Consent' })
     ).toBeInTheDocument();
-    // Back onto Consent, whose own previous is the Task List on this path.
+    // Back onto Consent, whose own previous is the Screener on every shape.
     fireEvent.click(screen.getByRole('button', { name: 'Previous: Consent' }));
+    expect(
+      screen.getByRole('button', { name: 'Previous: Screener' })
+    ).toBeInTheDocument();
+    // And the Screener's own previous is the Task List on this recorded path.
+    fireEvent.click(screen.getByRole('button', { name: 'Previous: Screener' }));
     expect(
       screen.getByRole('button', { name: 'Previous: Task List' })
     ).toBeInTheDocument();
 
-    // A hand-off poll now has a Consent step too (WZ-18), so Review's previous
-    // is also Consent here - but that Consent step's own previous is External
-    // Link, not Task List, which is the difference a hard-coded chain could not
-    // reproduce.
+    // A hand-off poll has the same Screener -> Consent -> Review tail, but the
+    // Screener's own previous is External Link, not Task List - the difference a
+    // hard-coded chain could not reproduce.
     fireEvent.click(steps()[0]);
     selectType('poll');
-    fireEvent.click(steps()[3]); // Consent
+    fireEvent.click(steps()[4]); // Consent
     fireEvent.click(screen.getByRole('button', { name: 'Continue: Review' }));
     expect(
       screen.getByRole('button', { name: 'Previous: Consent' })
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Previous: Consent' }));
+    expect(
+      screen.getByRole('button', { name: 'Previous: Screener' })
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Previous: Screener' }));
     expect(
       screen.getByRole('button', { name: 'Previous: External Link' })
     ).toBeInTheDocument();

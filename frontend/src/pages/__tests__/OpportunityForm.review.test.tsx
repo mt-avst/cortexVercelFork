@@ -250,18 +250,18 @@ beforeEach(() => {
 
 describe('Review is the only step that commits', () => {
   it.each([
-    // WZ-18 (Decision 9): every type that reaches Review is five steps and
-    // Review's previous is Consent - a hand-off's Consent step is a short
-    // confirmation, but it is a step all the same, so the count no longer jumps
-    // between four and five as the delivery mode changes.
-    ['unmoderated', 5, 'Consent'],
-    ['poll', 5, 'Consent'],
-    ['question', 5, 'Consent'],
-    // Five since #79 for the moderated pair too: Consent sits between Session
+    // Since MR2 every type that reaches Review is six steps and Review's
+    // previous is Consent - a Screener step sits before Consent on every shape,
+    // and both are steps all the same, so the count is a fixed six whatever the
+    // type and delivery mode.
+    ['unmoderated', 6, 'Consent'],
+    ['poll', 6, 'Consent'],
+    ['question', 6, 'Consent'],
+    // Six for the moderated pair too: Screener then Consent sit between Session
     // Management and Review, because Cortex now stores what those sessions agree
     // to keep.
-    ['test', 5, 'Consent'],
-    ['interview', 5, 'Consent']
+    ['test', 6, 'Consent'],
+    ['interview', 6, 'Consent']
   ])(
     'on the %s path: no earlier step offers a commit control, and Review does',
     (type, expectedSteps, stepBeforeReview) => {
@@ -388,7 +388,7 @@ describe('the Edit links open the step that owns each section', () => {
 
     expect(
       screen.getAllByRole('button', { name: /^Edit / }).map((button) => button.textContent?.trim())
-    ).toEqual(['Edit Basic Information', 'Edit Content & Details', 'Edit Task List', 'Edit Consent']);
+    ).toEqual(['Edit Basic Information', 'Edit Content & Details', 'Edit Task List', 'Edit Screener', 'Edit Consent']);
   });
 });
 
@@ -615,10 +615,12 @@ describe('the time slots confirmed on the session step are written by the commit
   it('writes them for a test, from Review', async () => {
     renderCreate();
     fillBasics('test');
-    // step 2, the session step, then Consent (on this path since #79)
+    // Content, then the session step; confirm a slot; then Screener, Consent
+    // and Review (Screener sits before Consent since MR2).
     fireEvent.click(forwardControl()!);
     fireEvent.click(forwardControl()!);
     fireEvent.click(screen.getByRole('button', { name: 'stub: confirm one slot' }));
+    fireEvent.click(forwardControl()!);
     fireEvent.click(forwardControl()!);
     fireEvent.click(forwardControl()!);
 
@@ -859,7 +861,8 @@ describe('a save that half-worked is not announced as a success', () => {
     fireEvent.click(forwardControl()!);
     fireEvent.click(forwardControl()!);
     fireEvent.click(screen.getByRole('button', { name: 'stub: confirm one slot' }));
-    // Consent sits between Session Management and Review since #79.
+    // Screener then Consent sit between Session Management and Review (MR2, #79).
+    fireEvent.click(forwardControl()!);
     fireEvent.click(forwardControl()!);
     fireEvent.click(forwardControl()!);
     fireEvent.click(screen.getByRole('button', { name: 'Create study' }));
@@ -892,7 +895,8 @@ describe('a save that half-worked is not announced as a success', () => {
     fireEvent.click(forwardControl()!);
     fireEvent.click(forwardControl()!);
     fireEvent.click(screen.getByRole('button', { name: 'stub: confirm one slot' }));
-    // Consent sits between Session Management and Review since #79.
+    // Screener then Consent sit between Session Management and Review (MR2, #79).
+    fireEvent.click(forwardControl()!);
     fireEvent.click(forwardControl()!);
     fireEvent.click(forwardControl()!);
     fireEvent.click(screen.getByRole('button', { name: 'Create study' }));
@@ -1038,7 +1042,7 @@ describe('the review-step preview is offered only where a preview can render (WZ
 });
 
 describe('the step that is not a StepActions row still names where it goes', () => {
-  it('offers Continue: Consent on Session Management', () => {
+  it('offers Continue: Screener on Session Management', () => {
     /*
      * The one forward control in this form that `StepActions` does not render.
      * Every "Continue: Review" assertion elsewhere sits on a StepActions step,
@@ -1053,12 +1057,12 @@ describe('the step that is not a StepActions row still names where it goes', () 
     fireEvent.click(forwardControl()!);
 
     expect(currentStepName()).toMatch(/Session Management/);
-    // Consent, not Review, since #79 put the consent step on this path. The
-    // hazard this test guards is unchanged: this is the one forward control
-    // StepActions does not render, so only an exact name here can catch it
-    // pointing at the wrong step.
+    // Screener, not Consent or Review: MR2 put the Screener step immediately
+    // after Session Management. The hazard this test guards is unchanged - this
+    // is the one forward control StepActions does not render, so only an exact
+    // name here can catch it pointing at the wrong step.
     expect(
-      screen.getByRole('button', { name: 'Continue: Consent' })
+      screen.getByRole('button', { name: 'Continue: Screener' })
     ).toBeInTheDocument();
   });
 });

@@ -285,6 +285,21 @@ export const startSurveySession = async (opportunityId: string): Promise<{ sessi
   return response.data;
 };
 
+/**
+ * Submit a participant's screener answers and get the auto-evaluated verdict.
+ *
+ * The verdict is what the three apply chokepoints enforce against, so this is
+ * the only way past a screener. Latest answer wins - a screened-out participant
+ * may retake. `answers` maps each questionId to the chosen optionId.
+ */
+export const submitScreener = async (
+  opportunityId: string,
+  answers: Record<string, string>
+): Promise<import('@shared/types').ScreenerSubmitResponse> => {
+  const response = await api.post(`/opportunities/${opportunityId}/screener`, { answers });
+  return response.data;
+};
+
 export const getFirstHandStudies = async (): Promise<import('./types').FirstHandStudy[]> => {
   const response = await api.get('/firsthand/studies');
   return response.data.studies ?? [];
