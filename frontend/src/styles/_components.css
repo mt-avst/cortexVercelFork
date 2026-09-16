@@ -3515,24 +3515,29 @@ body.theme-dark .admin-data-table td.col-date {
    ADMIN DASHBOARD - STAT CARDS
    ============================================================ */
 
-/* Cortex Brand Title - "Cortex Admin" Header */
-.cortex-brand-title {
+/* Page title - the H1 that names the page (Admin, My bookings, a study name...).
+   The product name lives once, in the header wordmark, so the page title names
+   the page's own job rather than repeating "Cortex". Colour is set per theme
+   below (near-black in light, white in dark, Lane A1's deliberate values);
+   --text-primary is the un-themed fallback. */
+.cortex-page-title {
   font-size: 2.5rem;
   font-weight: 700;
-  color: var(--color-cortex-orange);
+  color: var(--text-primary);
   margin: 0;
   line-height: 1.2;
 }
 
-.cortex-brand-title .cortex-admin-separator {
-  color: rgba(255, 255, 255, 0.3);
-  font-weight: 200;
-  margin: 0 0.35em;
-}
-
-.cortex-brand-title .cortex-admin-suffix {
-  color: #FFFFFF;
-  font-weight: 300;
+/* Kicker - the small eyebrow above an object-named title (e.g. "Analytics"
+   above a study name), so the section is still named without leading with it. */
+.cortex-page-kicker {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin: 0 0 0.25rem;
 }
 
 /* Pixel-perfect: Neutralize Bootstrap row negative margins for stat cards */
@@ -7510,8 +7515,8 @@ body.theme-light .booking-badge-survey {
   line-height: 1.2;
 }
 
-/* Override cortex-brand-title size for bookings page */
-.my-bookings-title.cortex-brand-title {
+/* Override cortex-page-title size for bookings page */
+.my-bookings-title.cortex-page-title {
   font-size: 2rem;
 }
 

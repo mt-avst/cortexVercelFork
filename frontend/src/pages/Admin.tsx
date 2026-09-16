@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import useDocumentTitle from '../hooks/useDocumentTitle';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { getOpportunities, deleteOpportunity, duplicateOpportunity, getDashboardStats, DashboardStats, exportBookingsCsv, getPendingApprovals, getFeedback } from '../api/client';
@@ -27,6 +28,9 @@ import { getStudyTypeGlyph } from '../utils/studyTypeIcons';
 import { formatStudyDate, formatClockTime, formatTimeZoneLabel } from '../utils/datetime';
 const Admin: React.FC = () => {
   const { user, loading, initialAuthCheck } = useAuth();
+  // Each page names itself in the browser tab; the "· Cortex" lock-up lives here
+  // (the tab has no persistent header) rather than repeating in the on-page title.
+  useDocumentTitle('Admin · Cortex');
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -337,7 +341,7 @@ const Admin: React.FC = () => {
             <div className="card-header card-header-transparent">
               <div className="admin-header-section">
                 <div>
-                  <h1 className="mb-1 cortex-brand-title">Cortex<span className="cortex-admin-separator">|</span><span className="cortex-admin-suffix">Admin</span></h1>
+                  <h1 className="mb-1 cortex-page-title">Admin</h1>
                   <p className="admin-subtitle">Manage research studies, bookings, and participant feedback</p>
                 </div>
                 <div className="admin-table-actions">

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
+import useDocumentTitle from '../hooks/useDocumentTitle';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { getOpportunities } from '../api/client';
 import { Opportunity } from '../api/types';
@@ -26,6 +27,10 @@ const Home: React.FC = memo(() => {
   const [selectedType, setSelectedType] = useState<string>('all');
   
   const { user } = useAuth();
+
+  // Signed-out visitors on "/" get the Landing hero, not this browse view, so
+  // their tab reads the brand; signed-in, it names the page they are on.
+  useDocumentTitle(user ? 'Browse studies · Cortex' : 'Cortex');
 
   const presentationListing =
     import.meta.env.VITE_PRESENTATION_LISTING === 'true';
@@ -181,12 +186,12 @@ const Home: React.FC = memo(() => {
           <div className="container mt-4" style={{ position: 'relative', zIndex: 10 }}>
             <div className="row" style={{ marginBottom: 'var(--spacing-section)' }}>
               <div className="col-12">
-                <h1 className="mb-3 cortex-brand-title" style={{ fontSize: '3.25rem' }}>Cortex</h1>
-              
+                <h1 className="mb-3 cortex-page-title" style={{ fontSize: '3.25rem' }}>Browse studies</h1>
+
               {/* Welcome text */}
               <div className="home-intro-text">
                 <p className="home-intro-description text-gray-400">
-                  Welcome to Cortex - every action you take here strengthens our group, sparks new ideas and helps us to leverage all the talent and experience that we have across TAG
+                  Every action you take here strengthens our group, sparks new ideas and helps us to leverage all the talent and experience that we have across TAG
                 </p>
                 <p className="home-intro-tagline">
                   Together we turn <em>participation into progress</em>

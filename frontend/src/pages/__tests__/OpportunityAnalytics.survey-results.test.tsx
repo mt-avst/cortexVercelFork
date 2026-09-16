@@ -197,22 +197,27 @@ describe('reading the answers', () => {
     expect(screen.getByRole('heading', { name: 'How easy was that?' })).toBeTruthy();
   });
 
-  it('does not print the study title under the page title that already says it', async () => {
+  it('names the study once, as the page title, and not again in the results', async () => {
     renderPage();
     await settled();
     await userEvent.click(screen.getByRole('tab', { name: 'Responses' }));
 
     await screen.findByText('3 participants');
 
-    // The page header already says which opportunity this is - in its context
-    // line, not as a heading. Rendering the STUDY's title as an h2 here showed
-    // the same words twice when they matched, which is every real case, and two
-    // different names for one screen when they did not, on a study reused by an
-    // opportunity its author did not create.
-    expect(screen.queryByRole('heading', { name: OPPORTUNITY_TITLE })).toBeNull();
+    // The study is named once, as the page's H1. It used to sit in a "Context:"
+    // line beneath a "Cortex | Analytics" title; the wordmark is the header's
+    // job, so the page now leads with the study itself. The results section
+    // must not repeat it as a second heading - that showed the same words twice
+    // when they matched, which is every real case, and two different names for
+    // one screen when they did not, on a study reused by an opportunity its
+    // author did not create. Its own heading is the generic "Responses" (next test).
+    const titled = screen.getAllByRole('heading', { name: OPPORTUNITY_TITLE });
+    expect(titled).toHaveLength(1);
+    expect(titled[0].tagName).toBe('H1');
 
-    // Still named once, where it belongs.
-    expect(screen.getByText(OPPORTUNITY_TITLE)).toBeTruthy();
+    // Named exactly once on the whole screen - not echoed as body text in the
+    // results panel either (what the old single-match getByText guarded).
+    expect(screen.getAllByText(OPPORTUNITY_TITLE)).toHaveLength(1);
   });
 
   it('keeps a heading there, so the level is not skipped', async () => {
