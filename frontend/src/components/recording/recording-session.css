@@ -132,7 +132,17 @@
   padding: 0.85rem 1.2rem;
   border: 1px solid transparent;
   border-radius: var(--radius-btn);
-  background: var(--ink);
+  /* A primary CTA must be legible wherever it renders. The Document PiP panel
+     (PipStandbyCard, and StudyRunner's in-pane task card) is portalled into a
+     separate document OUTSIDE .journey-frame, so it only ever gets THIS base
+     rule - the orange fill on .journey-frame .button never reaches it. --ink
+     is the light surface foreground (~#f0f0f0), so a var(--ink) fill under
+     white text rendered the pane's start CTA white-on-near-white: present and
+     clickable, but invisible. --accent-fill-text-safe is the global AA-safe
+     accent fill (>= 4.5:1 under white in both themes; see the accent-fill loop
+     in e2e/accessibility.test.ts) - the same token .journey-frame .button
+     already uses, so the two agree by construction. */
+  background: var(--accent-fill-text-safe);
   color: white;
   font-weight: 700;
   cursor: pointer;
