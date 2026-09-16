@@ -1222,8 +1222,14 @@ const OpportunityDetail: React.FC = () => {
                 // getEligibilityNote so the browse row and this page cannot answer
                 // the same question two different ways.
                 const showParticipants = Boolean(eligibilityNote);
+                // Roles/skills wanted (display-only): the advertised audience, so
+                // the right people self-select. Describes; does not gate.
+                const targetRoles = Array.isArray(opportunity.target_roles)
+                  ? opportunity.target_roles
+                  : [];
+                const showTargetRoles = targetRoles.length > 0;
 
-                if (!(showProduct || showBookableDuration || showRecordedDuration || showNativeExpectation || showTasks || showParticipants)) {
+                if (!(showProduct || showBookableDuration || showRecordedDuration || showNativeExpectation || showTasks || showParticipants || showTargetRoles)) {
                   return null;
                 }
 
@@ -1271,6 +1277,13 @@ const OpportunityDetail: React.FC = () => {
                         <div className="mission-data-item">
                           <span className="mission-data-label">PARTICIPANTS</span>
                           <span className="mission-data-value">{eligibilityNote}</span>
+                        </div>
+                      )}
+
+                      {showTargetRoles && (
+                        <div className="mission-data-item">
+                          <span className="mission-data-label">LOOKING FOR</span>
+                          <span className="mission-data-value">{targetRoles.join(', ')}</span>
                         </div>
                       )}
                     </div>

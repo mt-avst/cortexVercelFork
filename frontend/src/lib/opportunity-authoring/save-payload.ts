@@ -86,6 +86,9 @@ export interface SavePayloadFormState {
   has_screener: boolean;
   screener_questions: WithClientId<ScreenerQuestion>[];
   screener_message: string;
+  // Roles/skills wanted: the structured, display-only advertised audience.
+  // The chip list as authored; deduped and capped server-side.
+  target_roles: string[];
 }
 
 export interface SavePayloadInput {
@@ -195,6 +198,14 @@ export const buildSavePayload = ({
       : {}),
     participant_type_required: formData.participant_type_required,
     participant_type_specific_details: formData.participant_type_specific_details.trim() || undefined,
+    /*
+     * Structured, display-only advertised audience ("roles/skills wanted"). On
+     * the Content & Details step, which every shape has, so it is sent
+     * unconditionally like participant_type. The current chip list, deduped and
+     * capped server-side; an empty list clears it (the backend stores null), so
+     * an author who removes every chip on an edit has it cleared.
+     */
+    target_roles: formData.target_roles ?? [],
     /*
      * The author's own choice, always. This used to be forced to `draft` when
      * `allowUserSubmission` was set - the non-admin submission mode removed in

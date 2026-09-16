@@ -86,6 +86,8 @@ export interface ReviewSummaryInput {
   defaultDurationMinutes: number;
   participantType: string;
   participantTypeDetails: string;
+  /** Roles/skills wanted: the structured, display-only advertised audience. */
+  targetRoles: string[];
   startDate?: string;
   endDate?: string;
   externalLink: string;
@@ -415,6 +417,12 @@ const itemsForStep = (step: ReviewStepRef, input: ReviewSummaryInput): ReviewIte
         items.push({
           label: 'Specific Criteria',
           value: input.participantTypeDetails
+        });
+      }
+      if (input.targetRoles.length > 0) {
+        items.push({
+          label: 'Roles or skills wanted',
+          value: input.targetRoles.join(', ')
         });
       }
       return items;
