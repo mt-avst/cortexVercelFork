@@ -61,3 +61,17 @@ Drawable window and actionable session added 2026-09-01 after #95 and #62.
   Free/busy is the researcher's real commitments and needs a connected calendar; without one
   the grid is unchecked and the UI says so. Conflating the two is what made #89 look like a
   calendar bug when the picker was actually discarding a perfectly good grid.
+- **Screener** - the eligibility questions a researcher attaches to an opportunity so only the
+  right people take part. A small set of single-choice questions, each answer flagged qualify
+  or screen out, stored as JSONB on the opportunity. Absent means no screener - anyone signed
+  in may take part. Not "role" or "targeting" - "role" already means the actor roles. Owns
+  its own vocabulary in `shared/screener.ts` (ADR-0007).
+- **Screener verdict** - a participant's stored outcome for one opportunity's screener,
+  `qualified` or `screened_out`, one per `(opportunity, participant)` in
+  `opportunity_screener_responses`. The three apply chokepoints (book, recorded-session,
+  survey-session) refuse anyone without a `qualified` verdict. Latest answer wins - a
+  screened-out participant may retake. NOT the same axis as a booking's `completion_status`
+  (that is post-session approval); the verdict gates BEFORE the study starts.
+- **Screened out** - the terminal verdict for a participant an answer disqualified. They see
+  the opportunity's not-a-match message and cannot book. Say "screened out", not "rejected"
+  or "disqualified" (which reads as the answer-level flag, `disqualifies`).

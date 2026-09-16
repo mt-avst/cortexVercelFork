@@ -1,3 +1,5 @@
+import { redactScreenerForParticipant } from '../../../shared/screener';
+import type { Screener } from '../../../shared/types';
 import { logger } from './logger';
 
 // The non-admin view of an opportunity and of its sessions.
@@ -63,6 +65,33 @@ interface PublicSerialisable {
   owner_name?: unknown;
   owner_email?: unknown;
   sessions?: unknown;
+  screener?: unknown;
+}
+
+/**
+ * The screener's `disqualifies` flags are owner-only: a participant who could
+ * see which answer screens them out could game it. This reduces a screener to
+ * its participant-facing shape, and FAILS CLOSED - anything that is not a
+ * recognisable screener with questions is withheld entirely rather than passed
+ * through raw, for the same reason the joining link is (a leak here is silent).
+ * `null`/`undefined` (no screener) passes through unchanged.
+ */
+function toParticipantScreenerField(screener: unknown): unknown {
+  if (screener === null || screener === undefined) {
+    return screener;
+  }
+  try {
+    const questions = (screener as { questions?: unknown }).questions;
+    if (!Array.isArray(questions) || questions.length === 0) {
+      return undefined;
+    }
+    return redactScreenerForParticipant(screener as Screener);
+  } catch (error) {
+    logger.error('Unexpected screener shape in the public serialiser, withholding it', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return undefined;
+  }
 }
 
 interface JoiningLinkField {
@@ -107,6 +136,14 @@ export function toPublicOpportunity<T extends PublicSerialisable>(opportunity: T
     owner_email: _ownerEmail,
     ...publicView
   } = opportunity;
+
+  // Redact the screener's owner-only disqualifies flags. Applied here, before
+  // the sessions branching below, so BOTH return paths are covered.
+  if ('screener' in publicView) {
+    (publicView as Record<string, unknown>).screener = toParticipantScreenerField(
+      (publicView as Record<string, unknown>).screener
+    );
+  }
 
   // Absent sessions is a real shape: addMockOpportunity takes `any` and unshifts
   // it verbatim, so a mock-created opportunity can genuinely lack the key.

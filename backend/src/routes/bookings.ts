@@ -7,6 +7,7 @@ import { userCalendarService } from '../services/userCalendar';
 import { CalendarEvent } from '../../../shared/types';
 import emailService, { EmailService } from '../services/email';
 import { AppError, ValidationError, NotFoundError, ForbiddenError, ConflictError, asyncHandler } from '../utils/errorHandler';
+import { assertScreenerPassed } from '../services/screener';
 import { logger } from '../utils/logger';
 import { isDatabaseAvailable } from '../utils/database';
 import { awardPoints, awardPointsAfterApproval } from '../services/gamification';
@@ -75,7 +76,7 @@ router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request,
     const sessionResult = await client.query(`
       SELECT s.*, o.status as opportunity_status, o.title as opportunity_title,
              o.owner_user_id, o.purpose_one_liner, o.id as opportunity_id,
-             o.type as opportunity_type,
+             o.type as opportunity_type, o.screener,
              o.consent_text, o.consent_template_id, o.consent_template_version
       FROM sessions s
       JOIN opportunities o ON s.opportunity_id = o.id
@@ -108,6 +109,18 @@ router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request,
     if (session.opportunity_status !== 'published') {
       await client.query('ROLLBACK');
       throw new NotFoundError('Study not published');
+    }
+
+    // Screener gate, off the SAME locked row and before the consent gate: a
+    // study with a screener refuses anyone without a stored 'qualified' verdict,
+    // so a screened-out participant is turned away before being asked to
+    // consent. The shared guard throws; roll back first so the transaction is
+    // not left open, exactly as every gate below does.
+    try {
+      await assertScreenerPassed(client, session.opportunity_id, userId, session.screener);
+    } catch (screenerError) {
+      await client.query('ROLLBACK');
+      throw screenerError;
     }
 
     if (new Date(session.end_time) <= new Date()) {

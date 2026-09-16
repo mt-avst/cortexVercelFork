@@ -119,7 +119,11 @@ describe('the opportunities router', () => {
    * the open internet, behind a limiter that `trust proxy: 1` collapses to a
    * single shared key.
    *
-   * Everything else is authoring or reporting, and capped.
+   * Everything else is authoring or reporting, and capped. The screener
+   * submission (`POST /:id/screener`) is an authenticated PARTICIPANT write, but
+   * it is a light DB upsert rather than heavy runtime session work, so it takes
+   * no participant runtime admission and sits in the default lane - not the
+   * uncapped participant lane the two mint paths need.
    */
   const EXPECTED_LANES: Record<string, Lane> = {
     'DELETE /:id': 'admin',
@@ -139,6 +143,7 @@ describe('the opportunities router', () => {
     'POST /:id/duplicate': 'admin',
     'POST /:id/firsthand-handoff': 'participant',
     'POST /:id/recorded-study-session': 'participant',
+    'POST /:id/screener': 'admin',
     'POST /:id/sessions': 'admin',
     'POST /:id/survey-session': 'participant'
   };
