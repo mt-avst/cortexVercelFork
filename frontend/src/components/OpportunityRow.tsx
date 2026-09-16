@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Check, Clock, Tag, Users } from 'lucide-react';
+import { ArrowRight, Check, Clock, Sparkles, Tag, Users } from 'lucide-react';
 
 import type { Opportunity, User } from '../api/types';
 import {
@@ -15,6 +15,13 @@ type OpportunityRowProps = {
   opportunity: Opportunity;
   /** The viewer's role. Only admins ever see a status. */
   role?: User['role'];
+  /**
+   * Whether this study's advertised audience matches the viewer's active role
+   * set (saved profile or transient "browse as" override). Advisory only - it
+   * adds a "Matches you" pill and, via the caller's partition, lifts the row
+   * into the "For you" group. It never changes whether the study is bookable.
+   */
+  matchesProfile?: boolean;
 };
 
 /**
@@ -39,7 +46,7 @@ type OpportunityRowProps = {
  * action reads as a button without being one: a real button nested inside a
  * link is two tab stops and two targets for a single destination.
  */
-export function OpportunityRow({ opportunity, role }: OpportunityRowProps) {
+export function OpportunityRow({ opportunity, role, matchesProfile = false }: OpportunityRowProps) {
   const isAdmin = role === 'researcher_admin' || role === 'superadmin';
   const isBookable = opportunity.type === 'test' || opportunity.type === 'interview';
 
@@ -90,7 +97,7 @@ export function OpportunityRow({ opportunity, role }: OpportunityRowProps) {
   const hasEnded = remaining.urgency === 'ended';
 
   return (
-    <li className="opportunity-row">
+    <li className={`opportunity-row${matchesProfile ? ' opportunity-row--match' : ''}`}>
       {/* No aria-label. An explicit label REPLACES the link's content as its
           accessible name, so the deadline and the eligibility line - both
           inside this link - were never announced. The name is composed from the
@@ -103,6 +110,17 @@ export function OpportunityRow({ opportunity, role }: OpportunityRowProps) {
               <span className="opportunity-row__status"> · {opportunity.status}</span>
             )}
           </p>
+
+          {/* The match state is carried in TEXT, not colour alone: the pill reads
+              "Matches you" so a screen reader states the fit. Advisory - it
+              describes why this row is surfaced, and never that the study is
+              restricted to the viewer. */}
+          {matchesProfile && (
+            <p className="opportunity-row__match" data-testid="opportunity-row-match">
+              <Sparkles size={13} aria-hidden="true" />
+              Matches you
+            </p>
+          )}
 
           {/* h2, not h3: the listing page's only preceding heading is its h1, so
               an h3 here skips a level and axe reports heading-order. Light-mode

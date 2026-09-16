@@ -16,6 +16,12 @@ export interface User {
   role_title?: string;
   role: 'employee' | 'researcher_admin' | 'superadmin';
   created_at: string;
+  // The user's OWN roles/skills profile (browse discovery, display-only). Same
+  // vocabulary as an opportunity's target_roles, so "does this study match me"
+  // is a case-insensitive intersection. Returned only on the caller's own /api/me
+  // payload - never on another user's, an admin roster, or an opportunity. Absent
+  // or [] means no profile set. See shared/target-roles.ts.
+  profile_roles?: string[];
 }
 
 export interface SessionUser {

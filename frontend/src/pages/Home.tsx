@@ -1,16 +1,34 @@
 import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import useDocumentTitle from '../hooks/useDocumentTitle';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { getOpportunities } from '../api/client';
+import { getOpportunities, updateMyProfile } from '../api/client';
 import { Opportunity } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
-import { filterOpportunitiesForPresentationListing, getParticipantFacingType, sortByClosingSoonest } from '../utils/opportunityUtils';
+import {
+  filterOpportunitiesForPresentationListing,
+  getParticipantFacingType,
+  opportunityMatchesRoles,
+  resolveActiveMatchRoles,
+  sortByClosingSoonest,
+} from '../utils/opportunityUtils';
 import { logger } from '../utils/logger';
 import Landing from './Landing';
 import ErrorState from '../components/ErrorState';
 import StudyFilters from '../components/StudyFilters';
 import { OpportunityRow } from '../components/OpportunityRow';
+import RoleProfilePanel from '../components/RoleProfilePanel';
 import { CheckCircle, Inbox, Filter } from 'lucide-react';
+
+// Per-viewer convenience only (a dismissed set-once prompt), never authoritative
+// state - wrapped in try/catch because storage can be unavailable or throw.
+const PROMPT_DISMISS_KEY = 'cortex.profileRolesPrompt.dismissed';
+const readPromptDismissed = (): boolean => {
+  try {
+    return localStorage.getItem(PROMPT_DISMISS_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
 
 
 /**
@@ -25,8 +43,48 @@ const Home: React.FC = memo(() => {
   const [error, setError] = useState<string>('');
   const [showBookingSuccess, setShowBookingSuccess] = useState(false);
   const [selectedType, setSelectedType] = useState<string>('all');
-  
-  const { user } = useAuth();
+
+  // The transient "browse as..." override: client state only, never persisted,
+  // resets on reload (it is not seeded from storage). null -> matching falls back
+  // to the saved profile.
+  const [browseAs, setBrowseAs] = useState<string[] | null>(null);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [promptDismissed, setPromptDismissed] = useState<boolean>(readPromptDismissed);
+
+  const { user, refreshAuth } = useAuth();
+
+  // Stable identity: a fresh `?? []` each render would re-run the match memos
+  // every time even when the profile is unchanged.
+  const profileRoles = useMemo(() => user?.profile_roles ?? [], [user?.profile_roles]);
+
+  const dismissPrompt = useCallback(() => {
+    setPromptDismissed(true);
+    try {
+      localStorage.setItem(PROMPT_DISMISS_KEY, '1');
+    } catch {
+      // A per-viewer convenience; losing it just re-shows the prompt.
+    }
+  }, []);
+
+  const saveProfile = useCallback(
+    async (roles: string[] | null) => {
+      setSavingProfile(true);
+      try {
+        await updateMyProfile(roles);
+        // /api/me reads the profile fresh, so refreshing the auth user pulls the
+        // stored roles back and re-runs matching with them.
+        await refreshAuth();
+      } catch (err: unknown) {
+        logger.error('Failed to save the roles/skills profile', {
+          component: 'Home',
+          errorMessage: err instanceof Error ? err.message : String(err),
+        });
+      } finally {
+        setSavingProfile(false);
+      }
+    },
+    [refreshAuth]
+  );
 
   // Signed-out visitors on "/" get the Landing hero, not this browse view, so
   // their tab reads the brand; signed-in, it names the page they are on.
@@ -157,6 +215,29 @@ const Home: React.FC = memo(() => {
     return sortByClosingSoonest(filteredByType);
   }, [opportunities, selectedType]);
 
+  // The active role set drives highlighting/sort: browse-as override, else saved
+  // profile, else none. Matching is advisory - it partitions the ALREADY-FILTERED
+  // list into a "For you" group and the rest, and never removes a study. With no
+  // active roles, everything falls into `rest` and the view is exactly as before.
+  const activeRoles = useMemo(
+    () => resolveActiveMatchRoles(browseAs, profileRoles),
+    [browseAs, profileRoles]
+  );
+
+  const { matched, rest } = useMemo(() => {
+    if (activeRoles.length === 0) {
+      return { matched: [] as Opportunity[], rest: filteredOpportunities };
+    }
+    const matchedList: Opportunity[] = [];
+    const restList: Opportunity[] = [];
+    for (const opp of filteredOpportunities) {
+      (opportunityMatchesRoles(opp, activeRoles) ? matchedList : restList).push(opp);
+    }
+    return { matched: matchedList, rest: restList };
+  }, [filteredOpportunities, activeRoles]);
+
+  const hasMatches = matched.length > 0;
+
   return (
     <>
       {!user && (
@@ -197,7 +278,23 @@ const Home: React.FC = memo(() => {
                   Together we turn <em>participation into progress</em>
                 </p>
               </div>
-              
+
+              {/* Roles/skills profile + transient "browse as" override. Rendered
+                  once the listing has settled (not during load/error), and shown
+                  regardless of the study count so a first-time visitor can set a
+                  profile before any study advertises an audience. */}
+              {!loading && !error && (
+                <RoleProfilePanel
+                  profileRoles={profileRoles}
+                  onSaveProfile={saveProfile}
+                  saving={savingProfile}
+                  browseAs={browseAs}
+                  onBrowseAsChange={setBrowseAs}
+                  promptDismissed={promptDismissed}
+                  onDismissPrompt={dismissPrompt}
+                />
+              )}
+
               {/* Study summary and type filter chips */}
               {!loading && !error && opportunities.length > 0 && (
                 <>
@@ -293,15 +390,47 @@ const Home: React.FC = memo(() => {
                   actually there. role="list" because `list-style: none` drops
                   the list semantics in Safari + VoiceOver. */}
               {!loading && !error && opportunities.length > 0 && filteredOpportunities.length > 0 && (
-                <ul className="opportunity-index" role="list">
-                  {filteredOpportunities.map((opportunity: Opportunity) => (
-                    <OpportunityRow
-                      key={opportunity.id}
-                      opportunity={opportunity}
-                      role={user?.role}
-                    />
-                  ))}
-                </ul>
+                <>
+                  {/* "For you": the studies whose advertised audience matches the
+                      active role set, lifted to the top. It never hides the rest -
+                      every other study is in the list below. Absent when nothing
+                      matches or no role set is active. */}
+                  {hasMatches && (
+                    <section className="opportunity-group" aria-label="Studies for you">
+                      <h2 className="opportunity-group__heading">
+                        For you
+                        <span className="opportunity-group__count"> · {matched.length}</span>
+                      </h2>
+                      <ul className="opportunity-index" role="list">
+                        {matched.map((opportunity: Opportunity) => (
+                          <OpportunityRow
+                            key={opportunity.id}
+                            opportunity={opportunity}
+                            role={user?.role}
+                            matchesProfile
+                          />
+                        ))}
+                      </ul>
+                    </section>
+                  )}
+
+                  {rest.length > 0 && (
+                    <section className="opportunity-group" aria-label={hasMatches ? 'All other studies' : 'Studies'}>
+                      {hasMatches && (
+                        <h2 className="opportunity-group__heading">More studies</h2>
+                      )}
+                      <ul className="opportunity-index" role="list">
+                        {rest.map((opportunity: Opportunity) => (
+                          <OpportunityRow
+                            key={opportunity.id}
+                            opportunity={opportunity}
+                            role={user?.role}
+                          />
+                        ))}
+                      </ul>
+                    </section>
+                  )}
+                </>
               )}
               </div>
             </div>
