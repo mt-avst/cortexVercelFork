@@ -13354,6 +13354,23 @@ body.theme-dark .role-profile-panel__prompt-icon {
   margin-top: 12px;
 }
 
+/* The quiet re-entry left after the set-once banner is dismissed: a plain link,
+   not a boxed panel, so it does not compete with the study list. */
+.role-profile-panel--collapsed {
+  padding: 0;
+  border: none;
+  background: none;
+  margin: 0 0 16px;
+}
+
+.role-profile-panel__set-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  color: var(--opportunity-row-meta);
+}
+
 /* Same place on every row. Reads as a button, is not one - it lives inside the
    row's link, and a real button there would be a second tab stop for the same
    destination. */

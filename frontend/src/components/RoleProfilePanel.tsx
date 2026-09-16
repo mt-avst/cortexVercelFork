@@ -133,7 +133,17 @@ const RoleProfilePanel: React.FC<RoleProfilePanelProps> = ({
   // --- No profile yet: the dismissible set-once prompt ------------------------
   if (!hasProfile) {
     if (promptDismissed) {
-      return null;
+      // Dismissing the banner must not lock a user out of the feature: with no
+      // saved profile there is nowhere else on the browse page to set one, so
+      // leave a quiet, persistent way back in rather than rendering nothing.
+      return (
+        <section className="role-profile-panel role-profile-panel--collapsed" aria-label="Set your roles and skills">
+          <button type="button" className="btn btn-link role-profile-panel__set-link" onClick={openEditor}>
+            <Sparkles size={15} aria-hidden="true" />
+            Set your roles and skills
+          </button>
+        </section>
+      );
     }
     return (
       <section className="role-profile-panel role-profile-panel--prompt" aria-label="Set your roles and skills">

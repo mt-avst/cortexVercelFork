@@ -44,6 +44,22 @@ describe('RoleProfilePanel', () => {
       expect(screen.queryByText('See studies for you')).toBeNull();
     });
 
+    it('leaves a persistent "Set your roles and skills" link when dismissed, so the user is not locked out', async () => {
+      const user = userEvent.setup();
+      const { onSaveProfile } = setup({ profileRoles: [], promptDismissed: true });
+      // The banner is gone but a quiet re-entry remains.
+      expect(screen.queryByText('See studies for you')).toBeNull();
+      const link = screen.getByRole('button', { name: 'Set your roles and skills' });
+      expect(link).toBeVisible();
+
+      // Clicking it opens the editor - the only way back to set a profile.
+      await user.click(link);
+      await user.type(screen.getByRole('combobox'), 'Designer');
+      await user.click(screen.getByRole('button', { name: 'Add' }));
+      await user.click(screen.getByRole('button', { name: 'Save profile' }));
+      expect(onSaveProfile).toHaveBeenCalledWith(['Designer']);
+    });
+
     it('calls onDismissPrompt when dismissed', async () => {
       const user = userEvent.setup();
       const { onDismissPrompt } = setup({ profileRoles: [] });
