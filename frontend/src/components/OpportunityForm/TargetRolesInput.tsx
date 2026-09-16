@@ -7,18 +7,34 @@ interface TargetRolesInputProps {
   value: string[];
   /** Called with the next chip list on every add or remove. */
   onChange: (roles: string[]) => void;
+  /**
+   * The field label. Defaults to the authoring wording. The participant profile
+   * reuses this exact control (one vocabulary, one control) with its own copy,
+   * so both the label and the helper description are overridable.
+   */
+  label?: string;
+  /** The helper sentence under the label. Defaults to the authoring wording. */
+  description?: string;
 }
 
 /**
- * "Roles/skills wanted" - a chip input for the structured, display-only audience
- * an author advertises on an opportunity. Curated suggestions (a datalist) plus
- * free-add, with removable chips.
+ * A chip input over the shared roles/skills vocabulary (curated suggestions via a
+ * datalist plus free-add, removable chips). Used in two places with different
+ * copy: authoring a study's advertised audience ("Roles or skills wanted"), and
+ * a participant setting their OWN profile ("Your roles and skills"). The
+ * vocabulary and validation are identical, which is what makes browse matching a
+ * clean intersection - so it is one control, parameterised only on wording.
  *
  * Deduping and the hard caps are the server's job (targetRolesSchema); this
  * input only prevents an exact case-insensitive duplicate and stops adding past
  * the count cap, as UX rather than as the authority.
  */
-const TargetRolesInput: React.FC<TargetRolesInputProps> = ({ value, onChange }) => {
+const TargetRolesInput: React.FC<TargetRolesInputProps> = ({
+  value,
+  onChange,
+  label = 'Roles or skills wanted',
+  description = 'Add the roles or skills you are looking for so the right people can self-select. This describes your audience; it does not restrict who can take part.',
+}) => {
   const [draft, setDraft] = useState('');
   const inputId = useId();
   const listId = useId();
@@ -59,11 +75,10 @@ const TargetRolesInput: React.FC<TargetRolesInputProps> = ({ value, onChange }) 
         className="form-label mb-2"
         style={{ fontSize: '1rem', fontWeight: '600' }}
       >
-        Roles or skills wanted
+        {label}
       </label>
       <p className="mb-2 section-description" style={{ fontSize: '0.9rem' }}>
-        Add the roles or skills you are looking for so the right people can self-select.
-        This describes your audience; it does not restrict who can take part.
+        {description}
       </p>
 
       {value.length > 0 && (

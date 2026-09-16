@@ -3,6 +3,9 @@ import { requireAuth } from '../middleware/authenticate';
 import { pool } from '../config';
 import { resolveEffectiveRole } from '../config/betaAllAdmin';
 import { asyncHandler } from '../utils/errorHandler';
+import { logger } from '../utils/logger';
+import { perUserLimiter } from '../middleware/per-user-rate-limit';
+import { validateRequest, profileUpdateSchema } from '../validation/schemas';
 import opportunitiesRouter from './opportunities';
 import sessionsRouter from './sessions';
 import bookingsRouter from './bookings';
@@ -23,9 +26,63 @@ const router: Router = Router();
 // GET /api/me - Get current user information
 // Reports the request-effective role so the client renders admin navigation for
 // beta-lifted employees (CORTEX_BETA_ALL_ADMIN). Identity when the switch is off.
-router.get('/me', requireAuth, (req, res) => {
-  res.json({ ...req.user, role: resolveEffectiveRole(req.user!.role, req.user!.email) });
-});
+//
+// `req.user` is a SESSION SNAPSHOT taken at login, so it cannot carry
+// profile_roles (which the user edits mid-session via PATCH below). We read the
+// profile FRESH from the row here, keyed on the session user's id, so an edit is
+// visible on the very next /me without a re-login. null column -> [] so the
+// client always sees an array ("is my profile empty" is a length check).
+router.get('/me', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  // profile_roles is a DISPLAY-ONLY enrichment. Its read must never decide auth:
+  // requireAuth is synchronous, so /me could not 5xx for a live session before
+  // this query existed. A DB blip enriching a field must not turn a valid session
+  // into a 500, which the client treats as logged-out (AuthContext.setUser(null)).
+  // So a failed read degrades to an empty profile, never a failed request.
+  let profile_roles: string[] = [];
+  try {
+    const { rows } = await pool.query<{ profile_roles: string[] | null }>(
+      'SELECT profile_roles FROM users WHERE id = $1',
+      [req.user!.id]
+    );
+    profile_roles = rows[0]?.profile_roles ?? [];
+  } catch (err: unknown) {
+    logger.error('profile_roles read failed on /me; serving the session without it', {
+      userId: req.user!.id,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
+  }
+  res.json({
+    ...req.user,
+    role: resolveEffectiveRole(req.user!.role, req.user!.email),
+    profile_roles,
+  });
+}));
+
+// PATCH /api/me/profile - the caller updates their OWN roles/skills profile.
+//
+// Self-only by construction: the row it writes is keyed on req.user!.id from the
+// server-side session, never on anything in the body or path, so a caller cannot
+// address another user's row. It is not an admin surface and takes no user id.
+// Body validated by profileUpdateSchema (targetRolesSchema.nullable(), strict);
+// an empty list or null clears the profile (stored NULL). Rate-limited per user
+// like the other authenticated writes. Returns the read-back profile (null -> []).
+router.patch(
+  '/me/profile',
+  requireAuth,
+  perUserLimiter(30, 'Too many profile updates; please slow down'),
+  validateRequest(profileUpdateSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const roles = req.body.profile_roles as string[] | null;
+    // Empty list means "no profile" - collapse to NULL so absent and cleared read
+    // identically, mirroring the target_roles write path.
+    const value = roles && roles.length > 0 ? JSON.stringify(roles) : null;
+    const { rows } = await pool.query<{ profile_roles: string[] | null }>(
+      'UPDATE users SET profile_roles = $1::jsonb WHERE id = $2 RETURNING profile_roles',
+      [value, req.user!.id]
+    );
+    res.json({ profile_roles: rows[0]?.profile_roles ?? [] });
+  })
+);
 
 // GET /api/me/session-events - Get the current user's own FirstHand session events
 router.get('/me/session-events', requireAuth, asyncHandler(async (req: Request, res: Response) => {
