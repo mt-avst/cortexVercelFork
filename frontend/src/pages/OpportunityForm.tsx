@@ -774,7 +774,11 @@ const OpportunityForm: React.FC = () => {
     // still carries the owner-only `disqualifies` flags).
     has_screener: false,
     screener_questions: [] as WithClientId<ScreenerQuestion>[],
-    screener_message: '' as string
+    screener_message: '' as string,
+    // Roles/skills wanted: the structured, display-only advertised audience.
+    // Empty by default; hydration below fills it from a loaded opportunity's
+    // `target_roles`. Deduped and capped server-side.
+    target_roles: [] as string[]
   });
 
   // Whether the opportunity already pointed at a study when it loaded.
@@ -1651,6 +1655,8 @@ const OpportunityForm: React.FC = () => {
         firsthand_study_id: opportunity.firsthand_study_id || '',
         participant_type_required: opportunity.participant_type_required || 'any',
         participant_type_specific_details: opportunity.participant_type_specific_details || '',
+        // Roles/skills wanted as the row holds it (display-only advertised audience).
+        target_roles: opportunity.target_roles || [],
         status: opportunity.status === 'closed' ? 'draft' : opportunity.status,
         start_date: opportunity.start_date || '',
         end_date: opportunity.end_date || '',
@@ -1696,6 +1702,8 @@ const OpportunityForm: React.FC = () => {
         firsthand_study_id: opportunity.firsthand_study_id || '',
         participant_type_required: opportunity.participant_type_required || 'any' as const,
         participant_type_specific_details: opportunity.participant_type_specific_details || '',
+        // Baseline for the dirty check - see the live hydrate above.
+        target_roles: opportunity.target_roles || [],
         status: opportunity.status === 'closed' ? 'draft' as const : opportunity.status as 'draft' | 'published',
         start_date: opportunity.start_date || '',
         end_date: opportunity.end_date || '',
@@ -2600,6 +2608,7 @@ const OpportunityForm: React.FC = () => {
     defaultDurationMinutes: formData.default_duration_minutes,
     participantType: formData.participant_type_required,
     participantTypeDetails: formData.participant_type_specific_details,
+    targetRoles: formData.target_roles ?? [],
     startDate: formData.start_date,
     endDate: formData.end_date,
     externalLink: formData.external_link_optional,
@@ -4629,6 +4638,17 @@ const OpportunityForm: React.FC = () => {
   };
 
   /**
+   * Roles/skills wanted: the structured, display-only advertised audience. An
+   * array, so it takes its own setter rather than the scalar handleInputChange
+   * (same reason as the screener questions above). Deduping and caps are the
+   * server's job; the chip input only prevents an exact-duplicate add for UX.
+   */
+  const handleTargetRolesChange = (roles: string[]) => {
+    setSuccessMessage('');
+    setFormData(prev => ({ ...prev, target_roles: roles }));
+  };
+
+  /**
    * Turn a screener on, seeded with one empty question.
    *
    * A screener that exists must always be able to gate, so it starts as a valid
@@ -5360,6 +5380,7 @@ const OpportunityForm: React.FC = () => {
                         validationErrors={validationErrors}
                         handleInputChange={handleInputChange}
                         handleBlur={handleBlur}
+                        onTargetRolesChange={handleTargetRolesChange}
                       />
                       {continueControl && (
                       <StepActions

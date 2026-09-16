@@ -1132,7 +1132,9 @@ describe('Opportunities API', () => {
         consent_template_id: 'custom',
         consent_template_version: null,
         // No screener in the request body, so the create binds null for it.
-        screener: null
+        screener: null,
+        // No roles/skills wanted in the request body, so the create binds null.
+        target_roles: null
       };
 
       for (const [column, value] of Object.entries(expected)) {

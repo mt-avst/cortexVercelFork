@@ -256,4 +256,25 @@ describe('OpportunityRow', () => {
     const meta = screen.getByTestId('opportunity-row-meta');
     expect(within(meta).getAllByRole('listitem').length).toBeGreaterThan(1);
   });
+
+  it('advertises up to two roles/skills wanted in the meta line', () => {
+    renderRow(opp({ target_roles: ['Product Manager', 'ScriptRunner admin'] }));
+
+    const meta = screen.getByTestId('opportunity-row-meta');
+    expect(within(meta).getByText('Product Manager, ScriptRunner admin')).toBeVisible();
+  });
+
+  it('summarises more than two roles with a +N remainder to keep the row compact', () => {
+    renderRow(opp({ target_roles: ['Product Manager', 'Designer', 'QA Engineer', 'Jira admin'] }));
+
+    const meta = screen.getByTestId('opportunity-row-meta');
+    expect(within(meta).getByText('Product Manager, Designer +2')).toBeVisible();
+  });
+
+  it('shows no roles meta item when none are set', () => {
+    renderRow(opp({ target_roles: [] }));
+
+    const meta = screen.getByTestId('opportunity-row-meta');
+    expect(within(meta).queryByText(/\+\d/)).toBeNull();
+  });
 });

@@ -302,6 +302,15 @@ export async function runMigrations() {
       ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS screener JSONB
     `);
 
+    // Roles/skills wanted (opportunity-level, display-only). A structured JSONB
+    // array of the audience a study advertises ("Product Manager", "ScriptRunner
+    // admin") so the right people self-select. Absent/null means no advertised
+    // audience. It DESCRIBES; the screener above is what gates. Public - no
+    // owner-only part, so no redaction. Idempotent add for existing databases.
+    await client.query(`
+      ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS target_roles JSONB
+    `);
+
     // Per-participant screener verdicts - the enforcement key. The three apply
     // chokepoints refuse anyone without a 'qualified' row here. questions_snapshot
     // records the screener as it was evaluated, so editing the opportunity's
