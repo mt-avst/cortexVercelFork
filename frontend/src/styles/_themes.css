@@ -192,6 +192,12 @@ body.theme-light {
   --border-subtle-current: var(--border-subtle-light);
   --border-strong-current: var(--border-strong-light);
 
+  /* Row 26: light half of the tint scale above - see body.theme-dark for why
+     this exists. */
+  --surface-tint-subtle-current: var(--border-strength-subtle-light);
+  --surface-tint-medium-current: var(--border-strength-medium-light);
+  --surface-tint-strong-current: var(--border-strength-strong-light);
+
   --shadow-panel-current: var(--shadow-panel-light);
   --shadow-card-current: var(--shadow-card-light);
 
@@ -750,8 +756,17 @@ body.theme-light .table-hover tbody tr:hover {
   background: rgba(255, 255, 255, 0.5);
 }
 
-/* Badges */
-body.theme-light .badge,
+/* Badges.
+
+   Row 21: this used to read `body.theme-light .badge` (specificity 0,2,1),
+   which beats `.bg-success`/`.bg-danger` (0,1,0) regardless of source order -
+   so every semantic status badge (Session Management's Remaining column
+   among them) was flattened to the same neutral tag grey in light, while
+   dark rendered its green/red correctly. `:not([class*="bg-"])` excludes any
+   badge that already carries its own Bootstrap-style semantic fill class,
+   dropping this rule's specificity contest with `.bg-success`/`.bg-danger`
+   entirely rather than trying to out-rank them. */
+body.theme-light .badge:not([class*="bg-"]),
 body.theme-light .tag,
 body.theme-light .lozenge {
   background: var(--tag-bg);
@@ -2769,7 +2784,19 @@ body.theme-dark {
   
   --border-subtle-current: var(--border-subtle-dark);
   --border-strong-current: var(--border-strong-dark);
-  
+
+  /* Row 26: a theme-aware background-tint scale for the control-panel/
+     segmented-control/calendar-control-panel family, which used to hardcode
+     rgba(255, 255, 255, 0.05-0.15) directly - a white tint that reads as a
+     raised dark-mode surface and is genuinely invisible on the light theme's
+     near-white ground. Reuses the border-strength scale (already has a
+     light-mode counterpart) as a generic tint, exactly how --surface-glass
+     and --border-subtle-dark are already reused as both border and
+     background fills elsewhere in this file. */
+  --surface-tint-subtle-current: var(--border-strength-subtle);
+  --surface-tint-medium-current: var(--border-strength-medium);
+  --surface-tint-strong-current: var(--border-strength-strong);
+
   --shadow-panel-current: var(--shadow-panel-dark);
   --shadow-card-current: var(--shadow-card-dark);
 }
@@ -2928,9 +2955,16 @@ body.theme-dark .opportunity-form .border-bottom {
   border-color: rgba(255, 255, 255, 0.1);
 }
 
+/* Row 22: this used to fill with --color-brand-orange (--brand-orange-500,
+   #FF5A1F) - an IDENTITY colour, not a text-safe one - measured at 3.12:1
+   under the white label, below AA. --accent-fill-text-safe is the token the
+   light theme's own .btn-primary already uses for the same reason (its own
+   comment two blocks down says so); dark gets its own resolution of the same
+   token (--brand-orange-800) rather than light's (--brand-orange-700),
+   because each is tuned to clear AA on its own ground. */
 body.theme-dark .opportunity-form .btn-primary {
-  background-color: var(--color-brand-orange);
-  border-color: var(--color-brand-orange);
+  background-color: var(--accent-fill-text-safe);
+  border-color: var(--accent-fill-text-safe);
   color: #FFFFFF;
 }
 
@@ -2939,9 +2973,14 @@ body.theme-dark .opportunity-form .btn-primary:hover {
   border-color: var(--brand-orange-400);
 }
 
+/* Row 22: white on the raw Bootstrap green was 3.13:1, below AA - the exact
+   defect the light theme's own .btn-success comment already fixed for its
+   ground (5.02:1 with #15803d). --status-success is the app's own AA-checked
+   dark success token (brand-identity.test.ts pins it >= 4.5 under white), so
+   this reuses it instead of inventing a second green. */
 body.theme-dark .opportunity-form .btn-success {
-  background-color: #28a745;
-  border-color: #28a745;
+  background-color: var(--status-success);
+  border-color: var(--status-success);
 }
 
 body.theme-dark .opportunity-form .btn-outline-secondary {

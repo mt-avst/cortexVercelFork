@@ -149,6 +149,20 @@
   .col-xl-12 { flex: 0 0 auto; width: 100%; }
 }
 
+/* Row 37: the wizard card sat in a `.col-12 .col-xl-10` column, which is
+   83.333% of its row everywhere the xl breakpoint applies and 100% (clamped
+   by nothing) below it - two different percentages of two different
+   viewports, measured at 926px @1440 and 918px @1000. One fixed width
+   settles it, scoped to the wizard's own row so every other `.col-xl-10` in
+   the app (a percentage column, used elsewhere on its own terms) is
+   untouched. Specificity (0,4,0) beats the plain `.col-xl-10` media rule
+   above regardless of source order. */
+.opportunity-form.container-fluid .row.justify-content-center > .col-12.col-xl-10 {
+  width: 100%;
+  max-width: 926px;
+  margin-inline: auto;
+}
+
 /* ============================================================
    GRID GAP UTILITIES (Bootstrap g-* classes)
    ============================================================ */
@@ -1317,9 +1331,17 @@ body.theme-light .badge--question {
   box-shadow: 0 0 0 3px var(--focus-ring-color);
 }
 
+/* Row 28 (same root cause as row 23a): `align-items: center` centred the
+   input against the WHOLE label, including any multi-line description
+   underneath it - so a label that wraps to two lines drops its radio/
+   checkbox 25px below the label's own first line, level with the
+   description instead. `flex-start` aligns every `.form-check` to the top of
+   its (possibly multi-line) label instead, and `.form-check-input`'s
+   top offset re-centres it against a SINGLE-line label's cap-height, so the
+   common one-line case is unchanged. */
 .form-check {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--spacing-2);
   margin-bottom: var(--spacing-2);
 }
@@ -1328,6 +1350,7 @@ body.theme-light .badge--question {
   width: 1.25rem;
   height: 1.25rem;
   margin: 0;
+  margin-top: 0.15rem;
   accent-color: var(--brand-primary);
 }
 
@@ -1340,6 +1363,68 @@ body.theme-light .badge--question {
   margin-top: var(--spacing-1);
   font-size: var(--font-size-small);
   color: var(--text-muted);
+}
+
+/* ============================================================
+   FIELD WIDTH SYSTEM (row 29)
+
+   The wizard's three step grids had drifted onto four different field
+   widths between them, each an ad hoc `col-md-*` split rather than a chosen
+   size. These three named widths are the ones every field on the wizard
+   actually needs: a full-width field (a description, an address), a
+   half-width field paired with its twin (the existing `col-md-6` pairing,
+   e.g. Title / Meeting Location), and a short field for a single number or
+   date (e.g. capacity). Applying these to a given step's markup is that
+   step's own file, owned by other agents (see run/W5.md, row 29) - this only
+   defines the three widths and the one stack order below, so there is one
+   system to adopt rather than a fourth width invented per step.
+   ============================================================ */
+.field-width-full {
+  width: 100%;
+}
+
+.field-width-half {
+  width: 50%;
+}
+
+.field-width-short {
+  width: 25%;
+  min-width: 120px;
+}
+
+@media (max-width: 767px) {
+  .field-width-full,
+  .field-width-half,
+  .field-width-short {
+    width: 100%;
+  }
+}
+
+/* One stack order for a labelled field - label, then the control, then its
+   help text - so the sequence cannot flip between steps the way it does
+   today (row 29: "label/help/field order flips between steps"). */
+.field-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+}
+
+.field-stack > label,
+.field-stack > .form-label {
+  order: 0;
+}
+
+.field-stack > .form-control,
+.field-stack > .form-select,
+.field-stack > input,
+.field-stack > textarea,
+.field-stack > select {
+  order: 1;
+}
+
+.field-stack > .form-text,
+.field-stack > .field-help {
+  order: 2;
 }
 
 /* Form Validation States */
@@ -12314,16 +12399,22 @@ body.theme-light .col-actions .dropdown-menu .dropdown-divider {
    Horizontal control bars with filters, buttons, etc.
    ============================================================ */
 
-/* Control panel container */
+/* Control panel container.
+
+   Row 26: background-color used to be a flat rgba(255, 255, 255, *) white
+   tint - a raised surface on the dark page and nothing on a near-white one.
+   --surface-tint-*-current (defined in _themes.css) resolves to the same
+   white-tint family in dark and a theme-appropriate dark tint in light, so
+   the panel stays visible in both without changing the DOM. */
 .control-panel {
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: var(--surface-tint-subtle-current);
   border-radius: var(--radius-md);
   padding: var(--spacing-3) var(--spacing-4);
   margin-bottom: var(--spacing-3);
 }
 
 .control-panel-subtle {
-  background-color: rgba(255, 255, 255, 0.03);
+  background-color: var(--surface-tint-subtle-current);
   border-radius: var(--radius-md);
   padding: var(--spacing-2) var(--spacing-4);
   margin-bottom: var(--spacing-2);
@@ -12354,10 +12445,17 @@ body.theme-light .col-actions .dropdown-menu .dropdown-divider {
    Toggle buttons for switching between views
    ============================================================ */
 
-/* Segmented control container */
+/* Segmented control container.
+
+   Row 26: was background-only with no border, so the light theme's tint
+   (transparent white on white) left no visible track at all - dark rendered
+   a bordered pill because the tint alone happened to read against its dark
+   ground. The explicit border makes the track visible on its own, in either
+   theme, independent of how strong the fill tint resolves. */
 .segmented-control {
   display: inline-flex;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--surface-tint-subtle-current);
+  border: 1px solid var(--border-subtle-current);
   border-radius: 8px;
   padding: 4px;
   gap: 2px;
@@ -12383,7 +12481,7 @@ body.theme-light .col-actions .dropdown-menu .dropdown-divider {
 
 .segmented-control-btn:hover:not(:disabled) {
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--surface-tint-medium-current);
 }
 
 .segmented-control-btn:disabled {
@@ -12393,7 +12491,7 @@ body.theme-light .col-actions .dropdown-menu .dropdown-divider {
 
 .segmented-control-btn.active {
   color: var(--brand-headline);
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--surface-tint-strong-current);
 }
 
 /* Icon-only segmented button variant */
@@ -12660,7 +12758,12 @@ body.theme-dark .calendar-timeline--scrolls .calendar-time-column {
    Minimal styling buttons for toolbar actions
    ============================================================ */
 
-/* Ghost button - subtle outline, transforms on hover */
+/* Ghost button - subtle outline, transforms on hover.
+
+   Row 26: same white-tint-vanishes-on-white family as the segmented control
+   above (this button lives in the same Session Management toolbar) - the
+   border and hover fill now resolve per theme instead of assuming a dark
+   ground. */
 .btn-ghost {
   display: inline-flex;
   align-items: center;
@@ -12668,7 +12771,7 @@ body.theme-dark .calendar-timeline--scrolls .calendar-time-column {
   padding: 4px 8px;
   font-size: 0.7rem;
   font-weight: 500;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-subtle-current);
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -12677,8 +12780,8 @@ body.theme-dark .calendar-timeline--scrolls .calendar-time-column {
 }
 
 .btn-ghost:hover:not(:disabled) {
-  background-color: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.2);
+  background-color: var(--surface-tint-medium-current);
+  border-color: var(--border-strong-current);
   color: var(--text-primary);
 }
 
@@ -12722,11 +12825,13 @@ body.theme-light .btn-ghost-danger {
    Cards with backdrop blur effect
    ============================================================ */
 
+/* Row 26: same theme-aware tint as the rest of the Session Management
+   toolbar family - see .segmented-control above. */
 .card-glass {
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: var(--surface-tint-subtle-current);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-subtle-current);
   border-radius: 16px;
 }
 
@@ -12739,12 +12844,14 @@ body.theme-light .btn-ghost-danger {
    Glass panel for calendar filters and controls
    ============================================================ */
 
+/* Row 26: verify-claims #20 named this file directly - same white-tint-on-
+   white defect as .segmented-control above, now the same theme-aware fix. */
 .calendar-control-panel {
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: var(--surface-tint-subtle-current);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--border-subtle-current);
+  border-bottom: 1px solid var(--border-subtle-current);
   border-radius: 12px;
   padding: 10px 0;
   margin-bottom: 12px;
