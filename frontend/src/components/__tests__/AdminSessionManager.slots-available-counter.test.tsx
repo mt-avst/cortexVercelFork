@@ -117,6 +117,9 @@ describe('AdminSessionManager - the slots-available counter equals the selectabl
     renderManager();
     await settle();
 
+    // Since D11 the default surface is the time-axis grid: pickable slots are
+    // its enabled "available time slot" cell buttons, and the readout counts
+    // the same set.
     const pickable = await screen.findAllByRole('button', { name: /available time slot/i });
     const headline = await screen.findByText(/\d+ slots available/i);
     const headlineCount = Number(headline.textContent!.match(/(\d+) slots available/i)![1]);
@@ -124,10 +127,8 @@ describe('AdminSessionManager - the slots-available counter equals the selectabl
     // 6 generated, 2 in conflict: 4 pickable, and the headline must say 4, not 6.
     expect(pickable).toHaveLength(4);
     expect(headlineCount).toBe(4);
-
-    const selectAll = screen.getByRole('button', { name: /^Select all/i });
-    const offered = Number(selectAll.textContent!.match(/\((\d+)\)/)![1]);
-    expect(headlineCount).toBe(offered);
+    // Every pickable cell is a real, enabled button (not a conflict/past one).
+    pickable.forEach((cell) => expect(cell).toBeEnabled());
   });
 
   it('agrees with the Table view counter on the Calendar (grid) view too (follow-up)', async () => {
