@@ -306,4 +306,24 @@ describe('StepActions - D9: one commit colour, fixed-width nav buttons (row 24)'
     );
     expect(screen.getByRole('button', { name: 'Create opportunity' })).toHaveClass('step-actions__submit');
   });
+
+  it('the per-step Save Changes shortcut is btn-primary too - "one commit colour" means every commit control', () => {
+    // Row 24's own finding: the shortcut was still green (btn-success) after
+    // the terminal button became btn-primary, so the row disagreed with
+    // itself about which colour means "commit". Both are the commit action;
+    // D9's fix is one colour for all of them, not just the terminal one.
+    render(
+      <StepActions
+        onNext={noop}
+        nextLabel="Content & Details"
+        onSave={noop}
+        isEdit
+        saving={false}
+        disabled={false}
+      />
+    );
+    const shortcut = screen.getByRole('button', { name: 'Save Changes' });
+    expect(shortcut).toHaveClass('btn-primary');
+    expect(shortcut).not.toHaveClass('btn-success');
+  });
 });

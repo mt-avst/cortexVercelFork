@@ -80,3 +80,35 @@ describe('form-check radio/checkbox alignment (row 28)', () => {
     expect(block).toMatch(/margin-top\s*:\s*0\.15rem/);
   });
 });
+
+describe('sticky step actions have an opaque fill (row 24 / D9, coordinator LOW)', () => {
+  const components = read('_components.css');
+
+  it('does not use --bg-card, which is a 5%-alpha glass tint in dark theme', () => {
+    const block = blockFor(components, '.step-actions');
+    expect(block).not.toMatch(/var\(--bg-card\)/);
+  });
+
+  it('uses --surface-card-current, this codebase\'s existing 90%+-opaque "solid card" surface', () => {
+    const block = blockFor(components, '.step-actions');
+    expect(block).toMatch(/background\s*:\s*var\(--surface-card-current\)/);
+  });
+
+  it('--surface-card-current itself resolves to a near-opaque fill in both themes (alpha >= 0.9)', () => {
+    const tokens = read('_tokens.css');
+    const themes = read('_themes.css');
+
+    // Dark: --surface-card-current -> --surface-card (a rgba() literal).
+    const darkSurfaceCard = tokens.match(/--surface-card:\s*rgba\([^)]*,\s*([\d.]+)\s*\)/);
+    expect(darkSurfaceCard, '--surface-card must be an rgba() literal').not.toBeNull();
+    expect(Number(darkSurfaceCard![1])).toBeGreaterThanOrEqual(0.9);
+
+    // Light: --surface-card-current -> --surface-card-light, redefined in
+    // _themes.css to an rgba() literal (the _tokens.css base is #FFFFFF,
+    // fully opaque, but the theme file's own redefinition is what actually
+    // applies under body.theme-light).
+    const lightSurfaceCard = themes.match(/--surface-card-light:\s*rgba\([^)]*,\s*([\d.]+)\s*\)/);
+    expect(lightSurfaceCard, '--surface-card-light must be an rgba() literal in _themes.css').not.toBeNull();
+    expect(Number(lightSurfaceCard![1])).toBeGreaterThanOrEqual(0.9);
+  });
+});

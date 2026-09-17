@@ -144,7 +144,11 @@ const StepActions: React.FC<StepActionsProps> = ({
       {onSave && (
         <button
           type="button"
-          className="btn btn-success px-5 py-2 fw-semibold"
+          /* D9 (row 24): one commit colour. This was btn-success (green) while
+             the terminal control below is btn-primary (orange) - two
+             different "this saves your work" colours on the same row. Both
+             are the commit action now; only the words tell them apart. */
+          className="btn btn-primary px-5 py-2 fw-semibold"
           onClick={onSave}
           disabled={disabled}
           style={{ fontSize: '0.95rem' }}

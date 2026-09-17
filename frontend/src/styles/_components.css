@@ -13071,7 +13071,13 @@ body.theme-light .btn-ghost-danger {
   position: sticky;
   bottom: 0;
   z-index: 5;
-  background: var(--bg-card);
+  /* `--bg-card` (used by `.card` itself) is a glass tint - 5% white in dark -
+     right for a panel that sits ON the page background, wrong for a bar that
+     has to OCCLUDE step content scrolling underneath it: at 5% alpha the
+     content showed straight through while stuck. `--surface-card-current` is
+     this codebase's existing "solid card, no blur needed" surface (see the
+     bento-grid card rules above), 90%+ opaque in both themes. */
+  background: var(--surface-card-current);
 }
 
 .step-actions__nav-button {
