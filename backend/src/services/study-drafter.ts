@@ -1,5 +1,16 @@
-import Anthropic from '@anthropic-ai/sdk';
-import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
+// LAZY, DELIBERATELY. `@anthropic-ai/sdk` and its `helpers/zod` subpath (the
+// zod-to-JSON-schema machinery `zodOutputFormat` pulls in) are real weight in
+// the module graph - measured as the cause of a CI shard OOM once this
+// service's tests ran alongside everything else on `test-backend 2/2`
+// (every test passed; the worker was OOMKilled on cleanup, cumulative
+// memory across the shard). A `import type` costs nothing at runtime - it is
+// erased by tsc - so the TYPES stay available everywhere in this file
+// (`Anthropic.MessageParam`, `Anthropic` as the client's own type) while the
+// actual module load - and its memory - is deferred to `anthropicClient()`
+// and the one call site that needs `zodOutputFormat`, both on the real
+// drafting path only. Nothing on the 503-dormant path, and no test that only
+// imports this module for its exported schemas/helpers, ever pays for it.
+import type Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 // The SDK's structured-output helper is typed against zod's v4 API
 // (`import * as z from 'zod/v4'` in its own .d.ts), which is NOT the same
@@ -85,10 +96,15 @@ const draftModelId = (): string => process.env.CORTEX_AI_DRAFTING_MODEL?.trim() 
 
 let cachedClient: Anthropic | null = null;
 
-/** Lazily constructed so importing this module never requires a key to be set. */
-const anthropicClient = (): Anthropic => {
+/**
+ * Lazily constructed - both so importing this module never requires a key to
+ * be set, and so the `@anthropic-ai/sdk` module itself is only ever loaded on
+ * the real drafting path (see the import comment at the top of this file).
+ */
+const anthropicClient = async (): Promise<Anthropic> => {
   if (!cachedClient) {
-    cachedClient = new Anthropic();
+    const { default: AnthropicClient } = await import('@anthropic-ai/sdk');
+    cachedClient = new AnthropicClient();
   }
   return cachedClient;
 };
@@ -513,7 +529,11 @@ export const draftOpportunityFromBrief = async (input: {
     throw new DraftUnavailableError();
   }
 
-  const client = anthropicClient();
+  const client = await anthropicClient();
+  // Same lazy-load reasoning as `anthropicClient` above - `helpers/zod` is
+  // part of the SDK's own weight, not a separate dependency, so it is loaded
+  // here, on the same real-drafting path, and nowhere else.
+  const { zodOutputFormat } = await import('@anthropic-ai/sdk/helpers/zod');
   const messages: Anthropic.MessageParam[] = [
     { role: 'user', content: buildUserContent(input.brief, input.hints) }
   ];
