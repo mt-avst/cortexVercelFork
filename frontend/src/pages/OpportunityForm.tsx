@@ -1970,6 +1970,15 @@ const OpportunityForm: React.FC = () => {
    * marked visited once the load has produced its baseline. From then on each
    * step reports Completed or Needs attention on the same rules as a new one.
    *
+   * EXCEPT `review` (audit row 15): Review is not a fact ABOUT the study the
+   * way every other step is, it is the check-answers screen itself, and
+   * seeding it as visited on load is how it always read "Completed" without
+   * the author ever having opened it this session - the one step whose whole
+   * job is to be looked at was the one step this effect was already excusing
+   * from that. It still becomes visited the ordinary way, the first time the
+   * author actually leaves it (see the "record the step just left" effect
+   * above).
+   *
    * Keyed on `originalFormData` rather than on `isEdit`, because `isEdit` is
    * true from the first render, long before anything has been read back.
    */
@@ -1981,7 +1990,7 @@ const OpportunityForm: React.FC = () => {
       (previous) => new Set([...previous, ...getTabsForType(
         originalFormData.type,
         originalFormData.delivery_mode ?? 'external'
-      ).map((tab) => tab.key)])
+      ).map((tab) => tab.key).filter((key) => key !== 'review')])
     );
   }, [originalFormData]);
 
@@ -2788,21 +2797,27 @@ const OpportunityForm: React.FC = () => {
    * Whether a participant could actually start this study, for Review's share
    * block (#108).
    *
-   * Mirrors `OpportunityDetail`'s own `hasStartablePath`/inline expression for
-   * the one shape that check does not otherwise cover here: a test or
-   * interview starts by BOOKING A SLOT, and `findPublishProblem` above says
-   * nothing about slots at all, so a session-less booking type would
-   * otherwise be reported shareable the moment its status is set to
-   * Published. Every other shape defaults to `true` because
-   * `publishRefusal`, computed above from the same live `formData.status`,
-   * already refuses a Published status with no study or no external link -
-   * so this share block never renders "shareable" over content that publish
-   * itself would have refused.
+   * ANY current publish blocker suppresses the link (audit row 5 / row 17):
+   * `publishProblem` is a PREVIEW of what the server would refuse on the NEXT
+   * write, not a guarantee about the row as it is stored NOW - an opportunity
+   * can already sit in the database as `status: 'published'` with content
+   * that would fail this same check (four seeded studies did: no questions,
+   * no external link, no meeting location). Before this guard, Review showed
+   * that study's own blocker banner AND a copyable "Share this study" link in
+   * the same screen, offering participants a link its own banner said could
+   * not start.
+   *
+   * Checked first, and everything below is unreached once it fires - the
+   * test/interview arm mirrors `OpportunityDetail`'s own
+   * `hasStartablePath`/inline expression for the one shape `publishProblem`
+   * says nothing about (it does not model slots), so a session-less booking
+   * type is still caught even when publishProblem itself is null.
    */
-  const shareLinkStartable =
-    formData.type === 'test' || formData.type === 'interview'
-      ? sessions.length > 0
-      : true;
+  const shareLinkStartable = publishProblem
+    ? false
+    : formData.type === 'test' || formData.type === 'interview'
+    ? sessions.length > 0
+    : true;
 
   /**
    * Say the step change out loud.

@@ -334,11 +334,14 @@ describe('the step strip reports progress, not just position', () => {
     // The hand-off Consent step (index 4): nothing to validate, so Completed.
     expect(five).toHaveTextContent('Consent');
     expect(five).toHaveTextContent('Completed');
-    // Review too: a version that stopped one step short of the end would have
-    // passed while still leaving Review "Not started" under an author's own
-    // content.
+    // Review (audit row 15) is deliberately the ONE step this "already
+    // walked" seeding excludes: it is the check-answers screen itself, not a
+    // fact about the study, and seeding it visited made it read "Completed"
+    // without the author ever having opened it this session. It starts
+    // "Not started" and becomes visited the ordinary way, by actually being
+    // left.
     expect(six).toHaveTextContent('Review');
-    expect(six).toHaveTextContent('Completed');
+    expect(six).toHaveTextContent('Not started');
   });
 });
 
@@ -452,9 +455,12 @@ describe('the strip reports steps other than the first', () => {
     // exactly the one an id-keyed (rather than key-keyed) history tracker
     // could get right for five steps and wrong for the sixth, since Review's
     // id (6) matches neither the native nor the external shape's step count.
+    // It reads "Not started" rather than "Completed" (audit row 15): Review
+    // is excluded from the "already walked" edit-mode seeding, so it is
+    // visited the ordinary way, by actually being left.
     expect(rendered[5]).toHaveTextContent('Step 6 of 6');
     expect(rendered[5]).toHaveTextContent('Review');
-    expect(rendered[5]).toHaveTextContent('Completed');
+    expect(rendered[5]).toHaveTextContent('Not started');
   });
 
   it('does not carry one step 3 history over to a different step 3', () => {
