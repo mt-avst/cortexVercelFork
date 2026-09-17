@@ -425,6 +425,18 @@ describe('ConsentStep - the states it must not offer an editor in', () => {
   });
 
   /**
+   * Row 36: a curly `&rsquo;` entity here, against a straight apostrophe
+   * typed directly everywhere else this app's rendered copy has one.
+   */
+  it('spells the possessive with a straight apostrophe, matching the rest of the app', () => {
+    renderStep({ contentUnavailable: true, studyIsReadOnly: true });
+
+    const text = screen.getByTestId('consent-unavailable').textContent ?? '';
+    expect(text).toContain("study's consent wording");
+    expect(text).not.toContain('study’s consent wording');
+  });
+
+  /**
    * A study can be read-only for two different reasons, and the sentence has to
    * match: `not-representable` is fixable in the Task Lists area, `not-yours`
    * is not. Telling an author their own study belongs to somebody else sends

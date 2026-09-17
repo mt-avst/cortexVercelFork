@@ -218,7 +218,11 @@ const ConsentStep: React.FC<ConsentStepProps> = ({
       <div className="form-section mb-5" data-testid="consent-step">
         {heading}
         <p className="text-muted" data-testid="consent-unavailable">
-          This study&rsquo;s consent wording could not be loaded, so it is not
+          {/* Row 36: a curly &rsquo; entity here, against a straight
+              apostrophe typed directly everywhere else this app's rendered
+              copy has one (e.g. StudyEditor.tsx: "won't see the guided
+              open-and-share step"). */}
+          This study's consent wording could not be loaded, so it is not
           shown here. Reload the page to try again.
         </p>
       </div>
