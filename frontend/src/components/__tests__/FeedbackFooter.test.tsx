@@ -8,10 +8,11 @@ import FeedbackFooter from '../FeedbackFooter';
 import { submitFeedback } from '../../api/client';
 
 // The feedback table's CHECK constraint (backend/src/db/migrate.ts) only
-// accepts 'bug' | 'feature' | 'question' | 'other'. The footer used to submit
-// 'footer', which isn't in that set - every submission through this form
-// failed with a 500 in production, invisibly, because nothing pinned the
-// category to the set the database actually accepts.
+// accepts 'bug' | 'feature' | 'question' | 'other'. Unrelated to this
+// branch: an earlier version of this footer sent 'footer', which isn't in
+// that set, so every submission failed with a silent 500 in production.
+// Already fixed on main (this footer sends 'other') - this test just pins
+// the category so nothing sends it out of the accepted set again.
 const VALID_CATEGORIES = ['bug', 'feature', 'question', 'other'];
 
 vi.mock('../../api/client', () => ({
