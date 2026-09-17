@@ -15,6 +15,7 @@ jest.mock('../../firsthand/studies-repository', () => ({
   getStudyById: jest.fn(),
   updateStudy: jest.fn(),
   deleteStudy: jest.fn(),
+  listStudyUsage: jest.fn(),
   // NOT a jest.fn(). canWriteStudy is the authorisation rule itself, and the
   // point of the GET route reporting it is that the client is told the same
   // answer the write path would give - a stub here would let this file agree
@@ -118,6 +119,7 @@ import {
   getStudyById,
   updateStudy,
   deleteStudy,
+  listStudyUsage,
 } from '../../firsthand/studies-repository';
 import {
   answerCountsByStep,
@@ -136,6 +138,7 @@ const mockCreateStudy = (createStudy as jest.MockedFunction<typeof createStudy>)
 const mockGetStudyById = (getStudyById as jest.MockedFunction<typeof getStudyById>);
 const mockUpdateStudy = (updateStudy as jest.MockedFunction<typeof updateStudy>);
 const mockDeleteStudy = (deleteStudy as jest.MockedFunction<typeof deleteStudy>);
+const mockListStudyUsage = (listStudyUsage as jest.MockedFunction<typeof listStudyUsage>);
 const mockListResponsesForStudy = (listResponsesForStudy as jest.MockedFunction<typeof listResponsesForStudy>);
 const mockAnswerCountsByStep = (answerCountsByStep as jest.MockedFunction<typeof answerCountsByStep>);
 // Not a real export of the module, so it is reached through the mock registry
@@ -261,6 +264,7 @@ describe('FirstHand Express router', () => {
       { method: 'get', path: '/api/firsthand/studies/study_abc' },
       { method: 'put', path: '/api/firsthand/studies/study_abc' },
       { method: 'delete', path: '/api/firsthand/studies/study_abc' },
+      { method: 'get', path: '/api/firsthand/studies/study_abc/usage' },
       // Survey results are participant data. Both the aggregate and the CSV
       // export belong in this table for the same reason as the rest.
       { method: 'get', path: '/api/firsthand/studies/study_abc/results' },
@@ -281,6 +285,7 @@ describe('FirstHand Express router', () => {
       expect(mockUpdateStudy).not.toHaveBeenCalled();
       expect(mockDeleteStudy).not.toHaveBeenCalled();
       expect(mockListResponsesForStudy).not.toHaveBeenCalled();
+      expect(mockListStudyUsage).not.toHaveBeenCalled();
     }
 
     it.each(guardedRoutes)('rejects unauthenticated $method $path with 401', async ({ method, path }) => {
@@ -574,6 +579,33 @@ describe('FirstHand Express router', () => {
 
       expect(res.body.study.id).toBe('study_abc');
       expect(res.body.steps).toHaveLength(2);
+    });
+  });
+
+  describe('GET /api/firsthand/studies/:studyId/usage', () => {
+    it('reports the opportunities that reference this task list', async () => {
+      const studies = [
+        { id: 'opp-1', title: 'Onboarding survey', status: 'published' },
+        { id: 'opp-2', title: 'Retention pulse', status: 'draft' },
+      ];
+      mockListStudyUsage.mockResolvedValue(studies);
+
+      const res = await request(listening(app))
+        .get('/api/firsthand/studies/study_abc/usage')
+        .expect(200);
+
+      expect(res.body).toEqual({ count: 2, studies });
+      expect(mockListStudyUsage).toHaveBeenCalledWith(expect.anything(), 'study_abc');
+    });
+
+    it('answers count 0 for a task list nothing references, not an error', async () => {
+      mockListStudyUsage.mockResolvedValue([]);
+
+      const res = await request(listening(app))
+        .get('/api/firsthand/studies/study_unused/usage')
+        .expect(200);
+
+      expect(res.body).toEqual({ count: 0, studies: [] });
     });
   });
 
@@ -1577,6 +1609,7 @@ describe('FirstHand Express router', () => {
       'GET /studies': studyReadLimiter,
       'POST /studies': studyWriteLimiter,
       'GET /studies/:studyId': studyReadLimiter,
+      'GET /studies/:studyId/usage': studyReadLimiter,
       'PUT /studies/:studyId': studyWriteLimiter,
       'DELETE /studies/:studyId': studyWriteLimiter,
       'GET /studies/:studyId/results': studyResultsLimiter,

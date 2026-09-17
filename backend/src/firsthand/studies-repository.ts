@@ -1,5 +1,5 @@
 
-import type { PoolClient } from "pg";
+import type { Pool, PoolClient } from "pg";
 
 import {
   findStepShapeProblem,
@@ -341,6 +341,70 @@ export async function countStudyTasks(studyId: string): Promise<number | null> {
 
     return Number(result.rows[0]?.task_count ?? 0);
   });
+}
+
+/**
+ * An opportunity's own view of itself, as this repository reports it to a
+ * task-list usage caller. See `listStudyUsage`.
+ */
+export type StudyUsageOpportunity = {
+  id: string;
+  title: string;
+  status: string;
+};
+
+/**
+ * A caller that can run a parameterised query - the shape `pg.Pool` and
+ * `pg.PoolClient` both satisfy, and the only shape `listStudyUsage` needs.
+ *
+ * Not upgraded to a value import of `pool` from `../config`, deliberately.
+ * `../config` calls `getBackendConfig()` - a zod parse of `process.env` with
+ * no default on `SESSION_SECRET` - at MODULE SCOPE the instant anything
+ * imports it, so importing it here would make every test in this file's own
+ * suite (and its `-postgres` sibling, and every other `src/firsthand/**`
+ * vitest file) a transitive importer too. None of them set `SESSION_SECRET`;
+ * jest's suites do, in `src/__tests__/setup.ts`, which is exactly why
+ * `routes/opportunities.ts` and `routes/firsthand.ts` can import `pool`
+ * directly and this file cannot. The caller supplies whichever pool it already
+ * holds instead.
+ */
+type Queryable = Pick<Pool | PoolClient, "query">;
+
+/**
+ * Which opportunities currently serve this task list / question set to
+ * participants - the D4 "used by N studies" count and detail rows.
+ *
+ * `firsthand.studies` (this repository's own table) lives in the FirstHand
+ * runtime database; `opportunities` lives in Cortex's own database. The two
+ * are linked only by `opportunities.firsthand_study_id`, a bare TEXT column
+ * with no foreign key (migration 0007 `firsthand_studies_owner`) - the same
+ * column `routes/opportunities.ts`'s `studyIsSharedWithAnotherOpportunity`
+ * already reads for its in-editor sharing guard. There is no cross-database
+ * join to write, so this is a plain filtered SELECT against whichever pool the
+ * caller supplies (Cortex's own), not the runtime pool the rest of this file
+ * uses.
+ *
+ * Returns `[]` for a study id nothing currently references - including one
+ * that was never created, in either database - rather than treating either
+ * case as an error. "Nobody uses this" and "there is no such id" answer the
+ * same question a caller actually has: whether editing this list would change
+ * what somebody else's opportunity serves its participants.
+ */
+export async function listStudyUsage(
+  mainDatabase: Queryable,
+  studyId: string
+): Promise<StudyUsageOpportunity[]> {
+  const result = await mainDatabase.query<StudyUsageOpportunity>(
+    `
+      SELECT id::text AS id, title, status::text AS status
+      FROM opportunities
+      WHERE firsthand_study_id = $1
+      ORDER BY title ASC
+    `,
+    [studyId]
+  );
+
+  return result.rows;
 }
 
 export async function createStudy(input: CreateStudyInput): Promise<StudyWithSteps> {
