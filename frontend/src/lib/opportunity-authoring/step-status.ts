@@ -168,6 +168,23 @@ export interface PublishedReadinessSignal {
  * list response, which is a backend change outside this signal's reach.
  *   -> worth a tracked issue if the dashboard blind spot is judged worth
  *      closing now rather than left to the per-study Review page.
+ *
+ * ponytail: `sessionCount` disagrees with the study's own Review page by
+ * DESIGN, not by accident, and the two can genuinely give different
+ * verdicts for the same study. The admin list route (`GET /opportunities`,
+ * `backend/src/routes/opportunities.ts`) joins each opportunity's sessions
+ * through `ADMIN_RECENT_SESSIONS_ONLY` - `end_time > NOW() - INTERVAL '14
+ * days'` - so `Opportunity.sessions` here is a 14-DAY TAIL, not every
+ * session the study has. Review loads the full set with no such window
+ * (`getSessions(opportunityId)`) and counts all of it. A live session or
+ * interview whose only slots ended more than 14 days ago is therefore
+ * `hasBookableSlot: false` here (dashboard reads "Published, not working")
+ * while Review, seeing the same old slots, reads `hasBookableSlot: true`
+ * and shows no blocker at all - the opposite verdict on the SAME data, from
+ * the SAME function, for the SAME study. Not re-architected here: the
+ * window exists on purpose (cto/AdaptaLabs#103, see the comment above
+ * `ADMIN_RECENT_SESSIONS_ONLY`) for reasons unrelated to this signal, and
+ * changing it is a backend decision outside this file's reach.
  */
 export const isPublishedButNotWorking = (
   opportunityStatus: string,
