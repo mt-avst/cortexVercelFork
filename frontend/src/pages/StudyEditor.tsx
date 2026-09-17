@@ -456,6 +456,14 @@ export function StudyEditorForm({
             consent_template_version: initialStudy.consent_template_version ?? null
           }
         : {}),
+      // A hidden default, CREATE only. D4 drops the Locale field from the UI,
+      // but the pre-D4 form always sent 'en-GB' as its own default - dropping
+      // the field entirely would leave every new list `locale = null`, which
+      // nothing chose. An edit must never carry this: it would overwrite a
+      // stored locale on every save, and the update branch below only ever
+      // sees this key on create (it is absent whenever `isEditing`).
+      // `brand_name` has no equivalent: it never had a default to preserve.
+      ...(!isEditing ? { locale: 'en-GB' } : {}),
       estimated_duration_minutes: durationMinutes,
       status,
       steps: stepsPayload,

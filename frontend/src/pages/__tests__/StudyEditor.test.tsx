@@ -153,6 +153,23 @@ describe('StudyEditorForm - create', () => {
     expect(mockedUpdate).not.toHaveBeenCalled();
   });
 
+  /**
+   * D4 drops the Locale field from the UI, but the pre-D4 form always sent
+   * 'en-GB' as its own default. Omitting the field on create entirely would
+   * leave a new list `locale = null` in storage, which nothing chose - so the
+   * default is still sent, just hidden. An edit must never carry it (it would
+   * overwrite a stored locale on every save), so this is create-only.
+   */
+  it('sends the en-GB locale default on create, as a hidden default', async () => {
+    renderForm();
+    fillRequiredFields({ title: 'Locale default study' });
+
+    fireEvent.click(screen.getByRole('button', { name: /Create task list/i }));
+
+    await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(1));
+    expect(mockedCreate.mock.calls[0][0].locale).toBe('en-GB');
+  });
+
   it('rejects an unsafe starting url client-side (shared url-safety) and does not call the API', async () => {
     renderForm();
     fireEvent.click(screen.getByRole('button', { name: 'Add task' }));
@@ -216,6 +233,10 @@ describe('StudyEditorForm - edit', () => {
     await waitFor(() => expect(mockedUpdate).toHaveBeenCalledTimes(1));
     expect(mockedUpdate.mock.calls[0][0]).toBe('study_abc');
     expect(mockedCreate).not.toHaveBeenCalled();
+    // The en-GB default is create-only: an update must never carry it, or
+    // every edit would silently overwrite whatever locale the study actually
+    // stores.
+    expect(mockedUpdate.mock.calls[0][1]).not.toHaveProperty('locale');
   });
 
   /**
@@ -588,6 +609,46 @@ describe('StudyEditorForm - edit', () => {
     const payload = mockedCreate.mock.calls[0][0];
     expect(payload.id).toMatch(/^study_/);
     expect(payload.steps[0].step_id.startsWith(`${payload.id}_`)).toBe(true);
+  });
+
+  it('still mints a study id where crypto.randomUUID is unavailable', async () => {
+    // `randomUUID` is secure-context only, so it is absent over plain http -
+    // a dev server reached from another machine by IP, or an http staging
+    // host. `getRandomValues` is not, which is what the fallback is built on.
+    //
+    // It has to be SHADOWED, not deleted: `randomUUID` lives on
+    // `Crypto.prototype`, so `delete crypto.randomUUID` removes nothing and
+    // the real method shows through - which made an earlier version of this
+    // test pass against a build with no fallback at all.
+    const hadOwn = Object.prototype.hasOwnProperty.call(crypto, 'randomUUID');
+    Object.defineProperty(crypto, 'randomUUID', {
+      value: undefined,
+      configurable: true,
+      writable: true,
+    });
+    const randomBytes = vi.spyOn(crypto, 'getRandomValues');
+
+    try {
+      expect(typeof crypto.randomUUID).not.toBe('function');
+      renderForm();
+      fillRequiredFields({ title: 'Insecure context study' });
+      fireEvent.click(screen.getByRole('button', { name: /Create task list/i }));
+      await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(1));
+
+      const payload = mockedCreate.mock.calls[0][0];
+      expect(payload.id).toMatch(
+        /^study_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+      );
+      expect(payload.steps[0].step_id.startsWith(`${payload.id}_`)).toBe(true);
+      // A CSPRNG, not Math.random: this value becomes a primary key.
+      expect(randomBytes).toHaveBeenCalled();
+    } finally {
+      randomBytes.mockRestore();
+      if (!hadOwn) {
+        // @ts-expect-error - drop the shadow so the prototype method shows again.
+        delete crypto.randomUUID;
+      }
+    }
   });
 
   it('re-mints the study id after a failed create, so a retry is not a second collision', async () => {
