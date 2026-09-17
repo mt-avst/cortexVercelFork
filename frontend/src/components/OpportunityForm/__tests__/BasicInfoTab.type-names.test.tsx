@@ -10,9 +10,9 @@ import type { OpportunityFormData } from '../../../api/types';
 // The authoring form is where a type gets its name in a researcher's head, and
 // it used its own vocabulary: "User Test", "Unmoderated Testing". The dashboard
 // badge said "APP TESTING" and "UNMODERATED"; browse said "Usability test" and
-// "Recorded study". Three names for one thing. The option text may still carry
-// an emoji and a short gloss - what it may not do is call the type something
-// no other surface calls it.
+// "Recorded study". Three names for one thing. The D2 picker replaced the old
+// select, but the rule is unchanged: a card may not call a type something no
+// other surface calls it.
 
 const formData = {
   type: '',
@@ -33,56 +33,51 @@ const renderTab = () =>
     />
   );
 
-describe('BasicInfoTab research study type options', () => {
-  it('offers every type', () => {
-    renderTab();
-    const select = screen.getByLabelText(/research study type/i) as HTMLSelectElement;
-    const values = [...select.querySelectorAll('option')].map((o) => (o as HTMLOptionElement).value);
+const cardNames = () =>
+  screen
+    .getAllByRole('radio')
+    .map((card) => card.getAttribute('aria-label') ?? '');
 
+describe('BasicInfoTab study-type picker card names', () => {
+  it('offers a card for every type', () => {
+    renderTab();
+    const names = cardNames();
     for (const type of Object.values(OPPORTUNITY_TYPES)) {
-      expect(values, `no option for "${type}"`).toContain(type);
+      const facing = getParticipantFacingType(type);
+      expect(
+        names.some((name) => name.startsWith(facing)),
+        `no card for "${type}"`
+      ).toBe(true);
     }
   });
 
   it('names each one the way every other surface names it', () => {
     renderTab();
-    const select = screen.getByLabelText(/research study type/i) as HTMLSelectElement;
-
     for (const type of Object.values(OPPORTUNITY_TYPES)) {
-      const option = [...select.querySelectorAll('option')].find(
-        (o) => (o as HTMLOptionElement).value === type
-      );
-      expect(option?.textContent, `option for "${type}"`).toContain(getParticipantFacingType(type));
+      const facing = getParticipantFacingType(type);
+      // The card TITLE is the canonical participant-facing name, shown in view.
+      expect(
+        screen.getAllByText(facing).length,
+        `no card titled "${facing}" for "${type}"`
+      ).toBeGreaterThan(0);
     }
   });
 
   it('does not reintroduce the names only this form used', () => {
     renderTab();
-    const select = screen.getByLabelText(/research study type/i) as HTMLSelectElement;
-
-    expect(select.textContent).not.toMatch(/user test/i);
-    expect(select.textContent).not.toMatch(/unmoderated/i);
+    const picker = screen.getByRole('radiogroup', { name: /study type/i });
+    expect(picker.textContent).not.toMatch(/user test/i);
+    expect(picker.textContent).not.toMatch(/unmoderated/i);
   });
 
-  it('reserves no empty hint slot before a type is chosen (Lane C "Then")', () => {
-    // With no type selected there is no hint to show; the help element (which
-    // used to reserve a fixed ~2.5rem gap holding a single space) must not be
-    // rendered at all, so the label sits straight above the select.
-    const { container } = renderTab();
-    expect(container.querySelector('#type-help')).toBeNull();
-  });
-
-  it('shows the hint, in the help slot, once a type is chosen', () => {
-    const { container } = render(
-      <BasicInfoTab
-        formData={{ ...formData, type: 'unmoderated' } as unknown as OpportunityFormData}
-        validationErrors={{}}
-        handleInputChange={vi.fn()}
-        handleBlur={vi.fn()}
-      />
-    );
-    const help = container.querySelector('#type-help');
-    expect(help).not.toBeNull();
-    expect(help!.textContent).toMatch(/Self-guided, recorded in the browser/i);
+  it('keeps each type definition in view, not hidden behind a dropdown', () => {
+    renderTab();
+    // Interactive types have one card; the answer-based glosses appear on both
+    // the in-Cortex and external cards, hence getAllByText.
+    expect(screen.getByText('Research interview session')).toBeInTheDocument();
+    expect(
+      screen.getByText('Usability test you moderate, at a booked time')
+    ).toBeInTheDocument();
+    expect(screen.getAllByText('Quick opinion gathering').length).toBeGreaterThan(0);
   });
 });

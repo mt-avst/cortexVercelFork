@@ -13,6 +13,7 @@ import {
 } from '../../api/client';
 import { getFirstHandStudy } from '../../api/firsthand-studies';
 import { AUTOSAVE_MIN_INTERVAL_MS } from '../../lib/opportunity-authoring/autosave';
+import { chooseStudyType } from './helpers/study-type-picker';
 
 /**
  * The autosave as an author meets it.
@@ -159,9 +160,7 @@ const renderEditForm = (opportunity: Record<string, unknown> = draftOpportunity)
 
 /** Fill step one to the point the create schema would accept it. */
 const fillCreateThreshold = () => {
-  fireEvent.change(screen.getByLabelText(/Research Study Type/i), {
-    target: { value: 'survey' }
-  });
+  chooseStudyType('survey');
   fireEvent.change(screen.getByLabelText(/^Title/i), {
     target: { value: 'Developer experience pulse' }
   });
@@ -422,7 +421,7 @@ describe('a sequence of autosaves', () => {
       ).replace(/(Current step|Completed|Needs attention|Not started)$/, '');
     };
     const before = standingOn();
-    expect(before).toMatch(/Content & Details/);
+    expect(before).toMatch(/Audience/);
 
     await waitFor(() => expect(createOpportunity).toHaveBeenCalledTimes(1), {
       timeout: PAST_THE_DEBOUNCE
@@ -899,7 +898,7 @@ describe('the baseline a save measures "did this change" against', () => {
     );
     await screen.findByDisplayValue('Developer experience pulse');
 
-    fireEvent.click(screen.getByLabelText(/In Cortex/i));
+    chooseStudyType('poll', 'native');
     await waitFor(() => expect(updateOpportunity).toHaveBeenCalledTimes(1), {
       timeout: PAST_THE_DEBOUNCE
     });
@@ -911,7 +910,7 @@ describe('the baseline a save measures "did this change" against', () => {
 
     await new Promise((resolve) => setTimeout(resolve, AUTOSAVE_MIN_INTERVAL_MS + 500));
 
-    fireEvent.click(screen.getByLabelText(/In an external tool/i));
+    chooseStudyType('poll', 'external');
     await waitFor(() => expect(updateOpportunity).toHaveBeenCalledTimes(2), {
       timeout: PAST_THE_DEBOUNCE
     });

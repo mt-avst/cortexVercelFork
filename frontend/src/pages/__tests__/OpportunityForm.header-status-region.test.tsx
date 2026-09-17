@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import OpportunityForm from '../OpportunityForm';
 import { opportunityFormRoutes } from '../OpportunityForm.routes';
 import { createOpportunity, deleteOpportunity, getOpportunity, updateOpportunity } from '../../api/client';
+import { chooseStudyType } from './helpers/study-type-picker';
 
 /**
  * Row 27: the header status region used to size itself to however many of
@@ -85,9 +86,7 @@ const renderEditForm = (opportunity: Record<string, unknown>) => {
 };
 
 const fillCreateThreshold = () => {
-  fireEvent.change(screen.getByLabelText(/Research Study Type/i), {
-    target: { value: 'survey' }
-  });
+  chooseStudyType('survey');
   fireEvent.change(screen.getByLabelText(/^Title/i), {
     target: { value: 'Developer experience pulse' }
   });

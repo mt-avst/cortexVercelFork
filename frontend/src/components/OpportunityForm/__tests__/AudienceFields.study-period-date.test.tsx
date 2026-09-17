@@ -2,16 +2,20 @@ import React, { useState } from 'react';
 import { render, fireEvent, screen } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 
-import BasicInfoTab from '../BasicInfoTab';
+import AudienceFields from '../AudienceFields';
 import type { OpportunityFormData } from '../../../api/types';
 
 // #110 (beta feedback): "typing '2026' gives me '1906'" in the Study Period
 // date fields, and it round-trips into start_date/end_date - a silently wrong
 // study window, not just a cosmetic glitch.
 //
-// Root cause: a native <input type="date"> fires onChange on every keystroke
-// of the year sub-field, and while the year is only partly typed (with month
-// and day already filled) it reports a short, zero-padded year embedded in an
+// The Study Period fields moved from Basic Information to the Screener/Audience
+// step under D6, carrying this parse logic with them; this coverage moves with
+// the fields (it renders AudienceFields, which now owns them).
+//
+// Root cause: a native <input type="date"> fires onChange on every keystroke of
+// the year sub-field, and while the year is only partly typed (with month and
+// day already filled) it reports a short, zero-padded year embedded in an
 // otherwise-complete date string - e.g. typing just the "6" of "2026" reports
 // "0006-06-15". The old parse helper (`formatDateToISO`) had no check on the
 // year's magnitude, so `Date.UTC(6, ...)` hit JS's legacy two-digit-year rule
@@ -27,25 +31,31 @@ const baseFormData: OpportunityFormData = {
   default_duration_minutes: 15,
   status: 'draft',
   delivery_mode: 'external',
+  participant_type_required: 'any',
+  participant_type_specific_details: '',
+  target_roles: [],
   start_date: new Date(Date.UTC(2024, 5, 15, 12, 0, 0)).toISOString()
 };
 
-function ControlledBasicInfoTab({ initial }: { initial: OpportunityFormData }) {
+function ControlledAudienceFields({ initial }: { initial: OpportunityFormData }) {
   const [formData, setFormData] = useState(initial);
   return (
-    <BasicInfoTab
+    <AudienceFields
       formData={formData}
       validationErrors={{}}
       handleInputChange={(field, value) =>
         setFormData((prev) => ({ ...prev, [field]: value }))
       }
+      onTargetRolesChange={(roles) =>
+        setFormData((prev) => ({ ...prev, target_roles: roles }))
+      }
     />
   );
 }
 
-describe('BasicInfoTab study period date fields (#110)', () => {
+describe('AudienceFields study period date fields (#110)', () => {
   it('ignores a mid-typed short year instead of corrupting it into the 1900s', () => {
-    render(<ControlledBasicInfoTab initial={baseFormData} />);
+    render(<ControlledAudienceFields initial={baseFormData} />);
     const input = screen.getByLabelText(/start date/i) as HTMLInputElement;
 
     expect(input.value).toBe('2024-06-15');
@@ -62,7 +72,7 @@ describe('BasicInfoTab study period date fields (#110)', () => {
   });
 
   it('keeps a valid date round-tripping correctly (control)', () => {
-    render(<ControlledBasicInfoTab initial={baseFormData} />);
+    render(<ControlledAudienceFields initial={baseFormData} />);
     const input = screen.getByLabelText(/start date/i) as HTMLInputElement;
 
     fireEvent.change(input, { target: { value: '2025-03-10' } });
@@ -71,7 +81,7 @@ describe('BasicInfoTab study period date fields (#110)', () => {
   });
 
   it('lets the full typed year land, and survives a reload with 2026 intact', () => {
-    const { unmount } = render(<ControlledBasicInfoTab initial={baseFormData} />);
+    const { unmount } = render(<ControlledAudienceFields initial={baseFormData} />);
     const input = screen.getByLabelText(/start date/i) as HTMLInputElement;
 
     // A stray partial-year keystroke arrives first, then the completed entry.
@@ -84,7 +94,7 @@ describe('BasicInfoTab study period date fields (#110)', () => {
     // "Reload": remount fresh, as if the corrected value had just been saved
     // and the page were opened again.
     render(
-      <ControlledBasicInfoTab
+      <ControlledAudienceFields
         initial={{
           ...baseFormData,
           start_date: new Date(Date.UTC(2026, 5, 15, 12, 0, 0)).toISOString()
@@ -97,7 +107,7 @@ describe('BasicInfoTab study period date fields (#110)', () => {
   });
 
   it('still treats an explicit clear as a clear, not an ignored keystroke', () => {
-    render(<ControlledBasicInfoTab initial={baseFormData} />);
+    render(<ControlledAudienceFields initial={baseFormData} />);
     const input = screen.getByLabelText(/start date/i) as HTMLInputElement;
 
     fireEvent.change(input, { target: { value: '' } });
