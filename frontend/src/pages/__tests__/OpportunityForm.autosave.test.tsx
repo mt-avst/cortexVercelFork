@@ -802,8 +802,20 @@ describe('a deliberate save that overlaps an autosave', () => {
       timeout: PAST_THE_DEBOUNCE
     });
 
-    // The author presses Save and exit while it is still out.
-    fireEvent.click(screen.getByRole('button', { name: /Save and exit/i }));
+    // The author presses a deliberate Save while it is still out. D9 deletes
+    // "Save and exit" (which used to drive this test) - the per-step "Save
+    // Changes" shortcut cannot stand in for it here, because it needs
+    // `isEdit`, which this create has not become yet (the very autosave
+    // under test has not resolved). Review's terminal control is the one
+    // remaining trigger for `handleSubmit` on a form still mid-create, so
+    // walk there and press it - `.step-actions__submit` finds it regardless
+    // of what its label currently says.
+    for (let guard = 0; guard <= 6; guard += 1) {
+      const forward = screen.queryByRole('button', { name: /^Continue: /i });
+      if (!forward) break;
+      fireEvent.click(forward);
+    }
+    fireEvent.click(document.querySelector('.step-actions__submit') as HTMLButtonElement);
     releaseCreate(null);
 
     // Give the resumed handler every chance to send its own create.
@@ -840,7 +852,11 @@ describe('a deliberate save that overlaps an autosave', () => {
       timeout: PAST_THE_DEBOUNCE
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /Save and exit/i }));
+    // D9 deletes "Save and exit"; this form is already an edit with a change
+    // on screen, so the per-step "Save Changes" shortcut is already
+    // rendered and calls the same `handleSubmit()` that drove this test
+    // before.
+    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
     releaseUpdate(null);
 
     await waitFor(() => expect(updateOpportunity).toHaveBeenCalledTimes(2), {
@@ -1147,11 +1163,16 @@ describe('leaving the form', () => {
   }, 15_000);
 
 
-  it('offers Save and exit on a step that is not the last one', async () => {
+  it('does not offer "Save and exit" on any step (D9, row 24)', async () => {
+    // D9 deletes the control: drafts autosave, and Exit to dashboard already
+    // covers leaving deliberately, so it did a job the row already did
+    // twice over. See "a deliberate save that overlaps an autosave" below
+    // for confirmation that the specific race conditions this file guards
+    // are still reachable through the controls that remain.
     renderEditForm(draftOpportunity);
     await screen.findByDisplayValue('Developer experience pulse');
 
-    expect(screen.getByRole('button', { name: /Save and exit/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Save and exit/i })).not.toBeInTheDocument();
   });
 
   /**
