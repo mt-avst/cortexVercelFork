@@ -79,9 +79,11 @@ const ScreenerStep: React.FC<ScreenerStepProps> = ({
         {heading}
         <div className="alert alert-secondary" role="status">
           <p className="mb-2">
+            {/* Row 36: the heading above already says what a screener does
+                ("ask a few questions ... only let the right people through"),
+                so this no longer repeats that sentence 60px below it. */}
             <strong>No screener on this study.</strong> Anyone signed in can
-            start it. Add a screener to ask a few questions first and only let
-            the right people through.
+            start it. Add one to decide who qualifies first.
           </p>
           <button
             type="button"

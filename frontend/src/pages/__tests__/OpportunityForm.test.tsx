@@ -154,12 +154,8 @@ beforeEach(() => {
  * which does that for it) instead.
  */
 const goToConsentStep = () => {
-  // MR2 inserted a Screener step between the authoring step and Consent, so the
-  // walk is one longer. Guarded so this still works from a step already past it.
-  const toScreener = screen.queryByRole('button', { name: /^Continue: Screener$/i });
-  if (toScreener) {
-    fireEvent.click(toScreener);
-  }
+  // Since the D1/D3 reshape, Audience sits BEFORE the experience body, so from
+  // the experience step the next step is Consent directly.
   fireEvent.click(screen.getByRole('button', { name: /^Continue: Consent$/i }));
 };
 
@@ -319,7 +315,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       screen.getByRole('button', { name: /Task List/i })
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: /External Link/i })
+      screen.queryByRole('button', { name: /Your link/i })
     ).not.toBeInTheDocument();
     // ...and the picker card names it the way every other surface does.
     expect(
@@ -332,7 +328,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     selectType('poll');
 
     expect(
-      screen.getByRole('button', { name: /External Link/i })
+      screen.getByRole('button', { name: /Your link/i })
     ).toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: /Task List/i })
@@ -1201,7 +1197,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       firsthand_study_id: 'study_created_on_save'
     } as never);
 
-    fireEvent.click(screen.getByRole('button', { name: /Basic Info/i }));
+    fireEvent.click(screen.getByRole('button', { name: /The study/i }));
     fireEvent.change(await screen.findByLabelText(/^Title/i), {
       target: { value: 'Draft saved early, now renamed' }
     });
@@ -1374,7 +1370,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       await screen.findByText(/Copied from/i);
 
       // The switch itself.
-      fireEvent.click(screen.getByRole('button', { name: /Basic Info/i }));
+      fireEvent.click(screen.getByRole('button', { name: /The study/i }));
       selectType('survey', 'native');
 
       fireEvent.click(screen.getByRole('button', { name: /Questions/i }));
@@ -1423,7 +1419,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       fireEvent.click(await screen.findByRole('button', { name: /^Start from this Demo Survey$/ }));
       await screen.findByText(/Copied from/i);
 
-      fireEvent.click(screen.getByRole('button', { name: /Basic Info/i }));
+      fireEvent.click(screen.getByRole('button', { name: /The study/i }));
       selectType('unmoderated');
 
       fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
@@ -1464,7 +1460,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       fireEvent.click(await screen.findByRole('button', { name: /^Start from this Demo Study$/ }));
       await screen.findByText(/Copied from/i);
 
-      fireEvent.click(screen.getByRole('button', { name: /Basic Info/i }));
+      fireEvent.click(screen.getByRole('button', { name: /The study/i }));
       selectType('question');
       selectType('unmoderated');
 
@@ -1676,26 +1672,26 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
 describe('locateField', () => {
   it('puts each error key on the tab that actually renders it', () => {
     expect(locateField('title').tab).toBe(1);
-    // Audience fields (D6): Participant Type and its criteria moved off Content
-    // & Details onto the Screener/Audience step (4).
-    expect(locateField('participant_type_required').tab).toBe(4);
-    expect(locateField('participant_type_specific_details').tab).toBe(4);
-    // Session fields (D6): Meeting Location and Default Duration moved off Basic
-    // Information onto the Session Management step (3).
+    // Audience fields: Participant Type and its criteria live on the Audience
+    // step (tab 2 since the D1/D3 reshape).
+    expect(locateField('participant_type_required').tab).toBe(2);
+    expect(locateField('participant_type_specific_details').tab).toBe(2);
+    // Session fields (D6): Meeting Location and Default Duration are on the
+    // experience step (tab 3) for test/interview.
     expect(locateField('meeting_location_optional').tab).toBe(3);
     expect(locateField('default_duration_minutes').tab).toBe(3);
     expect(locateField('external_link_optional').tab).toBe(3);
-    // Step 5, since MR2: the Screener step took id 4, so consent is its own step
-    // at 5 on the two authoring paths. Asserted for BOTH keys, not one - the
-    // recorded and survey consent fields are a twin pair and pinning one has
-    // twice let the other drift.
-    expect(locateField('inline_study_consent_text').tab).toBe(5);
-    expect(locateField('inline_survey_consent_text').tab).toBe(5);
-    // The screener (MR2) is step 4. Both its top-level keys, and a per-question
-    // key routed by the regex branch, land there.
-    expect(locateField('screener_questions').tab).toBe(4);
-    expect(locateField('screener_message').tab).toBe(4);
-    expect(locateField('screener_questions.0.options.1.label').tab).toBe(4);
+    // Consent is its own step at tab 4 since the D1/D3 reshape (native and
+    // recorded authoring paths). Asserted for BOTH keys - the recorded and
+    // survey consent fields are a twin pair and pinning one has twice let the
+    // other drift.
+    expect(locateField('inline_study_consent_text').tab).toBe(4);
+    expect(locateField('inline_survey_consent_text').tab).toBe(4);
+    // The screener lives on the Audience step (tab 2). Both its top-level keys,
+    // and a per-question key routed by the regex branch, land there.
+    expect(locateField('screener_questions').tab).toBe(2);
+    expect(locateField('screener_message').tab).toBe(2);
+    expect(locateField('screener_questions.0.options.1.label').tab).toBe(2);
     // Still step 3, and asserted here because "the consent field moved" and
     // "everything on that step moved" are different changes: the content the
     // consent is about stayed where it was.
@@ -1884,7 +1880,7 @@ describe('OpportunityForm - a refused action always says so', () => {
     // Scoped to the step strip: Participant Type is on the Screener step now.
     fireEvent.click(
       within(screen.getByRole('navigation', { name: 'Form steps' }))
-        .getByRole('button', { name: /Screener/i })
+        .getByRole('button', { name: /Audience/i })
     );
     fireEvent.change(screen.getByLabelText(/Participant Type/i), {
       target: { value: 'specific' },
@@ -2029,7 +2025,7 @@ describe('OpportunityForm - a refused action always says so', () => {
 
     fireEvent.click(
       within(screen.getByRole('navigation', { name: 'Form steps' }))
-        .getByRole('button', { name: /Basic Information/i })
+        .getByRole('button', { name: /The study/i })
     );
     fireEvent.click(await screen.findByRole('button', { name: /Save Changes/i }));
 

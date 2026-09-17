@@ -188,7 +188,7 @@ describe('opening the preview from the authoring flow', () => {
     );
     // And the steps before it: walking back to Basic Information proves the
     // whole draft survived, not just the step that was on screen.
-    await user.click(screen.getByRole('button', { name: /Basic Information/i }));
+    await user.click(screen.getByRole('button', { name: /The study/i }));
     expect(await screen.findByLabelText(/^Title/i)).toHaveValue(
       'Developer experience pulse'
     );

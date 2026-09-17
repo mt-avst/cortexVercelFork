@@ -148,43 +148,24 @@ const submitFromLastStep = async (
 };
 
 describe('getTabsForType', () => {
-  it('offers the external link tab when a survey hands off', () => {
+  // The D1/D3 spine: The study, Audience, the experience body, Consent (native/
+  // recorded/moderated only), Review. External shapes are four steps - no
+  // Consent step, its affirmation folds into the link (row 13). The whole-array
+  // equality catches a missing or misplaced step, which `toContain` cannot.
+  it('gives an externally delivered survey four steps, its experience the link', () => {
     expect(getTabsForType('survey', 'external').map((tab) => tab.title)).toEqual([
-      'Basic Information',
-      'Content & Details',
-      'External Link',
-      'Screener',
-      'Consent',
+      'The study',
+      'Audience',
+      'Your link',
       'Review'
     ]);
   });
 
-  it('offers the questions tab when a survey runs in Cortex', () => {
+  it('gives a native survey five steps, its experience Questions and a Consent step', () => {
     expect(getTabsForType('survey', 'native').map((tab) => tab.title)).toEqual([
-      'Basic Information',
-      'Content & Details',
+      'The study',
+      'Audience',
       'Questions',
-      'Screener',
-      'Consent',
-      'Review'
-    ]);
-  });
-
-  /**
-   * WZ-18 (Decision 9): every question-carrying type now carries a Consent step
-   * whichever way it is delivered, so the step count stops jumping between four
-   * and five as the author toggles delivery mode. A native survey's Consent step
-   * edits the wording Cortex will show; an external survey's is a short
-   * confirmation that the tool on the other side of the link carries consent.
-   * `toEqual` on the whole array rather than `toContain`, because the failure
-   * that matters is a MISSING or misplaced step, and `toContain` cannot see one.
-   */
-  it('gives an externally delivered survey a confirmation Consent step, so the count matches the native shape', () => {
-    expect(getTabsForType('survey', 'external').map((tab) => tab.title)).toEqual([
-      'Basic Information',
-      'Content & Details',
-      'External Link',
-      'Screener',
       'Consent',
       'Review'
     ]);
@@ -192,27 +173,9 @@ describe('getTabsForType', () => {
 
   it('gives a recorded study a consent step, last before Review', () => {
     expect(getTabsForType('unmoderated').map((tab) => tab.title)).toEqual([
-      'Basic Information',
-      'Content & Details',
+      'The study',
+      'Audience',
       'Task List',
-      'Screener',
-      'Consent',
-      'Review'
-    ]);
-  });
-
-  /**
-   * WZ-18 (Decision 9): a handed-off question now carries a Consent step too - a
-   * short confirmation that the external tool holds the consent, so the wizard is
-   * five steps for every question-carrying type rather than four for a hand-off
-   * and five for a native run. `question` defaults to external delivery.
-   */
-  it('gives a handed-off question a confirmation Consent step, so its count matches the native question', () => {
-    expect(getTabsForType('question').map((tab) => tab.title)).toEqual([
-      'Basic Information',
-      'Content & Details',
-      'External Link',
-      'Screener',
       'Consent',
       'Review'
     ]);
@@ -222,49 +185,34 @@ describe('getTabsForType', () => {
     'gives %s a consent step, because Cortex stores what it agrees to keep (#79)',
     (type) => {
       expect(getTabsForType(type).map((tab) => tab.title)).toEqual([
-        'Basic Information',
-        'Content & Details',
+        'The study',
+        'Audience',
         'Session Management',
-        'Screener',
         'Consent',
         'Review'
       ]);
     }
   );
 
-  it('defaults to the external link tab, which is what every existing poll is', () => {
-    expect(getTabsForType('poll').map((tab) => tab.title)).toContain('External Link');
+  it('defaults an external poll to the link experience, which is what every existing poll is', () => {
+    expect(getTabsForType('poll').map((tab) => tab.title)).toContain('Your link');
   });
 
-  /**
-   * #78 replaced this test's premise rather than its assertion.
-   *
-   * It used to read "leaves the one-question type on the external link tab",
-   * because `question` had no native runner and kept the link step whatever
-   * the delivery mode said. It has one now - SurveyRunner, the same one a
-   * poll and a survey use - so the two shapes below are what it must have,
-   * and the pairing is the point: whole-array equality, because the failure
-   * that matters is a step that should have been swapped appearing alongside
-   * its replacement rather than instead of it.
-   */
-  it('keeps the external link tab when a question hands off, which is every existing one', () => {
+  it('keeps the link experience when a question hands off, which is every existing one', () => {
     expect(getTabsForType('question', 'external').map((tab) => tab.title)).toEqual([
-      'Basic Information',
-      'Content & Details',
-      'External Link',
-      'Screener',
-      'Consent',
+      'The study',
+      'Audience',
+      'Your link',
       'Review'
     ]);
   });
 
   it('offers the question tab, and a consent step, when a question runs in Cortex', () => {
     expect(getTabsForType('question', 'native').map((tab) => tab.title)).toEqual([
-      'Basic Information',
-      'Content & Details',
+      'The study',
+      'Audience',
       // Singular. The type's whole promise is that there is one.
       'Question',
-      'Screener',
       'Consent',
       'Review'
     ]);
@@ -278,7 +226,7 @@ describe('getTabsForType', () => {
    */
   it('defaults a question to handing off, which is what every stored one does', () => {
     expect(getTabsForType('question').map((tab) => tab.title)).toContain(
-      'External Link'
+      'Your link'
     );
   });
 
@@ -289,8 +237,8 @@ describe('getTabsForType', () => {
   });
 });
 
-describe("the hand-off Consent step confirms the external tool's consent (WZ-18)", () => {
-  const openExternalPollConsent = async (
+describe("the hand-off folds consent into the link step, with no Consent step (row 13)", () => {
+  const openExternalPollLink = async (
     user: ReturnType<typeof userEvent.setup>
   ) => {
     await user.click(studyTypeCard('poll', 'external'));
@@ -299,42 +247,49 @@ describe("the hand-off Consent step confirms the external tool's consent (WZ-18)
       screen.getByLabelText(/^Purpose/i),
       'One quick question after someone exports their data'
     );
-    await user.click(screen.getByRole('button', { name: /^Continue: Content & Details$/ }));
-    await user.click(screen.getByRole('button', { name: /^Continue: External Link$/ }));
-    await user.click(screen.getByRole('button', { name: /^Continue: Screener$/ }));
-    await user.click(screen.getByRole('button', { name: /^Continue: Consent$/ }));
+    // The D1/D3 spine: study -> audience -> your link -> review. The link step
+    // carries the consent affirmation.
+    await user.click(screen.getByRole('button', { name: /^Continue: Audience$/ }));
+    await user.click(screen.getByRole('button', { name: /^Continue: Your link$/ }));
   };
 
-  it('shows a short confirmation, not a consent-wording editor', async () => {
+  it('offers a consent affirmation on the link step, not a wording editor, and no Consent step', async () => {
     const user = userEvent.setup();
     renderForm();
-    await openExternalPollConsent(user);
+    await openExternalPollLink(user);
 
-    // The confirmation body, keyed by its own testid so it cannot be confused
-    // with the editing ConsentStep the native/moderated shapes render.
-    const step = await screen.findByTestId('external-consent-step');
-    expect(step).toHaveTextContent(/consent is\s+collected there, not in Cortex/i);
-    expect(step).toHaveTextContent(/Confirm the tool.s own\s+consent text is in place before you publish/i);
+    // The affirmation is a checkbox folded into the link step.
     expect(
-      within(step).getByRole('heading', { name: /Consent/i })
+      screen.getByLabelText(/I confirm the external tool has its own consent text/i)
     ).toBeInTheDocument();
 
     // And NONE of the editor: no wording textarea, no template chooser, no
-    // ConsentStep at all. A hand-off has no wording of its own to edit, and
-    // offering one would imply Cortex governs consent it does not hold.
+    // ConsentStep, and no separate Consent step in the strip. A hand-off has no
+    // wording of its own to edit, and offering one would imply Cortex governs
+    // consent it does not hold.
     expect(screen.queryByTestId('consent-step')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/Consent text/i)).not.toBeInTheDocument();
+    // No wording textbox (the affirmation is a checkbox, whose label mentions
+    // "consent text" - so this is scoped to a textbox, not any labelled control).
+    expect(screen.queryByRole('textbox', { name: /Consent text/i })).not.toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: /Customise consent wording/i })
+      within(screen.getByRole('navigation', { name: 'Form steps' }))
+        .queryByRole('button', { name: /Consent/ })
     ).not.toBeInTheDocument();
   });
 
-  it('sends nothing consent-shaped when a hand-off is created through the confirmation step', async () => {
-    // The confirmation step writes no consent fields - it only confirms - so a
-    // created external poll must carry no moderated/inline consent wording.
+  it('sends nothing consent-shaped when a hand-off is created', async () => {
+    // The affirmation is client-side only - a created external poll must carry
+    // no moderated/inline consent wording.
     const user = userEvent.setup();
     renderForm();
-    await openExternalPollConsent(user);
+    await openExternalPollLink(user);
+    await user.type(
+      screen.getByLabelText(/External Link/i),
+      'https://forms.example.com/poll'
+    );
+    await user.click(
+      screen.getByLabelText(/I confirm the external tool has its own consent text/i)
+    );
     await user.click(screen.getByRole('button', { name: /^Continue: Review$/ }));
     await user.click(screen.getByRole('button', { name: /^Create study$/ }));
 
@@ -478,14 +433,14 @@ describe('authoring a native survey', () => {
     const user = userEvent.setup();
     renderForm();
 
-    // The external card first: the third step is External Link.
+    // The external card first: the third step is Your link.
     await user.click(studyTypeCard('survey', 'external'));
-    expect(screen.getByText('External Link')).toBeInTheDocument();
+    expect(screen.getByText('Your link')).toBeInTheDocument();
 
     // Choosing the in-Cortex card swaps it for Questions.
     await user.click(studyTypeCard('survey', 'native'));
     await waitFor(() => expect(screen.getByText('Questions')).toBeInTheDocument());
-    expect(screen.queryByText('External Link')).toBeNull();
+    expect(screen.queryByText('Your link')).toBeNull();
   });
 
   /**
@@ -566,7 +521,6 @@ describe('authoring a native survey', () => {
       'How easy was that?'
     );
 
-    await user.click(screen.getByRole('button', { name: /^Continue: Screener$/i }));
     await user.click(screen.getByRole('button', { name: /^Continue: Consent$/i }));
     await user.click(
       screen.getByRole('button', { name: /Customise consent wording/i })
@@ -602,7 +556,6 @@ describe('authoring a native survey', () => {
 
     await user.click(screen.getByRole('button', { name: /Questions/i }));
     await user.click(screen.getByRole('button', { name: /^Add question$/i }));
-    await user.click(screen.getByRole('button', { name: /^Continue: Screener$/i }));
     await user.click(screen.getByRole('button', { name: /^Continue: Consent$/i }));
 
     expect(await screen.findByTestId('consent-template-state')).toHaveTextContent(
@@ -960,9 +913,9 @@ describe('authoring a native survey', () => {
     // their mind.
     await user.click(screen.getByRole('button', { name: /^Add question$/i }));
 
-    await user.click(screen.getByRole('button', { name: /Basic Information/i }));
+    await user.click(screen.getByRole('button', { name: /The study/i }));
     await user.click(studyTypeCard('survey', 'external'));
-    await user.click(screen.getByRole('button', { name: /External Link/i }));
+    await user.click(screen.getByRole('button', { name: /Your link/i }));
     await user.type(
       screen.getByLabelText(/External Link/i),
       'https://example.com/form'
@@ -1069,7 +1022,7 @@ describe('authoring a native survey', () => {
     await user.selectOptions(screen.getByLabelText(/^Type$/i), 'rating');
     await user.clear(screen.getByLabelText(/Points on the scale/i));
 
-    await user.click(screen.getByRole('button', { name: /Basic Information/i }));
+    await user.click(screen.getByRole('button', { name: /The study/i }));
     await user.click(screen.getByRole('button', { name: /Save Changes/i }));
 
     expect(updateOpportunity).not.toHaveBeenCalled();
@@ -1099,10 +1052,10 @@ describe('authoring a native survey', () => {
       'How easy was that?'
     );
 
-    await user.click(screen.getByRole('button', { name: /Basic Information/i }));
+    await user.click(screen.getByRole('button', { name: /The study/i }));
     await user.click(studyTypeCard('survey', 'external'));
 
-    await user.click(screen.getByRole('button', { name: /External Link/i }));
+    await user.click(screen.getByRole('button', { name: /Your link/i }));
     await user.type(
       screen.getByLabelText(/External Link/i),
       'https://example.com/form'
@@ -1205,7 +1158,6 @@ describe('starting a survey from an existing set of questions', () => {
     await user.click(
       screen.getByRole('radio', { name: /Start from an existing set of questions/i })
     );
-    await user.click(screen.getByRole('button', { name: /^Continue: Screener$/i }));
     await user.click(screen.getByRole('button', { name: /^Continue: Consent$/i }));
 
     expect(await screen.findByTestId('consent-step')).toBeInTheDocument();
@@ -1233,7 +1185,6 @@ describe('starting a survey from an existing set of questions', () => {
       await screen.findByRole('button', { name: /^Start from this Onboarding pulse$/ })
     );
     await screen.findByText(/Copied from/i);
-    await user.click(screen.getByRole('button', { name: /^Continue: Screener$/i }));
     await user.click(screen.getByRole('button', { name: /^Continue: Consent$/i }));
 
     // The source's wording is nobody's approved wording, and the copy inherits
@@ -1494,7 +1445,7 @@ describe('starting a survey from an existing set of questions', () => {
     );
     await screen.findByText(/Copied from/i);
 
-    await user.click(screen.getByRole('button', { name: /Basic Information/i }));
+    await user.click(screen.getByRole('button', { name: /The study/i }));
     expect(await screen.findByRole('button', { name: /Save Changes/i })).toBeInTheDocument();
   });
 
@@ -1704,9 +1655,9 @@ describe('the step action row', () => {
     renderForm();
 
     // Anchors this test to step 1: without confirming we are standing on the
-    // step whose forward control reads "Continue: Content & Details", the
-    // negative assertion below would pass on any step at all.
-    await screen.findByRole('button', { name: /Continue: Content & Details/i });
+    // first step (whose forward control reads a bare "Continue" until a type is
+    // chosen), the negative assertion below would pass on any step at all.
+    await screen.findByRole('button', { name: /^Continue/i });
 
     // Matched on the prefix, not on the whole label: the control names the
     // step it returns to now, so pinning the old bare "Back" here would be an
@@ -1794,7 +1745,6 @@ describe('the forward control on the Questions tab', () => {
 
     const user = userEvent.setup();
     await openQuestionsTab(user);
-    await user.click(screen.getByRole('button', { name: /^Continue: Screener$/i }));
     await user.click(screen.getByRole('button', { name: /^Continue: Consent$/i }));
 
     expect(await screen.findByTestId('consent-template-state')).toHaveTextContent(
@@ -1835,7 +1785,6 @@ describe('the forward control on the Questions tab', () => {
 
     const user = userEvent.setup();
     await openQuestionsTab(user);
-    await user.click(screen.getByRole('button', { name: /^Continue: Screener$/i }));
     await user.click(screen.getByRole('button', { name: /^Continue: Consent$/i }));
 
     expect(screen.queryByRole('button', { name: /Save Changes/i })).toBeNull();
@@ -1864,7 +1813,6 @@ describe('the forward control on the Questions tab', () => {
 
     const user = userEvent.setup();
     await openQuestionsTab(user);
-    await user.click(screen.getByRole('button', { name: /^Continue: Screener$/i }));
     await user.click(screen.getByRole('button', { name: /^Continue: Consent$/i }));
 
     const unlock = screen.queryByRole('button', { name: /Customise consent wording/i });
@@ -1892,7 +1840,6 @@ describe('the forward control on the Questions tab', () => {
     await user.click(
       await screen.findByRole('radio', { name: /Start from an existing set of questions/i })
     );
-    await user.click(screen.getByRole('button', { name: /^Continue: Screener$/i }));
     await user.click(screen.getByRole('button', { name: /^Continue: Consent$/i }));
 
     const back = await screen.findByRole('button', { name: /Go back to Questions/i });
@@ -1923,17 +1870,11 @@ describe('the forward control on the Questions tab', () => {
       ).toHaveLength(0);
     };
 
-    // Checked on all FOUR steps that lead to the terminal control, because
-    // C1 moved the terminal control onto Consent, C3 moved it again onto
-    // Review, and MR2 inserted a Screener step between Questions and Consent.
-    // Checking only where the control now lives would let a step it left behind
-    // reacquire one - and checking only a step it left behind would test
-    // nothing at all, which is precisely what this test did the moment
-    // Consent was added.
-    await screen.findByRole('button', { name: /^Continue: Screener$/i });
-    expectNoImplicitSubmit();
-
-    await user.click(screen.getByRole('button', { name: /^Continue: Screener$/i }));
+    // Checked on every step that leads to the terminal control. Since the D1/D3
+    // reshape a native survey runs study -> audience -> questions -> consent ->
+    // review, and this walk starts on Questions, whose forward reads
+    // "Continue: Consent". Checking only where the control now lives would let a
+    // step it left behind reacquire one.
     await screen.findByRole('button', { name: /^Continue: Consent$/i });
     expectNoImplicitSubmit();
 

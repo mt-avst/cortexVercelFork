@@ -568,6 +568,11 @@ export interface OpportunityFormData {
   external_link_optional?: string;
   start_date?: string;
   end_date?: string;
+  // The author's affirmation that the external tool collects consent (row 13).
+  // A client-side confirmation folded into the External Link step - not
+  // persisted (the save payload is a typed whitelist that omits it), shown on
+  // Review. Defaults true when loading an already-published study.
+  external_consent_confirmed?: boolean;
 
   // Task List tab (unmoderated type)
   firsthand_study_id?: string;

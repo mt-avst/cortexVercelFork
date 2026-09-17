@@ -421,7 +421,7 @@ describe('a sequence of autosaves', () => {
       ).replace(/(Current step|Completed|Needs attention|Not started)$/, '');
     };
     const before = standingOn();
-    expect(before).toMatch(/Content & Details/);
+    expect(before).toMatch(/Audience/);
 
     await waitFor(() => expect(createOpportunity).toHaveBeenCalledTimes(1), {
       timeout: PAST_THE_DEBOUNCE

@@ -74,6 +74,34 @@ const ExternalLinkTab: React.FC<ExternalLinkTabProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Consent, folded into this step (row 13 / D1). A hand-off has no
+            Consent step of its own: the tool on the far side of the link
+            collects consent, and Cortex records only that a participant followed
+            the link. The author affirms the tool has its own consent wording in
+            place; the affirmation is shown on Review. */}
+        <div className="mt-4 pt-3" style={{ borderTop: '1px solid var(--fs-border, #d0d0d0)' }}>
+          <h3 className="h6 mb-1" style={{ fontSize: '1.1rem', fontWeight: '600' }}>
+            Consent
+          </h3>
+          <p className="form-text mb-2" style={{ fontSize: '0.875rem' }}>
+            Consent is collected in the external tool, not in Cortex. Cortex
+            records only that a participant followed the link.
+          </p>
+          <div className="form-check">
+            <input
+              className="form-check-input"
+              type="checkbox"
+              id="external_consent_confirmed"
+              checked={Boolean(formData.external_consent_confirmed)}
+              onChange={(e) => handleInputChange('external_consent_confirmed', e.target.checked)}
+            />
+            <label className="form-check-label" htmlFor="external_consent_confirmed">
+              I confirm the external tool has its own consent text in place before
+              participants are sent there.
+            </label>
+          </div>
+        </div>
       </div>
     </div>
   );

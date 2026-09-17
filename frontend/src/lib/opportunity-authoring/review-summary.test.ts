@@ -40,6 +40,7 @@ const completeInput = (
   startDate: '',
   endDate: '',
   externalLink: '',
+  externalConsentConfirmed: false,
   deliveryMode: 'native',
   questionCount: 0,
   taskCount: 0,
@@ -882,33 +883,37 @@ describe('buildReviewSummary', () => {
       expect(item?.missing).toBe(true);
     });
 
-    it('external shape consent description reads Handled by the external tool', () => {
-      // Row 14: a pure hand-off (poll/survey/question over an external link)
-      // has no consent step BODY at all - the tool on the other side collects
-      // it. Before this, the summary still ran the moderated/authoring
-      // consent logic on this shape and read "Not set" or "Custom wording,
-      // not an approved template, ... will be shown to the participant",
-      // describing a control the step never rendered.
-      const externalHandoffSteps: ReviewStepRef[] = [
-        { id: 1, key: 'basics', title: 'Basic Information' },
-        { id: 3, key: 'externalLink', title: 'External Link' },
-        { id: 4, key: 'consent', title: 'Consent' },
+    it('an external shape carries its consent affirmation on the link section, not a consent step', () => {
+      // Since the D1/D3 reshape a pure hand-off has NO consent step at all
+      // (row 13): the tool on the far side collects consent, and the author's
+      // affirmation folds into the External Link step, summarised there.
+      const externalSteps: ReviewStepRef[] = [
+        { id: 1, key: 'basics', title: 'The study' },
+        { id: 2, key: 'screener', title: 'Audience' },
+        { id: 3, key: 'externalLink', title: 'Your link' },
         { id: 5, key: 'review', title: 'Review' }
       ];
-      const section = findSection(
-        buildReviewSummary(
-          completeInput({
-            steps: externalHandoffSteps,
-            consentText: '',
-            consentTemplate: null
-          })
-        ),
-        'consent'
+
+      const confirmed = buildReviewSummary(
+        completeInput({ steps: externalSteps, externalConsentConfirmed: true })
       );
-      const wording = findItem(section, 'Consent wording');
-      expect(wording?.value).toBe('Handled by the external tool');
-      expect(wording?.missing).not.toBe(true);
-      expect(section?.items).toHaveLength(1);
+      // No consent section exists on the external shape.
+      expect(findSection(confirmed, 'consent')).toBeUndefined();
+      const confirmedItem = findItem(findSection(confirmed, 'externalLink'), 'Consent');
+      expect(confirmedItem?.value).toBe(
+        'The external tool collects it - confirmed by the author'
+      );
+      expect(confirmedItem?.missing).not.toBe(true);
+
+      // Unconfirmed reads as an unmet requirement.
+      const unconfirmed = findSection(
+        buildReviewSummary(
+          completeInput({ steps: externalSteps, externalConsentConfirmed: false })
+        ),
+        'externalLink'
+      );
+      expect(findItem(unconfirmed, 'Consent')?.value).toBe('Not yet confirmed');
+      expect(findItem(unconfirmed, 'Consent')?.missing).toBe(true);
     });
 
     it('does not truncate exactly 160 characters', () => {

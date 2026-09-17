@@ -91,6 +91,8 @@ export interface ReviewSummaryInput {
   startDate?: string;
   endDate?: string;
   externalLink: string;
+  /** Row 13: the author's affirmation that the external tool collects consent. */
+  externalConsentConfirmed: boolean;
   deliveryMode: string;
   /** Authored survey questions. */
   questionCount: number;
@@ -407,6 +409,16 @@ const itemsForStep = (step: ReviewStepRef, input: ReviewSummaryInput): ReviewIte
         {
           label: 'Where the participant goes',
           value: 'A tool outside Cortex'
+        },
+        // Row 13: consent folds into this step, so its affirmation is summarised
+        // here rather than on a Consent step the hand-off no longer has.
+        {
+          label: 'Consent',
+          value: input.externalConsentConfirmed
+            ? 'The external tool collects it - confirmed by the author'
+            : 'Not yet confirmed',
+          note: 'Cortex records only that a participant followed the link.',
+          missing: !input.externalConsentConfirmed
         }
       ];
     }
@@ -510,26 +522,11 @@ const itemsForStep = (step: ReviewStepRef, input: ReviewSummaryInput): ReviewIte
     }
 
     case 'consent': {
-      // A pure hand-off (WZ-18 / Decision 9) has no consent step BODY at all -
-      // the tool on the other side of the link collects it, and Cortex records
-      // only that a participant followed the link. `hasExternalHandoff` is the
-      // same test `OpportunityForm` uses to decide whether to render THAT
-      // branch of the step (`tabs.some(tab => tab.key === 'externalLink')`),
-      // read here from the step list rather than re-derived from `type` so it
-      // cannot drift from what the author actually saw. Before this branch
-      // existed, an external shape's Review read "Not set" or "Custom wording,
-      // not an approved template, ... will be shown to the participant" -
-      // describing a control the step never rendered (row 14).
-      const isExternalHandoff = input.steps.some((step) => step.key === 'externalLink');
-      if (isExternalHandoff) {
-        return [
-          {
-            label: 'Consent wording',
-            value: 'Handled by the external tool',
-            note: 'Cortex records only that a participant followed the link.'
-          }
-        ];
-      }
+      // Since the D1/D3 reshape a pure hand-off has NO consent step at all - its
+      // affirmation folds into the External Link step (row 13), summarised in
+      // that section. So this case only runs for the shapes Cortex governs
+      // consent for: native (questions), recorded (taskList) and the moderated
+      // pair (sessions).
 
       // The moderated (bookable) shapes carry OPTIONAL consent (#79): a session
       // that stores nothing to consent to needs no wording, and an empty box is

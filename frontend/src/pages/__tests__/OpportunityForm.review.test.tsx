@@ -259,18 +259,15 @@ beforeEach(() => {
 
 describe('Review is the only step that commits', () => {
   it.each([
-    // Since MR2 every type that reaches Review is six steps and Review's
-    // previous is Consent - a Screener step sits before Consent on every shape,
-    // and both are steps all the same, so the count is a fixed six whatever the
-    // type and delivery mode.
-    ['unmoderated', 6, 'Consent'],
-    ['poll', 6, 'Consent'],
-    ['question', 6, 'Consent'],
-    // Six for the moderated pair too: Screener then Consent sit between Session
-    // Management and Review, because Cortex now stores what those sessions agree
-    // to keep.
-    ['test', 6, 'Consent'],
-    ['interview', 6, 'Consent']
+    // The D1/D3 spine: native/recorded/moderated shapes are five steps and
+    // Review's previous is Consent. External shapes are four steps (no Consent
+    // step, row 13), so Review's previous is the link. fillBasics picks the
+    // external default for the answer-based types.
+    ['unmoderated', 5, 'Consent'],
+    ['poll', 4, 'Your link'],
+    ['question', 4, 'Your link'],
+    ['test', 5, 'Consent'],
+    ['interview', 5, 'Consent']
   ])(
     'on the %s path: no earlier step offers a commit control, and Review does',
     (type, expectedSteps, stepBeforeReview) => {
@@ -401,7 +398,7 @@ describe('the Edit links open the step that owns each section', () => {
     // this is the same fact `getByRole`'s own name matching already reads.
     expect(
       screen.getAllByRole('button', { name: /^Edit / }).map((button) => button.getAttribute('aria-label'))
-    ).toEqual(['Edit Basic Information', 'Edit Content & Details', 'Edit Task List', 'Edit Screener', 'Edit Consent']);
+    ).toEqual(['Edit The study', 'Edit Audience', 'Edit Task List', 'Edit Consent']);
   });
 });
 
@@ -439,7 +436,7 @@ describe('the summary reads the form as it stands, not as it was on arrival', ()
     ).toBeInTheDocument();
 
     // Change something on step 1...
-    fireEvent.click(screen.getByRole('button', { name: 'Edit Basic Information' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit The study' }));
     fireEvent.change(screen.getByLabelText(/^Title/i), {
       target: { value: 'Renamed on a second visit' }
     });
@@ -467,7 +464,7 @@ describe('the summary reads the form as it stands, not as it was on arrival', ()
 describe('a publish that would be refused is previewed, never blocked', () => {
   it.each([
     ['unmoderated', PUBLISH_PROBLEM_MESSAGES.unmoderated_study_required, 'Task List'],
-    ['poll', PUBLISH_PROBLEM_MESSAGES.external_link_required, 'External Link']
+    ['poll', PUBLISH_PROBLEM_MESSAGES.external_link_required, 'Your link']
   ])('on the %s path, in the server\'s own words', (type, message, stepTitle) => {
     renderCreate();
     fillBasics(type);
@@ -681,12 +678,13 @@ describe('the time slots confirmed on the session step are written by the commit
   it('writes them for a test, from Review', async () => {
     renderCreate();
     fillBasics('test');
-    // Content, then the session step; confirm a slot; then Screener, Consent
-    // and Review (Screener sits before Consent since MR2).
+    // Audience, then the session step; confirm a slot; then Consent and Review.
+    // The D1/D3 spine puts Audience before the session step and drops the
+    // separate Screener step, so a test is study -> audience -> sessions ->
+    // consent -> review.
     fireEvent.click(forwardControl()!);
     fireEvent.click(forwardControl()!);
     fireEvent.click(screen.getByRole('button', { name: 'stub: confirm one slot' }));
-    fireEvent.click(forwardControl()!);
     fireEvent.click(forwardControl()!);
     fireEvent.click(forwardControl()!);
 
@@ -800,7 +798,7 @@ describe('a value the participant cannot use is never marked by colour alone', (
     renderCreate();
     fillBasics('poll');
     walkForward();
-    fireEvent.click(screen.getByRole('button', { name: 'Edit External Link' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Your link' }));
     fireEvent.change(screen.getByLabelText(/External Link/i), {
       target: { value: 'javascript:alert(1)' }
     });
@@ -829,10 +827,10 @@ describe('the form itself cannot commit, only the control on Review', () => {
    * button - which is the CONDITION for the HTML implicit-submission
    * algorithm, not a defence against it. A form with no submit button is
    * submitted from the form element whenever it holds no more than ONE field
-   * that blocks implicit submission, and two steps qualify: External Link
-   * renders a single `input[type=url]`, and Content & Details a single
-   * `input[type=text]`. Pressing Return in either created the opportunity and
-   * navigated away, from a step that is not Review.
+   * that blocks implicit submission. Since the D1/D3 reshape the step that
+   * qualifies is Your link, which renders a single `input[type=url]` (the old
+   * Content & Details single-input step is gone). Pressing Return there created
+   * the opportunity and navigated away, from a step that is not Review.
    *
    * jsdom does not implement implicit submission, so a keyDown here proves
    * nothing. Dispatching the submit event directly is what exercises the
@@ -848,8 +846,7 @@ describe('the form itself cannot commit, only the control on Review', () => {
   };
 
   it.each([
-    ['poll', 2, 'External Link'],
-    ['poll', 1, 'Content & Details']
+    ['poll', 2, 'Your link']
   ])(
     'ignores its own submit event on the %s path, %i step(s) in (%s)',
     (type, forwardClicks, expectedStep) => {
@@ -925,8 +922,7 @@ describe('a save that half-worked is not announced as a success', () => {
     fireEvent.click(forwardControl()!);
     fireEvent.click(forwardControl()!);
     fireEvent.click(screen.getByRole('button', { name: 'stub: confirm one slot' }));
-    // Screener then Consent sit between Session Management and Review (MR2, #79).
-    fireEvent.click(forwardControl()!);
+    // Consent then Review follow the session step (D1/D3: no separate Screener).
     fireEvent.click(forwardControl()!);
     fireEvent.click(forwardControl()!);
     fireEvent.click(screen.getByRole('button', { name: 'Create study' }));
@@ -962,8 +958,7 @@ describe('a save that half-worked is not announced as a success', () => {
     // session write, not a missing-venue preview.
     fillVenue();
     fireEvent.click(screen.getByRole('button', { name: 'stub: confirm one slot' }));
-    // Screener then Consent sit between Session Management and Review (MR2, #79).
-    fireEvent.click(forwardControl()!);
+    // Consent then Review follow the session step (D1/D3: no separate Screener).
     fireEvent.click(forwardControl()!);
     fireEvent.click(forwardControl()!);
     fireEvent.click(screen.getByRole('button', { name: 'Create study' }));
@@ -1129,7 +1124,7 @@ describe('the step that is not a StepActions row still names where it goes', () 
     // is the one forward control StepActions does not render, so only an exact
     // name here can catch it pointing at the wrong step.
     expect(
-      screen.getByRole('button', { name: 'Continue: Screener' })
+      screen.getByRole('button', { name: 'Continue: Consent' })
     ).toBeInTheDocument();
   });
 });
@@ -1147,7 +1142,9 @@ describe('a refusal does not follow the author off the step that caused it', () 
     fireEvent.change(screen.getByLabelText(/^Purpose/i), {
       target: { value: 'A purpose long enough to pass validation' }
     });
-    fireEvent.click(forwardControl()!);
+    // With no type chosen the forward control names nothing ("Continue", not
+    // "Continue: <step>"), so match it loosely rather than with forwardControl.
+    fireEvent.click(screen.getByRole('button', { name: /^Continue/i }));
     // By its own heading, not by role alone: a refused step also carries the
     // type error's inline alert, so `getByRole('alert')` is ambiguous here.
     expect(errorSummary()).toBeInTheDocument();
@@ -1163,7 +1160,7 @@ describe('a refusal does not follow the author off the step that caused it', () 
     fireEvent.click(strip()[1]);
     fireEvent.click(screen.getByRole('button', { name: /^Continue: / }));
     walkForward();
-    fireEvent.click(screen.getByRole('button', { name: 'Edit Basic Information' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit The study' }));
     expect(queryErrorSummary()).toBeNull();
     // The Edit link's own job, asserted here too so this cannot pass by the
     // click having done nothing at all.
@@ -1308,7 +1305,7 @@ describe('an opportunity stored with a bad link can still be repaired', () => {
     await screen.findByDisplayValue('A poll the author already wrote');
 
     walkForward();
-    fireEvent.click(screen.getByRole('button', { name: 'Edit External Link' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Your link' }));
     fireEvent.change(screen.getByLabelText(/External Link/i), {
       target: { value: 'https://example.com/repaired' }
     });

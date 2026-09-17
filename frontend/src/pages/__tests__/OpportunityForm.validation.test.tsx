@@ -191,7 +191,7 @@ describe('Continue can never pass what Submit refuses', () => {
 
     continueForward();
 
-    expect(currentStepName()).toMatch(/Basic Information/i);
+    expect(currentStepName()).toMatch(/The study/i);
     expect(summarisedErrorKeys()).toEqual(['title']);
     expect(summaryMessageFor('title')).toBe(
       'Shorten the title to 140 characters or fewer'
@@ -204,7 +204,7 @@ describe('Continue can never pass what Submit refuses', () => {
 
     continueForward();
 
-    expect(currentStepName()).toMatch(/Basic Information/i);
+    expect(currentStepName()).toMatch(/The study/i);
     expect(summarisedErrorKeys()).toEqual(['purpose_one_liner']);
     expect(summaryMessageFor('purpose_one_liner')).toBe(
       'Shorten the purpose to 180 characters or fewer'
@@ -282,7 +282,7 @@ describe('Continue can never pass what Submit refuses', () => {
 
     continueForward();
 
-    expect(currentStepName()).toMatch(/Content & Details/i);
+    expect(currentStepName()).toMatch(/Audience/i);
     expect(queryErrorSummary()).toBeNull();
   });
 
@@ -347,7 +347,7 @@ describe('Continue can never pass what Submit refuses', () => {
 
     continueForward();
 
-    expect(currentStepName()).toMatch(/Content & Details/i);
+    expect(currentStepName()).toMatch(/Audience/i);
     expect(queryErrorSummary()).toBeNull();
 
     // ...and the same form is refused at Submit, for that very field. Status
@@ -371,8 +371,8 @@ describe('Continue can never pass what Submit refuses', () => {
 
     // Advanced off Basic Information (to Content & Details, step 2 of the
     // five-step test shape) rather than being held on step 1 by the empty venue.
-    expect(currentStepName()).not.toMatch(/Basic Information/i);
-    expect(currentStepName()).toMatch(/Content & Details/i);
+    expect(currentStepName()).not.toMatch(/The study/i);
+    expect(currentStepName()).toMatch(/Audience/i);
     expect(queryErrorSummary()).toBeNull();
   });
 
@@ -408,7 +408,7 @@ describe('Continue can never pass what Submit refuses', () => {
 
     // Jump ahead to the Screener/Audience step, where Participant Type lives
     // now (D6), and refuse there too without fixing the title.
-    goToStep(/Screener/);
+    goToStep(/Audience/);
     fireEvent.change(screen.getByLabelText(/Participant Type/i), {
       target: { value: 'specific' },
     });
@@ -430,7 +430,7 @@ describe('Continue can never pass what Submit refuses', () => {
     setTitle('A title of a reasonable length');
     continueForward();
 
-    expect(currentStepName()).toMatch(/Content & Details/i);
+    expect(currentStepName()).toMatch(/Audience/i);
     expect(queryErrorSummary()).toBeNull();
   });
 });
@@ -448,7 +448,7 @@ describe('the error summary is reachable, and says one thing per problem', () =>
     // (the Screener/Audience step, D6), so the summary has to span steps and be
     // ordered.
     setPurpose('Find out where people stall in the checkout flow');
-    goToStep(/Screener/);
+    goToStep(/Audience/);
     fireEvent.change(screen.getByLabelText(/Participant Type/i), {
       target: { value: 'specific' },
     });
@@ -506,7 +506,7 @@ describe('the error summary is reachable, and says one thing per problem', () =>
 
     fireEvent.click(summaryLinkFor('title'));
 
-    expect(currentStepName()).toMatch(/Basic Information/i);
+    expect(currentStepName()).toMatch(/The study/i);
     expect(document.activeElement?.id).toBe('title');
   });
 
@@ -517,7 +517,7 @@ describe('the error summary is reachable, and says one thing per problem', () =>
 
     fireEvent.click(summaryLinkFor('participant_type_specific_details'));
 
-    expect(currentStepName()).toMatch(/Screener/i);
+    expect(currentStepName()).toMatch(/Audience/i);
     expect(document.activeElement?.id).toBe('participant_type_specific_details');
   });
 
@@ -714,7 +714,7 @@ describe('a refusal preserves every keystroke', () => {
     });
     // A field two steps away, on the Screener/Audience step, filled validly so
     // it adds no error of its own - only its survival through a refusal matters.
-    goToStep(/Screener/);
+    goToStep(/Audience/);
     fireEvent.change(screen.getByLabelText(/Participant Type/i), {
       target: { value: 'specific' },
     });
@@ -743,7 +743,7 @@ describe('a refusal preserves every keystroke', () => {
     );
 
     // And so is the untouched field two steps away.
-    goToStep(/Screener/);
+    goToStep(/Audience/);
     expect(screen.getByLabelText(/Specific Criteria/i)).toHaveValue(
       'Admins who use the export flow weekly'
     );
@@ -855,7 +855,7 @@ describe('a validation error does not outlive the field it is about', () => {
 
     // The type select is back on Basic Information; switch to a type with no
     // session step.
-    goToStep(/Basic Information/);
+    goToStep(/The study/);
     selectType('question');
 
     // The field is gone, so the message has to be gone...
@@ -887,7 +887,7 @@ describe('a validation error does not outlive the field it is about', () => {
 
     // The type select is on Basic Information; interview still has a session
     // step, so the error must survive.
-    goToStep(/Basic Information/);
+    goToStep(/The study/);
     selectType('interview');
 
     goToStep(/Session Management/);
@@ -1024,14 +1024,14 @@ describe('an error does not outlive the field it is about', () => {
 
     // Participant Type and its criteria live on the Screener/Audience step now
     // (D6).
-    goToStep(/Screener/);
+    goToStep(/Audience/);
     fireEvent.change(screen.getByLabelText(/Participant Type/i), {
       target: { value: 'specific' },
     });
     fireEvent.click(screen.getByRole('button', { name: /^Continue(:|$)/i }));
     expect(summarisedErrorKeys()).toEqual(['participant_type_specific_details']);
 
-    goToStep(/Screener/);
+    goToStep(/Audience/);
     fireEvent.change(screen.getByLabelText(/Participant Type/i), {
       target: { value: 'any' },
     });

@@ -97,32 +97,32 @@ describe('D6 field homes - FIELD_LOCATIONS routes a moved field to its new step'
     expect(FIELD_LOCATIONS.default_duration_minutes.tab).toBe(3);
   });
 
-  it('routes Participant Type and its criteria to the Screener step (4)', () => {
-    expect(FIELD_LOCATIONS.participant_type_required.tab).toBe(4);
-    expect(FIELD_LOCATIONS.participant_type_specific_details.tab).toBe(4);
+  it('routes Participant Type and its criteria to the Audience step (2)', () => {
+    expect(FIELD_LOCATIONS.participant_type_required.tab).toBe(2);
+    expect(FIELD_LOCATIONS.participant_type_specific_details.tab).toBe(2);
   });
 });
 
-describe('D6 field homes - Basic Information', () => {
-  it('asks Description on Basic Information, not on Content & Details', () => {
+describe('D6 field homes - The study step', () => {
+  it('asks Description on The study step, not on Audience', () => {
     renderForm();
     fillBasics('survey');
 
-    // On Basic Information now.
+    // On The study step now (with Title and Purpose).
     expect(screen.getByLabelText(/Description \(Optional\)/i)).toBeInTheDocument();
 
-    // Gone from Content & Details.
-    goToStep(/Content & Details/);
+    // Not on the Audience step.
+    goToStep(/Audience/);
     expect(screen.queryByLabelText(/Description \(Optional\)/i)).toBeNull();
   });
 
-  it('asks Product on Basic Information, not on Content & Details', () => {
+  it('asks Product on The study step, not on Audience', () => {
     renderForm();
     fillBasics('survey');
 
     expect(screen.getByLabelText(/Product\/Feature/i)).toBeInTheDocument();
 
-    goToStep(/Content & Details/);
+    goToStep(/Audience/);
     expect(screen.queryByLabelText(/Product\/Feature/i)).toBeNull();
   });
 });
@@ -150,37 +150,36 @@ describe('D6 field homes - Session Management step', () => {
   });
 });
 
-describe('D6 field homes - Screener/Audience step', () => {
-  it('asks Participant Type on the Screener step, not Content & Details', () => {
+describe('D6 field homes - Audience step', () => {
+  it('asks Participant Type on the Audience step, not The study', () => {
     renderForm();
     fillBasics('unmoderated');
 
-    goToStep(/Content & Details/);
+    // Not on The study step.
     expect(screen.queryByLabelText(/Participant Type/i)).toBeNull();
 
-    goToStep(/Screener/);
+    goToStep(/Audience/);
     expect(screen.getByLabelText(/Participant Type/i)).toBeInTheDocument();
   });
 
-  it('asks Roles or skills wanted on the Screener step, not Content & Details', () => {
+  it('asks Roles or skills wanted on the Audience step, not The study', () => {
     renderForm();
     fillBasics('unmoderated');
 
-    goToStep(/Content & Details/);
     expect(screen.queryByLabelText(/Roles or skills/i)).toBeNull();
 
-    goToStep(/Screener/);
+    goToStep(/Audience/);
     expect(screen.getByLabelText(/Roles or skills/i)).toBeInTheDocument();
   });
 
-  it('asks Study Period on the Screener step, not Basic Information', () => {
+  it('asks Study Period on the Audience step, not The study', () => {
     renderForm();
     fillBasics('unmoderated');
 
-    // Study Period is not on Basic Information any more.
+    // Study Period is not on The study step.
     expect(screen.queryByLabelText(/Start Date/i)).toBeNull();
 
-    goToStep(/Screener/);
+    goToStep(/Audience/);
     expect(screen.getByLabelText(/Start Date/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/End Date/i)).toBeInTheDocument();
   });
@@ -206,7 +205,7 @@ describe('D6 field homes - validation travels with the control', () => {
     renderForm();
     fillBasics('unmoderated');
 
-    goToStep(/Screener/);
+    goToStep(/Audience/);
     fireEvent.change(screen.getByLabelText(/Participant Type/i), {
       target: { value: 'specific' },
     });
