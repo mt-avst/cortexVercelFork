@@ -2746,13 +2746,8 @@ const OpportunityForm: React.FC = () => {
    * preview this used to be. A moderated study missing both its venue and
    * its slots is told about both in one screen; before this it fixed the
    * first, came back, and only then learned about the second.
-   *
-   * `.flatMap` rather than `.map` so a code `stepForPublishProblem` cannot
-   * resolve (defence only - every code this function returns maps to a step
-   * on every shape that can produce it) drops silently instead of previewing
-   * a "Go to" link with nowhere to send the author.
    */
-  const publishProblems = findPublishProblems({
+  const publishProblemCodes = findPublishProblems({
     // Read but not acted on: `findPublishProblems` never consults it (see
     // its own docblock) - kept only because `PublishReadinessInput` requires
     // it, the same struct `findPublishProblem` (singular, still used by the
@@ -2796,8 +2791,27 @@ const OpportunityForm: React.FC = () => {
      * wording is unreachable from here, and claiming it would preview a message
      * the server will not send.
      */
-  }).flatMap((problem) => {
-    const step = stepForPublishProblem(problem.code, tabs);
+  });
+
+  /**
+   * `publishProblemCodes` resolved to the step each one sends the author to,
+   * FAILING CLOSED rather than dropping an entry it cannot resolve.
+   *
+   * A code `STEP_KEY_FOR_PROBLEM`/`stepForPublishProblem` does not recognise
+   * - unreachable today (every current `PublishProblemCode` maps to a step on
+   * every shape that can produce it), but not unreachable FOREVER, the day a
+   * code is added to one without the other - used to `.flatMap` straight
+   * past silently. That silently shrank `publishProblems`, which is exactly
+   * what `shareLinkStartable` and `ReviewStep`'s "Published, not working"
+   * pill gate on: a code that fails to resolve would have RE-EXPOSED the
+   * share link and hidden the pill on a study that is, by the server's own
+   * rule, not actually ready. `?? tabs[0]` sends an unresolvable problem to
+   * the first step instead of nowhere, so it still counts - a `Go to` link
+   * to the wrong-ish place is a smaller failure than a warning that silently
+   * stops appearing.
+   */
+  const publishProblems = publishProblemCodes.flatMap((problem) => {
+    const step = stepForPublishProblem(problem.code, tabs) ?? tabs[0];
     return step
       ? [
           {
