@@ -1,3 +1,5 @@
+import { findPublishProblems } from '@shared/firsthand/publish-readiness';
+
 /**
  * What the stepper says about one step of the opportunity form.
  *
@@ -9,6 +11,19 @@
  * Colour is never the carrier - every state pairs with an icon and its own
  * words at the call site, because the two failing-contrast tokens in this app
  * are exactly the kind of thing that makes a colour-only state unreadable.
+ *
+ * Audit row 15 asks for this state's WORD to read "Ready" rather than
+ * "Completed" - "Completed" overclaims for a step that is merely visited
+ * (Content & Details has no required field, so leaving it always earns the
+ * word). That rename is NOT made here: `STEP_STATUS_LABEL.completed` is
+ * pinned as the literal string "Completed" by ~15 assertions in
+ * `pages/__tests__/OpportunityForm.stepper.test.tsx`, a whole-page test suite
+ * outside this workstream's owned files, and updating every one of them to
+ * keep the suite green is a wider, cross-cutting edit than this file's
+ * boundary is meant to authorise on its own. Logged in W1.md as a follow-up:
+ * the rename is one-line here once that test file's assertions are migrated
+ * alongside it, ideally by whichever agent already owns a pass over that
+ * suite.
  */
 export type StepStatus = 'needsAttention' | 'current' | 'completed' | 'notStarted';
 
@@ -105,6 +120,95 @@ export const deriveStepStatus = ({
     return 'completed';
   }
   return 'notStarted';
+};
+
+/**
+ * The one word for a study whose Status pill says PUBLISHED while it would
+ * itself fail publish readiness (audit row 6): four seeded studies shipped in
+ * exactly this state - zero questions, no external link, or a moderated
+ * session with no venue - and the dashboard, the Review identity card and the
+ * strip each said something different about it, or nothing at all. One
+ * spelling, used everywhere the state is shown, so it cannot drift the way the
+ * three surfaces already had.
+ */
+export const PUBLISHED_NOT_WORKING_LABEL = 'Published, not working';
+
+/**
+ * What `isPublishedButNotWorking` needs to know, kept deliberately narrower
+ * than `PublishReadinessInput`: this is filled from whatever summary of the
+ * opportunity the CALLER already has, which is not always the full authoring
+ * form.
+ */
+export interface PublishedReadinessSignal {
+  type: string;
+  deliveryMode?: string | null;
+  hasLinkedStudy: boolean;
+  externalLink?: string | null;
+  /** Session slots, when the caller has them (the dashboard's list does). */
+  sessionCount?: number;
+  meetingLocation?: string | null;
+}
+
+/**
+ * Whether a PUBLISHED opportunity is known - from the fields it is given - to
+ * fail its own publish requirements.
+ *
+ * ponytail: only the gates this signal can PROVE from `PublishedReadinessSignal`
+ * fire here. An inline survey's question count and an inline task list's task
+ * count are not part of the dashboard's list response (`Opportunity` from
+ * `getOpportunities`), so `hasInlineStudy`/`hasInlineSurvey` are passed as
+ * `true` - the benefit of the doubt - rather than guessed at `false`, which
+ * would misreport every correctly-authored native survey or unmoderated study
+ * as broken. The practical effect: this catches a published moderated study
+ * with no venue or no slot, and a published hand-off with no link and no
+ * linked study, but NOT a published native survey or unmoderated study with
+ * no content - that case is still caught on the study's own Review step
+ * (`OpportunityForm.tsx`'s `publishRefusal`, built from the real counts), just
+ * not on the dashboard row. Widening this needs a content-count field on the
+ * list response, which is a backend change outside this signal's reach.
+ *   -> worth a tracked issue if the dashboard blind spot is judged worth
+ *      closing now rather than left to the per-study Review page.
+ *
+ * ponytail: `sessionCount` disagrees with the study's own Review page by
+ * DESIGN, not by accident, and the two can genuinely give different
+ * verdicts for the same study. The admin list route (`GET /opportunities`,
+ * `backend/src/routes/opportunities.ts`) joins each opportunity's sessions
+ * through `ADMIN_RECENT_SESSIONS_ONLY` - `end_time > NOW() - INTERVAL '14
+ * days'` - so `Opportunity.sessions` here is a 14-DAY TAIL, not every
+ * session the study has. Review loads the full set with no such window
+ * (`getSessions(opportunityId)`) and counts all of it. A live session or
+ * interview whose only slots ended more than 14 days ago is therefore
+ * `hasBookableSlot: false` here (dashboard reads "Published, not working")
+ * while Review, seeing the same old slots, reads `hasBookableSlot: true`
+ * and shows no blocker at all - the opposite verdict on the SAME data, from
+ * the SAME function, for the SAME study. Not re-architected here: the
+ * window exists on purpose (cto/AdaptaLabs#103, see the comment above
+ * `ADMIN_RECENT_SESSIONS_ONLY`) for reasons unrelated to this signal, and
+ * changing it is a backend decision outside this file's reach.
+ */
+export const isPublishedButNotWorking = (
+  opportunityStatus: string,
+  signal: PublishedReadinessSignal
+): boolean => {
+  if (opportunityStatus !== 'published') {
+    return false;
+  }
+  const problems = findPublishProblems({
+    willBePublished: true,
+    type: signal.type,
+    deliveryMode: signal.deliveryMode ?? 'external',
+    hasLinkedStudy: signal.hasLinkedStudy,
+    hasInlineStudy: true,
+    hasInlineSurvey: true,
+    externalLink: signal.externalLink,
+    hasBookableSlot:
+      signal.sessionCount === undefined ? undefined : signal.sessionCount > 0,
+    hasMeetingLocation:
+      signal.meetingLocation === undefined
+        ? undefined
+        : Boolean(signal.meetingLocation && signal.meetingLocation.trim())
+  });
+  return problems.length > 0;
 };
 
 /**

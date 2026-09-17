@@ -306,4 +306,36 @@ describe('ShareOpportunityLink - unstartable', () => {
       screen.queryByText(/Nothing is linked for participants to start yet/i)
     ).toBeNull();
   });
+
+  /**
+   * Row 5's actual defect: a non-startable study offered a copyable link AND
+   * a working Copy button, with only a red sentence underneath saying not
+   * to use them. A warning next to a live control is still an offer.
+   */
+  it('offers no copyable link and no Copy button when not startable', () => {
+    render(<ShareOpportunityLink {...PUBLISHED} startable={false} />);
+
+    expect(
+      screen.queryByText(
+        `${window.location.origin}/opportunities/${PUBLISHED.opportunityId}`
+      )
+    ).toBeNull();
+    expect(screen.queryByRole('link')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Copy link' })).toBeNull();
+    // The explanation is still there - only the thing it warns against is gone.
+    expect(
+      screen.getByText(/Participants cannot start this yet/i)
+    ).toBeInTheDocument();
+  });
+
+  it('offers both the copyable link and the Copy button when startable', () => {
+    render(<ShareOpportunityLink {...PUBLISHED} startable />);
+
+    expect(
+      screen.getByText(
+        `${window.location.origin}/opportunities/${PUBLISHED.opportunityId}`
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Copy link' })).toBeInTheDocument();
+  });
 });

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   findPublishProblem,
+  findPublishProblems,
   PUBLISH_PROBLEM_MESSAGES,
   type PublishReadinessInput
 } from "../../../shared/firsthand/publish-readiness";
@@ -351,5 +352,78 @@ describe("findPublishProblem", () => {
         ).toBeTruthy();
       }
     );
+  });
+});
+
+/**
+ * Row 4 / row 16: Review needs every unmet requirement, not the first one a
+ * chain of early returns happens to reach - and it needs the same checklist
+ * on a Draft, which `findPublishProblem` deliberately says nothing about.
+ */
+describe("findPublishProblems", () => {
+  it("readiness returns every unmet requirement", () => {
+    // A moderated study with NEITHER a venue nor a slot fails two
+    // independent gates at once (audit row 5's seeded studies). The singular
+    // `findPublishProblem` reports only the first (location); the plural
+    // form reports both, in the same order.
+    expect(
+      findPublishProblems(
+        input({ type: "test", hasMeetingLocation: false, hasBookableSlot: false })
+      )
+    ).toEqual([
+      { code: "meeting_location_required" },
+      { code: "bookable_slot_required" }
+    ]);
+  });
+
+  it("agrees with findPublishProblem when only one gate is unmet", () => {
+    expect(
+      findPublishProblems(input({ type: "test", hasBookableSlot: false }))
+    ).toEqual([{ code: "bookable_slot_required" }]);
+  });
+
+  it("returns nothing once every gate for the shape is satisfied", () => {
+    expect(
+      findPublishProblems(
+        input({ type: "test", hasMeetingLocation: true, hasBookableSlot: true })
+      )
+    ).toEqual([]);
+  });
+
+  it("a draft Review sees the same checklist a publish attempt would meet", () => {
+    // `willBePublished: false` is not read at all: the question this answers
+    // is "what would block a publish", which does not change because the
+    // status happens to be Draft right now.
+    expect(
+      findPublishProblems(
+        input({
+          type: "unmoderated",
+          willBePublished: false,
+          hasLinkedStudy: false,
+          hasInlineStudy: false
+        })
+      )
+    ).toEqual([{ code: "unmoderated_study_required" }]);
+  });
+
+  it("still words a removed task list differently, matching findPublishProblem", () => {
+    expect(
+      findPublishProblems(
+        input({ type: "unmoderated", removingLinkedStudy: true })
+      )
+    ).toEqual([{ code: "unmoderated_study_removed" }]);
+  });
+
+  it("never asks a native question for a link, matching findPublishProblem", () => {
+    expect(
+      findPublishProblems(
+        input({
+          type: "question",
+          deliveryMode: "native",
+          hasInlineSurvey: true,
+          externalLink: undefined
+        })
+      )
+    ).toEqual([]);
   });
 });

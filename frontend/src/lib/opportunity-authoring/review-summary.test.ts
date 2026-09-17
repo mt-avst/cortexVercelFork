@@ -854,6 +854,35 @@ describe('buildReviewSummary', () => {
       expect(item?.missing).toBe(true);
     });
 
+    it('external shape consent description reads Handled by the external tool', () => {
+      // Row 14: a pure hand-off (poll/survey/question over an external link)
+      // has no consent step BODY at all - the tool on the other side collects
+      // it. Before this, the summary still ran the moderated/authoring
+      // consent logic on this shape and read "Not set" or "Custom wording,
+      // not an approved template, ... will be shown to the participant",
+      // describing a control the step never rendered.
+      const externalHandoffSteps: ReviewStepRef[] = [
+        { id: 1, key: 'basics', title: 'Basic Information' },
+        { id: 3, key: 'externalLink', title: 'External Link' },
+        { id: 4, key: 'consent', title: 'Consent' },
+        { id: 5, key: 'review', title: 'Review' }
+      ];
+      const section = findSection(
+        buildReviewSummary(
+          completeInput({
+            steps: externalHandoffSteps,
+            consentText: '',
+            consentTemplate: null
+          })
+        ),
+        'consent'
+      );
+      const wording = findItem(section, 'Consent wording');
+      expect(wording?.value).toBe('Handled by the external tool');
+      expect(wording?.missing).not.toBe(true);
+      expect(section?.items).toHaveLength(1);
+    });
+
     it('does not truncate exactly 160 characters', () => {
       const text = 'a'.repeat(160);
       const item = findItem(
