@@ -386,8 +386,12 @@ describe('the Edit links open the step that owns each section', () => {
     fillBasics('unmoderated');
     walkForward();
 
+    // The ACCESSIBLE name, not the visible text: row 30 shortened the visible
+    // label to the fixed word "Edit" (so every link sits at the same x
+    // position) and moved the full "Edit {title}" onto `aria-label` instead -
+    // this is the same fact `getByRole`'s own name matching already reads.
     expect(
-      screen.getAllByRole('button', { name: /^Edit / }).map((button) => button.textContent?.trim())
+      screen.getAllByRole('button', { name: /^Edit / }).map((button) => button.getAttribute('aria-label'))
     ).toEqual(['Edit Basic Information', 'Edit Content & Details', 'Edit Task List', 'Edit Screener', 'Edit Consent']);
   });
 });

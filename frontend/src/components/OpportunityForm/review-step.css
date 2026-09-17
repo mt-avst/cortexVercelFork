@@ -69,6 +69,17 @@
   border: 1px solid var(--status-warning);
 }
 
+/* "Published, not working" (row 6): a published study that would itself fail
+   publish readiness. Reuses the same warning treatment as the Draft pill -
+   this is also a state the author needs to act on, not a neutral fact like
+   the ordinary Published pill above - so a reader who has learned what the
+   Draft pill means recognises this one as the same kind of thing. */
+.review-header__pill--broken {
+  color: #000000;
+  background: var(--status-warning);
+  border: 1px solid var(--status-warning);
+}
+
 /* Two-column description lists: label on the left, value on the right. Children
    render in dt, dd order, so a two-column grid places each pair on its own row
    with no extra wrappers. */
@@ -102,4 +113,77 @@
   .review-dl > dt {
     margin-bottom: -0.25rem;
   }
+}
+
+/*
+ * A section as a rule + title (audit row 30), not a bordered card: six
+ * identical boxes holding one row or twelve read as six equal-weight cards
+ * regardless of what any of them actually held. A bottom rule separates
+ * sections without claiming they are all the same size, and the last one
+ * carries no rule at all, matching how a list of sections ends rather than
+ * how a stack of cards does.
+ */
+.review-section {
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--border-subtle-current);
+}
+
+.review-section:first-of-type {
+  padding-top: 0;
+}
+
+.review-section:last-of-type {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.review-section__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.review-section__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+/*
+ * Edit as a fixed-x link (row 30): the previous button read "Edit {title}",
+ * so its own width - and therefore the x position of the word "Edit" inside
+ * it - varied with the title's length, and right-aligning a variable-width
+ * button gave every row a different LEFT edge. A constant four-letter word
+ * in a fixed-width column starts at the same x on every row; the full
+ * "Edit {title}" accessible name still exists, carried by `aria-label` on
+ * the element in `ReviewStep.tsx` rather than by its visible text.
+ */
+.review-section__edit {
+  flex: none;
+  width: 3.25rem;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--fs-accent);
+  font-weight: 600;
+  font-size: 0.875rem;
+  text-align: right;
+  cursor: pointer;
+}
+
+.review-section__edit:hover,
+.review-section__edit:focus-visible {
+  text-decoration: underline;
+}
+
+/* The footer (row 30): Status and the share block it gates, set apart from
+   the read-only sections above by a rule of their own, so the screen reads
+   as facts-then-the-decision rather than one more pair of equal-weight
+   cards. */
+.review-footer {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-subtle-current);
 }
