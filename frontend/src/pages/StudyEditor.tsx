@@ -12,7 +12,7 @@ import {
   getFirstHandStudy,
   updateFirstHandStudy,
 } from '../api/firsthand-studies';
-import { Alert, Button, Card, CardBody } from '../components/ui';
+import { Alert, Button, Card, CardBody, StatusBadge } from '../components/ui';
 import { isStudyReadOnly, type StudyViewer } from '../utils/studyOwnership';
 import type { FirstHandStudy } from '../api/types';
 import {
@@ -42,6 +42,20 @@ import {
 
 type StepType = StudyStep['type'];
 type StudyStatus = 'draft' | 'launched' | 'archived';
+
+/**
+ * Row 35: this page and `Studies.tsx` had no page shell where every wizard
+ * screen has a card and a status pill - a plain uppercase text label here,
+ * against `StatusBadge` everywhere the opportunity form shows a study's
+ * standing. `StudyStatus` and `StatusBadge`'s own `StatusType` use different
+ * words for the same three states, so this maps rather than reusing one enum
+ * for both call sites.
+ */
+const STUDY_STATUS_BADGE: Record<StudyStatus, 'draft' | 'published' | 'closed'> = {
+  draft: 'draft',
+  launched: 'published',
+  archived: 'closed'
+};
 
 type StepDraft = {
   step_id: string;
@@ -1138,7 +1152,14 @@ export function StudyEditorForm({
         ) : null}
 
         <div className="d-flex gap-2">
-          <Button variant="secondary" onClick={addStep} type="button">
+          {/*
+            Row 35: `variant="secondary"` -> `.btn-secondary` -> `color:
+            var(--text-primary)`, which in the light theme is `--fs-ink`
+            (#14213d) - navy, while the wizard's own "Add task"/"Add question"
+            (QuestionList.tsx) are `btn-outline-primary`, the shared orange
+            token. Matched here rather than hard-coding a new hex.
+          */}
+          <Button variant="outline-primary" onClick={addStep} type="button">
             Add task
           </Button>
           <Button
@@ -1275,40 +1296,49 @@ const StudyEditor: React.FC = () => {
         Back to task lists
       </GuardedLink>
 
-      <p className="text-uppercase fw-semibold text-muted mb-1">
-        Researcher workspace
-      </p>
-      <h1 className="h3 mb-2">
-        {isEdit ? `Edit ${study?.title ?? 'task list'}` : 'New Task List'}
-      </h1>
-      <p className="text-muted mb-4">
-        {isEdit
-          ? 'Changes apply to new participant sessions. Sessions already in flight keep their original task payload.'
-          : 'Define the intro copy, consent and task sequence. An unmoderated study references the task list id once published.'}
-      </p>
-
-      {isEdit && loadingStudy ? (
-        <div className="d-flex justify-content-center py-5">
-          <div
-            className="spinner-border text-primary"
-            role="status"
-            aria-label="Loading task list"
-          >
-            <span className="visually-hidden">Loading task list...</span>
+      <Card padding="lg" hoverable={false}>
+        <CardBody>
+          <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-1">
+            <p className="text-uppercase fw-semibold text-muted mb-0">
+              Researcher workspace
+            </p>
+            {isEdit && study?.status && (
+              <StatusBadge status={STUDY_STATUS_BADGE[study.status as StudyStatus]} />
+            )}
           </div>
-        </div>
-      ) : loadError ? (
-        <Alert variant="danger">
-          <strong>Could not load task list.</strong>
-          <p className="mb-0">{loadError}</p>
-        </Alert>
-      ) : (
-        <StudyEditorForm
-          initialStudy={isEdit ? study ?? undefined : undefined}
-          initialSteps={isEdit ? steps : undefined}
-          viewer={user}
-        />
-      )}
+          <h1 className="h3 mb-2">
+            {isEdit ? `Edit ${study?.title ?? 'task list'}` : 'New Task List'}
+          </h1>
+          <p className="text-muted mb-4">
+            {isEdit
+              ? 'Changes apply to new participant sessions. Sessions already in flight keep their original task payload.'
+              : 'Define the intro copy, consent and task sequence. An unmoderated study references the task list id once published.'}
+          </p>
+
+          {isEdit && loadingStudy ? (
+            <div className="d-flex justify-content-center py-5">
+              <div
+                className="spinner-border text-primary"
+                role="status"
+                aria-label="Loading task list"
+              >
+                <span className="visually-hidden">Loading task list...</span>
+              </div>
+            </div>
+          ) : loadError ? (
+            <Alert variant="danger">
+              <strong>Could not load task list.</strong>
+              <p className="mb-0">{loadError}</p>
+            </Alert>
+          ) : (
+            <StudyEditorForm
+              initialStudy={isEdit ? study ?? undefined : undefined}
+              initialSteps={isEdit ? steps : undefined}
+              viewer={user}
+            />
+          )}
+        </CardBody>
+      </Card>
     </div>
   );
 };
