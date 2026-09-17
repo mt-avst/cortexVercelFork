@@ -9,10 +9,8 @@ import {
   EMPTY_FACET_SELECTION,
   facetSelectionCount,
   filterOpportunitiesForPresentationListing,
-  isAtPublishedListCap,
   opportunityMatchesRoles,
   opportunityPassesFacets,
-  PUBLISHED_LIST_CAP,
   resolveActiveMatchRoles,
   sortByClosingSoonest,
   type StudyFacetSelection,
@@ -226,11 +224,9 @@ const Home: React.FC = memo(() => {
     return sortByClosingSoonest(narrowed);
   }, [safeOpportunities, facetSelection, activeFacetCount]);
 
-  // At the list endpoint's cap the client cannot see studies it dropped, so the
-  // facets stop being authoritative (see PUBLISHED_LIST_CAP). During the beta the
-  // published count is a tiny fraction of the cap, so this never shows now - it is
-  // the guard that keeps a silent "no more matches" from ever reading as truth.
-  const atListCap = isAtPublishedListCap(safeOpportunities.length);
+  // No cap notice: the list endpoint returns 413 above PUBLISHED_LIST_CAP rather
+  // than a truncated page, so any list that renders is the whole published set and
+  // the facets are always authoritative for it (see the constant's note).
 
   // The active role set drives highlighting/sort: browse-as override, else saved
   // profile, else none. Matching is advisory - it partitions the ALREADY-FILTERED
@@ -323,16 +319,6 @@ const Home: React.FC = memo(() => {
                     {activeFacetCount > 0 &&
                       ` · ${activeFacetCount} ${activeFacetCount === 1 ? 'filter' : 'filters'}`}
                   </p>
-
-                  {/* At the list cap the client can't see dropped studies, so the
-                      facets below are no longer authoritative - say so rather than
-                      let a filtered view read as complete. */}
-                  {atListCap && (
-                    <p className="study-cap-notice" role="status">
-                      Showing the most recent {PUBLISHED_LIST_CAP} studies. Filters here apply only to
-                      these - refine your search on the server for the full set.
-                    </p>
-                  )}
 
                   <StudyFacets
                     options={facetOptions}

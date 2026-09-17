@@ -4,7 +4,6 @@ import {
   deriveFacetOptions,
   getStudyDelivery,
   getStudyTimeBucket,
-  isAtPublishedListCap,
   opportunityPassesFacets,
   PUBLISHED_LIST_CAP,
   EMPTY_FACET_SELECTION,
@@ -82,6 +81,14 @@ describe('getStudyTimeBucket', () => {
   it('external hand-off is Not specified', () => {
     expect(getStudyTimeBucket(opp({ type: 'survey', delivery_mode: 'external' }))).toBe('unspecified');
   });
+
+  // The list API has been seen concatenating a status suffix onto the type
+  // (baseTypeOf's reason for existing); both helpers must strip it before the
+  // exact set membership in runsNativeSurvey, or a native survey mis-buckets.
+  it('handles a status-suffixed type (surveypublished) as a native survey', () => {
+    expect(getStudyTimeBucket(opp({ type: 'surveypublished' as never, delivery_mode: 'native' }))).toBe('under_5');
+    expect(getStudyDelivery(opp({ type: 'surveypublished' as never, delivery_mode: 'native' }))).toBe('in_app');
+  });
 });
 
 describe('opportunityPassesFacets', () => {
@@ -157,12 +164,6 @@ describe('the client-side cap', () => {
     // Coupled by hand across the bundle boundary: if the backend constant moves,
     // this literal and this assertion move with it.
     expect(PUBLISHED_LIST_CAP).toBe(1000);
-  });
-
-  it('flags when the loaded set is at the cap (facets no longer authoritative)', () => {
-    expect(isAtPublishedListCap(999)).toBe(false);
-    expect(isAtPublishedListCap(1000)).toBe(true);
-    expect(isAtPublishedListCap(1001)).toBe(true);
   });
 });
 

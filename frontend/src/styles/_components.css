@@ -13395,9 +13395,10 @@ body.theme-dark {
 }
 
 .study-facets__count {
-  /* Per-theme brand accent via the row's AA-safe token, so no hard-coded
-     per-theme hex (accent-fill policy). */
-  color: var(--opportunity-row-urgent);
+  /* The row's meta ink - a neutral, AA-legible small-text colour. The brand
+     accent token measures ~3.3:1 at this 0.75rem weight, under the AA floor, and
+     the count does not need the accent to read as "active". */
+  color: var(--opportunity-row-meta);
 }
 
 .study-facets__clear {
@@ -13451,16 +13452,6 @@ body.theme-dark {
   }
 }
 
-/* Cap-awareness notice: shown only when the loaded set is at the list cap. */
-.study-cap-notice {
-  margin: 0 0 12px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  font-size: 0.85rem;
-  color: var(--opportunity-row-purpose);
-  background: color-mix(in srgb, var(--brand-orange-500) 8%, transparent);
-  border: 1px solid color-mix(in srgb, var(--brand-orange-500) 22%, var(--opportunity-row-rule));
-}
 
 /* Same place on every row. Reads as a button, is not one - it lives inside the
    row's link, and a real button there would be a second tab stop for the same

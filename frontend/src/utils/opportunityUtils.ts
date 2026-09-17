@@ -383,9 +383,13 @@ export type StudyDelivery = 'in_app' | 'external';
 export const getStudyDelivery = (
   opportunity: Pick<Opportunity, 'type' | 'delivery_mode'>
 ): StudyDelivery => {
+  // Strip a status suffix the list API has been seen concatenating onto the type
+  // (baseTypeOf's reason for existing), and use the STRIPPED value everywhere -
+  // runsNativeSurvey does an exact set membership, so passing the raw type would
+  // read `surveypublished` as not-question-carrying and mis-file a native survey.
   const type = baseTypeOf(opportunity.type);
   const isQuestionCarrying = QUESTION_CARRYING_TYPES.has(type);
-  return isQuestionCarrying && !runsNativeSurvey(opportunity.type, opportunity.delivery_mode)
+  return isQuestionCarrying && !runsNativeSurvey(type, opportunity.delivery_mode)
     ? 'external'
     : 'in_app';
 };
@@ -448,7 +452,8 @@ export const getStudyTimeBucket = (
       : 'unspecified';
   }
 
-  if (runsNativeSurvey(opportunity.type, opportunity.delivery_mode)) {
+  // The STRIPPED type, for the same reason as getStudyDelivery above.
+  if (runsNativeSurvey(type, opportunity.delivery_mode)) {
     return 'under_5';
   }
 
@@ -466,12 +471,17 @@ export interface StudyFacetSelection {
   timeBuckets: StudyTimeBucket[];
 }
 
-export const EMPTY_FACET_SELECTION: StudyFacetSelection = {
+// Frozen so this shared cleared-value singleton cannot have its axes reassigned
+// and poisoned for every consumer. The arrays themselves are never mutated in
+// place - `toggle` always returns a new array and setFacetSelection replaces the
+// whole object - so the object freeze plus that pure-update contract is the
+// guarantee (the arrays stay typed mutable because StudyFacetSelection is).
+export const EMPTY_FACET_SELECTION: StudyFacetSelection = Object.freeze({
   roles: [],
   types: [],
   deliveries: [],
   timeBuckets: [],
-};
+});
 
 export const facetSelectionCount = (selection: StudyFacetSelection): number =>
   selection.roles.length +
@@ -481,24 +491,22 @@ export const facetSelectionCount = (selection: StudyFacetSelection): number =>
 
 /**
  * The list endpoint's hard cap on returned published studies
- * (backend `MAX_OPPORTUNITIES_RETURNED`, opportunities.ts). Mirrored here as a
- * literal, and pinned in a test, because client-side faceting is STRUCTURALLY
- * BLIND to studies the cap dropped: at or above the cap the facets only see the
- * first N and would read as "no more matches". While the published count is
- * below this, client-side faceting is complete; when it approaches the cap,
- * faceting moves server-side (phase 3). If the backend constant changes, this
- * and its test must change with it - they cannot import it across the bundle
- * boundary, so the coupling is enforced by the pinning test, not the type system.
+ * (backend `MAX_OPPORTUNITIES_RETURNED`, opportunities.ts), mirrored here as a
+ * literal and pinned in a test.
+ *
+ * Client-side faceting is complete only while the published set is at or below
+ * this. Crucially, the list endpoint does NOT silently truncate above it: it
+ * queries `LIMIT cap + 1` and returns HTTP 413 when the count exceeds the cap
+ * (opportunities.ts). So a rendered list is always the WHOLE published set - a
+ * successful response can never be a truncated page - which is why there is no
+ * "showing the first N" notice here: it could never correctly fire (exactly-cap
+ * is the complete set; over-cap fails the request outright). When the count
+ * approaches the cap, faceting moves server-side (phase 3), which will also give
+ * the >cap case a real listing instead of a 413. If the backend constant changes,
+ * this literal and its pinning test change with it - the coupling is enforced by
+ * the test, not the type system (they cannot import across the bundle boundary).
  */
 export const PUBLISHED_LIST_CAP = 1000;
-
-/**
- * True when the loaded set is exactly the cap, i.e. the list endpoint MAY have
- * dropped studies. The browse UI must then stop presenting its client-side
- * facets as authoritative.
- */
-export const isAtPublishedListCap = (loadedCount: number): boolean =>
-  loadedCount >= PUBLISHED_LIST_CAP;
 
 export interface FacetOptions {
   roles: string[];
