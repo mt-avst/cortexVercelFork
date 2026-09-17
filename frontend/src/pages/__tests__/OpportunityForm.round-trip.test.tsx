@@ -2119,7 +2119,11 @@ describe('the Save button appearing for a change that only touches authored cont
     renderEdit('/admin/opportunities/opp-1/edit');
     await screen.findByDisplayValue('Checkout walkthrough');
 
-    // Study Period lives on the Basic Information tab, not with the content.
+    // Study Period lives on the Screener/Audience step now (D6).
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'Form steps' }))
+        .getByRole('button', { name: /Screener/i })
+    );
     fireEvent.change(screen.getByLabelText(/Start Date/i), {
       target: { value: '2026-09-02' }
     });

@@ -327,79 +327,15 @@ const itemsForStep = (step: ReviewStepRef, input: ReviewSummaryInput): ReviewIte
       // basics section now begins at Purpose. The header is read-only
       // orientation; editing the title or the type still happens through this
       // section's own "Edit Basic Information" link, which opens step 1.
+      // Purpose leads, then Description and Product - advert copy that moved
+      // here to sit with Title and Purpose (D6). Title and the type lead the
+      // check-answers HEADER (WZ-17), so they are not repeated as rows.
       const items: ReviewItem[] = [
         {
           label: 'Purpose',
           value: orNotSet(input.purpose),
           missing: !input.purpose
-        }
-      ];
-
-      /*
-       * Only on the shapes that HAVE a duration field, found by the step list.
-       *
-       * This row was unconditional, so a poll's Review read "Default Duration
-       * 30 minutes" - a field the author had never seen on any step, and a
-       * value the payload does not send: `default_duration_minutes` goes only
-       * for `test` and `interview`, and `BasicInfoTab` renders the input only
-       * for those two. On a check-answers screen that is an assertion about the
-       * record that is simply false.
-       *
-       * Gated on the presence of a `sessions` step rather than on the type,
-       * because that is the same set and it cannot drift from `getTabsForType`
-       * the way a sixth predicate about `type` could.
-       */
-      if (input.steps.some((candidate) => candidate.key === 'sessions')) {
-        items.push({
-          label: 'Default Duration',
-          value: pluralise(input.defaultDurationMinutes, 'minute')
-        });
-      }
-      if (input.meetingLocation) {
-        items.push({ label: 'Meeting Location', value: input.meetingLocation });
-      }
-      /*
-       * The Study Period, but only on the shapes that can edit it (row 26).
-       *
-       * `BasicInfoTab` renders the Start/End Date inputs for
-       * poll/survey/question/unmoderated and NOT for the moderated pair - a
-       * booked study's window is its slots, not a countdown. So a test or
-       * interview carrying start/end dates (legacy rows, or a type change that
-       * did not clear them) must not show a Study Period the author has no
-       * field for. Gated on the presence of a `sessions` step - the same set
-       * `BasicInfoTab` excludes - so it cannot drift from `getTabsForType`.
-       *
-       * Dates are formatted with the product's one date formatter in the
-       * reader's zone, like every other date in the app; Review used to print
-       * the raw ISO string. `?? value` keeps an unparseable value visible
-       * rather than dropping the row silently.
-       */
-      const editsStudyPeriod = !input.steps.some(
-        (candidate) => candidate.key === 'sessions'
-      );
-      if (editsStudyPeriod && input.startDate) {
-        items.push({
-          label: 'Available from',
-          value: formatStudyDate(input.startDate) ?? input.startDate
-        });
-      }
-      if (editsStudyPeriod && input.endDate) {
-        items.push({
-          label: 'Available until',
-          value: formatStudyDate(input.endDate) ?? input.endDate
-        });
-      }
-      return items;
-    }
-
-    case 'content': {
-      const participantTypeLabels: Record<string, string> = {
-        any: 'Any participant',
-        internal: 'Internal only',
-        external: 'External only',
-        specific: 'Specific criteria'
-      };
-      const items: ReviewItem[] = [
+        },
         {
           label: 'Description',
           value: orNotSet(input.description),
@@ -409,23 +345,14 @@ const itemsForStep = (step: ReviewStepRef, input: ReviewSummaryInput): ReviewIte
       if (input.product) {
         items.push({ label: 'Product', value: input.product });
       }
-      items.push({
-        label: 'Participant Type',
-        value: participantTypeLabels[input.participantType] ?? input.participantType
-      });
-      if (input.participantTypeDetails) {
-        items.push({
-          label: 'Specific Criteria',
-          value: input.participantTypeDetails
-        });
-      }
-      if (input.targetRoles.length > 0) {
-        items.push({
-          label: 'Roles or skills wanted',
-          value: input.targetRoles.join(', ')
-        });
-      }
       return items;
+    }
+
+    case 'content': {
+      // D6 moved every field this step carried onto the step it belongs on, so
+      // the check-answers screen has nothing to summarise here (2a keeps the
+      // step; 2c collapses it).
+      return [];
     }
 
     case 'questions': {
@@ -485,39 +412,101 @@ const itemsForStep = (step: ReviewStepRef, input: ReviewSummaryInput): ReviewIte
     }
 
     case 'sessions': {
-      return [
+      // Meeting Location and Default Duration are delivery facts about the
+      // session, so they moved here with the slots (D6). A session step means a
+      // moderated shape, so Default Duration always applies here.
+      const items: ReviewItem[] = [
         {
-          label: 'Time slots',
-          value: pluralise(input.sessionCount, 'slot'),
-          missing: input.sessionCount === 0,
-          note:
-            input.sessionCount === 0
-              ? 'A participant cannot book anything until at least one slot is added.'
-              : undefined
+          label: 'Default Duration',
+          value: pluralise(input.defaultDurationMinutes, 'minute')
         }
       ];
+      if (input.meetingLocation) {
+        items.push({ label: 'Meeting Location', value: input.meetingLocation });
+      }
+      items.push({
+        label: 'Time slots',
+        value: pluralise(input.sessionCount, 'slot'),
+        missing: input.sessionCount === 0,
+        note:
+          input.sessionCount === 0
+            ? 'A participant cannot book anything until at least one slot is added.'
+            : undefined
+      });
+      return items;
     }
 
     case 'screener': {
+      // The Screener/Audience step leads with who the study is for (D6):
+      // Participant Type, its criteria, Roles or skills wanted and the Study
+      // Period recruitment window, then the eligibility gate itself.
+      const participantTypeLabels: Record<string, string> = {
+        any: 'Any participant',
+        internal: 'Internal only',
+        external: 'External only',
+        specific: 'Specific criteria'
+      };
+      const items: ReviewItem[] = [
+        {
+          label: 'Participant Type',
+          value:
+            participantTypeLabels[input.participantType] ?? input.participantType
+        }
+      ];
+      if (input.participantTypeDetails) {
+        items.push({
+          label: 'Specific Criteria',
+          value: input.participantTypeDetails
+        });
+      }
+      if (input.targetRoles.length > 0) {
+        items.push({
+          label: 'Roles or skills wanted',
+          value: input.targetRoles.join(', ')
+        });
+      }
+      /*
+       * The Study Period, only on the shapes that can edit it (row 26):
+       * poll/survey/question/unmoderated render the Start/End Date inputs and
+       * the moderated pair does not - a booked study's window is its slots, not
+       * a countdown. Gated on the ABSENCE of a `sessions` step - the same set
+       * `AudienceFields` uses - so it cannot drift from `getTabsForType`. Dates
+       * are formatted with the product's one date formatter; `?? value` keeps
+       * an unparseable value visible rather than dropping the row silently.
+       */
+      const editsStudyPeriod = !input.steps.some(
+        (candidate) => candidate.key === 'sessions'
+      );
+      if (editsStudyPeriod && input.startDate) {
+        items.push({
+          label: 'Available from',
+          value: formatStudyDate(input.startDate) ?? input.startDate
+        });
+      }
+      if (editsStudyPeriod && input.endDate) {
+        items.push({
+          label: 'Available until',
+          value: formatStudyDate(input.endDate) ?? input.endDate
+        });
+      }
+
       // 0 is "no screener", a valid choice, so it is NOT flagged missing the
       // way an empty sessions or questions count is - a screener is optional,
       // and an author who wants everyone through leaves it off on purpose.
       if (input.screenerQuestionCount === 0) {
-        return [
-          {
-            label: 'Screener',
-            value: 'No screener',
-            note: 'Anyone signed in can take part - no eligibility questions are asked.'
-          }
-        ];
-      }
-      return [
-        {
+        items.push({
+          label: 'Screener',
+          value: 'No screener',
+          note: 'Anyone signed in can take part - no eligibility questions are asked.'
+        });
+      } else {
+        items.push({
           label: 'Screener questions',
           value: pluralise(input.screenerQuestionCount, 'question'),
           note: 'Anyone who does not qualify is shown the not-a-match message and cannot take part.'
-        }
-      ];
+        });
+      }
+      return items;
     }
 
     case 'consent': {
@@ -584,12 +573,16 @@ const itemsForStep = (step: ReviewStepRef, input: ReviewSummaryInput): ReviewIte
 
 const FOCUS_FIELD_BY_KEY: Record<string, string | undefined> = {
   basics: 'title',
-  content: 'participant_type_required',
+  // Content holds no fields after D6, so its Edit link opens the step without
+  // moving the caret.
+  content: undefined,
   questions: 'inline_survey_questions',
   taskList: 'inline_study_steps',
   externalLink: 'external_link_optional',
   sessions: undefined,
-  screener: 'screener_questions-heading'
+  // The Screener/Audience step now leads with Participant Type (D6), so its
+  // Edit link lands there.
+  screener: 'participant_type_required'
 };
 
 /**
@@ -635,9 +628,9 @@ const STEP_KEY_FOR_PROBLEM: Record<PublishProblemCode, string> = {
   native_survey_study_required: 'questions',
   external_link_required: 'externalLink',
   bookable_slot_required: 'sessions',
-  // The meeting location is a Basics field (row 9), so its refusal sends the
-  // author back to step 1, not to Session Management.
-  meeting_location_required: 'basics'
+  // The meeting location moved onto the Session Management step (D6), so its
+  // refusal sends the author there, with the slot check, not back to Basics.
+  meeting_location_required: 'sessions'
 };
 
 /**

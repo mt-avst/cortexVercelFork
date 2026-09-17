@@ -1,3 +1,4 @@
+export { default as AudienceFields } from './AudienceFields';
 export { default as BasicInfoTab } from './BasicInfoTab';
 export { default as ConsentStep } from './ConsentStep';
 export { default as ContentDetailsTab } from './ContentDetailsTab';

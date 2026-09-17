@@ -83,6 +83,19 @@ const continueForward = () =>
   fireEvent.click(screen.getByRole('button', { name: /^Continue(:|$)/i }));
 
 /**
+ * Click the strip button naming a step. Matched by substring, because each
+ * strip button's accessible name also carries its number and status word. Used
+ * to reach a field on the step it now lives on after the D6 field moves.
+ */
+const goToStep = (name: RegExp) =>
+  fireEvent.click(
+    within(screen.getByRole('navigation', { name: 'Form steps' })).getByRole(
+      'button',
+      { name }
+    )
+  );
+
+/**
  * Walk to Review and submit, whatever the shape's length.
  *
  * A loop rather than a fixed number of clicks, because the shapes are three,
@@ -185,20 +198,24 @@ describe('Continue can never pass what Submit refuses', () => {
     );
   });
 
-  it('refuses a 300-minute session length at Continue, where it used to advance', () => {
+  it('refuses a 300-minute session length on the step that owns it (D6)', () => {
+    // Session length used to be a Basic Information field with a hand-copied
+    // Continue rule. D6 moved it to the Session Management step; the refusal
+    // travels with the control and is raised there, not on Basics.
     renderForm();
     fillStepOne({ type: 'test' });
-    fireEvent.change(screen.getByLabelText(/Meeting Location/i), {
-      target: { value: 'https://meet.example.com/room' },
-    });
-    fireEvent.change(screen.getByLabelText(/Default Duration/i), {
-      target: { value: '300' },
-    });
 
-    continueForward();
+    // Not on Basic Information any more.
+    expect(screen.queryByLabelText(/Default Duration/i)).toBeNull();
 
-    expect(currentStepName()).toMatch(/Basic Information/i);
-    expect(summarisedErrorKeys()).toEqual(['default_duration_minutes']);
+    goToStep(/Session Management/);
+    const duration = screen.getByLabelText(/Default Duration/i);
+    fireEvent.change(duration, { target: { value: '300' } });
+    fireEvent.blur(duration);
+
+    expect(
+      inlineErrorText('Enter a session length between 5 and 240 minutes')
+    ).toBeInTheDocument();
   });
 
   it('still lets a valid step 1 through, so the refusals above are about the values', () => {
@@ -333,11 +350,9 @@ describe('Continue can never pass what Submit refuses', () => {
     continueForward();
     expect(summarisedErrorKeys()).toEqual(['title']);
 
-    // Jump ahead and refuse there too, without fixing the title.
-    const strip = within(
-      screen.getByRole('navigation', { name: 'Form steps' })
-    ).getAllByRole('button');
-    fireEvent.click(strip[1]);
+    // Jump ahead to the Screener/Audience step, where Participant Type lives
+    // now (D6), and refuse there too without fixing the title.
+    goToStep(/Screener/);
     fireEvent.change(screen.getByLabelText(/Participant Type/i), {
       target: { value: 'specific' },
     });
@@ -374,15 +389,16 @@ describe('the error summary is reachable, and says one thing per problem', () =>
     renderForm();
     selectType('question');
     // Title left empty (step 1), participant criteria demanded and left empty
-    // (step 2), so the summary has to span steps and be ordered.
+    // (the Screener/Audience step, D6), so the summary has to span steps and be
+    // ordered.
     setPurpose('Find out where people stall in the checkout flow');
-    const strip = within(
-      screen.getByRole('navigation', { name: 'Form steps' })
-    ).getAllByRole('button');
-    fireEvent.click(strip[1]);
+    goToStep(/Screener/);
     fireEvent.change(screen.getByLabelText(/Participant Type/i), {
       target: { value: 'specific' },
     });
+    const strip = within(
+      screen.getByRole('navigation', { name: 'Form steps' })
+    ).getAllByRole('button');
     fireEvent.click(strip[strip.length - 1]);
     fireEvent.click(screen.getByRole('button', { name: /^Create study$/ }));
   };
@@ -445,7 +461,7 @@ describe('the error summary is reachable, and says one thing per problem', () =>
 
     fireEvent.click(summaryLinkFor('participant_type_specific_details'));
 
-    expect(currentStepName()).toMatch(/Content & Details/i);
+    expect(currentStepName()).toMatch(/Screener/i);
     expect(document.activeElement?.id).toBe('participant_type_specific_details');
   });
 
@@ -572,6 +588,8 @@ describe('blur reports the same rules, on every field that has one', () => {
   it('flags an out-of-range session length on blur', () => {
     renderForm();
     selectType('test');
+    // Default Duration lives on the Session Management step now (D6).
+    goToStep(/Session Management/);
     const duration = screen.getByLabelText(/Default Duration/i);
     fireEvent.change(duration, { target: { value: '300' } });
     fireEvent.blur(duration);
@@ -634,15 +652,23 @@ describe('a refusal preserves every keystroke', () => {
     selectType('question');
     setTitle('abc');
     setPurpose('Find out where people stall in the checkout flow');
-    const strip = within(
-      screen.getByRole('navigation', { name: 'Form steps' })
-    ).getAllByRole('button');
-    // Description lives on step 2.
-    fireEvent.click(strip[1]);
+    // Description sits with Title and Purpose on Basic Information now (D6).
     fireEvent.change(screen.getByLabelText(/Description \(Optional\)/i), {
       target: { value: 'A long description the author does not want to retype' },
     });
+    // A field two steps away, on the Screener/Audience step, filled validly so
+    // it adds no error of its own - only its survival through a refusal matters.
+    goToStep(/Screener/);
+    fireEvent.change(screen.getByLabelText(/Participant Type/i), {
+      target: { value: 'specific' },
+    });
+    fireEvent.change(screen.getByLabelText(/Specific Criteria/i), {
+      target: { value: 'Admins who use the export flow weekly' },
+    });
 
+    const strip = within(
+      screen.getByRole('navigation', { name: 'Form steps' })
+    ).getAllByRole('button');
     fireEvent.click(strip[strip.length - 1]);
     fireEvent.click(screen.getByRole('button', { name: /^Create study$/ }));
 
@@ -655,14 +681,15 @@ describe('a refusal preserves every keystroke', () => {
     expect(screen.getByLabelText(/purpose/i)).toHaveValue(
       'Find out where people stall in the checkout flow'
     );
-
-    // And so is the untouched field two steps away.
-    const stripAgain = within(
-      screen.getByRole('navigation', { name: 'Form steps' })
-    ).getAllByRole('button');
-    fireEvent.click(stripAgain[1]);
+    // Description is on the same step, and is preserved too.
     expect(screen.getByLabelText(/Description \(Optional\)/i)).toHaveValue(
       'A long description the author does not want to retype'
+    );
+
+    // And so is the untouched field two steps away.
+    goToStep(/Screener/);
+    expect(screen.getByLabelText(/Specific Criteria/i)).toHaveValue(
+      'Admins who use the export flow weekly'
     );
   });
 });
@@ -758,6 +785,9 @@ describe('a validation error does not outlive the field it is about', () => {
     // on screen. The result was a step chip with nothing on the step to fix.
     renderForm();
     fillStepOne({ type: 'test' });
+    // Meeting Location and Default Duration live on the Session Management step
+    // now (D6).
+    goToStep(/Session Management/);
     fireEvent.change(screen.getByLabelText(/Meeting Location/i), {
       target: { value: 'https://meet.example.com/room' },
     });
@@ -768,6 +798,9 @@ describe('a validation error does not outlive the field it is about', () => {
       inlineErrorText('Enter a session length between 5 and 240 minutes')
     ).toBeInTheDocument();
 
+    // The type select is back on Basic Information; switch to a type with no
+    // session step.
+    goToStep(/Basic Information/);
     selectType('question');
 
     // The field is gone, so the message has to be gone...
@@ -775,13 +808,13 @@ describe('a validation error does not outlive the field it is about', () => {
     expect(
       screen.queryAllByText('Enter a session length between 5 and 240 minutes')
     ).toEqual([]);
-    // ...and so does the chip that pointed at it. This is the assertion that
-    // fails without the fix: the message disappears on its own, because the
-    // input that renders it has unmounted.
-    const stepOne = within(
-      screen.getByRole('navigation', { name: 'Form steps' })
-    ).getAllByRole('button')[0];
-    expect(stepOne).not.toHaveTextContent('Needs attention');
+    // ...and no step chip is left pointing at a field that no longer exists.
+    // This is the assertion that fails without the fix: the message disappears
+    // on its own, because the input that renders it has unmounted, while the
+    // reported-error key would otherwise linger on the strip.
+    within(screen.getByRole('navigation', { name: 'Form steps' }))
+      .getAllByRole('button')
+      .forEach((button) => expect(button).not.toHaveTextContent('Needs attention'));
   });
 
   it('keeps it while the type still HAS a session', () => {
@@ -789,6 +822,7 @@ describe('a validation error does not outlive the field it is about', () => {
     // error the moment the author switched between test and interview.
     renderForm();
     fillStepOne({ type: 'test' });
+    goToStep(/Session Management/);
     fireEvent.change(screen.getByLabelText(/Meeting Location/i), {
       target: { value: 'https://meet.example.com/room' },
     });
@@ -796,8 +830,12 @@ describe('a validation error does not outlive the field it is about', () => {
     fireEvent.change(duration, { target: { value: '300' } });
     fireEvent.blur(duration);
 
+    // The type select is on Basic Information; interview still has a session
+    // step, so the error must survive.
+    goToStep(/Basic Information/);
     selectType('interview');
 
+    goToStep(/Session Management/);
     expect(
       inlineErrorText('Enter a session length between 5 and 240 minutes')
     ).toBeInTheDocument();
@@ -930,26 +968,26 @@ describe('an error does not outlive the field it is about', () => {
     setTitle('A perfectly serviceable title');
     setPurpose('Find out where people stall in the checkout flow');
 
-    const strip = within(
-      screen.getByRole('navigation', { name: 'Form steps' })
-    ).getAllByRole('button');
-    fireEvent.click(strip[1]);
+    // Participant Type and its criteria live on the Screener/Audience step now
+    // (D6).
+    goToStep(/Screener/);
     fireEvent.change(screen.getByLabelText(/Participant Type/i), {
       target: { value: 'specific' },
     });
     fireEvent.click(screen.getByRole('button', { name: /^Continue(:|$)/i }));
     expect(summarisedErrorKeys()).toEqual(['participant_type_specific_details']);
 
+    goToStep(/Screener/);
     fireEvent.change(screen.getByLabelText(/Participant Type/i), {
       target: { value: 'any' },
     });
 
     expect(screen.queryByLabelText(/Specific Criteria/i)).toBeNull();
     expect(queryErrorSummary()).toBeNull();
-    const stepTwo = within(
-      screen.getByRole('navigation', { name: 'Form steps' })
-    ).getAllByRole('button')[1];
-    expect(stepTwo).not.toHaveTextContent('Needs attention');
+    // No step chip is left saying "Needs attention" over a field that is gone.
+    within(screen.getByRole('navigation', { name: 'Form steps' }))
+      .getAllByRole('button')
+      .forEach((button) => expect(button).not.toHaveTextContent('Needs attention'));
   });
 });
 

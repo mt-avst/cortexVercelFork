@@ -1,5 +1,4 @@
 import React from 'react';
-import { SESSION_DURATION } from '@shared/constants';
 import { QUESTION_CARRYING_TYPES } from '@shared/firsthand/delivery';
 import { OpportunityFormData } from '../../api/types';
 import FieldError from './FieldError';
@@ -13,53 +12,6 @@ interface BasicInfoTabProps {
   handleInputChange: (field: string, value: FormFieldValue) => void;
   handleBlur?: (field: string) => void;
 }
-
-/**
- * Date-only fields (study period): avoid timezone shifts.
- * Parsing "YYYY-MM-DD" as local midnight then calling toISOString() shifts the calendar
- * day for timezones ahead of UTC (e.g. APAC), so the picker appears to reject "future" dates.
- * We store the chosen calendar day as noon UTC; display uses UTC Y/M/D.
- */
-const formatDateForInput = (isoString: string | undefined): string => {
-  if (!isoString) return '';
-  try {
-    const date = new Date(isoString);
-    if (isNaN(date.getTime())) return '';
-    const y = date.getUTCFullYear();
-    const m = String(date.getUTCMonth() + 1).padStart(2, '0');
-    const d = String(date.getUTCDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  } catch {
-    return '';
-  }
-};
-
-/**
- * Parse YYYY-MM-DD from <input type="date"> as that calendar day at noon UTC
- * (stable round-trip).
- *
- * A native date input fires onChange on every keystroke of the year segment,
- * not just once a complete year is typed. While the year is only partly
- * typed - with month and day already valid - it reports a short, zero-padded
- * year embedded in an otherwise-complete date string (typing just the "6" of
- * "2026" reports "0006-06-15"). `Date.UTC`/`new Date()` then apply
- * JavaScript's legacy two-digit-year rule (any year 0-99 silently gets 1900
- * added), so that one keystroke becomes 1906 instead of being recognised as
- * unfinished (#110). Requiring a plausible four-digit year rejects every one
- * of those transient values outright, so a mid-edit keystroke never reaches
- * the caller.
- */
-const formatDateToISO = (dateValue: string): string | undefined => {
-  if (!dateValue) return undefined;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) return undefined;
-  const parts = dateValue.split('-').map((p) => parseInt(p, 10));
-  const [year, month, day] = parts;
-  if (year < 1000 || month < 1 || month > 12 || day < 1 || day > 31) return undefined;
-  const ms = Date.UTC(year, month - 1, day, 12, 0, 0);
-  const date = new Date(ms);
-  if (isNaN(date.getTime())) return undefined;
-  return date.toISOString();
-};
 
 /**
  * The one-line gloss under the study-type select, or '' when no type is chosen.
@@ -102,22 +54,6 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
   handleBlur
 }) => {
   const typeHint = typeHintFor(formData.type, formData.delivery_mode ?? 'external');
-  // An explicit clear (value === '') always propagates, setting the field to
-  // undefined. Anything else that fails to parse is a mid-edit keystroke, not
-  // a deliberate clear, so it is ignored - the previous value in formData
-  // stays put rather than being overwritten with `undefined` (which would
-  // otherwise blank out a perfectly good date on every unfinished keystroke).
-  const handleDateChange = (field: 'start_date' | 'end_date', value: string) => {
-    if (value === '') {
-      handleInputChange(field, undefined);
-      return;
-    }
-    const iso = formatDateToISO(value);
-    if (iso === undefined) return;
-    handleInputChange(field, iso);
-  };
-
-  const isExternalLinkType = ['poll', 'survey', 'question', 'unmoderated'].includes(formData.type);
   return (
     <div className="tab-pane active">
       <div className="form-section mb-5">
@@ -249,7 +185,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
         </div>
 
         <div className="row g-3" style={{ alignItems: 'flex-start' }}>
-          <div className={formData.type === 'test' || formData.type === 'interview' ? 'col-md-6' : 'col-md-12'}>
+          <div className="col-md-12">
             <div className="form-group mb-3" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
               <label htmlFor="title" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5' }}>
                 Title *
@@ -276,41 +212,10 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
               )}
             </div>
           </div>
-
-          {/* Meeting Location - only relevant for session-based types */}
-          {(formData.type === 'test' || formData.type === 'interview') && (
-            <div className="col-md-6">
-              <div className="form-group mb-3" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                <label htmlFor="meeting_location_optional" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5' }}>
-                  Meeting Location *
-                </label>
-                <div id="meeting_location-help" className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4' }}>
-                  Zoom, Google Meet, or other meeting link
-                </div>
-                <input
-                  type="text"
-                  id="meeting_location_optional"
-                  className={`form-control ${validationErrors.meeting_location_optional ? 'is-invalid' : ''}`}
-                  style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto', width: '100%' }}
-                  value={formData.meeting_location_optional || ''}
-                  onChange={(e) => handleInputChange('meeting_location_optional', e.target.value)}
-                  onBlur={() => handleBlur?.('meeting_location_optional')}
-                  placeholder="e.g., https://zoom.us/j/123456789 or https://meet.google.com/abc-defg-hij"
-                  aria-describedby={validationErrors.meeting_location_optional ? 'meeting_location-error meeting_location-help' : 'meeting_location-help'}
-                  aria-invalid={validationErrors.meeting_location_optional ? 'true' : 'false'}
-                  aria-required="true"
-                  required
-                />
-                {validationErrors.meeting_location_optional && (
-                  <FieldError id="meeting_location-error">{validationErrors.meeting_location_optional}</FieldError>
-                )}
-              </div>
-            </div>
-          )}
         </div>
 
         <div className="row g-3" style={{ alignItems: 'flex-start' }}>
-          <div className="col-md-6">
+          <div className="col-md-12">
             <div className="form-group mb-3" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
               <label htmlFor="purpose_one_liner" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5' }}>
                 Purpose *
@@ -337,106 +242,58 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
               )}
             </div>
           </div>
-
-          {/* Duration - only show for test and interview types */}
-          {(formData.type === 'test' || formData.type === 'interview') && (
-            <div className="col-md-6">
-              <div className="form-group mb-3" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                <label htmlFor="default_duration_minutes" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5' }}>
-                  Default Duration (minutes) *
-                </label>
-                <div id="duration-help" className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4' }}>
-                  Expected time commitment for participants ({SESSION_DURATION.MIN_MINUTES}-{SESSION_DURATION.MAX_MINUTES} minutes)
-                </div>
-                <input
-                  type="number"
-                  id="default_duration_minutes"
-                  className={`form-control ${validationErrors.default_duration_minutes ? 'is-invalid' : ''}`}
-                  style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto', width: '100%', maxWidth: '150px' }}
-                  // Clearing the field stores NaN (parseInt('')), and React
-                  // warns and keeps the last painted value if that reaches
-                  // `value`. Show it empty, which is what the author did.
-                  value={
-                    Number.isFinite(formData.default_duration_minutes)
-                      ? formData.default_duration_minutes
-                      : ''
-                  }
-                  onChange={(e) => handleInputChange('default_duration_minutes', parseInt(e.target.value))}
-                  onBlur={() => handleBlur?.('default_duration_minutes')}
-                  min={SESSION_DURATION.MIN_MINUTES}
-                  max={SESSION_DURATION.MAX_MINUTES}
-                  aria-describedby={validationErrors.default_duration_minutes ? 'duration-error duration-help' : 'duration-help'}
-                  aria-invalid={validationErrors.default_duration_minutes ? 'true' : 'false'}
-                  aria-required="true"
-                  required
-                />
-                {validationErrors.default_duration_minutes && (
-                  <FieldError id="duration-error">{validationErrors.default_duration_minutes}</FieldError>
-                )}
-              </div>
-            </div>
-          )}
         </div>
 
-        {/* Study Period - only show for external link types (poll, survey, question, unmoderated) */}
-        {isExternalLinkType && (
-          <div className="row g-3 mt-2" style={{ alignItems: 'flex-start' }}>
-            <div className="col-12 mb-2">
-              <h3 className="h6 mb-1" style={{ fontSize: '1.1rem', fontWeight: '600' }}>
-                Study Period
-              </h3>
-              <p className="mb-0" style={{ fontSize: '0.875rem' }}>
-                Set dates to show a countdown timer on the study card (optional)
-              </p>
-            </div>
-            <div className="col-md-6">
-              <div className="form-group mb-3" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                <label htmlFor="start_date" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5' }}>
-                  Start Date
-                </label>
-                <div id="start_date-help" className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '1.5rem', lineHeight: '1.4' }}>
-                  When the study opens for participation
-                </div>
-                <input
-                  type="date"
-                  id="start_date"
-                  className={`form-control ${validationErrors.start_date ? 'is-invalid' : ''}`}
-                  style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto', width: '100%', maxWidth: '200px' }}
-                  value={formatDateForInput(formData.start_date)}
-                  onChange={(e) => handleDateChange('start_date', e.target.value)}
-                  aria-describedby={validationErrors.start_date ? 'start_date-error start_date-help' : 'start_date-help'}
-                  aria-invalid={validationErrors.start_date ? 'true' : 'false'}
-                />
-                {validationErrors.start_date && (
-                  <FieldError id="start_date-error">{validationErrors.start_date}</FieldError>
-                )}
+        {/* Description and Product are advert copy: what the study is and how it
+            is pitched, so they sit with Title and Purpose (D6). */}
+        <div className="row">
+          <div className="col-md-6 col-12">
+            <div className="form-group mb-3">
+              <label htmlFor="description_optional" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600' }}>
+                Description (Optional)
+              </label>
+              <div className="form-text mb-2" style={{ fontSize: '0.875rem' }}>
+                Detailed description of what participants will do and what to expect
               </div>
-            </div>
-            <div className="col-md-6">
-              <div className="form-group mb-3" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                <label htmlFor="end_date" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5' }}>
-                  End Date
-                </label>
-                <div id="end_date-help" className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '1.5rem', lineHeight: '1.4' }}>
-                  When the study closes (shows countdown on card)
-                </div>
-                <input
-                  type="date"
-                  id="end_date"
-                  className={`form-control ${validationErrors.end_date ? 'is-invalid' : ''}`}
-                  style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto', width: '100%', maxWidth: '200px' }}
-                  value={formatDateForInput(formData.end_date)}
-                  onChange={(e) => handleDateChange('end_date', e.target.value)}
-                  aria-describedby={validationErrors.end_date ? 'end_date-error end_date-help' : 'end_date-help'}
-                  aria-invalid={validationErrors.end_date ? 'true' : 'false'}
-                />
-                {validationErrors.end_date && (
-                  <FieldError id="end_date-error">{validationErrors.end_date}</FieldError>
-                )}
-              </div>
+              <textarea
+                id="description_optional"
+                className={`form-control ${validationErrors.description_optional ? 'is-invalid' : ''}`}
+                style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: '120px', resize: 'vertical' }}
+                value={formData.description_optional}
+                onChange={(e) => handleInputChange('description_optional', e.target.value)}
+                placeholder="Provide detailed information about the study, what participants will be doing, what they need to prepare, etc."
+              />
+              {validationErrors.description_optional && (
+                <FieldError>{validationErrors.description_optional}</FieldError>
+              )}
             </div>
           </div>
-        )}
+        </div>
+
+        <div className="row">
+          <div className="col-md-6 col-12">
+            <div className="form-group mb-3">
+              <label htmlFor="product_optional" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600' }}>
+                Product/Feature (Optional)
+              </label>
+              <div className="form-text mb-2" style={{ fontSize: '0.875rem' }}>
+                Specific product, feature, or area this study relates to
+              </div>
+              <input
+                type="text"
+                id="product_optional"
+                className={`form-control ${validationErrors.product_optional ? 'is-invalid' : ''}`}
+                style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto' }}
+                value={formData.product_optional}
+                onChange={(e) => handleInputChange('product_optional', e.target.value)}
+                placeholder="e.g., Mobile App, Dashboard, API, etc."
+              />
+              {validationErrors.product_optional && (
+                <FieldError>{validationErrors.product_optional}</FieldError>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

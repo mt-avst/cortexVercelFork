@@ -180,6 +180,14 @@ const fillBasics = (
   fireEvent.change(screen.getByLabelText(/^Purpose/i), {
     target: { value: 'A purpose long enough to pass validation' }
   });
+};
+
+/**
+ * Fill the venue on the Session Management step (D6 moved it there from
+ * Basics). Call it while that step is on screen - Meeting Location renders in
+ * the step body, above the AdminSessionManager stub.
+ */
+const fillVenue = () => {
   const location = screen.queryByLabelText(/Meeting Location/i);
   if (location) {
     fireEvent.change(location, { target: { value: 'Zoom' } });
@@ -531,12 +539,10 @@ describe('every unmet requirement is listed at once, not one at a time (row 4)',
   it('names both the missing venue and the missing slot for the same moderated study', () => {
     renderCreate();
     fillBasics('test');
-    // `fillBasics` fills the venue in for a moderated type - clear it again so
-    // BOTH moderated gates are unmet at once, the shape audit row 5 found
-    // seeded live: a live session or interview with no venue AND no slot.
-    fireEvent.change(screen.getByLabelText(/Meeting Location/i), {
-      target: { value: '' }
-    });
+    // Venue and slot are both left empty - the venue now lives on the Session
+    // Management step (D6), so leaving Basics untouched already leaves it unset,
+    // the shape audit row 5 found seeded live: a live session or interview with
+    // no venue AND no slot.
     walkForward();
     setStatus('published');
 
@@ -546,10 +552,10 @@ describe('every unmet requirement is listed at once, not one at a time (row 4)',
     // Two separate list items, not one gate silently standing in for both.
     expect(within(alert).getAllByRole('listitem')).toHaveLength(2);
 
-    // Each names its own step: the venue is a Basics field (row 9), the slot
-    // is on Session Management.
-    fireEvent.click(within(alert).getByRole('button', { name: /Basic Information/ }));
-    expect(currentStepName()).toMatch(/Basic Information/);
+    // Both now name the Session Management step, which owns the venue AND the
+    // slots (D6). Activating either lands the author there.
+    fireEvent.click(within(alert).getAllByRole('button', { name: /Session Management/ })[0]);
+    expect(currentStepName()).toMatch(/Session Management/);
   });
 });
 
@@ -583,6 +589,17 @@ describe('publishing a live session or interview needs at least one slot (audit 
     renderCreate();
     fillBasics('test');
     walkForward();
+    // Set the venue (D6 moved it to Session Management) so the only refusal left
+    // to preview is the missing slot.
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'Form steps' }))
+        .getByRole('button', { name: /Session Management/ })
+    );
+    fillVenue();
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'Form steps' }))
+        .getByRole('button', { name: /Review/ })
+    );
     setStatus('published');
 
     const banner = screen.getByRole('alert');
@@ -942,6 +959,9 @@ describe('a save that half-worked is not announced as a success', () => {
     fillBasics('test');
     fireEvent.click(forwardControl()!);
     fireEvent.click(forwardControl()!);
+    // On Session Management: set the venue (D6) so the only banner is the failed
+    // session write, not a missing-venue preview.
+    fillVenue();
     fireEvent.click(screen.getByRole('button', { name: 'stub: confirm one slot' }));
     // Screener then Consent sit between Session Management and Review (MR2, #79).
     fireEvent.click(forwardControl()!);
@@ -1181,9 +1201,11 @@ describe('a publish that WOULD be allowed says nothing', () => {
     renderCreate();
     fillBasics('test');
     // The same navigation the slot-writing test above uses: two forwards reach
-    // the Session Management step, where the stub confirms one slot.
+    // the Session Management step, where the venue is set (D6) and the stub
+    // confirms one slot.
     fireEvent.click(forwardControl()!);
     fireEvent.click(forwardControl()!);
+    fillVenue();
     fireEvent.click(screen.getByRole('button', { name: 'stub: confirm one slot' }));
     walkForward(); // -> Review (through Consent)
     setStatus('published');

@@ -1680,7 +1680,14 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
 describe('locateField', () => {
   it('puts each error key on the tab that actually renders it', () => {
     expect(locateField('title').tab).toBe(1);
-    expect(locateField('participant_type_specific_details').tab).toBe(2);
+    // Audience fields (D6): Participant Type and its criteria moved off Content
+    // & Details onto the Screener/Audience step (4).
+    expect(locateField('participant_type_required').tab).toBe(4);
+    expect(locateField('participant_type_specific_details').tab).toBe(4);
+    // Session fields (D6): Meeting Location and Default Duration moved off Basic
+    // Information onto the Session Management step (3).
+    expect(locateField('meeting_location_optional').tab).toBe(3);
+    expect(locateField('default_duration_minutes').tab).toBe(3);
     expect(locateField('external_link_optional').tab).toBe(3);
     // Step 5, since MR2: the Screener step took id 4, so consent is its own step
     // at 5 on the two authoring paths. Asserted for BOTH keys, not one - the
@@ -1866,7 +1873,8 @@ describe('OpportunityForm - a refused action always says so', () => {
 
   it('opens the middle tab when that is where the problem is', async () => {
     // Guards the routing rather than a hardcoded "go to tab 1": the failing
-    // field here is on Content & Details, two tabs from where it was refused.
+    // field here is Participant Type's criteria, which lives on the
+    // Screener/Audience step (D6), several tabs from where it was refused.
     renderForm();
     selectType('unmoderated');
 
@@ -1877,12 +1885,10 @@ describe('OpportunityForm - a refused action always says so', () => {
       target: { value: 'Find out where people stall in the checkout flow' },
     });
 
-    // Scoped to the step strip. C3's "Continue: {next step}" label means the
-    // forward control on step 1 is now ALSO named "Content & Details" -
-    // "Continue: Content & Details" - so an unscoped match is ambiguous.
+    // Scoped to the step strip: Participant Type is on the Screener step now.
     fireEvent.click(
       within(screen.getByRole('navigation', { name: 'Form steps' }))
-        .getByRole('button', { name: /Content & Details/i })
+        .getByRole('button', { name: /Screener/i })
     );
     fireEvent.change(screen.getByLabelText(/Participant Type/i), {
       target: { value: 'specific' },
@@ -1901,7 +1907,14 @@ describe('OpportunityForm - a refused action always says so', () => {
       target: { value: 'Find the export button' },
     });
 
-    submitFromLastStep(/^Create/i);
+    // Straight to Review via the strip rather than walking Continue: the empty
+    // criteria on the Screener step (D6) is exactly the refusal under test, so a
+    // Continue-based walk would be stopped by it on the way past.
+    const strip = within(
+      screen.getByRole('navigation', { name: 'Form steps' })
+    ).getAllByRole('button');
+    fireEvent.click(strip[strip.length - 1]);
+    fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
 
     await screen.findByRole('alert', { name: /There is a problem/i });
     expect(summarisedErrorKeys()).toEqual(['participant_type_specific_details']);
@@ -2005,17 +2018,22 @@ describe('OpportunityForm - a refused action always says so', () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(await screen.findByRole('button', { name: /Basic Info/i }));
+    // Default Duration lives on the Session Management step now (D6), so it is
+    // cleared there. The step's own save controls live inside AdminSessionManager
+    // (mocked out here), so the edit is committed from a step that carries the
+    // Save Changes shortcut - Basic Information - which still runs the full
+    // collector.
+    fireEvent.click(
+      within(await screen.findByRole('navigation', { name: 'Form steps' }))
+        .getByRole('button', { name: /Session Management/i })
+    );
     fireEvent.change(await screen.findByLabelText(/Default Duration/i), {
       target: { value: '' },
     });
 
-    // Scoped to the step strip. C3's "Continue: {next step}" label means the
-    // forward control on step 1 is now ALSO named "Content & Details" -
-    // "Continue: Content & Details" - so an unscoped match is ambiguous.
     fireEvent.click(
       within(screen.getByRole('navigation', { name: 'Form steps' }))
-        .getByRole('button', { name: /Content & Details/i })
+        .getByRole('button', { name: /Basic Information/i })
     );
     fireEvent.click(await screen.findByRole('button', { name: /Save Changes/i }));
 

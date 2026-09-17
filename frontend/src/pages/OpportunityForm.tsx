@@ -99,7 +99,7 @@ import {
 import type { FirstHandStudyWithSteps } from '../api/firsthand-studies';
 import { logger } from '../utils/logger';
 import AdminSessionManager from '../components/AdminSessionManager';
-import { BasicInfoTab, ConsentStep, ContentDetailsTab, ErrorSummary, ExternalLinkTab, FirstHandStudyTab, ReviewStep, ScreenerStep, StepActions, StepNav, SurveyQuestionsTab } from '../components/OpportunityForm';
+import { AudienceFields, BasicInfoTab, ConsentStep, ContentDetailsTab, ErrorSummary, ExternalLinkTab, FieldError, FirstHandStudyTab, ReviewStep, ScreenerStep, StepActions, StepNav, SurveyQuestionsTab } from '../components/OpportunityForm';
 import ConfirmationModal from '../components/ConfirmationModal';
 import { RATING_SCALE_BOUNDS } from '@shared/firsthand/contract';
 import {
@@ -107,7 +107,7 @@ import {
   isQuestionCarryingType,
   runsNativeSurvey
 } from '@shared/firsthand/delivery';
-import { VALIDATION } from '@shared/constants';
+import { SESSION_DURATION, VALIDATION } from '@shared/constants';
 import {
   CUSTOM_CONSENT_TEMPLATE_ID,
   DEFAULT_MODERATED_CONSENT_TEXT,
@@ -241,12 +241,18 @@ export const FIELD_LOCATIONS: Record<string, { tab: number; control?: string }> 
   // Review (#111) does not change this; if a validator ever does start
   // setting it, it must be routed to `REVIEW_STEP_ID`, not tab 1, since that
   // is where the control now lives.
-  meeting_location_optional: { tab: 1, control: 'meeting_location_optional' },
+  // Meeting Location and Default Duration are delivery facts about a session, so
+  // they live on the Session Management step (tab 3 for test/interview) with the
+  // slots, not on Basic Information (D6).
+  meeting_location_optional: { tab: 3, control: 'meeting_location_optional' },
   purpose_one_liner: { tab: 1, control: 'purpose_one_liner' },
-  default_duration_minutes: { tab: 1, control: 'default_duration_minutes' },
-  participant_type_required: { tab: 2, control: 'participant_type_required' },
+  default_duration_minutes: { tab: 3, control: 'default_duration_minutes' },
+  // Participant Type and its criteria are audience decisions, so they live with
+  // the eligibility gate on the Screener step (tab 4), not on Content & Details
+  // (D6).
+  participant_type_required: { tab: 4, control: 'participant_type_required' },
   participant_type_specific_details: {
-    tab: 2,
+    tab: 4,
     control: 'participant_type_specific_details'
   },
   external_link_optional: { tab: 3, control: 'external_link_optional' },
@@ -5559,13 +5565,7 @@ const OpportunityForm: React.FC = () => {
                   {/* Content & Details Tab */}
                   {currentStep?.key === 'content' && (
                     <>
-                      <ContentDetailsTab
-                        formData={formData}
-                        validationErrors={validationErrors}
-                        handleInputChange={handleInputChange}
-                        handleBlur={handleBlur}
-                        onTargetRolesChange={handleTargetRolesChange}
-                      />
+                      <ContentDetailsTab />
                       {continueControl && (
                       <StepActions
                         isEdit={isEdit}
@@ -5691,6 +5691,17 @@ const OpportunityForm: React.FC = () => {
                       opt-in gate, and the whole thing can be removed. */}
                   {currentStep?.key === 'screener' && (
                     <>
+                      {/* Audience block (D6): Participant Type, Roles or skills
+                          wanted and the Study Period recruitment window sit with
+                          the eligibility gate, above the screener itself. */}
+                      <AudienceFields
+                        formData={formData}
+                        validationErrors={validationErrors}
+                        handleInputChange={handleInputChange}
+                        handleBlur={handleBlur}
+                        onTargetRolesChange={handleTargetRolesChange}
+                      />
+
                       <ScreenerStep
                         hasScreener={formData.has_screener}
                         questions={formData.screener_questions}
@@ -5931,6 +5942,78 @@ const OpportunityForm: React.FC = () => {
                             <p className="mb-0 section-description" style={{ fontSize: '0.95rem' }}>
                               Create time slots for participants to book
                             </p>
+                          </div>
+                        </div>
+
+                        {/* Meeting Location and Default Duration are delivery
+                            facts about the session, so they sit with the slots
+                            (D6) rather than on Basic Information. Default
+                            Duration is the slot length the generator below
+                            reads. */}
+                        <div className="row g-3 mb-4" style={{ alignItems: 'flex-start' }}>
+                          <div className="col-md-6">
+                            <div className="form-group" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                              <label htmlFor="meeting_location_optional" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5' }}>
+                                Meeting Location *
+                              </label>
+                              <div id="meeting_location-help" className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4' }}>
+                                Zoom, Google Meet, or other meeting link
+                              </div>
+                              <input
+                                type="text"
+                                id="meeting_location_optional"
+                                className={`form-control ${validationErrors.meeting_location_optional ? 'is-invalid' : ''}`}
+                                style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto', width: '100%' }}
+                                value={formData.meeting_location_optional || ''}
+                                onChange={(e) => handleInputChange('meeting_location_optional', e.target.value)}
+                                onBlur={() => handleBlur('meeting_location_optional')}
+                                placeholder="e.g., https://zoom.us/j/123456789 or https://meet.google.com/abc-defg-hij"
+                                aria-describedby={validationErrors.meeting_location_optional ? 'meeting_location-error meeting_location-help' : 'meeting_location-help'}
+                                aria-invalid={validationErrors.meeting_location_optional ? 'true' : 'false'}
+                                aria-required="true"
+                                required
+                              />
+                              {validationErrors.meeting_location_optional && (
+                                <FieldError id="meeting_location-error">{validationErrors.meeting_location_optional}</FieldError>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="col-md-6">
+                            <div className="form-group" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                              <label htmlFor="default_duration_minutes" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5' }}>
+                                Default Duration (minutes) *
+                              </label>
+                              <div id="duration-help" className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4' }}>
+                                Expected time commitment for participants ({SESSION_DURATION.MIN_MINUTES}-{SESSION_DURATION.MAX_MINUTES} minutes)
+                              </div>
+                              <input
+                                type="number"
+                                id="default_duration_minutes"
+                                className={`form-control ${validationErrors.default_duration_minutes ? 'is-invalid' : ''}`}
+                                style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto', width: '100%', maxWidth: '150px' }}
+                                // Clearing the field stores NaN (parseInt('')), and
+                                // React warns and keeps the last painted value if
+                                // that reaches `value`. Show it empty, which is
+                                // what the author did.
+                                value={
+                                  Number.isFinite(formData.default_duration_minutes)
+                                    ? formData.default_duration_minutes
+                                    : ''
+                                }
+                                onChange={(e) => handleInputChange('default_duration_minutes', parseInt(e.target.value))}
+                                onBlur={() => handleBlur('default_duration_minutes')}
+                                min={SESSION_DURATION.MIN_MINUTES}
+                                max={SESSION_DURATION.MAX_MINUTES}
+                                aria-describedby={validationErrors.default_duration_minutes ? 'duration-error duration-help' : 'duration-help'}
+                                aria-invalid={validationErrors.default_duration_minutes ? 'true' : 'false'}
+                                aria-required="true"
+                                required
+                              />
+                              {validationErrors.default_duration_minutes && (
+                                <FieldError id="duration-error">{validationErrors.default_duration_minutes}</FieldError>
+                              )}
+                            </div>
                           </div>
                         </div>
 

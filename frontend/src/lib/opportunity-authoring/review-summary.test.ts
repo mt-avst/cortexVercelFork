@@ -197,38 +197,51 @@ describe('buildReviewSummary', () => {
         { id: 5, key: 'review', title: 'Review' }
       ];
 
+      // Default Duration lives on the Session Management section now (D6).
       const present = findItem(
         findSection(
           buildReviewSummary(
             completeInput({ steps: withSessions, defaultDurationMinutes: 45 })
           ),
-          'basics'
+          'sessions'
         ),
         'Default Duration'
       );
       expect(present?.value).toBe('45 minutes');
 
+      // A shape with no Session Management step has no section to carry it.
       expect(
         findItem(
           findSection(
             buildReviewSummary(
               completeInput({ steps: withoutSessions, defaultDurationMinutes: 45 })
             ),
-            'basics'
+            'sessions'
           ),
           'Default Duration'
         )
       ).toBeUndefined();
     });
 
-    it('includes Meeting Location only when it is set, whatever the type', () => {
+    it('includes Meeting Location only when it is set, on the Session Management section', () => {
+      // Meeting Location moved to the Session Management section with the slots
+      // (D6), so it is summarised there.
+      const moderatedSteps: ReviewStepRef[] = [
+        { id: 1, key: 'basics', title: 'Basic Information' },
+        { id: 3, key: 'sessions', title: 'Session Management' },
+        { id: 5, key: 'review', title: 'Review' }
+      ];
       const withLocation = findSection(
-        buildReviewSummary(completeInput({ meetingLocation: 'Room 4' })),
-        'basics'
+        buildReviewSummary(
+          completeInput({ steps: moderatedSteps, meetingLocation: 'Room 4' })
+        ),
+        'sessions'
       );
       const withoutLocation = findSection(
-        buildReviewSummary(completeInput({ meetingLocation: '' })),
-        'basics'
+        buildReviewSummary(
+          completeInput({ steps: moderatedSteps, meetingLocation: '' })
+        ),
+        'sessions'
       );
       expect(findItem(withLocation, 'Meeting Location')?.value).toBe('Room 4');
       expect(findItem(withoutLocation, 'Meeting Location')).toBeUndefined();
@@ -236,20 +249,30 @@ describe('buildReviewSummary', () => {
 
     it('includes Available from/until only when the dates are set, formatted with the product date formatter', () => {
       // The form stores study-period dates as an ISO timestamp at noon UTC (see
-      // BasicInfoTab.formatDateToISO), so this fixture uses that real shape - a
+      // AudienceFields.formatDateToISO), so this fixture uses that real shape - a
       // bare 'YYYY-MM-DD' is not what the summary is ever handed. Review used to
       // print that raw string; row 26 formats it in the reader's zone the way
-      // every other date in the product is written.
+      // every other date in the product is written. The Study Period moved to
+      // the Screener/Audience section (D6), on the shapes with no session step.
+      const audienceSteps: ReviewStepRef[] = [
+        { id: 1, key: 'basics', title: 'Basic Information' },
+        { id: 4, key: 'screener', title: 'Screener' },
+        { id: 5, key: 'review', title: 'Review' }
+      ];
       const withDates = findSection(
         buildReviewSummary(
           completeInput({
+            steps: audienceSteps,
             startDate: '2026-08-18T12:00:00.000Z',
             endDate: '2026-08-30T12:00:00.000Z'
           })
         ),
-        'basics'
+        'screener'
       );
-      const withoutDates = findSection(buildReviewSummary(completeInput()), 'basics');
+      const withoutDates = findSection(
+        buildReviewSummary(completeInput({ steps: audienceSteps })),
+        'screener'
+      );
 
       expect(findItem(withDates, 'Available from')?.value).toBe('Tue 18 Aug 2026');
       expect(findItem(withDates, 'Available until')?.value).toBe('Sun 30 Aug 2026');
@@ -258,14 +281,15 @@ describe('buildReviewSummary', () => {
     });
 
     it('omits the Study Period on a moderated shape, which has no dates to edit', () => {
-      // test/interview render no Study Period fields in BasicInfoTab (only
+      // test/interview render no Study Period fields (only
       // poll/survey/question/unmoderated do), so a bookable shape carrying
       // start/end dates - legacy rows, or a type change - must not show a
       // Study Period the author cannot reach. Keyed on the `sessions` step, the
-      // same set BasicInfoTab excludes, so it cannot drift from getTabsForType.
+      // same set AudienceFields excludes, so it cannot drift from getTabsForType.
       const moderatedSteps: ReviewStepRef[] = [
         { id: 1, key: 'basics', title: 'Basic Information' },
         { id: 3, key: 'sessions', title: 'Session Management' },
+        { id: 4, key: 'screener', title: 'Screener' },
         { id: 5, key: 'review', title: 'Review' }
       ];
       const section = findSection(
@@ -276,24 +300,20 @@ describe('buildReviewSummary', () => {
             endDate: '2026-08-30T12:00:00.000Z'
           })
         ),
-        'basics'
+        'screener'
       );
       expect(findItem(section, 'Available from')).toBeUndefined();
       expect(findItem(section, 'Available until')).toBeUndefined();
     });
   });
 
-  describe('content section', () => {
-    const contentSteps: ReviewStepRef[] = [
-      { id: 1, key: 'basics', title: 'Basic Information' },
-      { id: 2, key: 'content', title: 'Content Details' },
-      { id: 5, key: 'review', title: 'Review' }
-    ];
-
+  describe('advert copy on the basics section (D6)', () => {
+    // Description and Product moved to Basic Information, beside Title and
+    // Purpose (D6). completeInput's default steps carry a basics section.
     it('marks an empty description as missing', () => {
       const section = findSection(
-        buildReviewSummary(completeInput({ steps: contentSteps, description: '' })),
-        'content'
+        buildReviewSummary(completeInput({ description: '' })),
+        'basics'
       );
       const item = findItem(section, 'Description');
       expect(item?.missing).toBe(true);
@@ -309,18 +329,26 @@ describe('buildReviewSummary', () => {
 
     it('includes Product only when it is non-empty', () => {
       const withProduct = findSection(
-        buildReviewSummary(
-          completeInput({ steps: contentSteps, product: 'Confluence' })
-        ),
-        'content'
+        buildReviewSummary(completeInput({ product: 'Confluence' })),
+        'basics'
       );
       const withoutProduct = findSection(
-        buildReviewSummary(completeInput({ steps: contentSteps, product: '' })),
-        'content'
+        buildReviewSummary(completeInput({ product: '' })),
+        'basics'
       );
       expect(findItem(withProduct, 'Product')?.value).toBe('Confluence');
       expect(findItem(withoutProduct, 'Product')).toBeUndefined();
     });
+  });
+
+  describe('audience fields on the screener section (D6)', () => {
+    // Participant Type, its criteria and Roles or skills wanted moved to the
+    // Screener/Audience section (D6).
+    const audienceSteps: ReviewStepRef[] = [
+      { id: 1, key: 'basics', title: 'Basic Information' },
+      { id: 4, key: 'screener', title: 'Screener' },
+      { id: 5, key: 'review', title: 'Review' }
+    ];
 
     it.each([
       ['any', 'Any participant'],
@@ -330,9 +358,9 @@ describe('buildReviewSummary', () => {
     ])('labels participant type %s as %s', (participantType, label) => {
       const section = findSection(
         buildReviewSummary(
-          completeInput({ steps: contentSteps, participantType })
+          completeInput({ steps: audienceSteps, participantType })
         ),
-        'content'
+        'screener'
       );
       expect(findItem(section, 'Participant Type')?.value).toBe(label);
     });
@@ -341,18 +369,18 @@ describe('buildReviewSummary', () => {
       const withDetails = findSection(
         buildReviewSummary(
           completeInput({
-            steps: contentSteps,
+            steps: audienceSteps,
             participantType: 'specific',
             participantTypeDetails: 'Must own a Jira licence'
           })
         ),
-        'content'
+        'screener'
       );
       const withoutDetails = findSection(
         buildReviewSummary(
-          completeInput({ steps: contentSteps, participantTypeDetails: '' })
+          completeInput({ steps: audienceSteps, participantTypeDetails: '' })
         ),
-        'content'
+        'screener'
       );
       expect(findItem(withDetails, 'Specific Criteria')?.value).toBe(
         'Must own a Jira licence'
@@ -364,15 +392,15 @@ describe('buildReviewSummary', () => {
       const withRoles = findSection(
         buildReviewSummary(
           completeInput({
-            steps: contentSteps,
+            steps: audienceSteps,
             targetRoles: ['Product Manager', 'ScriptRunner admin']
           })
         ),
-        'content'
+        'screener'
       );
       const withoutRoles = findSection(
-        buildReviewSummary(completeInput({ steps: contentSteps, targetRoles: [] })),
-        'content'
+        buildReviewSummary(completeInput({ steps: audienceSteps, targetRoles: [] })),
+        'screener'
       );
       expect(findItem(withRoles, 'Roles or skills wanted')?.value).toBe(
         'Product Manager, ScriptRunner admin'
@@ -1021,13 +1049,14 @@ describe('durations are counted like everything else on this screen', () => {
     [1, '1 minute'],
     [30, '30 minutes']
   ])('states a default duration of %i as "%s"', (minutes, expected) => {
-    // The twin on the Basic Information section, which had the same bug.
+    // The twin on the Session Management section, where the duration lives now
+    // (D6), which had the same bug.
     const item = findItem(
       findSection(
         buildReviewSummary(
           completeInput({ steps: sessionShape, defaultDurationMinutes: minutes })
         ),
-        'basics'
+        'sessions'
       ),
       'Default Duration'
     );
@@ -1181,15 +1210,15 @@ describe('stepForPublishProblem', () => {
     expect(step?.key).toBe('externalLink');
   });
 
-  it('sends meeting_location_required to the Basics step, where the venue is set (row 9)', () => {
+  it('sends meeting_location_required to the Session Management step, where the venue is set now (D6)', () => {
     const steps: ReviewStepRef[] = [
       { id: 1, key: 'basics', title: 'Basic Information' },
       { id: 3, key: 'sessions', title: 'Session Management' },
       { id: 5, key: 'review', title: 'Review' }
     ];
     const step = stepForPublishProblem('meeting_location_required', steps);
-    expect(step?.id).toBe(1);
-    expect(step?.key).toBe('basics');
+    expect(step?.id).toBe(3);
+    expect(step?.key).toBe('sessions');
   });
 
   it('returns null when the relevant step is not in the list', () => {
@@ -1234,12 +1263,14 @@ describe('the screener section', () => {
     expect(item?.missing).not.toBe(true);
   });
 
-  it('focuses the screener step heading from its Edit link', () => {
+  it('focuses the audience block at the top of the step from its Edit link', () => {
+    // The Screener/Audience step now leads with Participant Type (D6), so the
+    // Edit link lands there rather than on the screener heading below it.
     const section = findSection(
       buildReviewSummary(completeInput({ steps: screenerSteps, screenerQuestionCount: 2 })),
       'screener'
     );
-    expect(section?.focusFieldId).toBe('screener_questions-heading');
+    expect(section?.focusFieldId).toBe('participant_type_required');
     expect(section?.stepId).toBe(10);
   });
 });
