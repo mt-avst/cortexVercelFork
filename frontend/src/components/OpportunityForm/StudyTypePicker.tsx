@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Sparkles } from 'lucide-react';
 import { QUESTION_CARRYING_TYPES } from '@shared/firsthand/delivery';
 import FieldError from './FieldError';
+import DescribeIt from './DescribeIt';
+import type { DraftedOpportunity } from '../../api/client';
 
 type DeliveryMode = 'native' | 'external';
 
@@ -20,6 +21,13 @@ interface StudyTypePickerProps {
   isPublished: boolean;
   /** The `type` validation error, shown against the group. */
   validationError?: string;
+  /**
+   * D13: wires the live "Describe it" panel. Absent means the panel does not
+   * render at all - the new-study route passes it, the edit route (and any
+   * caller not ready for it) does not, which is what keeps the panel new-only
+   * per the spec without a second flag.
+   */
+  onApplyDraft?: (draft: DraftedOpportunity) => void;
 }
 
 /**
@@ -152,7 +160,8 @@ const StudyTypePicker: React.FC<StudyTypePickerProps> = ({
   deliveryMode,
   onSelect,
   isPublished,
-  validationError
+  validationError,
+  onApplyDraft
 }) => {
   // Row 7: a published study is locked until the author explicitly asks to
   // change the type, which names what that detaches.
@@ -204,7 +213,9 @@ const StudyTypePicker: React.FC<StudyTypePickerProps> = ({
         </div>
       )}
 
-      <FrontDoorPrompt />
+      {onApplyDraft && (
+        <DescribeIt hints={{ type: type || undefined, delivery_mode: deliveryMode }} onApply={onApplyDraft} />
+      )}
 
       <div
         role="radiogroup"
@@ -264,35 +275,5 @@ const StudyTypePicker: React.FC<StudyTypePickerProps> = ({
     </div>
   );
 };
-
-/**
- * D13 front-door AI shell, dormant. The agreed "What do you want to find out?"
- * prompt sits above the cards; W9 wires the real drafting. Nothing here saves
- * anything or calls a backend - the control is inert until then.
- */
-const FrontDoorPrompt: React.FC = () => (
-  <div className="form-section mb-3 p-3" data-testid="front-door-ai-prompt" style={{ border: '1px solid var(--fs-border, #d0d0d0)', borderRadius: '4px' }}>
-    <label htmlFor="ai_study_prompt" className="form-label mb-1 d-flex align-items-center gap-2" style={{ fontSize: '1rem', fontWeight: '600' }}>
-      <Sparkles size={16} aria-hidden="true" />
-      What do you want to find out?
-    </label>
-    <textarea
-      id="ai_study_prompt"
-      className="form-control"
-      rows={2}
-      style={{ fontSize: '0.95rem' }}
-      placeholder="e.g. Do first-time admins understand the new board view well enough to set one up without help?"
-    />
-    <div className="mt-2">
-      <button type="button" className="btn btn-outline-secondary btn-sm" disabled>
-        Suggest a type
-      </button>
-    </div>
-    <p className="form-text mt-2 mb-0" style={{ fontSize: '0.8rem' }}>
-      Nothing here is saved, and typing creates no draft. When AI drafting lands
-      it will suggest a type below - you still choose.
-    </p>
-  </div>
-);
 
 export default StudyTypePicker;

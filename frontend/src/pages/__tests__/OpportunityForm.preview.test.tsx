@@ -28,6 +28,12 @@ vi.mock('../../contexts/AuthContext', () => ({
 vi.mock('../../contexts/ThemeContext', () => ({ useTheme: () => ({ theme: 'light' }) }));
 
 vi.mock('../../api/client', () => ({
+  // D13, W9: StudyTypePicker mounts DescribeIt on the new-study route, and it
+  // checks this on every mount - unmocked, this call resolves to `undefined`
+  // and throws inside a component effect. False keeps the AI panel hidden,
+  // which is the correct default for a suite that is not about AI drafting.
+  getAiDraftingAvailable: vi.fn().mockResolvedValue(false),
+  draftOpportunityFromBrief: vi.fn(),
   createOpportunity: vi.fn().mockResolvedValue({ id: 'new-1' }),
   updateOpportunity: vi.fn(),
   getOpportunity: vi.fn(),

@@ -24,6 +24,8 @@ import app from '../index';
 
 describe('GET /api/health', () => {
   const ORIGINAL_SHA = process.env.APP_COMMIT_SHA;
+  const ORIGINAL_AI_DRAFTING = process.env.CORTEX_AI_DRAFTING;
+  const ORIGINAL_ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
 
   beforeEach(() => {
     probe.mockReset();
@@ -35,6 +37,50 @@ describe('GET /api/health', () => {
     } else {
       process.env.APP_COMMIT_SHA = ORIGINAL_SHA;
     }
+    if (ORIGINAL_AI_DRAFTING === undefined) {
+      delete process.env.CORTEX_AI_DRAFTING;
+    } else {
+      process.env.CORTEX_AI_DRAFTING = ORIGINAL_AI_DRAFTING;
+    }
+    if (ORIGINAL_ANTHROPIC_KEY === undefined) {
+      delete process.env.ANTHROPIC_API_KEY;
+    } else {
+      process.env.ANTHROPIC_API_KEY = ORIGINAL_ANTHROPIC_KEY;
+    }
+  });
+
+  // D13: the frontend's only carrier for whether the AI drafting panel may
+  // show at all. False in the beta today, because the manifest sets neither
+  // env var - this is what makes the panel hide with no error.
+  it('reports aiDrafting false when neither the flag nor the key is set', async () => {
+    delete process.env.CORTEX_AI_DRAFTING;
+    delete process.env.ANTHROPIC_API_KEY;
+    probe.mockResolvedValue({ healthy: true, latencyMs: 5 });
+
+    const response = await request(listening(app)).get('/api/health');
+
+    expect(response.body.aiDrafting).toBe(false);
+  });
+
+  it('reports aiDrafting true only once both the flag and the key are set', async () => {
+    process.env.CORTEX_AI_DRAFTING = 'true';
+    process.env.ANTHROPIC_API_KEY = 'test-key';
+    probe.mockResolvedValue({ healthy: true, latencyMs: 5 });
+
+    const response = await request(listening(app)).get('/api/health');
+
+    expect(response.body.aiDrafting).toBe(true);
+  });
+
+  it('still reports aiDrafting on the degraded (database down) path', async () => {
+    delete process.env.CORTEX_AI_DRAFTING;
+    delete process.env.ANTHROPIC_API_KEY;
+    probe.mockResolvedValue({ healthy: false, reason: 'timeout', latencyMs: 2000 });
+
+    const response = await request(listening(app)).get('/api/health');
+
+    expect(response.status).toBe(503);
+    expect(response.body.aiDrafting).toBe(false);
   });
 
   it('answers 200 ok/up when the database responds', async () => {

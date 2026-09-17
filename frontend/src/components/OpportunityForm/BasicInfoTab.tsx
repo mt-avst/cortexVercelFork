@@ -2,6 +2,7 @@ import React from 'react';
 import { OpportunityFormData } from '../../api/types';
 import FieldError from './FieldError';
 import StudyTypePicker from './StudyTypePicker';
+import type { DraftedOpportunity } from '../../api/client';
 
 /** Form field value type for opportunity form handlers */
 type FormFieldValue = string | number | boolean | undefined;
@@ -11,13 +12,20 @@ interface BasicInfoTabProps {
   validationErrors: Record<string, string>;
   handleInputChange: (field: string, value: FormFieldValue) => void;
   handleBlur?: (field: string) => void;
+  /**
+   * D13, W9: passed straight through to StudyTypePicker, which mounts the
+   * live "Describe it" panel only when this is provided - see
+   * OpportunityForm.tsx's own comment at the call site for why it is new-only.
+   */
+  onApplyDraft?: (draft: DraftedOpportunity) => void;
 }
 
 const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
   formData,
   validationErrors,
   handleInputChange,
-  handleBlur
+  handleBlur,
+  onApplyDraft
 }) => {
   return (
     <div className="tab-pane active">
@@ -25,8 +33,8 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
           "Research Study Type" select and the "Where participants answer"
           delivery radios. Selecting a card sets the existing type and
           delivery_mode values together, and the front-door AI prompt (D13)
-          sits above the cards, dormant until W9. Row 7: a published study's
-          type is read-only behind "Change study type". */}
+          is wired by W9 - live only when onApplyDraft is provided. Row 7: a
+          published study's type is read-only behind "Change study type". */}
       <StudyTypePicker
         type={formData.type}
         deliveryMode={formData.delivery_mode ?? 'external'}
@@ -36,6 +44,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
         }}
         isPublished={formData.status === 'published'}
         validationError={validationErrors.type}
+        onApplyDraft={onApplyDraft}
       />
 
       <div className="form-section mb-5">

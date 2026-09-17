@@ -38,4 +38,14 @@ module.exports = {
   coverageReporters: ['text', 'lcov', 'html'],
   setupFilesAfterEnv: ['<rootDir>/src/__tests__/setup.ts'],
   testTimeout: 15000,
+  // D13 (AI study drafting) added a real @anthropic-ai/sdk import and its
+  // zod-to-JSON-schema machinery to the backend's module graph. On the CI
+  // runner's sharded `test-backend 2/2` this tipped a worker's CUMULATIVE
+  // memory across a long-running suite over the container's ceiling - every
+  // test passes, then the container is OOMKilled (exit 137) during cleanup.
+  // Not reproducible locally (ample RAM); confirmed on the runner by
+  // comparing pre-D13 main (green, 72s) against this branch's merge-ref
+  // (OOMs ~63s in). This recycles a worker once its own memory passes the
+  // limit, which is the standard remedy for this exact signature.
+  workerIdleMemoryLimit: '512MB',
 };
