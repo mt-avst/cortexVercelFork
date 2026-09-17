@@ -1,6 +1,6 @@
+export { default as AudienceFields } from './AudienceFields';
 export { default as BasicInfoTab } from './BasicInfoTab';
 export { default as ConsentStep } from './ConsentStep';
-export { default as ContentDetailsTab } from './ContentDetailsTab';
 export { default as ErrorSummary } from './ErrorSummary';
 export { default as FieldError } from './FieldError';
 export { default as ExternalLinkTab } from './ExternalLinkTab';
@@ -10,3 +10,4 @@ export { default as ScreenerStep } from './ScreenerStep';
 export { default as SurveyQuestionsTab } from './SurveyQuestionsTab';
 export { default as StepActions } from './StepActions';
 export { default as StepNav } from './StepNav';
+export { default as StudyTypePicker } from './StudyTypePicker';

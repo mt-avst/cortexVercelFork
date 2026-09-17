@@ -108,7 +108,7 @@ describe('hydrating a moderated row never seeds consent it does not hold', () =>
     renderEdit();
     await awaitLoaded();
 
-    goToStep(/Basic Information/);
+    goToStep(/The study/);
     await screen.findByDisplayValue('A live session already saved');
     fireEvent.change(screen.getByLabelText(/^Title/i), {
       target: { value: 'A live session with a new title' }

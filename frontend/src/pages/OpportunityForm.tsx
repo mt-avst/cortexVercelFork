@@ -99,7 +99,7 @@ import {
 import type { FirstHandStudyWithSteps } from '../api/firsthand-studies';
 import { logger } from '../utils/logger';
 import AdminSessionManager from '../components/AdminSessionManager';
-import { BasicInfoTab, ConsentStep, ContentDetailsTab, ErrorSummary, ExternalLinkTab, FirstHandStudyTab, ReviewStep, ScreenerStep, StepActions, StepNav, SurveyQuestionsTab } from '../components/OpportunityForm';
+import { AudienceFields, BasicInfoTab, ConsentStep, ErrorSummary, ExternalLinkTab, FieldError, FirstHandStudyTab, ReviewStep, ScreenerStep, StepActions, StepNav, SurveyQuestionsTab } from '../components/OpportunityForm';
 import ConfirmationModal from '../components/ConfirmationModal';
 import { RATING_SCALE_BOUNDS } from '@shared/firsthand/contract';
 import {
@@ -107,7 +107,7 @@ import {
   isQuestionCarryingType,
   runsNativeSurvey
 } from '@shared/firsthand/delivery';
-import { VALIDATION } from '@shared/constants';
+import { SESSION_DURATION, VALIDATION } from '@shared/constants';
 import {
   CUSTOM_CONSENT_TEMPLATE_ID,
   DEFAULT_MODERATED_CONSENT_TEXT,
@@ -241,9 +241,15 @@ export const FIELD_LOCATIONS: Record<string, { tab: number; control?: string }> 
   // Review (#111) does not change this; if a validator ever does start
   // setting it, it must be routed to `REVIEW_STEP_ID`, not tab 1, since that
   // is where the control now lives.
-  meeting_location_optional: { tab: 1, control: 'meeting_location_optional' },
+  // Meeting Location and Default Duration are delivery facts about a session, so
+  // they live on the Session Management step (tab 3 for test/interview) with the
+  // slots, not on Basic Information (D6).
+  meeting_location_optional: { tab: 3, control: 'meeting_location_optional' },
   purpose_one_liner: { tab: 1, control: 'purpose_one_liner' },
-  default_duration_minutes: { tab: 1, control: 'default_duration_minutes' },
+  default_duration_minutes: { tab: 3, control: 'default_duration_minutes' },
+  // Participant Type and its criteria are audience decisions, so they live with
+  // the eligibility gate on the Audience step (tab 2 since the D1/D3 reshape),
+  // not on Content & Details (D6).
   participant_type_required: { tab: 2, control: 'participant_type_required' },
   participant_type_specific_details: {
     tab: 2,
@@ -276,23 +282,23 @@ export const FIELD_LOCATIONS: Record<string, { tab: number; control?: string }> 
   // The HEADING again, and for a sharper reason: consent is locked to the
   // approved wording by default, and while it is locked the textarea carrying
   // the field id is not rendered at all. C3 found this by driving the form.
-  inline_study_consent_text: { tab: 5, control: 'inline_study_consent_text-heading' },
+  inline_study_consent_text: { tab: 4, control: 'inline_study_consent_text-heading' },
   inline_survey_questions: { tab: 3, control: 'inline_survey_questions' },
   inline_survey_duration_minutes: {
     tab: 3,
     control: 'inline_survey_duration_minutes'
   },
-  inline_survey_consent_text: { tab: 5, control: 'inline_survey_consent_text-heading' },
-  moderated_consent_text: { tab: 5, control: 'moderated_consent_text-heading' },
-  // The screener (MR2) is step 4 on every shape that has a Consent step. The
+  inline_survey_consent_text: { tab: 4, control: 'inline_survey_consent_text-heading' },
+  moderated_consent_text: { tab: 4, control: 'moderated_consent_text-heading' },
+  // The screener lives on the Audience step (tab 2 since the D1/D3 reshape). The
   // top-level key carries the "needs a question" / "needs a screen-out answer"
   // refusals and lands on the step heading (an id + tabIndex={-1}, like the
   // consent and sessions headings). Per-question keys
-  // (`screener_questions.<i>.*`) are routed to tab 4 by `locateField` below and
+  // (`screener_questions.<i>.*`) are routed to tab 2 by `locateField` below and
   // open the step without a per-control caret, the same smaller promise the
   // task and survey lists keep.
-  screener_questions: { tab: 4, control: 'screener_questions-heading' },
-  screener_message: { tab: 4, control: 'screener_message' },
+  screener_questions: { tab: 2, control: 'screener_questions-heading' },
+  screener_message: { tab: 2, control: 'screener_message' },
   // Audit row 15: the Session Management step (tab 3 for test/interview). Like
   // `inline_study_steps`, the slots are a list with no single input to land on,
   // so the summary link lands on the step HEADING (id + tabIndex={-1}).
@@ -396,12 +402,12 @@ export const locateField = (key: string): { tab: number; control?: string } => {
     return { tab: 3 };
   }
 
-  // Per-question and per-answer screener errors (MR2) all live on the Screener
-  // step. Routed here rather than by a FIELD_LOCATIONS entry per index, the same
-  // way the two lists above are, and to tab 4 - where getTabsForType puts the
-  // Screener step on every shape that has one.
+  // Per-question and per-answer screener errors all live on the Audience step.
+  // Routed here rather than by a FIELD_LOCATIONS entry per index, the same way
+  // the two lists above are, and to tab 2 - where getTabsForType puts the
+  // Audience step (screener gate) on every shape that has one.
   if (/^screener_questions\.\d+\./.test(key)) {
-    return { tab: 4 };
+    return { tab: 2 };
   }
   // `Object.hasOwn` would read better but needs the es2022 lib, and widening
   // the compiler target for one call is not a trade worth making.
@@ -444,9 +450,12 @@ export const parseIndexedErrorKey = (
  * from `type` and `deliveryMode` themselves, in predicates that had to agree
  * with this function and could silently stop agreeing with it.
  */
+// The step KEYS are internal wiring and deliberately unchanged by the D1/D3
+// reshape, to bound the diff: `basics` renders "The study" and `screener`
+// renders "Audience". The user-facing spine (titles, order, count) is the D1
+// spine; `content` is gone (D6 emptied it, 2c collapses it).
 export type StepKey =
   | 'basics'
-  | 'content'
   | 'questions'
   | 'externalLink'
   | 'taskList'
@@ -471,12 +480,15 @@ export interface FormStep {
  * all until the tests did - a justification for an export that no reader had
  * is the kind of nearly-right premise this plan keeps paying for.
  *
- * 6 since MR2 inserted the Screener step before Consent. Every type that shows
- * a strip is now six steps long (basics, content, one type-specific step,
- * Screener, Consent, Review), and the no-type shape is still three (basics,
- * content, Review) - a fixed id past both keeps Review off any lower step's id.
+ * 5 since the D1/D3 reshape. The spine is: The study (1), Audience (2), the
+ * participant's experience (3), Consent (4, native/recorded/moderated only),
+ * Review (5). A native/recorded/moderated shape is five steps; an external
+ * shape is four (no Consent step - its affirmation folds into the link step,
+ * row 13), so it carries ids 1, 2, 3, 5 with a gap at 4. The no-type shape is
+ * two (The study, Review). A FIXED id, not "one past the end", so Review can
+ * never collide with the type-specific experience step at id 3.
  */
-export const REVIEW_STEP_ID = 6;
+export const REVIEW_STEP_ID = 5;
 
 /**
  * Where to send an author standing on a step the current shape does not have.
@@ -512,21 +524,21 @@ export const getTabsForType = (
   type: string,
   deliveryMode: 'native' | 'external' = 'external'
 ): FormStep[] => {
+  // Step 1, "The study": the picker and the study's advert copy (Title,
+  // Purpose, Description, Product). It merges the old Basic Information and the
+  // emptied Content & Details step (D1/D6). Internal key kept as `basics`.
   const tabs: FormStep[] = [
-    { id: 1, key: 'basics', title: 'Basic Information', description: 'Configure type and details' },
-    { id: 2, key: 'content', title: 'Content & Details', description: 'Define study content' }
+    { id: 1, key: 'basics', title: 'The study', description: 'What the study is' }
   ];
 
-  // Every question-carrying type has two shapes. Native delivery collects the
-  // questions here; external delivery collects the link it hands off to.
-  //
-  // `question` joined them in #78. It used to keep the link step
-  // unconditionally, which was the whole of that issue: the only study type
-  // with no native option, so a one-question study always handed off and Cortex
-  // got back a click count. A single question is a strict subset of what
-  // SurveyRunner already draws, so this is the same two shapes, not a third.
+  // The participant's experience: ONE step, whose body is chosen by type
+  // (D1). Native delivery collects the questions; external delivery collects the
+  // link it hands off to; unmoderated authors a task list; the moderated pair
+  // manages sessions. `question` joined the question-carrying set in #78: a
+  // single question is a strict subset of a survey, the same two shapes.
+  let experience: FormStep | null = null;
   if (QUESTION_CARRYING_TYPES.has(type)) {
-    tabs.push(
+    experience =
       deliveryMode === 'native'
         ? {
             id: 3,
@@ -535,90 +547,57 @@ export const getTabsForType = (
             title: type === 'question' ? 'Question' : 'Questions',
             description: 'What the participant is asked'
           }
-        : { id: 3, key: 'externalLink', title: 'External Link', description: 'Configure external tool' }
-    );
-  }
-
-  if (type === 'unmoderated') {
-    tabs.push({ id: 3, key: 'taskList', title: 'Task List', description: 'What the participant does' });
-  }
-
-  if (type === 'test' || type === 'interview') {
-    tabs.push({
+        : { id: 3, key: 'externalLink', title: 'Your link', description: 'The external tool participants go to' };
+  } else if (type === 'unmoderated') {
+    experience = { id: 3, key: 'taskList', title: 'Task List', description: 'What the participant does' };
+  } else if (type === 'test' || type === 'interview') {
+    experience = {
       id: 3,
       key: 'sessions',
       title: 'Session Management',
       description: 'Create time slots'
-    });
+    };
   }
 
-  // Consent is a step of its own on every shape that reaches a participant, so
-  // the wizard is the same five steps whichever type and delivery mode the
-  // author picks (WZ-18 / Decision 9). Its body differs by how consent is held:
-  //
-  // - A study-authoring shape (`questions` or `taskList` above) gets a Consent
-  //   step that edits the wording Cortex will show, derived from that step
-  //   rather than re-tested against `type` so the two cannot disagree - the
-  //   drift B1 removed. A future type that authors a study gets it for free.
-  // - The two MODERATED shapes (`sessions` above) get the same editor by type
-  //   (#79): the session happens on a third-party call, but what the
-  //   participant agrees to at booking time is what Cortex may hold afterwards
-  //   (recording, transcript, acceptance).
-  // - A pure hand-off (`externalLink` above) gets a SHORT confirmation Consent
-  //   step instead of an editor: the wording lives in the tool on the other
-  //   side of the link, and this step asks the author to confirm it is in place
-  //   rather than pretending Cortex governs it. Before Decision 9 a hand-off
-  //   had no Consent step at all, which made its wizard four steps to a native
-  //   run's five - the count jumped as the author toggled delivery mode, which
-  //   is the confusion WZ-18 removes. The render keys the confirmation body off
-  //   the `externalLink` step, so the two cannot disagree either.
-  const authoringStep = tabs.find(
-    (tab) => tab.key === 'questions' || tab.key === 'taskList'
-  );
-  const moderatedStep = tabs.find((tab) => tab.key === 'sessions');
-  const externalHandoffStep = tabs.find((tab) => tab.key === 'externalLink');
+  // A shape reaches a participant exactly when it has an experience body. Those
+  // shapes carry the rest of the spine; the no-type shape is just The study and
+  // Review.
+  if (experience) {
+    const isExternalHandoff = experience.key === 'externalLink';
 
-  // The Screener and Consent steps travel together, on exactly the shapes that
-  // reach a participant (MR2). Screener is FIRST - eligibility is decided before
-  // the participant is asked to agree to anything - and both are pushed under
-  // the one condition so a shape can never have consent without a screener step
-  // to author the gate the participant will meet. The screener itself is
-  // optional; the STEP is always present so the invariant below holds.
-  if (authoringStep || moderatedStep || externalHandoffStep) {
+    // Step 2, "Audience": who can take part - Participant Type, Roles or skills
+    // wanted, the Study Period recruitment window (D6) and the screener gate.
+    // It comes BEFORE the experience body (D1): who the study is for is decided
+    // before what they are asked to do. Internal key kept as `screener`.
     tabs.push({
-      id: 4,
+      id: 2,
       key: 'screener',
-      title: 'Screener',
+      title: 'Audience',
       description: 'Who can take part'
     });
-    tabs.push({
-      id: 5,
-      key: 'consent',
-      title: 'Consent',
-      description: externalHandoffStep
-        ? 'Confirm the external tool carries it'
-        : 'What the participant agrees to'
-    });
+
+    // Step 3, the type-specific experience body.
+    tabs.push(experience);
+
+    // Step 4, Consent - on the shapes Cortex governs consent for: native
+    // (questions), recorded (taskList) and the moderated pair (sessions). A pure
+    // hand-off has no Consent step (D1/row 13): the tool on the far side of the
+    // link collects consent, and the author's affirmation that it is in place is
+    // a section of the link step, not a step of its own.
+    if (!isExternalHandoff) {
+      tabs.push({
+        id: 4,
+        key: 'consent',
+        title: 'Consent',
+        description: 'What the participant agrees to'
+      });
+    }
   }
 
-  /*
-   * Review is last on every shape. Since MR2 inserted the Screener step, every
-   * type that shows a strip is six steps long (basics, content, one
-   * type-specific step, Screener, Consent, Review), so id === index + 1 there -
-   * but the no-type shape is still just two steps before it (basics, content,
-   * Review), and that is the shape the fixed id protects.
-   *
-   * Its id is a FIXED 6 rather than "one past the end", deliberately, and the
-   * gaps that leaves are the point. One past the end would give Review id 3 on
-   * a form with no type chosen - and id 3 is already Task List, Questions,
-   * External Link or Session Management depending on the type. Making it also
-   * mean Review is the same collision that had the strip reporting "External
-   * Link: Completed" for a step nobody had opened.
-   *
-   * The Screener step takes the old consent id 4, Consent moves to 5, and this
-   * fixed 6 sits past both - so `FIELD_LOCATIONS` routes screener errors to
-   * tab 4 and consent errors to tab 5, matching where each control now lives.
-   */
+  // Review is last on every shape, at a FIXED id past the experience step's 3 so
+  // it can never collide with it (the collision that once read "External Link:
+  // Completed" for a step nobody had opened). An external shape leaves a gap at
+  // id 4 - it has no Consent step - and Review still sits at 5.
   tabs.push({
     id: REVIEW_STEP_ID,
     key: 'review',
@@ -727,6 +706,9 @@ const OpportunityForm: React.FC = () => {
     meeting_location_optional: '',
     default_duration_minutes: 30,
     external_link_optional: '',
+    // Row 13: the external-tool consent affirmation starts unconfirmed on a new
+    // study; an author confirms it on the External Link step before publishing.
+    external_consent_confirmed: false,
     participant_type_required: 'any' as 'any' | 'internal' | 'external' | 'specific',
     participant_type_specific_details: '',
     status: 'draft' as 'draft' | 'published',
@@ -1696,6 +1678,12 @@ const OpportunityForm: React.FC = () => {
         meeting_location_optional: opportunity.meeting_location_optional || '',
         default_duration_minutes: opportunity.default_duration_minutes,
         external_link_optional: opportunity.external_link_optional || '',
+        // Row 13: not persisted, so an already-published external study is
+        // treated as already affirmed for Review's sake (shown neutrally, not as
+        // an author action); a draft loads unconfirmed.
+        // ponytail: client-only, lost on reload, published assumed-confirmed
+        //   -> cto/AdaptaLabs#136 (persist + publish-gate)
+        external_consent_confirmed: opportunity.status === 'published',
         firsthand_study_id: opportunity.firsthand_study_id || '',
         participant_type_required: opportunity.participant_type_required || 'any',
         participant_type_specific_details: opportunity.participant_type_specific_details || '',
@@ -1743,6 +1731,12 @@ const OpportunityForm: React.FC = () => {
         meeting_location_optional: opportunity.meeting_location_optional || '',
         default_duration_minutes: opportunity.default_duration_minutes,
         external_link_optional: opportunity.external_link_optional || '',
+        // Row 13: not persisted, so an already-published external study is
+        // treated as already affirmed for Review's sake (shown neutrally, not as
+        // an author action); a draft loads unconfirmed.
+        // ponytail: client-only, lost on reload, published assumed-confirmed
+        //   -> cto/AdaptaLabs#136 (persist + publish-gate)
+        external_consent_confirmed: opportunity.status === 'published',
         firsthand_study_id: opportunity.firsthand_study_id || '',
         participant_type_required: opportunity.participant_type_required || 'any' as const,
         participant_type_specific_details: opportunity.participant_type_specific_details || '',
@@ -2665,6 +2659,7 @@ const OpportunityForm: React.FC = () => {
     startDate: formData.start_date,
     endDate: formData.end_date,
     externalLink: formData.external_link_optional,
+    externalConsentConfirmed: Boolean(formData.external_consent_confirmed),
     deliveryMode,
     questionCount: formData.inline_survey_questions.length,
     taskCount: formData.inline_study_steps.length,
@@ -2909,8 +2904,8 @@ const OpportunityForm: React.FC = () => {
    * about the 140 limit on some paths, and a `javascript:` external link was
    * called "not a valid URL" here and something else on submit. Two of the six
    * cases were unreachable in any case, because the inputs they named never
-   * wired `onBlur` - the prop was threaded into `BasicInfoTab` and
-   * `ContentDetailsTab` and used by neither.
+   * wired `onBlur` - the prop was threaded into `BasicInfoTab` and used by
+   * neither.
    *
    * Now it runs the collector and takes ONE key out of the answer. Every field
    * with a rule is covered by construction, including the indexed per-question
@@ -5550,59 +5545,20 @@ const OpportunityForm: React.FC = () => {
                         justSaved={Boolean(successMessage)}
                         onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
                         {...continueControl}
-                        onNext={() => continueFromStep(continueControl.onNext)}
-                      />
-                      )}
-                    </>
-                  )}
-
-                  {/* Content & Details Tab */}
-                  {currentStep?.key === 'content' && (
-                    <>
-                      <ContentDetailsTab
-                        formData={formData}
-                        validationErrors={validationErrors}
-                        handleInputChange={handleInputChange}
-                        handleBlur={handleBlur}
-                        onTargetRolesChange={handleTargetRolesChange}
-                      />
-                      {continueControl && (
-                      <StepActions
-                        isEdit={isEdit}
-                        onSaveAndExit={handleSaveAndExit}
-                        saving={saving}
-                        disabled={saveControlsDisabled}
-                        justSaved={Boolean(successMessage)}
-                        {...backwardControl}
-                        onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
-                        {...continueControl}
                         /*
                           The one place a forward control does NOT name its
-                          destination, and the exception is the point.
-                          With no type chosen the step list is [1, 2, 5], so the
-                          next step BY POSITION is Review - but the handler
+                          destination, and the exception is the point. With no
+                          type chosen the step list is [The study, Review], so
+                          the next step BY POSITION is Review - but the handler
                           below refuses that move and sends the author to the
                           type field instead. A label reading "Continue: Review"
-                          would therefore promise a step it does not go to,
-                          which is the exact defect C3 deleted from this row
-                          ("Continue to Link Setup", landing on Questions). The
-                          honest label is the one that names nothing, because
-                          until a type is chosen there is nothing to name.
+                          would promise a step it does not go to, so the honest
+                          label names nothing until a type is chosen. (Before the
+                          D1/D3 reshape this guard sat on the old Content step,
+                          which is where a no-type author used to stand; it now
+                          lives here, on The study.)
                         */
                         nextLabel={formData.type ? continueControl.nextLabel : 'Continue'}
-                        /*
-                          The missing type is still refused here, and it is now
-                          refused by the same rules as everywhere else.
-
-                          It used to be a hand-written guard, because this step
-                          is reachable with no type set - the step headers are
-                          directly clickable - and continuing would have walked
-                          the author past the only choice that decides what this
-                          form is for. `errorsForStep` keeps `type` in scope on
-                          every step for exactly that reason, so the guard is
-                          now the general rule rather than a special case that
-                          could stop agreeing with it.
-                        */
                         onNext={() => continueFromStep(continueControl.onNext)}
                       />
                       )}
@@ -5691,6 +5647,17 @@ const OpportunityForm: React.FC = () => {
                       opt-in gate, and the whole thing can be removed. */}
                   {currentStep?.key === 'screener' && (
                     <>
+                      {/* Audience block (D6): Participant Type, Roles or skills
+                          wanted and the Study Period recruitment window sit with
+                          the eligibility gate, above the screener itself. */}
+                      <AudienceFields
+                        formData={formData}
+                        validationErrors={validationErrors}
+                        handleInputChange={handleInputChange}
+                        handleBlur={handleBlur}
+                        onTargetRolesChange={handleTargetRolesChange}
+                      />
+
                       <ScreenerStep
                         hasScreener={formData.has_screener}
                         questions={formData.screener_questions}
@@ -5808,44 +5775,11 @@ const OpportunityForm: React.FC = () => {
                     </>
                   )}
 
-                  {/* Consent for a pure HAND-OFF (WZ-18 / Decision 9): the tool
-                      on the other side of the link collects consent, so this
-                      step confirms that rather than editing wording Cortex does
-                      not own. Keyed off the externalLink step, so a shape with a
-                      link always shows it and no other shape does. */}
-                  {currentStep?.key === 'consent' && hasExternalHandoff && (
-                    <>
-                      <div className="form-section mb-5" data-testid="external-consent-step">
-                        <div className="d-flex align-items-center mb-4 pb-3" style={{ borderBottom: 'none' }}>
-                          <div>
-                            <h2 id="external-consent-heading" tabIndex={-1} className="h4 mb-1 section-title" style={{ fontSize: '1.5rem', lineHeight: '1.3', fontWeight: '600' }}>Consent</h2>
-                            <p className="mb-0 section-description" style={{ fontSize: '0.95rem' }}>
-                              The external tool handles consent
-                            </p>
-                          </div>
-                        </div>
-                        <p className="mb-0" style={{ maxWidth: '48rem' }}>
-                          This study hands off to an external tool, so consent is
-                          collected there, not in Cortex. Confirm the tool&rsquo;s own
-                          consent text is in place before you publish. Cortex records
-                          only that a participant followed the link.
-                        </p>
-                      </div>
-
-                      {continueControl && (
-                      <StepActions
-                        isEdit={isEdit}
-                        onSaveAndExit={handleSaveAndExit}
-                        saving={saving}
-                        disabled={saveControlsDisabled}
-                        justSaved={Boolean(successMessage)}
-                        {...backwardControl}
-                        onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
-                        {...continueControl}
-                      />
-                      )}
-                    </>
-                  )}
+                  {/* A pure hand-off has no Consent step of its own since the
+                      D1/D3 reshape (row 13): the tool on the far side of the
+                      link collects consent, and the author's affirmation that it
+                      is in place is a section of the External Link step, not a
+                      step here. */}
 
                   {/* Consent for the MODERATED pair (#79): same step component,
                       third consent home. No study exists here, so none of the
@@ -5934,6 +5868,78 @@ const OpportunityForm: React.FC = () => {
                           </div>
                         </div>
 
+                        {/* Meeting Location and Default Duration are delivery
+                            facts about the session, so they sit with the slots
+                            (D6) rather than on Basic Information. Default
+                            Duration is the slot length the generator below
+                            reads. */}
+                        <div className="row g-3 mb-4" style={{ alignItems: 'flex-start' }}>
+                          <div className="col-md-6">
+                            <div className="form-group" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                              <label htmlFor="meeting_location_optional" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5' }}>
+                                Meeting Location *
+                              </label>
+                              <div id="meeting_location-help" className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4' }}>
+                                Zoom, Google Meet, or other meeting link
+                              </div>
+                              <input
+                                type="text"
+                                id="meeting_location_optional"
+                                className={`form-control ${validationErrors.meeting_location_optional ? 'is-invalid' : ''}`}
+                                style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto', width: '100%' }}
+                                value={formData.meeting_location_optional || ''}
+                                onChange={(e) => handleInputChange('meeting_location_optional', e.target.value)}
+                                onBlur={() => handleBlur('meeting_location_optional')}
+                                placeholder="e.g., https://zoom.us/j/123456789 or https://meet.google.com/abc-defg-hij"
+                                aria-describedby={validationErrors.meeting_location_optional ? 'meeting_location-error meeting_location-help' : 'meeting_location-help'}
+                                aria-invalid={validationErrors.meeting_location_optional ? 'true' : 'false'}
+                                aria-required="true"
+                                required
+                              />
+                              {validationErrors.meeting_location_optional && (
+                                <FieldError id="meeting_location-error">{validationErrors.meeting_location_optional}</FieldError>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="col-md-6">
+                            <div className="form-group" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                              <label htmlFor="default_duration_minutes" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5' }}>
+                                Default Duration (minutes) *
+                              </label>
+                              <div id="duration-help" className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4' }}>
+                                Expected time commitment for participants ({SESSION_DURATION.MIN_MINUTES}-{SESSION_DURATION.MAX_MINUTES} minutes)
+                              </div>
+                              <input
+                                type="number"
+                                id="default_duration_minutes"
+                                className={`form-control ${validationErrors.default_duration_minutes ? 'is-invalid' : ''}`}
+                                style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto', width: '100%', maxWidth: '150px' }}
+                                // Clearing the field stores NaN (parseInt('')), and
+                                // React warns and keeps the last painted value if
+                                // that reaches `value`. Show it empty, which is
+                                // what the author did.
+                                value={
+                                  Number.isFinite(formData.default_duration_minutes)
+                                    ? formData.default_duration_minutes
+                                    : ''
+                                }
+                                onChange={(e) => handleInputChange('default_duration_minutes', parseInt(e.target.value))}
+                                onBlur={() => handleBlur('default_duration_minutes')}
+                                min={SESSION_DURATION.MIN_MINUTES}
+                                max={SESSION_DURATION.MAX_MINUTES}
+                                aria-describedby={validationErrors.default_duration_minutes ? 'duration-error duration-help' : 'duration-help'}
+                                aria-invalid={validationErrors.default_duration_minutes ? 'true' : 'false'}
+                                aria-required="true"
+                                required
+                              />
+                              {validationErrors.default_duration_minutes && (
+                                <FieldError id="duration-error">{validationErrors.default_duration_minutes}</FieldError>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
                         {isEdit && !opportunityId && !loadingOpportunity && error ? (
                           <div className="alert alert-warning" role="alert">
                             <AlertTriangle size={18} className="me-2" />
@@ -5962,7 +5968,21 @@ const OpportunityForm: React.FC = () => {
                              */
                             onBack={previousStep ? () => setActiveTab(previousStep.id) : undefined}
                             onBackLabel={previousStep?.title}
-                            onContinue={continueControl?.onNext}
+                            /*
+                             * Routed through `continueFromStep` like every other
+                             * step's forward control, not the raw `onNext`. D6
+                             * moved `default_duration_minutes` and the
+                             * published-edit `meeting_location_required` gate
+                             * onto this step, so a raw Continue would ADVANCE
+                             * past a value Submit still refuses - breaking the
+                             * "Continue can never pass what Submit refuses"
+                             * invariant for the two fields this step now owns.
+                             */
+                            onContinue={
+                              continueControl
+                                ? () => continueFromStep(continueControl.onNext)
+                                : undefined
+                            }
                             onContinueLabel={nextStep?.title}
                             /*
                              * The step's footer is the shared StepActions row

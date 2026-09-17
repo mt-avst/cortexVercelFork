@@ -20,6 +20,7 @@ import {
   summarisedErrorKeys,
   summaryMessageFor,
 } from './helpers/error-summary';
+import { chooseStudyType } from './helpers/study-type-picker';
 import { createOpportunity, getFirstHandStudies, getOpportunity, updateOpportunity } from '../../api/client';
 import { getFirstHandStudy } from '../../api/firsthand-studies';
 
@@ -153,12 +154,8 @@ beforeEach(() => {
  * which does that for it) instead.
  */
 const goToConsentStep = () => {
-  // MR2 inserted a Screener step between the authoring step and Consent, so the
-  // walk is one longer. Guarded so this still works from a step already past it.
-  const toScreener = screen.queryByRole('button', { name: /^Continue: Screener$/i });
-  if (toScreener) {
-    fireEvent.click(toScreener);
-  }
+  // Since the D1/D3 reshape, Audience sits BEFORE the experience body, so from
+  // the experience step the next step is Consent directly.
   fireEvent.click(screen.getByRole('button', { name: /^Continue: Consent$/i }));
 };
 
@@ -289,17 +286,14 @@ const renderForm = () =>
     </MemoryRouter>
   );
 
-const selectType = (value: string) => {
-  fireEvent.change(screen.getByRole('combobox', { name: /Research Study Type/i }), {
-    target: { value },
-  });
-};
+const selectType = (value: string, delivery: 'native' | 'external' = 'external') =>
+  chooseStudyType(value, delivery);
 
 describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
   it('renders the create form for an admin without loading an opportunity', () => {
     renderForm();
     expect(
-      screen.getByRole('combobox', { name: /Research Study Type/i })
+      screen.getByRole('radiogroup', { name: /study type/i })
     ).toBeInTheDocument();
     // Status (#111) is no longer on the first step - it moved to Review, the
     // last decision on the form rather than the first. See
@@ -321,12 +315,12 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       screen.getByRole('button', { name: /Task List/i })
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: /External Link/i })
+      screen.queryByRole('button', { name: /Your link/i })
     ).not.toBeInTheDocument();
-    // ...and the type helper copy no longer names an internal product.
+    // ...and the picker card names it the way every other surface does.
     expect(
-      screen.getByText('Self-guided, recorded in the browser')
-    ).toBeInTheDocument();
+      screen.getByRole('radio', { name: 'Recorded session' })
+    ).toHaveAttribute('aria-checked', 'true');
   });
 
   it('keeps the External Link tab for poll and hides the Task List tab', () => {
@@ -334,7 +328,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     selectType('poll');
 
     expect(
-      screen.getByRole('button', { name: /External Link/i })
+      screen.getByRole('button', { name: /Your link/i })
     ).toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: /Task List/i })
@@ -1203,7 +1197,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       firsthand_study_id: 'study_created_on_save'
     } as never);
 
-    fireEvent.click(screen.getByRole('button', { name: /Basic Info/i }));
+    fireEvent.click(screen.getByRole('button', { name: /The study/i }));
     fireEvent.change(await screen.findByLabelText(/^Title/i), {
       target: { value: 'Draft saved early, now renamed' }
     });
@@ -1376,9 +1370,8 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       await screen.findByText(/Copied from/i);
 
       // The switch itself.
-      fireEvent.click(screen.getByRole('button', { name: /Basic Info/i }));
-      selectType('survey');
-      fireEvent.click(screen.getByLabelText(/In Cortex/i));
+      fireEvent.click(screen.getByRole('button', { name: /The study/i }));
+      selectType('survey', 'native');
 
       fireEvent.click(screen.getByRole('button', { name: /Questions/i }));
 
@@ -1408,8 +1401,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     it('clears the copy and its provenance when switching from a copied set of questions to unmoderated', async () => {
       vi.mocked(getFirstHandStudy).mockResolvedValueOnce(linkedStudy({ kind: 'survey' }));
       renderForm();
-      selectType('survey');
-      fireEvent.click(screen.getByLabelText(/In Cortex/i));
+      selectType('survey', 'native');
 
       fireEvent.change(screen.getByLabelText(/^Title/i), {
         target: { value: 'Developer experience pulse' }
@@ -1427,7 +1419,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       fireEvent.click(await screen.findByRole('button', { name: /^Start from this Demo Survey$/ }));
       await screen.findByText(/Copied from/i);
 
-      fireEvent.click(screen.getByRole('button', { name: /Basic Info/i }));
+      fireEvent.click(screen.getByRole('button', { name: /The study/i }));
       selectType('unmoderated');
 
       fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
@@ -1468,7 +1460,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       fireEvent.click(await screen.findByRole('button', { name: /^Start from this Demo Study$/ }));
       await screen.findByText(/Copied from/i);
 
-      fireEvent.click(screen.getByRole('button', { name: /Basic Info/i }));
+      fireEvent.click(screen.getByRole('button', { name: /The study/i }));
       selectType('question');
       selectType('unmoderated');
 
@@ -1680,19 +1672,26 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
 describe('locateField', () => {
   it('puts each error key on the tab that actually renders it', () => {
     expect(locateField('title').tab).toBe(1);
+    // Audience fields: Participant Type and its criteria live on the Audience
+    // step (tab 2 since the D1/D3 reshape).
+    expect(locateField('participant_type_required').tab).toBe(2);
     expect(locateField('participant_type_specific_details').tab).toBe(2);
+    // Session fields (D6): Meeting Location and Default Duration are on the
+    // experience step (tab 3) for test/interview.
+    expect(locateField('meeting_location_optional').tab).toBe(3);
+    expect(locateField('default_duration_minutes').tab).toBe(3);
     expect(locateField('external_link_optional').tab).toBe(3);
-    // Step 5, since MR2: the Screener step took id 4, so consent is its own step
-    // at 5 on the two authoring paths. Asserted for BOTH keys, not one - the
-    // recorded and survey consent fields are a twin pair and pinning one has
-    // twice let the other drift.
-    expect(locateField('inline_study_consent_text').tab).toBe(5);
-    expect(locateField('inline_survey_consent_text').tab).toBe(5);
-    // The screener (MR2) is step 4. Both its top-level keys, and a per-question
-    // key routed by the regex branch, land there.
-    expect(locateField('screener_questions').tab).toBe(4);
-    expect(locateField('screener_message').tab).toBe(4);
-    expect(locateField('screener_questions.0.options.1.label').tab).toBe(4);
+    // Consent is its own step at tab 4 since the D1/D3 reshape (native and
+    // recorded authoring paths). Asserted for BOTH keys - the recorded and
+    // survey consent fields are a twin pair and pinning one has twice let the
+    // other drift.
+    expect(locateField('inline_study_consent_text').tab).toBe(4);
+    expect(locateField('inline_survey_consent_text').tab).toBe(4);
+    // The screener lives on the Audience step (tab 2). Both its top-level keys,
+    // and a per-question key routed by the regex branch, land there.
+    expect(locateField('screener_questions').tab).toBe(2);
+    expect(locateField('screener_message').tab).toBe(2);
+    expect(locateField('screener_questions.0.options.1.label').tab).toBe(2);
     // Still step 3, and asserted here because "the consent field moved" and
     // "everything on that step moved" are different changes: the content the
     // consent is about stayed where it was.
@@ -1825,9 +1824,9 @@ describe('OpportunityForm - a refused action always says so', () => {
 
     await screen.findByRole('alert', { name: /There is a problem/i });
     expect(summarisedErrorKeys()).toEqual(['type']);
-    // Left on the step that holds the field, with the field itself marked.
+    // Left on the step that holds the field, with the picker group marked.
     expect(
-      screen.getByRole('combobox', { name: /Research Study Type/i })
+      screen.getByRole('radiogroup', { name: /study type/i })
     ).toBeInvalid();
     // The SAME sentence in both places. A summary that paraphrases the field is
     // two vocabularies wearing one coat, which is what D1 deleted.
@@ -1866,7 +1865,8 @@ describe('OpportunityForm - a refused action always says so', () => {
 
   it('opens the middle tab when that is where the problem is', async () => {
     // Guards the routing rather than a hardcoded "go to tab 1": the failing
-    // field here is on Content & Details, two tabs from where it was refused.
+    // field here is Participant Type's criteria, which lives on the
+    // Screener/Audience step (D6), several tabs from where it was refused.
     renderForm();
     selectType('unmoderated');
 
@@ -1877,12 +1877,10 @@ describe('OpportunityForm - a refused action always says so', () => {
       target: { value: 'Find out where people stall in the checkout flow' },
     });
 
-    // Scoped to the step strip. C3's "Continue: {next step}" label means the
-    // forward control on step 1 is now ALSO named "Content & Details" -
-    // "Continue: Content & Details" - so an unscoped match is ambiguous.
+    // Scoped to the step strip: Participant Type is on the Screener step now.
     fireEvent.click(
       within(screen.getByRole('navigation', { name: 'Form steps' }))
-        .getByRole('button', { name: /Content & Details/i })
+        .getByRole('button', { name: /Audience/i })
     );
     fireEvent.change(screen.getByLabelText(/Participant Type/i), {
       target: { value: 'specific' },
@@ -1901,7 +1899,14 @@ describe('OpportunityForm - a refused action always says so', () => {
       target: { value: 'Find the export button' },
     });
 
-    submitFromLastStep(/^Create/i);
+    // Straight to Review via the strip rather than walking Continue: the empty
+    // criteria on the Screener step (D6) is exactly the refusal under test, so a
+    // Continue-based walk would be stopped by it on the way past.
+    const strip = within(
+      screen.getByRole('navigation', { name: 'Form steps' })
+    ).getAllByRole('button');
+    fireEvent.click(strip[strip.length - 1]);
+    fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
 
     await screen.findByRole('alert', { name: /There is a problem/i });
     expect(summarisedErrorKeys()).toEqual(['participant_type_specific_details']);
@@ -2005,17 +2010,22 @@ describe('OpportunityForm - a refused action always says so', () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(await screen.findByRole('button', { name: /Basic Info/i }));
+    // Default Duration lives on the Session Management step now (D6), so it is
+    // cleared there. The step's own save controls live inside AdminSessionManager
+    // (mocked out here), so the edit is committed from a step that carries the
+    // Save Changes shortcut - Basic Information - which still runs the full
+    // collector.
+    fireEvent.click(
+      within(await screen.findByRole('navigation', { name: 'Form steps' }))
+        .getByRole('button', { name: /Session Management/i })
+    );
     fireEvent.change(await screen.findByLabelText(/Default Duration/i), {
       target: { value: '' },
     });
 
-    // Scoped to the step strip. C3's "Continue: {next step}" label means the
-    // forward control on step 1 is now ALSO named "Content & Details" -
-    // "Continue: Content & Details" - so an unscoped match is ambiguous.
     fireEvent.click(
       within(screen.getByRole('navigation', { name: 'Form steps' }))
-        .getByRole('button', { name: /Content & Details/i })
+        .getByRole('button', { name: /The study/i })
     );
     fireEvent.click(await screen.findByRole('button', { name: /Save Changes/i }));
 

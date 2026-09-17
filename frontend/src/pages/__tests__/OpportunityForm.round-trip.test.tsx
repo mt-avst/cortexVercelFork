@@ -213,13 +213,8 @@ beforeEach(() => {
  * which does that for it) instead.
  */
 const goToConsentStep = () => {
-  // MR2 inserted a Screener step between the authoring step and Consent, so the
-  // walk is one longer than it was. Guarded so this still works from a step that
-  // is already past the Screener.
-  const toScreener = screen.queryByRole('button', { name: /^Continue: Screener$/i });
-  if (toScreener) {
-    fireEvent.click(toScreener);
-  }
+  // Since the D1/D3 reshape, Audience sits BEFORE the experience body, so from
+  // the experience step the next step is Consent directly.
   fireEvent.click(screen.getByRole('button', { name: /^Continue: Consent$/i }));
 };
 
@@ -1138,9 +1133,8 @@ describe('reopening an opportunity that has a task list', () => {
     expect(consentField().value).toBe(
       'The bespoke wording this researcher actually wrote'
     );
-    // Back through the Screener step, which MR2 put between Consent and the Task
-    // List, to reach the Task List and confirm its content survived the trip.
-    fireEvent.click(screen.getByRole('button', { name: /^Previous: Screener$/i }));
+    // Back to the Task List (Consent's previous since the D1/D3 reshape - the
+    // Screener no longer sits between them) to confirm its content survived.
     fireEvent.click(screen.getByRole('button', { name: /^Previous: Task List$/i }));
     expect(
       (screen.getByLabelText(/Starting URL/i) as HTMLInputElement).value
@@ -1364,7 +1358,7 @@ describe('a study this author may not change here', () => {
       'Which delivery option would you pick?'
     ]);
 
-    fireEvent.click(screen.getByRole('button', { name: /Basic Info/i }));
+    fireEvent.click(screen.getByRole('button', { name: /The study/i }));
     fireEvent.change(await screen.findByDisplayValue('Checkout walkthrough'), {
       target: { value: 'Checkout walkthrough v2' }
     });
@@ -1408,7 +1402,7 @@ describe('a study this author may not change here', () => {
       await screen.findByText(/uses something this form cannot show/i)
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Basic Info/i }));
+    fireEvent.click(screen.getByRole('button', { name: /The study/i }));
     fireEvent.change(await screen.findByDisplayValue('Checkout walkthrough'), {
       target: { value: 'Checkout walkthrough v2' }
     });
@@ -1468,7 +1462,7 @@ describe('a set of questions this author may not change here', () => {
       'Would you recommend it?'
     ]);
 
-    fireEvent.click(screen.getByRole('button', { name: /Basic Info/i }));
+    fireEvent.click(screen.getByRole('button', { name: /The study/i }));
     fireEvent.change(await screen.findByDisplayValue('Developer experience pulse'), {
       target: { value: 'Developer experience pulse 2026' }
     });
@@ -1515,7 +1509,7 @@ describe('a linked study the form would never render', () => {
       await screen.findByText(/use something this form cannot show/i)
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Basic Info/i }));
+    fireEvent.click(screen.getByRole('button', { name: /The study/i }));
     fireEvent.change(await screen.findByDisplayValue('Developer experience pulse'), {
       target: { value: 'Developer experience pulse 2026' }
     });
@@ -1707,7 +1701,7 @@ describe('the automatic estimate on a survey that already has one', () => {
     // whose action row carries no Save Changes shortcut - it has `onSubmit`
     // and no `onSave`. Navigating there is also what makes this a test of
     // hasChanges() rather than of the submit button, which fires regardless.
-    fireEvent.click(screen.getByRole('button', { name: /Basic Info/i }));
+    fireEvent.click(screen.getByRole('button', { name: /The study/i }));
     fireEvent.click(await screen.findByRole('button', { name: /Save Changes/i }));
     await waitFor(() => expect(updateOpportunity).toHaveBeenCalled());
 
@@ -1924,21 +1918,22 @@ describe('when the linked study cannot be read', () => {
     await screen.findByText(/could not be loaded, so this study cannot be saved/i);
 
     expect(
-      await screen.findByRole('button', { name: /Continue: Content & Details/i })
+      await screen.findByRole('button', { name: /Continue: Audience/i })
     ).toBeEnabled();
 
     fireEvent.click(await screen.findByRole('button', { name: /Task List/i }));
 
-    expect(await screen.findByRole('button', { name: /^Previous: Content & Details$/i })).toBeEnabled();
+    expect(await screen.findByRole('button', { name: /^Previous: Audience$/i })).toBeEnabled();
 
-    // And onward through Screener to Consent, then Review - the step C3 added,
-    // which is now the one holding the save control - so these are steps an
-    // over-broad `disabled` would strand the author on, with no way back.
+    // And onward to Consent, then Review - the step that holds the save control
+    // now - so these are steps an over-broad `disabled` would strand the author
+    // on, with no way back. Since the D1/D3 reshape the Task List's next step is
+    // Consent directly.
     expect(
-      screen.getByRole('button', { name: /^Continue: Screener$/i })
+      screen.getByRole('button', { name: /^Continue: Consent$/i })
     ).toBeEnabled();
     goToConsentStep();
-    expect(await screen.findByRole('button', { name: /^Previous: Screener$/i })).toBeEnabled();
+    expect(await screen.findByRole('button', { name: /^Previous: Task List$/i })).toBeEnabled();
 
     expect(
       screen.getByRole('button', { name: /^Continue: Review$/i })
@@ -1986,7 +1981,7 @@ describe('the Save button appearing for a change that only touches authored cont
     fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
     await openAllCards();
     change();
-    fireEvent.click(screen.getByRole('button', { name: /Basic Info/i }));
+    fireEvent.click(screen.getByRole('button', { name: /The study/i }));
     return screen.queryByRole('button', { name: /Save Changes/i });
   };
 
@@ -2119,7 +2114,11 @@ describe('the Save button appearing for a change that only touches authored cont
     renderEdit('/admin/opportunities/opp-1/edit');
     await screen.findByDisplayValue('Checkout walkthrough');
 
-    // Study Period lives on the Basic Information tab, not with the content.
+    // Study Period lives on the Screener/Audience step now (D6).
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'Form steps' }))
+        .getByRole('button', { name: /Audience/i })
+    );
     fireEvent.change(screen.getByLabelText(/Start Date/i), {
       target: { value: '2026-09-02' }
     });
@@ -2137,7 +2136,7 @@ describe('the Save button appearing for a change that only touches authored cont
     await screen.findByDisplayValue('Checkout walkthrough');
     fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
     await openAllCards();
-    fireEvent.click(screen.getByRole('button', { name: /Basic Info/i }));
+    fireEvent.click(screen.getByRole('button', { name: /The study/i }));
 
     expect(screen.queryByRole('button', { name: /Save Changes/i })).not.toBeInTheDocument();
   });
@@ -2168,8 +2167,7 @@ describe('the Save button appearing for a change that only touches authored cont
     goToConsentStep();
     expect(screen.queryByRole('button', { name: /Save Changes/i })).not.toBeInTheDocument();
 
-    // Back through the Screener step (MR2) to the Task List.
-    fireEvent.click(screen.getByRole('button', { name: /^Previous: Screener$/i }));
+    // Back to the Task List (Consent's previous since the D1/D3 reshape).
     fireEvent.click(screen.getByRole('button', { name: /^Previous: Task List$/i }));
     await openAllCards();
     fireEvent.change(screen.getAllByLabelText(/What the participant sees/i)[0], {

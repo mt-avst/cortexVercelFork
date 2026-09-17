@@ -1,10 +1,11 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import OpportunityForm from '../OpportunityForm';
 import { getOpportunity, getSessions } from '../../api/client';
+import { chooseStudyType } from './helpers/study-type-picker';
 
 /**
  * #108: the participant share link, threaded from OpportunityForm into
@@ -114,9 +115,7 @@ beforeEach(() => {
 describe('OpportunityForm - the share link OpportunityForm computes for Review (#108)', () => {
   it('is null before the opportunity has ever been saved', () => {
     renderCreate();
-    fireEvent.change(screen.getByLabelText(/Research Study Type/i), {
-      target: { value: 'poll' }
-    });
+    chooseStudyType('poll');
     fireEvent.change(screen.getByLabelText(/^Title/i), {
       target: { value: 'A study with a long enough title' }
     });
@@ -162,11 +161,16 @@ describe('OpportunityForm - the share link OpportunityForm computes for Review (
       vi.mocked(getSessions).mockResolvedValue([] as never);
       renderEdit();
       // D5: every shape, test and interview included, now lands on Basic
-      // Information (step 1) - `walkToReview` clicks through from wherever
-      // the author is standing, so waiting for the title field here works
-      // exactly as it does for the poll cases above.
+      // Information (step 1).
       await screen.findByDisplayValue('A poll the author already wrote');
-      walkToReview();
+      // Straight to Review via the strip: this published test has no slot, so
+      // the Session Management step's Continue now (correctly) refuses to
+      // advance past that gate - reaching Review is what this test needs, not a
+      // Continue-based walk.
+      const strip = within(
+        screen.getByRole('navigation', { name: 'Form steps' })
+      ).getAllByRole('button');
+      fireEvent.click(strip[strip.length - 1]);
 
       expect(screen.getByText(/Participants cannot start this yet/i)).toBeInTheDocument();
     });
