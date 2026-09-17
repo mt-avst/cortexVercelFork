@@ -1,10 +1,11 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import OpportunityForm from '../OpportunityForm';
 import { getOpportunity } from '../../api/client';
+import { chooseStudyType } from './helpers/study-type-picker';
 
 /**
  * WZ-18: the step strip is locked at type-choice.
@@ -54,11 +55,7 @@ const renderNew = () =>
 const stripQuery = () =>
   screen.queryByRole('navigation', { name: /form steps/i });
 
-const selectType = (value: string) => {
-  fireEvent.change(screen.getByRole('combobox', { name: /Research Study Type/i }), {
-    target: { value },
-  });
-};
+const selectType = (value: string) => chooseStudyType(value);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -68,11 +65,11 @@ describe('the step strip is locked at type-choice (WZ-18)', () => {
   it('shows no strip on a new form until a type is chosen', () => {
     renderNew();
 
-    // Before a type: the Basic Information body and its type selector are on
+    // Before a type: the Basic Information body and its type picker are on
     // screen, but the numbered strip is not - it has no fixed count to show yet.
     expect(stripQuery()).not.toBeInTheDocument();
     expect(
-      screen.getByRole('combobox', { name: /Research Study Type/i })
+      screen.getByRole('radiogroup', { name: /study type/i })
     ).toBeInTheDocument();
 
     selectType('unmoderated');

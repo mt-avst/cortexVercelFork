@@ -1,10 +1,10 @@
 import React from 'react';
 import { render, screen, fireEvent, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import OpportunityForm, { FIELD_LOCATIONS } from '../OpportunityForm';
-import { createOpportunity } from '../../api/client';
+import { createOpportunity, getOpportunity } from '../../api/client';
 import {
   errorSummary,
   inlineErrorText,
@@ -14,6 +14,7 @@ import {
   summaryMessageFor,
   summaryMessages,
 } from './helpers/error-summary';
+import { chooseStudyType } from './helpers/study-type-picker';
 
 /*
  * D1 - one validation rule set, one vocabulary, reachable by keyboard.
@@ -34,7 +35,22 @@ vi.mock('../../contexts/ThemeContext', () => ({
   useTheme: () => ({ theme: 'light' }),
 }));
 
-vi.mock('../../components/AdminSessionManager', () => ({ default: () => null }));
+// A stub that still exposes the step's forward control, so a test can press
+// Continue ON the Session Management step - the field-owning step since D6.
+vi.mock('../../components/AdminSessionManager', () => ({
+  default: ({
+    onContinue,
+    onContinueLabel
+  }: {
+    onContinue?: () => void;
+    onContinueLabel?: string;
+  }) =>
+    onContinue ? (
+      <button type="button" onClick={onContinue}>
+        Continue: {onContinueLabel}
+      </button>
+    ) : null
+}));
 
 vi.mock('../../api/client', () => ({
   createOpportunity: vi.fn(),
@@ -60,11 +76,8 @@ const renderForm = () =>
     </MemoryRouter>
   );
 
-const selectType = (value: string) => {
-  fireEvent.change(screen.getByRole('combobox', { name: /Research Study Type/i }), {
-    target: { value },
-  });
-};
+const selectType = (value: string, delivery: 'native' | 'external' = 'external') =>
+  chooseStudyType(value, delivery);
 
 const setTitle = (value: string) =>
   fireEvent.change(screen.getByLabelText(/^Title/i), { target: { value } });
@@ -81,6 +94,19 @@ const currentStepName = () =>
 
 const continueForward = () =>
   fireEvent.click(screen.getByRole('button', { name: /^Continue(:|$)/i }));
+
+/**
+ * Click the strip button naming a step. Matched by substring, because each
+ * strip button's accessible name also carries its number and status word. Used
+ * to reach a field on the step it now lives on after the D6 field moves.
+ */
+const goToStep = (name: RegExp) =>
+  fireEvent.click(
+    within(screen.getByRole('navigation', { name: 'Form steps' })).getByRole(
+      'button',
+      { name }
+    )
+  );
 
 /**
  * Walk to Review and submit, whatever the shape's length.
@@ -165,7 +191,7 @@ describe('Continue can never pass what Submit refuses', () => {
 
     continueForward();
 
-    expect(currentStepName()).toMatch(/Basic Information/i);
+    expect(currentStepName()).toMatch(/The study/i);
     expect(summarisedErrorKeys()).toEqual(['title']);
     expect(summaryMessageFor('title')).toBe(
       'Shorten the title to 140 characters or fewer'
@@ -178,27 +204,74 @@ describe('Continue can never pass what Submit refuses', () => {
 
     continueForward();
 
-    expect(currentStepName()).toMatch(/Basic Information/i);
+    expect(currentStepName()).toMatch(/The study/i);
     expect(summarisedErrorKeys()).toEqual(['purpose_one_liner']);
     expect(summaryMessageFor('purpose_one_liner')).toBe(
       'Shorten the purpose to 180 characters or fewer'
     );
   });
 
-  it('refuses a 300-minute session length at Continue, where it used to advance', () => {
+  it('refuses a 300-minute session length at Continue on the step that owns it (D6)', () => {
+    // Session length used to be a Basic Information field with a hand-copied
+    // Continue rule. D6 moved it to the Session Management step; Continue THERE
+    // must refuse it, not just blur - otherwise the author advances past a value
+    // Submit still refuses, the exact "Continue can never pass what Submit
+    // refuses" break the D6 review caught.
     renderForm();
     fillStepOne({ type: 'test' });
-    fireEvent.change(screen.getByLabelText(/Meeting Location/i), {
-      target: { value: 'https://meet.example.com/room' },
-    });
+
+    // Not on Basic Information any more.
+    expect(screen.queryByLabelText(/Default Duration/i)).toBeNull();
+
+    goToStep(/Session Management/);
     fireEvent.change(screen.getByLabelText(/Default Duration/i), {
       target: { value: '300' },
     });
 
-    continueForward();
+    // The step's forward control (the AdminSessionManager stub exposes it).
+    fireEvent.click(screen.getByRole('button', { name: /^Continue: /i }));
 
-    expect(currentStepName()).toMatch(/Basic Information/i);
+    // It did NOT advance, and it named the field on this step.
+    expect(currentStepName()).toMatch(/Session Management/i);
     expect(summarisedErrorKeys()).toEqual(['default_duration_minutes']);
+  });
+
+  it('refuses an emptied meeting location at Continue when publishing (row 9 / D6)', async () => {
+    // The published-edit venue gate moved to the Session Management step too
+    // (D6). A published test with the venue cleared must be refused at Continue
+    // there, not advanced past.
+    vi.mocked(getOpportunity).mockResolvedValueOnce({
+      id: 'opp-pub',
+      type: 'test',
+      title: 'A published live session',
+      purpose_one_liner: 'Watch people work through the new checkout end to end',
+      status: 'published',
+      default_duration_minutes: 30,
+      meeting_location_optional: 'https://meet.example.com/room',
+      participant_type_required: 'any',
+    } as never);
+
+    render(
+      <MemoryRouter initialEntries={['/admin/opportunities/opp-pub/edit']}>
+        <Routes>
+          <Route path="/admin/opportunities/:id/edit" element={<OpportunityForm />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByRole('navigation', { name: 'Form steps' });
+    goToStep(/Session Management/);
+    fireEvent.change(screen.getByLabelText(/Meeting Location/i), {
+      target: { value: '' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /^Continue: /i }));
+
+    // Did not advance, and the venue refusal is on the record. (A slotless
+    // published test also reports `sessions` here - both are Session Management
+    // gates now - so the venue key is asserted by presence, not exclusively.)
+    expect(currentStepName()).toMatch(/Session Management/i);
+    expect(summarisedErrorKeys()).toContain('meeting_location_optional');
   });
 
   it('still lets a valid step 1 through, so the refusals above are about the values', () => {
@@ -209,7 +282,7 @@ describe('Continue can never pass what Submit refuses', () => {
 
     continueForward();
 
-    expect(currentStepName()).toMatch(/Content & Details/i);
+    expect(currentStepName()).toMatch(/Audience/i);
     expect(queryErrorSummary()).toBeNull();
   });
 
@@ -274,7 +347,7 @@ describe('Continue can never pass what Submit refuses', () => {
 
     continueForward();
 
-    expect(currentStepName()).toMatch(/Content & Details/i);
+    expect(currentStepName()).toMatch(/Audience/i);
     expect(queryErrorSummary()).toBeNull();
 
     // ...and the same form is refused at Submit, for that very field. Status
@@ -298,8 +371,8 @@ describe('Continue can never pass what Submit refuses', () => {
 
     // Advanced off Basic Information (to Content & Details, step 2 of the
     // five-step test shape) rather than being held on step 1 by the empty venue.
-    expect(currentStepName()).not.toMatch(/Basic Information/i);
-    expect(currentStepName()).toMatch(/Content & Details/i);
+    expect(currentStepName()).not.toMatch(/The study/i);
+    expect(currentStepName()).toMatch(/Audience/i);
     expect(queryErrorSummary()).toBeNull();
   });
 
@@ -315,11 +388,11 @@ describe('Continue can never pass what Submit refuses', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Continue(:|$)/ }));
 
     expect(summarisedErrorKeys()).toEqual(['type']);
-    // Left on the step that HOLDS the field: the type selector is still on
+    // Left on the step that HOLDS the field: the type picker is still on
     // screen, so the author was not advanced past the choice. (The strip is
     // absent with no type, so this is asserted by the body, not by the strip.)
     expect(
-      screen.getByRole('combobox', { name: /Research Study Type/i })
+      screen.getByRole('radiogroup', { name: /study type/i })
     ).toBeInTheDocument();
   });
 
@@ -333,11 +406,9 @@ describe('Continue can never pass what Submit refuses', () => {
     continueForward();
     expect(summarisedErrorKeys()).toEqual(['title']);
 
-    // Jump ahead and refuse there too, without fixing the title.
-    const strip = within(
-      screen.getByRole('navigation', { name: 'Form steps' })
-    ).getAllByRole('button');
-    fireEvent.click(strip[1]);
+    // Jump ahead to the Screener/Audience step, where Participant Type lives
+    // now (D6), and refuse there too without fixing the title.
+    goToStep(/Audience/);
     fireEvent.change(screen.getByLabelText(/Participant Type/i), {
       target: { value: 'specific' },
     });
@@ -359,7 +430,7 @@ describe('Continue can never pass what Submit refuses', () => {
     setTitle('A title of a reasonable length');
     continueForward();
 
-    expect(currentStepName()).toMatch(/Content & Details/i);
+    expect(currentStepName()).toMatch(/Audience/i);
     expect(queryErrorSummary()).toBeNull();
   });
 });
@@ -374,15 +445,16 @@ describe('the error summary is reachable, and says one thing per problem', () =>
     renderForm();
     selectType('question');
     // Title left empty (step 1), participant criteria demanded and left empty
-    // (step 2), so the summary has to span steps and be ordered.
+    // (the Screener/Audience step, D6), so the summary has to span steps and be
+    // ordered.
     setPurpose('Find out where people stall in the checkout flow');
-    const strip = within(
-      screen.getByRole('navigation', { name: 'Form steps' })
-    ).getAllByRole('button');
-    fireEvent.click(strip[1]);
+    goToStep(/Audience/);
     fireEvent.change(screen.getByLabelText(/Participant Type/i), {
       target: { value: 'specific' },
     });
+    const strip = within(
+      screen.getByRole('navigation', { name: 'Form steps' })
+    ).getAllByRole('button');
     fireEvent.click(strip[strip.length - 1]);
     fireEvent.click(screen.getByRole('button', { name: /^Create study$/ }));
   };
@@ -434,7 +506,7 @@ describe('the error summary is reachable, and says one thing per problem', () =>
 
     fireEvent.click(summaryLinkFor('title'));
 
-    expect(currentStepName()).toMatch(/Basic Information/i);
+    expect(currentStepName()).toMatch(/The study/i);
     expect(document.activeElement?.id).toBe('title');
   });
 
@@ -445,7 +517,7 @@ describe('the error summary is reachable, and says one thing per problem', () =>
 
     fireEvent.click(summaryLinkFor('participant_type_specific_details'));
 
-    expect(currentStepName()).toMatch(/Content & Details/i);
+    expect(currentStepName()).toMatch(/Audience/i);
     expect(document.activeElement?.id).toBe('participant_type_specific_details');
   });
 
@@ -572,6 +644,8 @@ describe('blur reports the same rules, on every field that has one', () => {
   it('flags an out-of-range session length on blur', () => {
     renderForm();
     selectType('test');
+    // Default Duration lives on the Session Management step now (D6).
+    goToStep(/Session Management/);
     const duration = screen.getByLabelText(/Default Duration/i);
     fireEvent.change(duration, { target: { value: '300' } });
     fireEvent.blur(duration);
@@ -634,15 +708,23 @@ describe('a refusal preserves every keystroke', () => {
     selectType('question');
     setTitle('abc');
     setPurpose('Find out where people stall in the checkout flow');
-    const strip = within(
-      screen.getByRole('navigation', { name: 'Form steps' })
-    ).getAllByRole('button');
-    // Description lives on step 2.
-    fireEvent.click(strip[1]);
+    // Description sits with Title and Purpose on Basic Information now (D6).
     fireEvent.change(screen.getByLabelText(/Description \(Optional\)/i), {
       target: { value: 'A long description the author does not want to retype' },
     });
+    // A field two steps away, on the Screener/Audience step, filled validly so
+    // it adds no error of its own - only its survival through a refusal matters.
+    goToStep(/Audience/);
+    fireEvent.change(screen.getByLabelText(/Participant Type/i), {
+      target: { value: 'specific' },
+    });
+    fireEvent.change(screen.getByLabelText(/Specific Criteria/i), {
+      target: { value: 'Admins who use the export flow weekly' },
+    });
 
+    const strip = within(
+      screen.getByRole('navigation', { name: 'Form steps' })
+    ).getAllByRole('button');
     fireEvent.click(strip[strip.length - 1]);
     fireEvent.click(screen.getByRole('button', { name: /^Create study$/ }));
 
@@ -655,14 +737,15 @@ describe('a refusal preserves every keystroke', () => {
     expect(screen.getByLabelText(/purpose/i)).toHaveValue(
       'Find out where people stall in the checkout flow'
     );
-
-    // And so is the untouched field two steps away.
-    const stripAgain = within(
-      screen.getByRole('navigation', { name: 'Form steps' })
-    ).getAllByRole('button');
-    fireEvent.click(stripAgain[1]);
+    // Description is on the same step, and is preserved too.
     expect(screen.getByLabelText(/Description \(Optional\)/i)).toHaveValue(
       'A long description the author does not want to retype'
+    );
+
+    // And so is the untouched field two steps away.
+    goToStep(/Audience/);
+    expect(screen.getByLabelText(/Specific Criteria/i)).toHaveValue(
+      'Admins who use the export flow weekly'
     );
   });
 });
@@ -681,10 +764,9 @@ describe('a summary link lands on the item it names', () => {
    */
   const refuseOnAnEmptyQuestion = async () => {
     renderForm();
-    selectType('survey');
+    selectType('survey', 'native');
     setTitle('Developer experience pulse');
     setPurpose('Ten short questions about the tools you use every day');
-    fireEvent.click(screen.getByLabelText(/In Cortex/i));
 
     // Through the step strip: C3's forward control on step 2 is ALSO named
     // "Continue: Questions", so an unscoped match is ambiguous.
@@ -758,6 +840,9 @@ describe('a validation error does not outlive the field it is about', () => {
     // on screen. The result was a step chip with nothing on the step to fix.
     renderForm();
     fillStepOne({ type: 'test' });
+    // Meeting Location and Default Duration live on the Session Management step
+    // now (D6).
+    goToStep(/Session Management/);
     fireEvent.change(screen.getByLabelText(/Meeting Location/i), {
       target: { value: 'https://meet.example.com/room' },
     });
@@ -768,6 +853,9 @@ describe('a validation error does not outlive the field it is about', () => {
       inlineErrorText('Enter a session length between 5 and 240 minutes')
     ).toBeInTheDocument();
 
+    // The type select is back on Basic Information; switch to a type with no
+    // session step.
+    goToStep(/The study/);
     selectType('question');
 
     // The field is gone, so the message has to be gone...
@@ -775,13 +863,13 @@ describe('a validation error does not outlive the field it is about', () => {
     expect(
       screen.queryAllByText('Enter a session length between 5 and 240 minutes')
     ).toEqual([]);
-    // ...and so does the chip that pointed at it. This is the assertion that
-    // fails without the fix: the message disappears on its own, because the
-    // input that renders it has unmounted.
-    const stepOne = within(
-      screen.getByRole('navigation', { name: 'Form steps' })
-    ).getAllByRole('button')[0];
-    expect(stepOne).not.toHaveTextContent('Needs attention');
+    // ...and no step chip is left pointing at a field that no longer exists.
+    // This is the assertion that fails without the fix: the message disappears
+    // on its own, because the input that renders it has unmounted, while the
+    // reported-error key would otherwise linger on the strip.
+    within(screen.getByRole('navigation', { name: 'Form steps' }))
+      .getAllByRole('button')
+      .forEach((button) => expect(button).not.toHaveTextContent('Needs attention'));
   });
 
   it('keeps it while the type still HAS a session', () => {
@@ -789,6 +877,7 @@ describe('a validation error does not outlive the field it is about', () => {
     // error the moment the author switched between test and interview.
     renderForm();
     fillStepOne({ type: 'test' });
+    goToStep(/Session Management/);
     fireEvent.change(screen.getByLabelText(/Meeting Location/i), {
       target: { value: 'https://meet.example.com/room' },
     });
@@ -796,8 +885,12 @@ describe('a validation error does not outlive the field it is about', () => {
     fireEvent.change(duration, { target: { value: '300' } });
     fireEvent.blur(duration);
 
+    // The type select is on Basic Information; interview still has a session
+    // step, so the error must survive.
+    goToStep(/The study/);
     selectType('interview');
 
+    goToStep(/Session Management/);
     expect(
       inlineErrorText('Enter a session length between 5 and 240 minutes')
     ).toBeInTheDocument();
@@ -812,10 +905,9 @@ describe('a per-item message renumbers when its item moves', () => {
   /** A native survey whose SECOND question is empty, refused from Review. */
   const refuseOnTheSecondQuestion = async () => {
     renderForm();
-    selectType('survey');
+    selectType('survey', 'native');
     setTitle('Developer experience pulse');
     setPurpose('Ten short questions about the tools you use every day');
-    fireEvent.click(screen.getByLabelText(/In Cortex/i));
 
     const strip = within(
       screen.getByRole('navigation', { name: 'Form steps' })
@@ -868,13 +960,13 @@ describe('a per-item message renumbers when its item moves', () => {
 
 describe('blur does not flag a field the author never filled', () => {
   it('says nothing when they tab through a blank form', () => {
-    // `type`, `title` and `purpose` are the first three tab stops on a new
-    // form. Validating unconditionally on blur meant simply LOOKING at the form
-    // raised three assertive refusals before a character was typed. Nothing did
-    // that before D1, because no input on this step wired `onBlur` at all.
+    // Title and purpose are the first text tab stops on a new form (the type is
+    // now a card picker, not a blurred field). Validating unconditionally on
+    // blur meant simply LOOKING at the form raised assertive refusals before a
+    // character was typed. Nothing did that before D1, because no input on this
+    // step wired `onBlur` at all.
     renderForm();
 
-    fireEvent.blur(screen.getByRole('combobox', { name: /Research Study Type/i }));
     fireEvent.blur(screen.getByLabelText(/^Title/i));
     fireEvent.blur(screen.getByLabelText(/purpose/i));
 
@@ -930,26 +1022,26 @@ describe('an error does not outlive the field it is about', () => {
     setTitle('A perfectly serviceable title');
     setPurpose('Find out where people stall in the checkout flow');
 
-    const strip = within(
-      screen.getByRole('navigation', { name: 'Form steps' })
-    ).getAllByRole('button');
-    fireEvent.click(strip[1]);
+    // Participant Type and its criteria live on the Screener/Audience step now
+    // (D6).
+    goToStep(/Audience/);
     fireEvent.change(screen.getByLabelText(/Participant Type/i), {
       target: { value: 'specific' },
     });
     fireEvent.click(screen.getByRole('button', { name: /^Continue(:|$)/i }));
     expect(summarisedErrorKeys()).toEqual(['participant_type_specific_details']);
 
+    goToStep(/Audience/);
     fireEvent.change(screen.getByLabelText(/Participant Type/i), {
       target: { value: 'any' },
     });
 
     expect(screen.queryByLabelText(/Specific Criteria/i)).toBeNull();
     expect(queryErrorSummary()).toBeNull();
-    const stepTwo = within(
-      screen.getByRole('navigation', { name: 'Form steps' })
-    ).getAllByRole('button')[1];
-    expect(stepTwo).not.toHaveTextContent('Needs attention');
+    // No step chip is left saying "Needs attention" over a field that is gone.
+    within(screen.getByRole('navigation', { name: 'Form steps' }))
+      .getAllByRole('button')
+      .forEach((button) => expect(button).not.toHaveTextContent('Needs attention'));
   });
 });
 
@@ -957,10 +1049,9 @@ describe('the "at least two answers" rule waits until focus leaves the group', (
   /** A native survey with one single-choice question, on the Questions step. */
   const aChoiceQuestion = async () => {
     renderForm();
-    selectType('survey');
+    selectType('survey', 'native');
     setTitle('Developer experience pulse');
     setPurpose('Ten short questions about the tools you use every day');
-    fireEvent.click(screen.getByLabelText(/In Cortex/i));
 
     const strip = within(
       screen.getByRole('navigation', { name: 'Form steps' })

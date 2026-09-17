@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import OpportunityForm from '../OpportunityForm';
 import { opportunityFormRoutes } from '../OpportunityForm.routes';
 import { createOpportunity, deleteOpportunity, getOpportunity, updateOpportunity } from '../../api/client';
+import { chooseStudyType } from './helpers/study-type-picker';
 
 /**
  * Row 1 / D8: the header used to rename itself - "Create new study" to "Edit
@@ -68,9 +69,7 @@ const assertNoRenameChrome = () => {
 };
 
 const fillCreateThreshold = (type = 'survey') => {
-  fireEvent.change(screen.getByLabelText(/Research Study Type/i), {
-    target: { value: type }
-  });
+  chooseStudyType(type);
   fireEvent.change(screen.getByLabelText(/^Title/i), {
     target: { value: 'Developer experience pulse' }
   });

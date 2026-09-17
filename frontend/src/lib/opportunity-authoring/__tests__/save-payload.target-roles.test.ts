@@ -9,11 +9,12 @@ import {
 /**
  * Roles/skills wanted in the save payload.
  *
- * The field is on the Content & Details step, which every shape has, so unlike
- * the screener it is sent unconditionally. The chip list travels as authored;
- * deduping and the caps are the server's job. An empty list is sent as [] so an
- * author who clears every chip on an edit has it cleared (the backend stores
- * null for an empty list).
+ * The field lives on the Screener/Audience step (D6), but the payload builder
+ * reads it straight from formData, so it is sent unconditionally regardless of
+ * the rendered shape. The chip list travels as authored; deduping and the caps
+ * are the server's job. An empty list is sent as [] so an author who clears
+ * every chip on an edit has it cleared (the backend stores null for an empty
+ * list).
  */
 const formState = (overrides: Record<string, unknown> = {}): SavePayloadFormState => ({
   type: 'test',

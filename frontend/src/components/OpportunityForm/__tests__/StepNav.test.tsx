@@ -8,7 +8,7 @@ import type { FormStep } from '../../../pages/OpportunityForm';
 
 const STEPS: FormStep[] = [
   { id: 1, key: 'basics', title: 'Basic Information', description: 'Configure type and status' },
-  { id: 2, key: 'content', title: 'Content & Details', description: 'Define opportunity content' },
+  { id: 2, key: 'screener', title: 'Audience', description: 'Who can take part' },
   { id: 3, key: 'taskList', title: 'Task List', description: 'What the participant does' },
   { id: 4, key: 'consent', title: 'Consent', description: 'What the participant agrees to' }
 ];
@@ -128,7 +128,7 @@ describe('StepNav', () => {
     // history is held by key, and id 3 is four different steps.
     expect(statusOf.mock.calls.map(([step]) => [step.id, step.key])).toEqual([
       [1, 'basics'],
-      [2, 'content'],
+      [2, 'screener'],
       [4, 'consent']
     ]);
   });
