@@ -131,9 +131,17 @@ import {
 } from '@shared/firsthand/inline-study';
 import { isSafeTargetUrl } from '@shared/firsthand/url-safety';
 import { normaliseTargetUrl } from '../utils/targetUrl';
+// D8: the header's type and status lozenges, read from the SAME formatters
+// the dashboard row already uses, so a study's name for itself never drifts
+// from what the dashboard calls it two clicks away.
+import { getTypeBadgeClass } from '../utils/opportunityUtils';
+import { getAdminTypeLabel, getDisplayStatus } from '../utils/adminDashboard';
+// Row 27: 24-hour, en-GB, like every other clock in the product - the save
+// state used to be the one clock left reading the browser's own locale.
+import { formatClockTime } from '../utils/datetime';
 
 import { CreateOpportunityRequest, UpdateOpportunityRequest, Opportunity, Session, Screener, ScreenerQuestion } from '../api/types';
-import { TrendingUp, UserCircle, AlertTriangle, CheckCircle, LogOut } from 'lucide-react';
+import { TrendingUp, UserCircle, AlertTriangle, CheckCircle, LogOut, Calendar } from 'lucide-react';
 
 /**
  * Unmoderated studies run with logged-in Cortex users, so an external
@@ -671,6 +679,27 @@ const resolveSourceTitle = async (studyId: string): Promise<string> => {
 };
 
 /**
+ * Row 27: the header status region's reserved height.
+ *
+ * That region shows between one line (a clean published study: just the
+ * save-model note) and three (an autosaving draft mid-save: the save-model
+ * note, the autosave state, AND Discard draft) - and it used to size itself
+ * to whichever of those was currently true, so the six-step strip 60px below
+ * it dropped every time a line appeared or disappeared, including at the
+ * exact moment autosave silently mints a row (row 1). Reserving this much
+ * space up front keeps the strip's position fixed regardless of which lines
+ * are actually rendered.
+ *
+ * A LITERAL rather than something derived from "three lines of `small` text
+ * plus their padding": a value computed from the same assumptions that
+ * produced the growth in the first place would drift in the same direction
+ * if any one line's padding changed, and a test asserting against a derived
+ * number cannot see that. Pinned here so a test can fail BY NAME if this
+ * shrinks back towards auto.
+ */
+const HEADER_STATUS_REGION_MIN_HEIGHT = '7.5rem';
+
+/**
  * The admin authoring form, and only the admin one.
  *
  * It used to take `allowUserSubmission`, a non-admin submission mode threaded
@@ -1120,6 +1149,14 @@ const OpportunityForm: React.FC = () => {
   // Undefined when the author is on a step this type does not have - reachable,
   // because the step headers are clickable and the type can change underneath.
   const currentStep = tabs.find((tab) => tab.id === activeTab);
+
+  /**
+   * D5: the sessions step for the header's "Manage time slots" control, or
+   * `null` for a shape that has none. The landing effect no longer walks the
+   * author here automatically (see the rewrite above) - this is what lets
+   * them get there in one click when they actually want to.
+   */
+  const sessionsStep = tabs.find((tab) => tab.key === 'sessions') ?? null;
 
   /**
    * The step before the current one, by position in the list rather than by a
@@ -1593,26 +1630,33 @@ const OpportunityForm: React.FC = () => {
       }
 
       /*
-       * Where the author lands, chosen with the content rather than after it.
+       * Where the author lands: always the first step. (D5.)
        *
-       * MUST STAY ABOVE `setFormData`. Automatic batching makes the two one
-       * commit today, but the statement ORDER is the load-bearing guarantee,
-       * not the batching: if anything ever puts a task boundary between them,
-       * the intermediate commit holds the landing id against a form whose type
-       * is still blank. That shape is `[1, 2, 5]`, so the `stepAfterShapeChange`
-       * clamp below rewrites an id of 3 to 2 - and once the real type arrives, 2
-       * is a valid member, so nothing corrects it back. The author lands on the
-       * wrong step, permanently, with no error. `loadOpportunity` already awaits
-       * mid-function, so this is an ordinary edit away.
+       * This used to search the shape for a `sessions` step and land there
+       * whenever the type had one, on the theory that booking a slot is a
+       * moderated study's most urgent job. In practice it fired on a DRAFT as
+       * readily as a published study - "this shape has a sessions step" is a
+       * fact about the TYPE, not about what is most urgent right now - and it
+       * dropped the author on an unlabelled step 3: the strip's current-step
+       * chip reads "Needs attention" instead of "Current step" whenever the
+       * step you are standing on also has a problem (`step-status.ts`), and
+       * step 1 carried its own, second, unrelated red flag the author had not
+       * been told about either (verify-claims 14). Arriving at your own form
+       * should not require working out why you are three steps into it.
        *
-       * Read off the SHAPE by key rather than restating `type === 'test' ||
-       * type === 'interview' ? 3 : 1`. Id 3 is Task List, Questions, External
-       * Link or Session Management depending on the type, so a hardcoded 3 asks
-       * for a position and hopes it still means what it meant. `getTabsForType`
-       * makes the same argument about Consent a few lines down: a predicate
-       * saying the same thing in different words is a predicate that can stop
-       * agreeing. A future type that grows a sessions step gets the right
-       * landing for free.
+       * Landing on step 1 unconditionally means every shape opens the same
+       * way, and it happens to remove a batching hazard the old code carried:
+       * `shape.find(...).id` could be 3 on a shape the type had not resolved
+       * to yet (`getTabsForType` defaults to `[1, 2, 5]` before a type is
+       * chosen, so id 3 was not even a member), which only worked because
+       * `setFormData` below commits in the same batch. Landing on `shape[0]`
+       * needs no such guarantee: id 1 is the first step of every shape,
+       * including `[1, 2, 5]`, so this stays correct even if a future edit
+       * puts a task boundary between the two calls.
+       *
+       * A moderated author who DOES want the sessions step first is one click
+       * away: the "Manage time slots" control in the header (also D5) jumps
+       * straight there from wherever they land, for the shapes that have one.
        *
        * ONCE per opportunity: this function also runs on the re-read after a
        * save, and landing again there would throw the author back to the first
@@ -1624,7 +1668,7 @@ const OpportunityForm: React.FC = () => {
           opportunity.type,
           opportunity.delivery_mode ?? 'external'
         );
-        setActiveTab((shape.find((step) => step.key === 'sessions') ?? shape[0]).id);
+        setActiveTab(shape[0].id);
       }
 
       // The screener as the ROW holds it (MR2). The ADMIN response carries the
@@ -3353,8 +3397,13 @@ const OpportunityForm: React.FC = () => {
    * what it does NOT cover matters more than the code:
    *
    *  - It cannot cover in-app navigation. That is what `requestExit` and its
-   *    confirmation are for, and every control on this form that leaves goes
-   *    through it.
+   *    confirmation are for. Every control on this form that leaves while
+   *    there is something to lose is routed through it - including Analytics
+   *    (row 10: it used to call `navigate` directly, so the one exit that
+   *    looked least like leaving was the one exit nothing caught) - except
+   *    "Return to Dashboard" inside the success banner, which never has
+   *    anything to lose because it renders only after a save has already
+   *    succeeded.
    *  - A true route blocker would use `useBlocker`, which needs a data router.
    *    This app mounts `BrowserRouter` with a `Routes` tree, so the hook is
    *    not available here and moving the whole app onto `createBrowserRouter`
@@ -3766,17 +3815,23 @@ const OpportunityForm: React.FC = () => {
   }, [changeSignature]);
 
   /**
-   * "Saved 15:42", in the reader's own locale and timezone.
+   * "Saved 15:42" - 24-hour, en-GB, in the reader's own timezone (row 27).
    *
-   * Hours and minutes only. A second-precision timestamp on a save that
-   * happens every few seconds reads as a stopwatch, and the question this
-   * answers is "is my work safe", not "exactly when".
+   * `toLocaleTimeString(undefined, ...)` used to defer to the BROWSER's own
+   * locale, which read "Saved 12:36 AM" for a US-locale browser on a product
+   * that writes every other clock (`utils/datetime.ts`) as a 24-hour en-GB
+   * time regardless of the reader. `formatClockTime` is that same formatter -
+   * reused rather than re-specified, so this line cannot drift back to a
+   * twelve-hour clock the way it did the first time. Hours and minutes only:
+   * a second-precision timestamp on a save that happens every few seconds
+   * reads as a stopwatch, and the question this answers is "is my work
+   * safe", not "exactly when". `formatClockTime` only returns `null` for an
+   * unparseable date, which `Date.now()` never produces, but the type is
+   * nullable regardless - `?? ''` keeps this function's own signature
+   * (`string`, not `string | null`) rather than pushing the nullability
+   * outward to `saveStateMessage`.
    */
-  const formatSavedAt = (at: number) =>
-    new Date(at).toLocaleTimeString(undefined, {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+  const formatSavedAt = (at: number) => formatClockTime(new Date(at)) ?? '';
 
   /**
    * Save what is on screen and leave.
@@ -4953,7 +5008,9 @@ const OpportunityForm: React.FC = () => {
   if (isEdit && loadingOpportunity) {
     return (
       <div className="d-flex justify-content-center align-items-center min-h-50vh" aria-busy="true" aria-live="polite">
-        <h1 className="visually-hidden">Edit study</h1>
+        {/* D8: no "Create"/"Edit" word to pick between before the study has
+            even loaded - the header below never says either any more. */}
+        <h1 className="visually-hidden">Study</h1>
         <div className="spinner-border text-primary" role="status" aria-label="Loading study">
           <span className="visually-hidden">Loading study...</span>
         </div>
@@ -4998,41 +5055,100 @@ const OpportunityForm: React.FC = () => {
               one and the harmless one were told apart by position alone.
               This one says Exit, carries a different icon, and asks before it
               throws anything away. The bottom one names the step it returns to.
+
+              Analytics sits beside it now (D8/row 1): it used to live inside
+              the identity header below, which meant it appeared the instant
+              autosave minted a row - on a study "created ninety seconds ago,
+              with nothing in it" (mav-wizard-shell), keyed off an event that
+              also flips the study's URL but nothing else about it. It is
+              gated on the study having actually been PUBLISHED rather than
+              merely having an id, so the same event stops growing this
+              control too; the analytics page itself still renders for every
+              type, per the comment this one inherits below.
             */}
-            <button
-              className="btn btn-outline-secondary mb-3"
-              onClick={() => requestExit('/admin')}
-            >
-              <LogOut size={16} className="me-1" />
-              Exit to dashboard
-            </button>
+            <div className="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+              <button
+                className="btn btn-outline-secondary"
+                onClick={() => requestExit('/admin')}
+              >
+                <LogOut size={16} className="me-1" />
+                Exit to dashboard
+              </button>
+              {/* Analytics for every study TYPE, once published - the
+                  analytics page renders an Overview for all types and is the
+                  only route to a moderated study's participant roster, so it
+                  must not be gated to question-carrying and unmoderated types
+                  (audit row a64-analytics-live-session-participants). Routed
+                  through `requestExit` rather than a bare `navigate` (row 10):
+                  it used to be the one exit control the unsaved-work guard
+                  never saw. */}
+              {isEdit && id && formData.status === 'published' && (
+                <button
+                  className="btn btn-outline-primary btn-sm text-sm"
+                  onClick={() => requestExit(`/admin/opportunities/${id}/analytics`)}
+                >
+                  <TrendingUp size={14} className="me-1" />
+                  Analytics
+                </button>
+              )}
+            </div>
 
           <div className="card shadow-sm border-0">
+            {/*
+              D8: the header carries the STUDY, not the product's opinion of
+              what the author is doing to it. It used to read "Create new
+              study" through step 3 and "Edit study" from step 4 on - the same
+              draft, the same sitting, renamed mid-flow by the autosave event
+              that mints a row underneath the author (row 1) - so it cannot
+              flip: there is no "mode" word left to flip. A title, a type, a
+              status; all three come from `formData`, so none of them can
+              disagree with what Review or the dashboard say about the same
+              study.
+            */}
             <div className="card-header border-0 py-4">
               <div className="d-flex align-items-center justify-content-between form-edit-header">
-                <div>
-                  <h1 className="mb-1 form-title form-title-lg">
-                    {isEdit ? 'Edit study' : 'Create new study'}
+                <div className="d-flex align-items-center gap-2 flex-wrap">
+                  <h1 className="mb-0 form-title form-title-lg">
+                    {formData.title.trim() || 'Untitled study'}
                   </h1>
-                  <p className="mb-0 form-subtitle form-subtitle-md">
-                    {isEdit ? 'Update study details and sessions' : 'Set up a new Cortex research study'}
-                  </p>
+                  {formData.type && (
+                    <span className={getTypeBadgeClass(formData.type)}>
+                      {getAdminTypeLabel(formData.type)}
+                    </span>
+                  )}
+                  <span className={`admin-study-status admin-study-status--${formData.status}`}>
+                    {getDisplayStatus(formData.status)}
+                  </span>
                 </div>
                 <div className="d-flex align-items-center gap-3">
-                  {/* Analytics button for every study type in edit mode. The
-                      analytics page renders an Overview for all types and is the
-                      only route to a moderated study's participant roster, so it
-                      must not be gated to question-carrying and unmoderated types
-                      (audit row a64-analytics-live-session-participants). */}
-                  {isEdit && id && (
+                  {/* D5: one click to the sessions step for a shape that has
+                      one, from wherever the author is standing - the landing
+                      effect no longer walks them here on its own (see the
+                      rewrite above `setFormData` near the top of this file). */}
+                  {sessionsStep && activeTab !== sessionsStep.id && (
                     <button
-                      className="btn btn-outline-primary btn-sm text-sm"
-                      onClick={() => navigate(`/admin/opportunities/${id}/analytics`)}
+                      type="button"
+                      className="btn btn-outline-secondary btn-sm"
+                      onClick={() => setActiveTab(sessionsStep.id)}
                     >
-                      <TrendingUp size={14} className="me-1" />
-                      Analytics
+                      <Calendar size={14} className="me-1" />
+                      Manage time slots
                     </button>
                   )}
+                  {/* D10: the feedback footer used to sit under every setup
+                      page - 232px of permanent chrome asking a researcher for
+                      an opinion about the product while they are doing work
+                      in it (mav-wizard-shell). `FeedbackFooter` now hides
+                      itself on these routes; this is where feedback lives
+                      instead. Routed through `requestExit` like every other
+                      control that leaves this form with something to lose. */}
+                  <button
+                    type="button"
+                    className="btn btn-link btn-sm p-0 text-body-secondary"
+                    onClick={() => requestExit('/feedback')}
+                  >
+                    Feedback
+                  </button>
                   <div className="form-user-info form-user-info-text">
                     <UserCircle size={16} className="me-1" />
                     {user?.name || 'Unknown User'}
@@ -5190,6 +5306,18 @@ const OpportunityForm: React.FC = () => {
                 on a published study it stands in for that line entirely,
                 since there is no autosave state to report.
               */}
+              {/*
+                Row 27: everything below, up to and including Discard draft,
+                sits in one region with a reserved minimum height - see
+                `HEADER_STATUS_REGION_MIN_HEIGHT` above for why it is a
+                literal rather than a derived number. Whichever of the three
+                lines below are actually showing, the strip underneath this
+                region does not move.
+              */}
+              <div
+                data-testid="header-status-region"
+                style={{ minHeight: HEADER_STATUS_REGION_MIN_HEIGHT }}
+              >
               <div
                 className="px-4 pt-2 small text-body-secondary"
                 data-testid="save-model-note"
@@ -5286,6 +5414,7 @@ const OpportunityForm: React.FC = () => {
                   </button>
                 </div>
               )}
+              </div>
 
               {/*
                 One line, offered once, for an author coming back to an
