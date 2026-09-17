@@ -419,7 +419,11 @@ describe('the summary reads the form as it stands, not as it was on arrival', ()
     fillBasics('unmoderated');
     walkForward();
 
-    expect(screen.getByText('A study with a long enough title')).toBeInTheDocument();
+    // Scoped to the Review step (D8: the page header now ALSO shows the
+    // live title, so an unscoped query matches both).
+    expect(
+      within(screen.getByTestId('review-step')).getByText('A study with a long enough title')
+    ).toBeInTheDocument();
 
     // Change something on step 1...
     fireEvent.click(screen.getByRole('button', { name: 'Edit Basic Information' }));
@@ -436,7 +440,11 @@ describe('the summary reads the form as it stands, not as it was on arrival', ()
 
     fireEvent.click(strip()[strip().length - 1]);
 
-    expect(screen.getByText('Renamed on a second visit')).toBeInTheDocument();
+    // Scoped to the Review step - the page header (D8) also carries the live
+    // title now, so an unscoped query matches both.
+    expect(
+      within(screen.getByTestId('review-step')).getByText('Renamed on a second visit')
+    ).toBeInTheDocument();
     expect(screen.queryByText('A study with a long enough title')).not.toBeInTheDocument();
     // The hostname as the participant sees it - not the port, not the path.
     expect(screen.getByText('shop.example.com')).toBeInTheDocument();

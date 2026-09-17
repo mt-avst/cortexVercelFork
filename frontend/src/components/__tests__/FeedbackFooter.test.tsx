@@ -56,4 +56,35 @@ describe('FeedbackFooter', () => {
 
     expect(screen.getByLabelText('How we can improve Cortex')).toBeInTheDocument();
   });
+
+  // D10: 232px of permanent chrome asking a researcher for an opinion about
+  // the product while they are doing work in it (mav-wizard-shell) - and the
+  // study-setup header now carries its own "Feedback" item, so nothing is
+  // lost by hiding this one on these routes.
+  describe('on the study-setup pages (D10)', () => {
+    it.each([
+      '/admin/opportunities/new',
+      '/admin/opportunities/new/preview',
+      '/admin/opportunities/opp-1/edit',
+      '/admin/opportunities/opp-1/edit/preview'
+    ])('renders nothing on %s', (pathname) => {
+      render(
+        <MemoryRouter initialEntries={[pathname]}>
+          <FeedbackFooter />
+        </MemoryRouter>
+      );
+
+      expect(screen.queryByLabelText('How we can improve Cortex')).toBeNull();
+    });
+
+    it('still renders on the admin dashboard, which is not a setup route', () => {
+      render(
+        <MemoryRouter initialEntries={['/admin']}>
+          <FeedbackFooter />
+        </MemoryRouter>
+      );
+
+      expect(screen.getByLabelText('How we can improve Cortex')).toBeInTheDocument();
+    });
+  });
 });
