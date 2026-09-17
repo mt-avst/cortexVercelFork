@@ -171,7 +171,7 @@ const ScreenerQuestions: React.FC<ScreenerQuestionsProps> = ({
                             </button>
                             <button
                               type="button"
-                              className={`btn btn-sm ${option.disqualifies ? 'btn-dark' : 'btn-outline-secondary'}`}
+                              className={`btn btn-sm ${option.disqualifies ? 'btn-danger' : 'btn-outline-secondary'}`}
                               aria-pressed={option.disqualifies}
                               onClick={() =>
                                 updateOption(index, oIndex, { disqualifies: true })

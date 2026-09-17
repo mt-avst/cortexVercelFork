@@ -93,6 +93,74 @@ describe('ScreenerQuestions - editing', () => {
       within(group2).getByRole('button', { name: /screen out/i })
     ).toHaveAttribute('aria-pressed', 'true');
   });
+
+  it('never applies an undefined btn-* class to the eligibility toggle', () => {
+    // ScreenerQuestions.tsx used `btn-dark`, which no stylesheet in this app
+    // defines (Bootstrap is not loaded) - a selected "Screen out" rendered as
+    // bare text. Every btn-* class used here must be one _components.css
+    // actually defines.
+    const definedBtnClasses = new Set([
+      'btn',
+      'btn-sm',
+      'btn-lg',
+      'btn-primary',
+      'btn-secondary',
+      'btn-outline-primary',
+      'btn-outline-secondary',
+      'btn-danger',
+      'btn-outline-danger',
+      'btn-success',
+      'btn-warning',
+      'btn-link',
+      'btn-glass',
+      'btn-power',
+      'btn-close',
+      'btn-nowrap',
+      'btn-view-details',
+      'btn-booking-join',
+      'btn-booking-cancel'
+    ]);
+
+    renderList({
+      questions: [
+        question({
+          options: [
+            { id: 'o1', label: 'Engineer', disqualifies: false },
+            { id: 'o2', label: 'Something else', disqualifies: true }
+          ]
+        })
+      ]
+    });
+
+    screen.getAllByRole('button').forEach((button) => {
+      button.className
+        .split(/\s+/)
+        .filter((cls) => cls.startsWith('btn-') || cls === 'btn')
+        .forEach((cls) => {
+          expect(definedBtnClasses.has(cls)).toBe(true);
+        });
+    });
+  });
+
+  it('gives a selected Screen out flag a real fill, not bare text', () => {
+    renderList({
+      questions: [
+        question({
+          options: [
+            { id: 'o1', label: 'Engineer', disqualifies: false },
+            { id: 'o2', label: 'Something else', disqualifies: true }
+          ]
+        })
+      ]
+    });
+
+    const group2 = screen.getByRole('group', { name: /answer 2 eligibility/i });
+    const screenOut = within(group2).getByRole('button', { name: /screen out/i });
+    expect(screenOut).toHaveAttribute('aria-pressed', 'true');
+    // A defined, filled class - not the undefined `btn-dark`.
+    expect(screenOut.className).toContain('btn-danger');
+    expect(screenOut.className).not.toContain('btn-dark');
+  });
 });
 
 describe('ScreenerQuestions - adding and removing', () => {

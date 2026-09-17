@@ -211,6 +211,24 @@ describe('collapsing', () => {
   });
 
   /**
+   * Row 32: "Edit"/"Collapse" sits inside the one big disclosure button that
+   * toggles the whole card, but `.question-card__toggle` underlines it
+   * (question-list.css), so it reads as its own separate link. Overridden
+   * inline here, since the underline itself lives in a CSS file outside this
+   * change's boundary.
+   */
+  it('does not underline "Edit", which is part of the disclosure button, not a link of its own', () => {
+    render(<Harness />);
+
+    const [toggle] = screen.getAllByText('Edit');
+    expect(toggle.closest('button')).toHaveAttribute(
+      'class',
+      expect.stringContaining('question-card__summary')
+    );
+    expect(toggle).toHaveStyle({ textDecoration: 'none' });
+  });
+
+  /**
    * The auto-expand runs off `items`, and every keystroke anywhere in the list
    * makes a new `items`. Without a guard it re-opened a card the author had
    * deliberately collapsed, every time they typed a character in another one -

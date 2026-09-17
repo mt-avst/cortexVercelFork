@@ -205,6 +205,31 @@ describe('Studies list ownership affordance', () => {
 });
 
 /**
+ * Row 35: a bare page (no card) where every wizard screen sits inside one,
+ * and a plain uppercase status label where the opportunity form uses a pill
+ * (`StatusBadge`).
+ */
+describe('Studies page - shell parity (row 35)', () => {
+  it('wraps the page content in a card, like every wizard screen', async () => {
+    renderPage();
+
+    const heading = await screen.findByRole('heading', { name: 'Task Lists' });
+    expect(heading.closest('.card')).not.toBeNull();
+  });
+
+  it('shows a launched task list\'s status as a pill, not plain text', async () => {
+    mockedList.mockResolvedValue([
+      study({ status: 'launched', owner_user_id: 'user-viewer' }),
+    ] as never);
+
+    renderPage();
+
+    await screen.findByText('Checkout walkthrough');
+    expect(screen.getByText('Published').className).toMatch(/rounded-full/);
+  });
+});
+
+/**
  * Which studies are NOT on approved consent wording, at a glance.
  *
  * The chip's own unit tests cover when it renders; this covers that the LIST
