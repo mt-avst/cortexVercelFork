@@ -158,3 +158,54 @@ describe('StepNav', () => {
     expect(onSelect).toHaveBeenCalledTimes(1);
   });
 });
+
+/**
+ * D7 (row 23): the strip used to stack position, title, description and
+ * state - up to 167px tall - and the description is what carried no
+ * accessibility contract of its own (unlike the icon, the status words and
+ * the position sentence, all pinned above). Aicher-style replaces the visible
+ * position with a numeral and drops the description, while keeping the full
+ * position sentence for assistive tech and the button/aria-current contract
+ * unchanged - the tests above this block already prove that part still
+ * holds.
+ */
+describe('StepNav - D7 step strip (row 23)', () => {
+  it('shows a numeral in place of the position line, hidden from assistive tech', () => {
+    renderNav();
+
+    const indexes = stepButtons().map((button) => button.querySelector('.step-tab__index'));
+    indexes.forEach((index) => expect(index).toHaveAttribute('aria-hidden', 'true'));
+    expect(indexes.map((index) => index?.textContent)).toEqual(['1', '2', '3', '4']);
+  });
+
+  it('keeps the full "Step X of Y" sentence for assistive tech, visually hidden', () => {
+    renderNav();
+
+    const position = stepButtons()[0].querySelector('.step-tab__position');
+    expect(position).toHaveClass('sr-only');
+    expect(position).toHaveTextContent('Step 1 of 4');
+    // Not just present in a class list - the textContent contract the rest
+    // of this file already depends on ("reports each step at its own
+    // position") must survive being visually hidden.
+    expect(stepButtons()[0]).toHaveTextContent('Step 1 of 4');
+  });
+
+  it('drops the description - no tab-description element is rendered at all', () => {
+    renderNav();
+
+    stepButtons().forEach((button) => {
+      expect(button.querySelector('.tab-description')).not.toBeInTheDocument();
+      expect(button.querySelector('.tab-description-dynamic')).not.toBeInTheDocument();
+    });
+    // None of the given descriptions leaked onto the button some other way.
+    expect(screen.queryByText('Configure type and status')).not.toBeInTheDocument();
+    expect(screen.queryByText('What the participant does')).not.toBeInTheDocument();
+  });
+
+  it('still renders the title and the status words a sighted author reads', () => {
+    renderNav();
+
+    expect(stepButtons()[0]).toHaveTextContent('Basic Information');
+    expect(stepButtons()[0]).toHaveTextContent('Needs attention');
+  });
+});

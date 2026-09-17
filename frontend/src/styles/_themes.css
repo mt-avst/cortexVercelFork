@@ -2907,14 +2907,6 @@ body.theme-dark .opportunity-form .opportunity-form-tab .tab-title {
   color: inherit;
 }
 
-body.theme-dark .opportunity-form .opportunity-form-tab .tab-description {
-  color: rgba(224, 224, 224, 0.7);
-}
-
-body.theme-dark .opportunity-form .opportunity-form-tab.active .tab-description {
-  color: color-mix(in srgb, var(--brand-orange-500) 80%, transparent);
-}
-
 body.theme-dark .opportunity-form .opportunity-form-tab:hover:not(.active) {
   color: #fff;
   border-bottom: 2px solid rgba(255,255,255,0.2);
@@ -3150,14 +3142,6 @@ body.theme-light .opportunity-form .opportunity-form-tab.active {
 
 body.theme-light .opportunity-form .opportunity-form-tab .tab-title {
   color: inherit;
-}
-
-body.theme-light .opportunity-form .opportunity-form-tab .tab-description {
-  color: #6B7280;
-}
-
-body.theme-light .opportunity-form .opportunity-form-tab.active .tab-description {
-  color: var(--accent-text-on-light);
 }
 
 /* Light-theme twin of the block above. The greens and greys here are picked
