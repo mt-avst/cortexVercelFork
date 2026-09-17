@@ -344,6 +344,20 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
           </div>
         )}
 
+        {/*
+          Row 12: only Review told the author this set of questions is shared,
+          editing it in place rather than authoring content that belongs to
+          this opportunity alone. No count of the studies it is linked to yet -
+          the usage endpoint that answers that lands in a later wave - so this
+          says only that it is shared, not by how much.
+        */}
+        {hasLinkedStudy && !studyIsReadOnly && (
+          <div className="alert alert-info py-2 px-3 mb-4" style={{ fontSize: '0.875rem' }}>
+            This is a shared set of questions. Changes here apply everywhere it
+            is linked, not only to this study.
+          </div>
+        )}
+
         {offeringSourceChoice && (
           <StudySourceChoice
             noun="question"
