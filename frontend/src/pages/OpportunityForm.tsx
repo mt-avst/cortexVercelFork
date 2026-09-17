@@ -6045,7 +6045,21 @@ const OpportunityForm: React.FC = () => {
                              */
                             onBack={previousStep ? () => setActiveTab(previousStep.id) : undefined}
                             onBackLabel={previousStep?.title}
-                            onContinue={continueControl?.onNext}
+                            /*
+                             * Routed through `continueFromStep` like every other
+                             * step's forward control, not the raw `onNext`. D6
+                             * moved `default_duration_minutes` and the
+                             * published-edit `meeting_location_required` gate
+                             * onto this step, so a raw Continue would ADVANCE
+                             * past a value Submit still refuses - breaking the
+                             * "Continue can never pass what Submit refuses"
+                             * invariant for the two fields this step now owns.
+                             */
+                            onContinue={
+                              continueControl
+                                ? () => continueFromStep(continueControl.onNext)
+                                : undefined
+                            }
                             onContinueLabel={nextStep?.title}
                             /*
                              * The step's footer is the shared StepActions row

@@ -1,10 +1,10 @@
 import React from 'react';
 import { render, screen, fireEvent, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import OpportunityForm, { FIELD_LOCATIONS } from '../OpportunityForm';
-import { createOpportunity } from '../../api/client';
+import { createOpportunity, getOpportunity } from '../../api/client';
 import {
   errorSummary,
   inlineErrorText,
@@ -35,7 +35,22 @@ vi.mock('../../contexts/ThemeContext', () => ({
   useTheme: () => ({ theme: 'light' }),
 }));
 
-vi.mock('../../components/AdminSessionManager', () => ({ default: () => null }));
+// A stub that still exposes the step's forward control, so a test can press
+// Continue ON the Session Management step - the field-owning step since D6.
+vi.mock('../../components/AdminSessionManager', () => ({
+  default: ({
+    onContinue,
+    onContinueLabel
+  }: {
+    onContinue?: () => void;
+    onContinueLabel?: string;
+  }) =>
+    onContinue ? (
+      <button type="button" onClick={onContinue}>
+        Continue: {onContinueLabel}
+      </button>
+    ) : null
+}));
 
 vi.mock('../../api/client', () => ({
   createOpportunity: vi.fn(),
@@ -196,10 +211,12 @@ describe('Continue can never pass what Submit refuses', () => {
     );
   });
 
-  it('refuses a 300-minute session length on the step that owns it (D6)', () => {
+  it('refuses a 300-minute session length at Continue on the step that owns it (D6)', () => {
     // Session length used to be a Basic Information field with a hand-copied
-    // Continue rule. D6 moved it to the Session Management step; the refusal
-    // travels with the control and is raised there, not on Basics.
+    // Continue rule. D6 moved it to the Session Management step; Continue THERE
+    // must refuse it, not just blur - otherwise the author advances past a value
+    // Submit still refuses, the exact "Continue can never pass what Submit
+    // refuses" break the D6 review caught.
     renderForm();
     fillStepOne({ type: 'test' });
 
@@ -207,13 +224,54 @@ describe('Continue can never pass what Submit refuses', () => {
     expect(screen.queryByLabelText(/Default Duration/i)).toBeNull();
 
     goToStep(/Session Management/);
-    const duration = screen.getByLabelText(/Default Duration/i);
-    fireEvent.change(duration, { target: { value: '300' } });
-    fireEvent.blur(duration);
+    fireEvent.change(screen.getByLabelText(/Default Duration/i), {
+      target: { value: '300' },
+    });
 
-    expect(
-      inlineErrorText('Enter a session length between 5 and 240 minutes')
-    ).toBeInTheDocument();
+    // The step's forward control (the AdminSessionManager stub exposes it).
+    fireEvent.click(screen.getByRole('button', { name: /^Continue: /i }));
+
+    // It did NOT advance, and it named the field on this step.
+    expect(currentStepName()).toMatch(/Session Management/i);
+    expect(summarisedErrorKeys()).toEqual(['default_duration_minutes']);
+  });
+
+  it('refuses an emptied meeting location at Continue when publishing (row 9 / D6)', async () => {
+    // The published-edit venue gate moved to the Session Management step too
+    // (D6). A published test with the venue cleared must be refused at Continue
+    // there, not advanced past.
+    vi.mocked(getOpportunity).mockResolvedValueOnce({
+      id: 'opp-pub',
+      type: 'test',
+      title: 'A published live session',
+      purpose_one_liner: 'Watch people work through the new checkout end to end',
+      status: 'published',
+      default_duration_minutes: 30,
+      meeting_location_optional: 'https://meet.example.com/room',
+      participant_type_required: 'any',
+    } as never);
+
+    render(
+      <MemoryRouter initialEntries={['/admin/opportunities/opp-pub/edit']}>
+        <Routes>
+          <Route path="/admin/opportunities/:id/edit" element={<OpportunityForm />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByRole('navigation', { name: 'Form steps' });
+    goToStep(/Session Management/);
+    fireEvent.change(screen.getByLabelText(/Meeting Location/i), {
+      target: { value: '' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /^Continue: /i }));
+
+    // Did not advance, and the venue refusal is on the record. (A slotless
+    // published test also reports `sessions` here - both are Session Management
+    // gates now - so the venue key is asserted by presence, not exclusively.)
+    expect(currentStepName()).toMatch(/Session Management/i);
+    expect(summarisedErrorKeys()).toContain('meeting_location_optional');
   });
 
   it('still lets a valid step 1 through, so the refusals above are about the values', () => {
