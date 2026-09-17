@@ -212,6 +212,62 @@ describe('StudyEditorForm - edit', () => {
     expect(mockedCreate).not.toHaveBeenCalled();
   });
 
+  /**
+   * Row 3: the standalone editor showed five task cards for a study the
+   * wizard shows as four - the fifth was the `_step_end` completion marker,
+   * editable and removable here even though no authoring path ever writes
+   * one by hand.
+   */
+  describe('the completion marker (row 3)', () => {
+    const withEndMarker = {
+      id: 'study_abc',
+      title: 'Existing study',
+      intro_text: 'Existing intro',
+      consent_text: 'Existing consent',
+      status: 'launched' as const,
+    };
+
+    const stepsWithEndMarker = [
+      {
+        step_id: 'study_abc_step_1',
+        order: 1,
+        type: 'instruction' as const,
+        prompt: 'Do the thing',
+        target_url: 'https://example.com',
+      },
+      {
+        step_id: 'study_abc_step_end',
+        order: 2,
+        type: 'end' as const,
+        prompt: 'Thanks - that is the end of the study.',
+      },
+    ];
+
+    it('excludes the end marker from the editable task list', () => {
+      renderForm({ initialStudy: withEndMarker, initialSteps: stepsWithEndMarker });
+
+      // One real task, not two - the terminator gets no card of its own.
+      expect(screen.getAllByLabelText('Task id')).toHaveLength(1);
+      expect(screen.getByLabelText('Task id')).toHaveValue('study_abc_step_1');
+    });
+
+    it('still saves the end marker unedited, after the last authored task', async () => {
+      renderForm({ initialStudy: withEndMarker, initialSteps: stepsWithEndMarker });
+
+      fireEvent.click(screen.getByRole('button', { name: /Save changes/i }));
+
+      await waitFor(() => expect(mockedUpdate).toHaveBeenCalledTimes(1));
+      const steps = mockedUpdate.mock.calls[0][1].steps ?? [];
+      expect(steps).toHaveLength(2);
+      expect(steps[1]).toMatchObject({
+        step_id: 'study_abc_step_end',
+        type: 'end',
+        order: 2,
+        prompt: 'Thanks - that is the end of the study.',
+      });
+    });
+  });
+
   describe('optimistic concurrency', () => {
     const editableStudy = {
       id: 'study_abc',

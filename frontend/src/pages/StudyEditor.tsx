@@ -334,6 +334,7 @@ export function StudyEditorForm({
   const [steps, setSteps] = useState<StepDraft[]>(() => {
     if (initialSteps && initialSteps.length > 0) {
       return initialSteps
+        .filter((step) => step.type !== 'end')
         .slice()
         .sort((left, right) => left.order - right.order)
         .map(stepDraftFromStep);
@@ -341,6 +342,24 @@ export function StudyEditorForm({
 
     return [defaultStep(1, stepIdFor(studyId, 1))];
   });
+  /**
+   * The completion marker every authoring path appends after the authored
+   * steps (row 3). It is never an editor-facing task: the standalone editor
+   * used to fold it into `steps` and render it as a fifth, removable card -
+   * one more than the wizard's Task List ever shows for the same study,
+   * because the wizard's authoring vocabulary never carries it at all
+   * (`toStudySteps`/`toSurveySteps` append it on the way OUT).
+   *
+   * Held apart from `steps` rather than filtered at render time so every
+   * index-based handler above (`removeStep`, `changeStepType`, reordering)
+   * keeps operating on task steps only - folding it back in for render and
+   * unfolding it for each handler would be the same bug rewritten five times.
+   * Not itself editable, so it needs no state setter; it is carried through to
+   * the save payload unchanged, at the position after the last authored step.
+   */
+  const endStepRef = useRef<StudyStep | null>(
+    initialSteps?.find((step) => step.type === 'end') ?? null
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /**
@@ -572,6 +591,15 @@ export function StudyEditorForm({
       return;
     }
 
+    const authoredSteps = steps.map(stepDraftToPayload);
+    // The completion marker (row 3) is carried through unedited, at the
+    // position after the last authored task, rather than sourced from
+    // `steps` - it was deliberately kept out of that state so no handler
+    // above can touch it.
+    const stepsPayload = endStepRef.current
+      ? [...authoredSteps, { ...endStepRef.current, order: authoredSteps.length + 1 }]
+      : authoredSteps;
+
     const payload = {
       // Sent on create so the study row's id matches the prefix already baked
       // into the step ids. Ignored on update, where the id comes from the route.
@@ -601,7 +629,7 @@ export function StudyEditorForm({
         : undefined,
       locale: locale.trim() || undefined,
       status,
-      steps: steps.map(stepDraftToPayload),
+      steps: stepsPayload,
     };
 
     // Validate client-side against the shared contract before hitting the API,
