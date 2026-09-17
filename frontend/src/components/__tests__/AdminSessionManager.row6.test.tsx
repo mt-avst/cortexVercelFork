@@ -138,10 +138,15 @@ describe('Row 6 defect 5 - the list is the default view and shows existing sessi
     await settle();
 
     // Zero sessions: the Table opens directly on the picker, so slots are chosen
-    // here with no detour. The old "No sessions yet -> Add slots -> calendar"
-    // dead-end is gone (Mav & Petra: pick from the table, not the calendar).
-    expect(screen.queryByText('No sessions yet')).not.toBeInTheDocument();
+    // here with no detour - the old "No sessions yet -> Add slots -> calendar"
+    // dead-end stays gone (Mav & Petra: pick from the table, not the calendar).
+    // Superseded by the 2026-09-17 redesign's row 2: the picker being on
+    // screen no longer means the list must say nothing about having zero
+    // sessions (verifier claim 13 - that branch was dead code). Both hold at
+    // once: the picker is still what is on screen at rest, and the status
+    // text sits beneath it rather than gating the picker behind it.
     expect(await screen.findByRole('button', { name: /^Select all/i })).toBeInTheDocument();
+    expect(screen.getByText('No sessions yet')).toBeInTheDocument();
     // A pickable slot is a real, named button, and the picker's controls are up.
     expect(screen.getByRole('button', { name: /available time slot/i })).toBeInTheDocument();
     expect(screen.getByLabelText('Start Date')).toBeInTheDocument();
@@ -227,7 +232,13 @@ describe('Row 2 - slot removal is a deferred, undoable commit', () => {
     }
   });
 
-  it('shows a booked slot\'s refusal reason as visible text, not a title on a disabled button', async () => {
+  it('shows a booked row as a neutral tag, not a refusal - and offers no trash to disable (row 20)', async () => {
+    // Superseded by the 2026-09-17 redesign's row 20: three lines of
+    // danger-red "Cannot remove: N booking(s)" prose on a perfectly healthy
+    // booked row read as a fault, when a participant booking it is the point
+    // of the feature. It is a grey "N booked" tag now, and there is no trash
+    // control at all - not even a disabled one - because a booked row was
+    // never removable from here.
     const onSessionsChange = vi.fn();
     const { container } = renderManager({
       onSessionsChange,
@@ -240,17 +251,15 @@ describe('Row 2 - slot removal is a deferred, undoable commit', () => {
     });
     await settle();
 
-    // The reason is readable text in the row, not hidden in a `title` attribute
-    // on a disabled control.
-    expect(screen.getByText(/Cannot remove: 1 booking/i)).toBeInTheDocument();
+    expect(screen.getByText('1 booked')).toBeInTheDocument();
+    expect(screen.queryByText(/Cannot remove/i)).not.toBeInTheDocument();
     // No remove control is offered for a booked slot, so nothing can be deleted.
     expect(
       screen.queryByRole('button', { name: /Remove session on/i })
     ).not.toBeInTheDocument();
     expect(vi.mocked(deleteSession)).not.toHaveBeenCalled();
     expect(onSessionsChange).not.toHaveBeenCalled();
-    // Not merely a tooltip: the reason is in the DOM as text.
-    expect(container.textContent).toMatch(/Cannot remove: 1 booking/i);
+    expect(container.textContent).toMatch(/1 booked/);
   });
 });
 
@@ -403,9 +412,12 @@ describe('Existing Sessions table headers name their scope (row 12)', () => {
     const table = container.querySelector('.momentum-table-container table');
     expect(table).not.toBeNull();
     const headers = [...table!.querySelectorAll('th')];
-    // The seven columns of the Existing Sessions table, so an empty list cannot
+    // Five columns since the 2026-09-17 redesign's row 33: Start Time and End
+    // Time merged into one "Session" column, and Capacity and Booked into one
+    // "Booked" reading ("N of M booked") - both were narrow, wrapping columns
+    // this table used to carry two of each concept in. An empty list cannot
     // pass this vacuously.
-    expect(headers).toHaveLength(7);
+    expect(headers).toHaveLength(5);
     for (const th of headers) {
       expect(th.getAttribute('scope')).toBe('col');
     }
