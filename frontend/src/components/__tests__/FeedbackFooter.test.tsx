@@ -8,10 +8,11 @@ import FeedbackFooter from '../FeedbackFooter';
 import { submitFeedback } from '../../api/client';
 
 // The feedback table's CHECK constraint (backend/src/db/migrate.ts) only
-// accepts 'bug' | 'feature' | 'question' | 'other'. The footer used to submit
-// 'footer', which isn't in that set - every submission through this form
-// failed with a 500 in production, invisibly, because nothing pinned the
-// category to the set the database actually accepts.
+// accepts 'bug' | 'feature' | 'question' | 'other'. Unrelated to this
+// branch: an earlier version of this footer sent 'footer', which isn't in
+// that set, so every submission failed with a silent 500 in production.
+// Already fixed on main (this footer sends 'other') - this test just pins
+// the category so nothing sends it out of the accepted set again.
 const VALID_CATEGORIES = ['bug', 'feature', 'question', 'other'];
 
 vi.mock('../../api/client', () => ({
@@ -55,5 +56,36 @@ describe('FeedbackFooter', () => {
     );
 
     expect(screen.getByLabelText('How we can improve Cortex')).toBeInTheDocument();
+  });
+
+  // D10: 232px of permanent chrome asking a researcher for an opinion about
+  // the product while they are doing work in it (mav-wizard-shell) - and the
+  // study-setup header now carries its own "Feedback" item, so nothing is
+  // lost by hiding this one on these routes.
+  describe('on the study-setup pages (D10)', () => {
+    it.each([
+      '/admin/opportunities/new',
+      '/admin/opportunities/new/preview',
+      '/admin/opportunities/opp-1/edit',
+      '/admin/opportunities/opp-1/edit/preview'
+    ])('renders nothing on %s', (pathname) => {
+      render(
+        <MemoryRouter initialEntries={[pathname]}>
+          <FeedbackFooter />
+        </MemoryRouter>
+      );
+
+      expect(screen.queryByLabelText('How we can improve Cortex')).toBeNull();
+    });
+
+    it('still renders on the admin dashboard, which is not a setup route', () => {
+      render(
+        <MemoryRouter initialEntries={['/admin']}>
+          <FeedbackFooter />
+        </MemoryRouter>
+      );
+
+      expect(screen.getByLabelText('How we can improve Cortex')).toBeInTheDocument();
+    });
   });
 });
