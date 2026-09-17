@@ -2747,11 +2747,12 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
    * only ever agree with each other and with what a click can actually do.
    */
   // ponytail: this Calendar counter excludes calendar-conflict slots but not
-  //   isAllocated (non-exact overlap of a session) or isConfirmed, which the
-  //   view still disables - the same gap gridBookableCount now closes. Left
-  //   consistent with W2 rather than reworked mid-redesign.
-  //   -> follow-up: fold the allocated/confirmed exclusion into all three
-  //   counters together, sharing one predicate.
+  //   isAllocated (non-exact overlap of a session), isConfirmed, or slotIsPast -
+  //   three divergence axes the view still disables (or greys) that
+  //   gridBookableCount now closes. Left consistent with W2 rather than reworked
+  //   mid-redesign.
+  //   -> cto/AdaptaLabs#135: fold the allocated/confirmed/past exclusion into all
+  //   three counters together, sharing one predicate.
   const drawnSlots = React.useMemo(() => {
     const onScreen = visibleDayKeys(startDate, endDate, excludeWeekends, currentPage, daysPerPage);
     return slotsToDraw(displaySlots, durationMinutes, protectedSlotKeys).filter(slot => {
@@ -2788,8 +2789,8 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
    * headline can only ever agree with what is actually pickable.
    */
   // ponytail: same shared gap as drawnSlots above - excludes conflicts but not
-  //   isAllocated/isConfirmed. Kept as W2 shipped it; the consistent fix across
-  //   all three counters is the follow-up noted at drawnSlots.
+  //   isAllocated, isConfirmed or slotIsPast. Kept as W2 shipped it; the
+  //   consistent fix across all three counters is cto/AdaptaLabs#135.
   const tableSlotCount = React.useMemo(() => {
     const inRange = new Set(
       daysInRange(startDate, endDate, excludeWeekends).map(d => d.toDateString())
@@ -3810,7 +3811,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
             .session-cellbtn-available:hover { border-color: var(--brand-orange-500); }
             /* --accent-fill-text-safe is the accent FILL proven >= 4.5:1 under
                white text in both themes (5.77 dark / 5.18 light); brand-orange-500
-               under white is only ~2.6:1, below AA for the .62rem cell label. The
+               under white is only 3.12:1, below AA for the .62rem cell label. The
                text-carrying accent cells fill with the text-safe token, not the
                raw ramp step - so no white text sits on a brand-orange fill here. */
             .session-cellbtn-selected { background: var(--accent-fill-text-safe);

@@ -44,36 +44,43 @@ describe('AdminSessionManager has no unconditional dark-theme override (row 3)',
  *
  * The default grid draws every selected and every booked slot as an accent
  * cell with white text. `var(--brand-orange-500)` (#FF5A1F) under white is only
- * ~2.60:1 - below AA 4.5 for the .62rem cell label - which the project's
- * accent-fill-policy records. Text on accent has to fill with
- * `--accent-fill-text-safe` (>= 5.18:1 under white in both themes) instead.
+ * 3.12:1 - below AA 4.5 for the .62rem cell label - which the project's
+ * accent-fill-policy records; the semantic aliases resolve to the same sub-AA
+ * ramp (`--brand-primary` = orange-600 ~3.78:1, `--brand-headline` = orange-500).
+ * Text on accent has to fill with `--accent-fill-text-safe` (>= 5.18:1 under
+ * white in both themes) instead.
  *
- * A source assertion because jsdom has no contrast: this fails BY NAME if any
- * rule ever pairs white text with a raw brand-orange background again.
+ * A source assertion because jsdom has no contrast. Deliberately broad so the
+ * "inline style escapes a scoped guard" class cannot regress: it flags the
+ * `background` shorthand AND `background-color`, the raw ramp AND the semantic
+ * aliases, and a near-white text colour (not only `#fff`). Scoped to the
+ * `.session-*` block, so the pre-existing chip-picker/momentum CSS - which has
+ * its own guards and allow-listed accent usage - is left alone.
  */
 describe('AdminSessionManager grid accent cells keep white text off raw brand-orange (D11 AA)', () => {
-  it('has no D11 grid rule pairing white text with a brand-orange background', () => {
-    // Scope to the D11 `<style>` block (the `.session-*` rules), not the
-    // pre-existing chip-picker/momentum-table blocks, which have their own
-    // guards and their own allow-listed accent usage.
+  it('has no D11 grid rule pairing near-white text with a sub-AA orange background', () => {
     const blockStart = source.indexOf('.session-status-band');
     const blockEnd = source.indexOf('`}</style>', blockStart);
     expect(blockStart).toBeGreaterThan(-1);
     expect(blockEnd).toBeGreaterThan(blockStart);
     const d11Block = source.slice(blockStart, blockEnd);
 
-    // Rule bodies, split on the closing brace. A rule that sets a near-white
-    // text colour AND a brand-orange (ramp step or #FF5A1F) background is the
-    // sub-AA pairing this guards - accent cells must fill with
-    // --accent-fill-text-safe instead.
+    // A near-white text colour: white/#fff/#ffffff, or a hex or rgb that reads
+    // as near-white (starts with f, or an rgb with high channels) - anything
+    // that would fail against a sub-AA orange fill.
+    const nearWhiteText =
+      /color:\s*(#fff\b|#ffffff\b|white\b|#f[0-9a-f]{2}\b|#f[0-9a-f]{5}\b|rgba?\(\s*2[45][0-9])/i;
+    // A sub-AA orange FILL, via the shorthand or background-color, and via the
+    // raw ramp (--brand-orange-N / #ff5a1f) or the semantic aliases that resolve
+    // to it (--brand-primary, --brand-headline). --accent-fill-text-safe is the
+    // AA-safe fill and is deliberately NOT matched, so it keeps passing.
+    const subAaOrangeFill =
+      /background(?:-color)?:[^;]*(--brand-orange-\d|--brand-primary\b|--brand-headline\b|#ff5a1f)/i;
+
     const offenders = d11Block
       .split('}')
       .map((rule) => rule.trim())
-      .filter((rule) => {
-        const whiteText = /color:\s*(#fff\b|#ffffff\b|white\b)/i.test(rule);
-        const orangeBackground = /background:[^;]*(--brand-orange-\d|#ff5a1f)/i.test(rule);
-        return whiteText && orangeBackground;
-      });
+      .filter((rule) => nearWhiteText.test(rule) && subAaOrangeFill.test(rule));
 
     expect(offenders).toEqual([]);
   });
