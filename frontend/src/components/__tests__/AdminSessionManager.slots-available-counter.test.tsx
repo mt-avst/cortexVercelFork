@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -128,6 +128,22 @@ describe('AdminSessionManager - the slots-available counter equals the selectabl
     const selectAll = screen.getByRole('button', { name: /^Select all/i });
     const offered = Number(selectAll.textContent!.match(/\((\d+)\)/)![1]);
     expect(headlineCount).toBe(offered);
+  });
+
+  it('agrees with the Table view counter on the Calendar (grid) view too (follow-up)', async () => {
+    // The Table view fix (`tableSlotCount`) excluded conflict cells; the grid
+    // view's own counter (`drawnSlots.length`) did not, so switching views
+    // re-inflated "4 slots available" back to "6 slots available" on the
+    // exact same underlying data - same fixture as the test above.
+    renderManager();
+    await settle();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Calendar' }));
+    await settle();
+
+    const headline = await screen.findByText(/\d+ slots available/i);
+    const headlineCount = Number(headline.textContent!.match(/(\d+) slots available/i)![1]);
+    expect(headlineCount).toBe(4);
   });
 
   it('does not announce a calendar-conflict cell as an image', async () => {

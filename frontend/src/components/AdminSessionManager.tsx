@@ -1634,15 +1634,27 @@ const CopyLinkButton: React.FC<{ value: string }> = ({ value }) => {
   };
 
   return (
-    <button
-      type="button"
-      className="btn btn-link btn-sm p-0 ms-1"
-      onClick={handleCopy}
-      aria-label="Copy meeting link"
-      title={copied ? 'Copied' : 'Copy meeting link'}
-    >
-      <Copy size={12} aria-hidden="true" />
-    </button>
+    <>
+      <button
+        type="button"
+        className="btn btn-link btn-sm p-0 ms-1"
+        onClick={handleCopy}
+        aria-label="Copy meeting link"
+        title={copied ? 'Copied' : 'Copy meeting link'}
+      >
+        <Copy size={12} aria-hidden="true" />
+      </button>
+      {/*
+        Follow-up fix: `title` alone is a mouse-only confirmation - it is
+        never announced to a screen reader. A visually-hidden aria-live
+        region says "Copied" out loud on success, without adding visible
+        text to an already-tight table row. Empty when idle, so nothing is
+        announced on mount or on a failed copy.
+      */}
+      <span aria-live="polite" className="visually-hidden">
+        {copied ? 'Copied' : ''}
+      </span>
+    </>
   );
 };
 
@@ -2505,15 +2517,25 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
   }, [availableSlots, protectedSlotKeys]);
 
   /**
-   * What the grid will ACTUALLY draw, computed with the same functions the grid
-   * uses. The counter below reports this rather than `displaySlots.length`,
-   * which was pre-filter and pre-prune and read 21 on a grid drawing 20.
+   * What the Calendar (grid) view's counter should report, computed with the
+   * same functions the grid uses. Originally just "pre-filter, pre-prune vs
+   * post" (21 counted against 20 drawn) - also excludes calendar-conflict
+   * slots now (row 8, follow-up): those chips are still drawn on the grid,
+   * grey and unselectable, but a headline that counts them is the exact same
+   * lie the Table view's counter told before its own fix - "N slots
+   * available" beside a busy chip nobody can click. `slotConflictsWithEvents`
+   * is the SAME predicate `tableSlotCount` below uses, so the two views can
+   * only ever agree with each other and with what a click can actually do.
    */
   const drawnSlots = React.useMemo(() => {
     const onScreen = visibleDayKeys(startDate, endDate, excludeWeekends, currentPage, daysPerPage);
     return slotsToDraw(displaySlots, durationMinutes, protectedSlotKeys).filter(slot => {
       const when = new Date(slot.start);
-      return !Number.isNaN(when.getTime()) && onScreen.has(when.toDateString());
+      return (
+        !Number.isNaN(when.getTime()) &&
+        onScreen.has(when.toDateString()) &&
+        !slotConflictsWithEvents(slot, calendarEvents)
+      );
     });
   }, [
     displaySlots,
@@ -2524,6 +2546,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
     excludeWeekends,
     currentPage,
     daysPerPage,
+    calendarEvents,
   ]);
 
   /**
@@ -2554,20 +2577,40 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
   }, [displaySlots, durationMinutes, protectedSlotKeys, startDate, endDate, excludeWeekends, calendarEvents]);
 
   /**
-   * Existing sessions the Calendar view's grid cannot draw at all (row 39).
+   * Existing sessions the Calendar view's grid cannot draw at all (row 39),
+   * split by WHY (follow-up fix): the first pass lumped "outside the picked
+   * dates" and "inside them, but a weekend with weekends switched off" into
+   * one "falls outside {range}" sentence, which is simply false for the
+   * second group - a Saturday inside 18-24 Sept is not outside 18-24 Sept, it
+   * is hidden by the "Include weekends" toggle above. The live-bookings study
+   * (Fri 11, Sat 19, Sun 20, Tue 22 vs an 18-24 Sept window) is exactly both
+   * causes at once: Fri 11 is genuinely before the window, Sat 19 and Sun 20
+   * are inside it and only excluded by the toggle, and Tue 22 is drawn fine.
    *
-   * The grid only ever visits days inside `daysInRange(startDate, endDate,
-   * excludeWeekends)` - a session dated outside that window is never looked
-   * up, never drawn, and (unlike the Table view, whose Existing Sessions list
-   * shows every session regardless of date) nothing on the Calendar view says
-   * so. A study with four sessions could show one and state nothing about the
-   * other three.
+   * `windowDates` deliberately ignores `excludeWeekends` - it is every day in
+   * [startDate, endDate], so "in the window" cannot itself be confused with
+   * "a weekday". Only a session inside the window AND a weekend gets sorted
+   * into `hiddenByWeekendToggle`; everything else the grid does not draw is
+   * `outOfRange`.
    */
   const sessionsOutsideCalendarRange = React.useMemo(() => {
-    const drawnDates = new Set(
-      daysInRange(startDate, endDate, excludeWeekends).map(d => d.toDateString())
+    const windowDates = new Set(
+      daysInRange(startDate, endDate, false).map(d => d.toDateString())
     );
-    return sessions.filter((session) => !drawnDates.has(new Date(session.start_time).toDateString()));
+    const outOfRange: Session[] = [];
+    const hiddenByWeekendToggle: Session[] = [];
+    sessions.forEach((session) => {
+      const day = new Date(session.start_time);
+      if (!windowDates.has(day.toDateString())) {
+        outOfRange.push(session);
+        return;
+      }
+      const isWeekend = day.getDay() === 0 || day.getDay() === 6;
+      if (excludeWeekends && isWeekend) {
+        hiddenByWeekendToggle.push(session);
+      }
+    });
+    return { outOfRange, hiddenByWeekendToggle };
   }, [sessions, startDate, endDate, excludeWeekends]);
 
   const handleAddManualSlot = useCallback(() => {
@@ -3709,15 +3752,34 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                       Please select a timeslot duration (15, 30, 45, or 60 minutes) to view available slots.
                     </div>
                   )}
-                  {sessionsOutsideCalendarRange.length > 0 && (
+                  {(sessionsOutsideCalendarRange.outOfRange.length > 0 ||
+                    sessionsOutsideCalendarRange.hiddenByWeekendToggle.length > 0) && (
                     <div className="alert alert-warning mb-3" role="alert">
                       <AlertTriangle size={16} className="me-2" />
-                      {sessionsOutsideCalendarRange.length} existing session
-                      {sessionsOutsideCalendarRange.length === 1 ? '' : 's'}{' '}
-                      {sessionsOutsideCalendarRange.length === 1 ? 'falls' : 'fall'} outside{' '}
-                      {formatStudyDate(startDate)}–{formatStudyDate(endDate)} and{' '}
-                      {sessionsOutsideCalendarRange.length === 1 ? "isn't" : "aren't"} drawn here.
-                      Switch to Table view to see and manage {sessionsOutsideCalendarRange.length === 1 ? 'it' : 'them'}.
+                      {sessionsOutsideCalendarRange.outOfRange.length > 0 && (
+                        <span>
+                          {sessionsOutsideCalendarRange.outOfRange.length} existing session
+                          {sessionsOutsideCalendarRange.outOfRange.length === 1 ? '' : 's'}{' '}
+                          {sessionsOutsideCalendarRange.outOfRange.length === 1 ? 'falls' : 'fall'} outside{' '}
+                          {formatStudyDate(startDate)}–{formatStudyDate(endDate)} and{' '}
+                          {sessionsOutsideCalendarRange.outOfRange.length === 1 ? "isn't" : "aren't"} drawn here.{' '}
+                        </span>
+                      )}
+                      {sessionsOutsideCalendarRange.hiddenByWeekendToggle.length > 0 && (
+                        <span>
+                          {sessionsOutsideCalendarRange.hiddenByWeekendToggle.length} existing session
+                          {sessionsOutsideCalendarRange.hiddenByWeekendToggle.length === 1 ? '' : 's'} on a weekend{' '}
+                          {sessionsOutsideCalendarRange.hiddenByWeekendToggle.length === 1 ? 'is' : 'are'} hidden
+                          while weekends are excluded above.{' '}
+                        </span>
+                      )}
+                      Switch to Table view to see and manage{' '}
+                      {sessionsOutsideCalendarRange.outOfRange.length +
+                        sessionsOutsideCalendarRange.hiddenByWeekendToggle.length ===
+                      1
+                        ? 'it'
+                        : 'them'}
+                      .
                     </div>
                   )}
                   <CalendarView

@@ -117,4 +117,50 @@ describe('AdminSessionManager - Calendar view states sessions it cannot draw (ro
 
     expect(screen.queryByText(/existing session.*(falls|is) outside/i)).not.toBeInTheDocument();
   });
+
+  it('names the weekend toggle, not "outside the range", for a weekend session INSIDE the window (follow-up)', async () => {
+    // Follow-up to the Opus review: `daysInRange(startDate, endDate,
+    // excludeWeekends)` was used to decide "drawn", which bakes the weekend
+    // toggle into "in range" - a Saturday inside the picked dates was reported
+    // as "falls outside" them, which is false. It is inside the dates and
+    // hidden by "Include weekends" being off.
+    //
+    // The default window is tomorrow..+7 days - 7 consecutive days, which is
+    // guaranteed to contain a Saturday and a Sunday - so this finds the first
+    // one rather than hard-coding a date that would eventually roll out of
+    // range.
+    const day = new Date();
+    day.setDate(day.getDate() + 1);
+    while (day.getDay() !== 0 && day.getDay() !== 6) {
+      day.setDate(day.getDate() + 1);
+    }
+    day.setHours(10, 0, 0, 0);
+    const end = new Date(day.getTime() + 30 * 60 * 1000);
+
+    renderManager({
+      sessions: [
+        {
+          id: 'weekend-in-range',
+          opportunity_id: 'opp-1',
+          start_time: day.toISOString(),
+          end_time: end.toISOString(),
+          capacity: 1,
+          booked_count: 0,
+          remaining: 1,
+          created_at: new Date(0).toISOString(),
+          updated_at: new Date(0).toISOString(),
+        },
+      ] as never,
+    });
+    await settle();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Calendar' }));
+    await settle();
+
+    expect(
+      screen.getByText(/1 existing session on a weekend is hidden while weekends are excluded/i)
+    ).toBeInTheDocument();
+    // Not the out-of-range wording: this session IS inside the picked dates.
+    expect(screen.queryByText(/falls outside/i)).not.toBeInTheDocument();
+  });
 });

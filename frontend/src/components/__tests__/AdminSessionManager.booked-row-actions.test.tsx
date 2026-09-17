@@ -126,4 +126,37 @@ describe('AdminSessionManager - a booked row states its state calmly (row 20)', 
 
     expect(writeText).toHaveBeenCalledWith(fullLink);
   });
+
+  it('announces the copy to a screen reader, not only via the title attribute (follow-up)', async () => {
+    // `title` is a mouse-hover-only confirmation - a screen-reader user never
+    // gets it. An aria-live region has to actually change text on success.
+    const start = daysAhead(3);
+    const end = new Date(start.getTime() + 45 * 60 * 1000);
+    const fullLink = 'https://meet.google.com/abc-defg-hij-a-very-long-meeting-code';
+    renderManager({
+      sessions: [
+        {
+          id: 'booked-1',
+          opportunity_id: 'opp-1',
+          start_time: start.toISOString(),
+          end_time: end.toISOString(),
+          capacity: 1,
+          booked_count: 0,
+          remaining: 1,
+          location_or_meet_link_optional: fullLink,
+          created_at: new Date(0).toISOString(),
+          updated_at: new Date(0).toISOString(),
+        },
+      ] as never,
+    });
+    await settle();
+
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+
+    const copyButton = await screen.findByRole('button', { name: /copy meeting link/i });
+    fireEvent.click(copyButton);
+
+    expect(await screen.findByText('Copied')).toBeInTheDocument();
+  });
 });
