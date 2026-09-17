@@ -84,11 +84,14 @@ const walkToReview = () => {
 };
 
 /**
- * Review's terminal control, found by its class rather than its name - the
- * name is the whole point under test ("Save changes" / "Saved" /
- * "Updating...").
+ * Review's terminal control, found by a stable structural class rather than
+ * its name OR its colour - the name is the whole point under test
+ * ("Save changes" / "Saved" / "Updating...") and D9 made the colour a moving
+ * target too (btn-success -> btn-primary, "one commit colour"). StepActions
+ * gives this control `.step-actions__submit` for exactly this reason - it is
+ * never applied to Previous, Continue or the per-step Save Changes shortcut.
  */
-const commitButton = () => document.querySelector('.btn-success') as HTMLButtonElement;
+const commitButton = () => document.querySelector('.step-actions__submit') as HTMLButtonElement;
 
 beforeEach(() => {
   vi.clearAllMocks();

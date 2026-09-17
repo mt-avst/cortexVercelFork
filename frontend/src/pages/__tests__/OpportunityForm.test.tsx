@@ -1888,10 +1888,13 @@ describe('OpportunityForm - a refused action always says so', () => {
       target: { value: 'specific' },
     });
 
-    // Anchored on the tab's own description: from tab 2 the forward button is
-    // named "Continue: Task List", so /Task List/i alone matches both.
+    // Scoped to the step strip, same as the click above - D7 dropped the
+    // step description ("What the participant does") that used to
+    // disambiguate this click from the "Continue: Task List" forward button,
+    // which carries the same "Task List" substring from tab 2 onward.
     fireEvent.click(
-      screen.getByRole('button', { name: /What the participant does/i })
+      within(screen.getByRole('navigation', { name: 'Form steps' }))
+        .getByRole('button', { name: /Task List/i })
     );
     fireEvent.click(await screen.findByRole('button', { name: 'Add task' }));
     fireEvent.change(screen.getByLabelText(/What the participant sees/i), {
