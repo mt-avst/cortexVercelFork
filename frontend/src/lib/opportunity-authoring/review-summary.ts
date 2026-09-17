@@ -521,6 +521,27 @@ const itemsForStep = (step: ReviewStepRef, input: ReviewSummaryInput): ReviewIte
     }
 
     case 'consent': {
+      // A pure hand-off (WZ-18 / Decision 9) has no consent step BODY at all -
+      // the tool on the other side of the link collects it, and Cortex records
+      // only that a participant followed the link. `hasExternalHandoff` is the
+      // same test `OpportunityForm` uses to decide whether to render THAT
+      // branch of the step (`tabs.some(tab => tab.key === 'externalLink')`),
+      // read here from the step list rather than re-derived from `type` so it
+      // cannot drift from what the author actually saw. Before this branch
+      // existed, an external shape's Review read "Not set" or "Custom wording,
+      // not an approved template, ... will be shown to the participant" -
+      // describing a control the step never rendered (row 14).
+      const isExternalHandoff = input.steps.some((step) => step.key === 'externalLink');
+      if (isExternalHandoff) {
+        return [
+          {
+            label: 'Consent wording',
+            value: 'Handled by the external tool',
+            note: 'Cortex records only that a participant followed the link.'
+          }
+        ];
+      }
+
       // The moderated (bookable) shapes carry OPTIONAL consent (#79): a session
       // that stores nothing to consent to needs no wording, and an empty box is
       // how the author says so. Detected by the `sessions` step - the same set

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  PUBLISHED_NOT_WORKING_LABEL,
   STEP_STATUS_LABEL,
   describeStepPosition,
   deriveStepStatus,
+  isPublishedButNotWorking,
   stepsHoldingErrors
 } from './step-status';
 
@@ -119,6 +121,18 @@ describe('deriveStepStatus', () => {
       })
     ).toBe('completed');
   });
+
+  it('a visited-but-invalid step is Needs attention, not Ready', () => {
+    // Row 15: "Ready" (the intended word for the `completed` state - see the
+    // note beside `STEP_STATUS_LABEL` on why the literal rename is deferred)
+    // claims a step would survive a publish. A step the author walked past
+    // leaving something invalid behind must never carry that claim, under
+    // either word: the state machine below must resolve it to
+    // `needsAttention`, never to the `completed` state "Ready" describes.
+    const state = derive({ visited: true, liveErrorSteps: new Set([1]) });
+    expect(state).toBe('needsAttention');
+    expect(state).not.toBe('completed');
+  });
 });
 
 describe('describeStepPosition', () => {
@@ -142,5 +156,69 @@ describe('STEP_STATUS_LABEL', () => {
     const labels = Object.values(STEP_STATUS_LABEL);
     expect(new Set(labels).size).toBe(labels.length);
     expect(labels).toHaveLength(4);
+  });
+
+});
+
+describe('PUBLISHED_NOT_WORKING_LABEL', () => {
+  it('is one fixed word, shared by every surface that shows it (row 6)', () => {
+    expect(PUBLISHED_NOT_WORKING_LABEL).toBe('Published, not working');
+  });
+});
+
+describe('isPublishedButNotWorking', () => {
+  const signal = (over: Partial<Parameters<typeof isPublishedButNotWorking>[1]> = {}) => ({
+    type: 'test',
+    hasLinkedStudy: false,
+    externalLink: null,
+    sessionCount: 1,
+    meetingLocation: 'Zoom',
+    ...over
+  });
+
+  it('is false for a draft, however broken its content is', () => {
+    expect(isPublishedButNotWorking('draft', signal({ sessionCount: 0, meetingLocation: '' }))).toBe(false);
+  });
+
+  it('is true for a published moderated study with no venue', () => {
+    expect(isPublishedButNotWorking('published', signal({ meetingLocation: '' }))).toBe(true);
+  });
+
+  it('is true for a published moderated study with no bookable slot', () => {
+    expect(isPublishedButNotWorking('published', signal({ sessionCount: 0 }))).toBe(true);
+  });
+
+  it('is true for a published hand-off with no link and no linked study', () => {
+    expect(
+      isPublishedButNotWorking(
+        'published',
+        signal({ type: 'poll', deliveryMode: 'external', externalLink: '' })
+      )
+    ).toBe(true);
+  });
+
+  it('is false for a published hand-off with a usable link', () => {
+    expect(
+      isPublishedButNotWorking(
+        'published',
+        signal({ type: 'poll', deliveryMode: 'external', externalLink: 'https://example.com/s' })
+      )
+    ).toBe(false);
+  });
+
+  it('is false for a fully ready published moderated study', () => {
+    expect(isPublishedButNotWorking('published', signal())).toBe(false);
+  });
+
+  it('does not claim a broken state for content it cannot count (the known dashboard gap)', () => {
+    // A published native survey with zero questions cannot be detected from
+    // this signal - there is no question count on it - so this stays false
+    // rather than guessing. The per-study Review step still catches it.
+    expect(
+      isPublishedButNotWorking(
+        'published',
+        signal({ type: 'survey', deliveryMode: 'native', sessionCount: undefined, meetingLocation: undefined })
+      )
+    ).toBe(false);
   });
 });

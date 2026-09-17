@@ -66,6 +66,33 @@ describe('ReviewStep - the summary', () => {
     expect(screen.queryByText(/Nothing has been saved yet/i)).not.toBeInTheDocument();
   });
 
+  /**
+   * Row 16: "Any change you have not already saved is still only on this
+   * screen" is false on an autosaving draft, where the timer has already
+   * persisted every settled change. Pinned per save model.
+   */
+  describe('the standfirst, pinned per save model (row 16)', () => {
+    it('says changes save automatically on an autosaving draft edit', () => {
+      render(<ReviewStep {...baseProps} isEdit status="draft" />);
+      expect(
+        screen.getByText(/Changes on this screen are saved automatically as you go/i)
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText(/still only on this screen/i)
+      ).not.toBeInTheDocument();
+    });
+
+    it('keeps the "still only on this screen" claim for a published edit, where autosave does not run', () => {
+      render(<ReviewStep {...baseProps} isEdit status="published" />);
+      expect(
+        screen.getByText(/Any change you have not already saved is still only on this screen/i)
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText(/saved automatically/i)
+      ).not.toBeInTheDocument();
+    });
+  });
+
   it('marks a missing value with an icon, never with colour alone', () => {
     const flagged: ReviewSection = {
       ...SECTION,
@@ -87,6 +114,39 @@ describe('ReviewStep - the summary', () => {
     const dl = label.closest('dl')!;
     expect(dl).toHaveClass('review-dl');
     expect(within(dl).getByText('Find where people stall')).toBeInTheDocument();
+  });
+
+  /**
+   * Row 30: sections read as a rule + title, not one more bordered card, and
+   * the Edit control shows the fixed word "Edit" rather than "Edit {title}" -
+   * so every one sits at the same x position - while the full accessible
+   * name still exists for a screen reader (and for `getByRole`, proven
+   * above).
+   */
+  it('lays a section out as a rule and title, with a short visible Edit label', () => {
+    render(<ReviewStep {...baseProps} />);
+
+    const heading = screen.getByRole('heading', { name: 'Basic Information' });
+    expect(heading.closest('section')).toHaveClass('review-section');
+
+    const edit = screen.getByRole('button', { name: 'Edit Basic Information' });
+    expect(edit).toHaveTextContent('Edit');
+    expect(edit).not.toHaveTextContent('Edit Basic Information');
+  });
+});
+
+/**
+ * Row 30: Review's own H2 was the one step heading missing the inline
+ * `fontSize: '1.5rem'` every other step's heading carries
+ * (`BasicInfoTab.tsx`, `ContentDetailsTab.tsx`, and the rest), so it
+ * rendered 13px against their 18px.
+ */
+describe('ReviewStep - the H2 matches the other step headings (row 30)', () => {
+  it('gives the Review heading the same 1.5rem size the other steps use', () => {
+    render(<ReviewStep {...baseProps} />);
+
+    const heading = screen.getByRole('heading', { name: 'Review', level: 2 });
+    expect(heading).toHaveStyle({ fontSize: '1.5rem' });
   });
 });
 
@@ -116,6 +176,40 @@ describe('ReviewStep - the identity header (WZ-17)', () => {
     const header = screen.getByTestId('review-header');
     expect(within(header).getByText('Published')).toBeInTheDocument();
     expect(within(header).queryByText('Draft')).not.toBeInTheDocument();
+  });
+
+  it('shows "Published, not working" instead of Published when a publish blocker exists (row 6)', () => {
+    render(
+      <ReviewStep
+        {...baseProps}
+        status="published"
+        publishRefusal={{
+          message: 'Add questions before publishing.',
+          stepId: 2,
+          stepTitle: 'Questions'
+        }}
+      />
+    );
+
+    const header = screen.getByTestId('review-header');
+    expect(within(header).getByText('Published, not working')).toBeInTheDocument();
+    expect(within(header).queryByText('Published')).not.toBeInTheDocument();
+  });
+
+  it('also reads "Published, not working" from a non-empty checklist, with no singular refusal', () => {
+    render(
+      <ReviewStep
+        {...baseProps}
+        status="published"
+        publishRefusal={null}
+        publishProblems={[
+          { message: 'Add questions before publishing.', stepId: 2, stepTitle: 'Questions' }
+        ]}
+      />
+    );
+
+    const header = screen.getByTestId('review-header');
+    expect(within(header).getByText('Published, not working')).toBeInTheDocument();
   });
 
   it('flags a missing title as a problem, never by colour alone, when none is entered', () => {
@@ -161,6 +255,89 @@ describe('ReviewStep - the publish refusal preview', () => {
 
     fireEvent.click(link);
     expect(onEdit).toHaveBeenCalledWith(3);
+  });
+});
+
+/**
+ * Row 4: a moderated study missing both its venue and its slots must be
+ * told about BOTH, not just whichever one `findPublishProblem` (singular)
+ * happens to check first. `publishProblems` is the additive prop that
+ * carries every unmet requirement; see this file's own note on why
+ * `OpportunityForm.tsx` does not build it yet.
+ */
+describe('ReviewStep - the publish problem checklist (row 4)', () => {
+  it('a draft Review lists the problems as a checklist', () => {
+    const onEdit = vi.fn();
+    render(
+      <ReviewStep
+        {...baseProps}
+        isEdit
+        status="draft"
+        onEdit={onEdit}
+        publishProblems={[
+          {
+            message: 'Enter where the session takes place before publishing.',
+            stepId: 1,
+            stepTitle: 'Basic Information'
+          },
+          {
+            message: 'Add at least one upcoming time slot before publishing.',
+            stepId: 3,
+            stepTitle: 'Session Management'
+          }
+        ]}
+      />
+    );
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent(
+      'Enter where the session takes place before publishing.'
+    );
+    expect(alert).toHaveTextContent(
+      'Add at least one upcoming time slot before publishing.'
+    );
+    // Both, as separate list items, not concatenated into one sentence.
+    expect(within(alert).getAllByRole('listitem')).toHaveLength(2);
+
+    fireEvent.click(within(alert).getByRole('button', { name: 'Go to Session Management' }));
+    expect(onEdit).toHaveBeenCalledWith(3);
+  });
+
+  it('falls back to the single publishRefusal alert when the checklist is empty', () => {
+    render(
+      <ReviewStep
+        {...baseProps}
+        publishProblems={[]}
+        publishRefusal={{
+          message: 'Add an external link before publishing a poll.',
+          stepId: 3,
+          stepTitle: 'External Link'
+        }}
+      />
+    );
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('Add an external link before publishing a poll.');
+    expect(within(alert).queryAllByRole('listitem')).toHaveLength(0);
+  });
+
+  it('prefers the checklist over the singular refusal when both are given', () => {
+    render(
+      <ReviewStep
+        {...baseProps}
+        publishRefusal={{
+          message: 'The singular message, which should not appear.',
+          stepId: 1,
+          stepTitle: 'Basic Information'
+        }}
+        publishProblems={[
+          { message: 'The checklist message.', stepId: 3, stepTitle: 'External Link' }
+        ]}
+      />
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent('The checklist message.');
+    expect(screen.queryByText('The singular message, which should not appear.')).not.toBeInTheDocument();
   });
 });
 

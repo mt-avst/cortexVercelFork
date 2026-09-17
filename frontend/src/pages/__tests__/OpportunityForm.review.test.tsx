@@ -386,8 +386,12 @@ describe('the Edit links open the step that owns each section', () => {
     fillBasics('unmoderated');
     walkForward();
 
+    // The ACCESSIBLE name, not the visible text: row 30 shortened the visible
+    // label to the fixed word "Edit" (so every link sits at the same x
+    // position) and moved the full "Edit {title}" onto `aria-label` instead -
+    // this is the same fact `getByRole`'s own name matching already reads.
     expect(
-      screen.getAllByRole('button', { name: /^Edit / }).map((button) => button.textContent?.trim())
+      screen.getAllByRole('button', { name: /^Edit / }).map((button) => button.getAttribute('aria-label'))
     ).toEqual(['Edit Basic Information', 'Edit Content & Details', 'Edit Task List', 'Edit Screener', 'Edit Consent']);
   });
 });
@@ -486,17 +490,20 @@ describe('a publish that would be refused is previewed, never blocked', () => {
     );
   });
 
-  it('says nothing about a draft, because the guard is about publishing', () => {
+  it('previews the checklist on a draft too, so saving as Draft is never blocked by it (row 4)', () => {
+    // Superseded by row 4: the single-problem preview used to gate on
+    // `willBePublished` and said NOTHING on a draft, so an author saving
+    // work in progress had no idea what publishing would still need. The
+    // plural checklist previews "what would this need to publish" from the
+    // shape of the content alone, regardless of the status currently
+    // chosen - and it is still only ever a PREVIEW: a draft's save stays
+    // enabled either way.
     renderCreate();
     fillBasics('unmoderated');
     walkForward();
 
-    /*
-     * The same empty task list as the refusal test above. A draft is ALLOWED to
-     * be empty, and warning about it here would train the author to ignore the
-     * one warning on this screen that means something.
-     */
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent(PUBLISH_PROBLEM_MESSAGES.unmoderated_study_required);
     expect(commitControl()).toBeEnabled();
   });
 
@@ -510,6 +517,39 @@ describe('a publish that would be refused is previewed, never blocked', () => {
     // The server is the authority on this, and a disabled button that is wrong
     // is unrecoverable: the author cannot press it to find out why.
     expect(commitControl()).toBeEnabled();
+  });
+});
+
+/**
+ * Row 4: the LIVE Review, wired to `findPublishProblems` (plural) rather than
+ * the single-problem `findPublishProblem`. A moderated study missing BOTH its
+ * venue and its slot used to be told about only the venue (checked first);
+ * this proves both are named in the one banner, on the real page, not just
+ * on `ReviewStep` in isolation.
+ */
+describe('every unmet requirement is listed at once, not one at a time (row 4)', () => {
+  it('names both the missing venue and the missing slot for the same moderated study', () => {
+    renderCreate();
+    fillBasics('test');
+    // `fillBasics` fills the venue in for a moderated type - clear it again so
+    // BOTH moderated gates are unmet at once, the shape audit row 5 found
+    // seeded live: a live session or interview with no venue AND no slot.
+    fireEvent.change(screen.getByLabelText(/Meeting Location/i), {
+      target: { value: '' }
+    });
+    walkForward();
+    setStatus('published');
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent(PUBLISH_PROBLEM_MESSAGES.meeting_location_required);
+    expect(alert).toHaveTextContent(PUBLISH_PROBLEM_MESSAGES.bookable_slot_required);
+    // Two separate list items, not one gate silently standing in for both.
+    expect(within(alert).getAllByRole('listitem')).toHaveLength(2);
+
+    // Each names its own step: the venue is a Basics field (row 9), the slot
+    // is on Session Management.
+    fireEvent.click(within(alert).getByRole('button', { name: /Basic Information/ }));
+    expect(currentStepName()).toMatch(/Basic Information/);
   });
 });
 

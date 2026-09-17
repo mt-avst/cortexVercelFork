@@ -125,48 +125,57 @@ export function ShareOpportunityLink({
           organisation.
         </p>
 
-        <div className="d-flex align-items-center gap-2 flex-wrap">
-          {/*
-            An anchor, not a bare <code>: it is keyboard-focusable, so an admin
-            who cannot use a mouse can still act on the fallback instruction
-            below, and it can be opened to check the link resolves.
+        {/*
+          Row 5: a non-startable study gets NO copyable link and NO Copy
+          button, not a copyable link plus a warning underneath it. A red
+          sentence next to a working "Copy link" button is still an offer to
+          copy something that leads nowhere the moment it is skimmed rather
+          than read - and the audit finding this closes was exactly that: a
+          study whose own Review banner said it could not start, with a live
+          link sitting right below ready to hand to a participant.
+        */}
+        {startable ? (
+          <div className="d-flex align-items-center gap-2 flex-wrap">
+            {/*
+              An anchor, not a bare <code>: it is keyboard-focusable, so an admin
+              who cannot use a mouse can still act on the fallback instruction
+              below, and it can be opened to check the link resolves.
 
-            The layout is set inline because this app has NO Bootstrap - the
-            `flex-grow-1` and `text-break` utilities do not exist in any
-            stylesheet here, so relying on them left the URL neither growing nor
-            wrapping. `minWidth: 0` is what actually lets a flex item shrink
-            below its content, and `overflowWrap: anywhere` is what breaks a URL
-            with no hyphens in it. A UUID happens to break at its own hyphens,
-            which is exactly why eyeballing one is not evidence that wrapping
-            works.
-          */}
-          <a
-            href={shareUrl}
-            ref={urlRef}
-            rel="noopener noreferrer"
-            style={{
-              flexGrow: 1,
-              minWidth: 0,
-              overflowWrap: 'anywhere',
-              fontFamily: 'var(--font-family-mono)',
-              fontSize: '0.875rem',
-            }}
-            target="_blank"
-          >
-            {shareUrl}
-          </a>
-          <Button onClick={handleCopy} size="sm" type="button" variant="secondary">
-            Copy link
-          </Button>
-        </div>
-
-        {!startable ? (
-          <p className="text-danger mb-0 mt-2" style={{ fontSize: '0.875rem' }}>
+              The layout is set inline because this app has NO Bootstrap - the
+              `flex-grow-1` and `text-break` utilities do not exist in any
+              stylesheet here, so relying on them left the URL neither growing nor
+              wrapping. `minWidth: 0` is what actually lets a flex item shrink
+              below its content, and `overflowWrap: anywhere` is what breaks a URL
+              with no hyphens in it. A UUID happens to break at its own hyphens,
+              which is exactly why eyeballing one is not evidence that wrapping
+              works.
+            */}
+            <a
+              href={shareUrl}
+              ref={urlRef}
+              rel="noopener noreferrer"
+              style={{
+                flexGrow: 1,
+                minWidth: 0,
+                overflowWrap: 'anywhere',
+                fontFamily: 'var(--font-family-mono)',
+                fontSize: '0.875rem',
+              }}
+              target="_blank"
+            >
+              {shareUrl}
+            </a>
+            <Button onClick={handleCopy} size="sm" type="button" variant="secondary">
+              Copy link
+            </Button>
+          </div>
+        ) : (
+          <p className="text-danger mb-0" style={{ fontSize: '0.875rem' }}>
             Participants cannot start this yet, so the button on this page is
             disabled. Add a session, a task list or a link before sharing,
             depending on the study type.
           </p>
-        ) : null}
+        )}
 
         {/* Announced rather than only shown, since the button's own label does
             not change and a silent copy gives no feedback at all. */}

@@ -67,7 +67,7 @@ import {
 } from '../lib/opportunity-authoring/review-summary';
 import {
   PUBLISH_PROBLEM_MESSAGES,
-  findPublishProblem
+  findPublishProblems
 } from '@shared/firsthand/publish-readiness';
 import {
   EXTERNAL_LINK_PROTOCOL_MESSAGE,
@@ -1970,6 +1970,15 @@ const OpportunityForm: React.FC = () => {
    * marked visited once the load has produced its baseline. From then on each
    * step reports Completed or Needs attention on the same rules as a new one.
    *
+   * EXCEPT `review` (audit row 15): Review is not a fact ABOUT the study the
+   * way every other step is, it is the check-answers screen itself, and
+   * seeding it as visited on load is how it always read "Completed" without
+   * the author ever having opened it this session - the one step whose whole
+   * job is to be looked at was the one step this effect was already excusing
+   * from that. It still becomes visited the ordinary way, the first time the
+   * author actually leaves it (see the "record the step just left" effect
+   * above).
+   *
    * Keyed on `originalFormData` rather than on `isEdit`, because `isEdit` is
    * true from the first render, long before anything has been read back.
    */
@@ -1981,7 +1990,7 @@ const OpportunityForm: React.FC = () => {
       (previous) => new Set([...previous, ...getTabsForType(
         originalFormData.type,
         originalFormData.delivery_mode ?? 'external'
-      ).map((tab) => tab.key)])
+      ).map((tab) => tab.key).filter((key) => key !== 'review')])
     );
   }, [originalFormData]);
 
@@ -2729,7 +2738,20 @@ const OpportunityForm: React.FC = () => {
       ? authoringInlineStudy
       : false;
 
-  const publishProblem = findPublishProblem({
+  /**
+   * Every unmet publish requirement this shape has right now (audit row 4),
+   * not just the first - `findPublishProblems` (plural) does not gate on
+   * `willBePublished` at all, so a Draft sees the same checklist a publish
+   * attempt would meet, rather than the single-problem, published-only
+   * preview this used to be. A moderated study missing both its venue and
+   * its slots is told about both in one screen; before this it fixed the
+   * first, came back, and only then learned about the second.
+   */
+  const publishProblemCodes = findPublishProblems({
+    // Read but not acted on: `findPublishProblems` never consults it (see
+    // its own docblock) - kept only because `PublishReadinessInput` requires
+    // it, the same struct `findPublishProblem` (singular, still used by the
+    // backend routes) reads it from.
     willBePublished: formData.status === 'published',
     type: formData.type,
     deliveryMode,
@@ -2771,38 +2793,71 @@ const OpportunityForm: React.FC = () => {
      */
   });
 
-  const publishRefusalStep = publishProblem
-    ? stepForPublishProblem(publishProblem.code, tabs)
-    : null;
+  /**
+   * `publishProblemCodes` resolved to the step each one sends the author to,
+   * FAILING CLOSED rather than dropping an entry it cannot resolve.
+   *
+   * A code `STEP_KEY_FOR_PROBLEM`/`stepForPublishProblem` does not recognise
+   * - unreachable today (every current `PublishProblemCode` maps to a step on
+   * every shape that can produce it), but not unreachable FOREVER, the day a
+   * code is added to one without the other - used to `.flatMap` straight
+   * past silently. That silently shrank `publishProblems`, which is exactly
+   * what `shareLinkStartable` and `ReviewStep`'s "Published, not working"
+   * pill gate on: a code that fails to resolve would have RE-EXPOSED the
+   * share link and hidden the pill on a study that is, by the server's own
+   * rule, not actually ready. `?? tabs[0]` sends an unresolvable problem to
+   * the first step instead of nowhere, so it still counts - a `Go to` link
+   * to the wrong-ish place is a smaller failure than a warning that silently
+   * stops appearing.
+   */
+  const publishProblems = publishProblemCodes.flatMap((problem) => {
+    const step = stepForPublishProblem(problem.code, tabs) ?? tabs[0];
+    return step
+      ? [
+          {
+            message: PUBLISH_PROBLEM_MESSAGES[problem.code],
+            stepId: step.id,
+            stepTitle: step.title
+          }
+        ]
+      : [];
+  });
 
-  const publishRefusal =
-    publishProblem && publishRefusalStep
-      ? {
-          message: PUBLISH_PROBLEM_MESSAGES[publishProblem.code],
-          stepId: publishRefusalStep.id,
-          stepTitle: publishRefusalStep.title
-        }
-      : null;
+  /**
+   * The single-problem preview `ReviewStep` still accepts, derived from the
+   * plural list above rather than a second `findPublishProblem` call, so the
+   * two can never disagree about which problem is "the" one. `ReviewStep`
+   * itself prefers `publishProblems` whenever it is non-empty (see its own
+   * file), so this is read only as a fallback - kept because the prop is
+   * still required, not because anything here still needs a single answer.
+   */
+  const publishRefusal = publishProblems[0] ?? null;
 
   /**
    * Whether a participant could actually start this study, for Review's share
    * block (#108).
    *
-   * Mirrors `OpportunityDetail`'s own `hasStartablePath`/inline expression for
-   * the one shape that check does not otherwise cover here: a test or
-   * interview starts by BOOKING A SLOT, and `findPublishProblem` above says
-   * nothing about slots at all, so a session-less booking type would
-   * otherwise be reported shareable the moment its status is set to
-   * Published. Every other shape defaults to `true` because
-   * `publishRefusal`, computed above from the same live `formData.status`,
-   * already refuses a Published status with no study or no external link -
-   * so this share block never renders "shareable" over content that publish
-   * itself would have refused.
+   * ANY current publish blocker suppresses the link (audit row 5 / row 17):
+   * `publishProblems` is a PREVIEW of what the server would refuse on the
+   * NEXT write, not a guarantee about the row as it is stored NOW - an
+   * opportunity can already sit in the database as `status: 'published'`
+   * with content that would fail this same check (four seeded studies did:
+   * no questions, no external link, no meeting location). Before this guard,
+   * Review showed that study's own blocker banner AND a copyable "Share this
+   * study" link in the same screen, offering participants a link its own
+   * banner said could not start.
+   *
+   * Checked first, and everything below is unreached once it fires - the
+   * test/interview arm mirrors `OpportunityDetail`'s own
+   * `hasStartablePath`/inline expression for the one shape `publishProblems`
+   * says nothing about (it does not model slots), so a session-less booking
+   * type is still caught even when the list itself is empty.
    */
-  const shareLinkStartable =
-    formData.type === 'test' || formData.type === 'interview'
-      ? sessions.length > 0
-      : true;
+  const shareLinkStartable = publishProblems.length > 0
+    ? false
+    : formData.type === 'test' || formData.type === 'interview'
+    ? sessions.length > 0
+    : true;
 
   /**
    * Say the step change out loud.
@@ -5943,6 +5998,7 @@ const OpportunityForm: React.FC = () => {
                         sections={reviewSections}
                         header={reviewHeader}
                         publishRefusal={publishRefusal}
+                        publishProblems={publishProblems}
                         onEdit={goToStepAndFocus}
                         isEdit={isEdit}
                         status={formData.status}
