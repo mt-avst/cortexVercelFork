@@ -423,6 +423,7 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
                   derivedFrom={`${steps.length} ${
                     steps.length === 1 ? 'task' : 'tasks'
                   }`}
+                  itemNoun="task"
                   onValueChange={(value) =>
                     handleInputChange('inline_study_duration_minutes', value)
                   }

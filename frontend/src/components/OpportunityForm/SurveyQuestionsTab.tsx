@@ -463,6 +463,7 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
                   derivedFrom={`${questions.length} ${
                     questions.length === 1 ? 'question' : 'questions'
                   }`}
+                  itemNoun="question"
                   onValueChange={(value) =>
                     handleInputChange('inline_survey_duration_minutes', value)
                   }
