@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, jest } from '@jest/globals';
+import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import request from 'supertest';
 import express from 'express';
 
@@ -267,6 +267,41 @@ describe('POST /api/opportunities/draft-from-brief', () => {
       expect(response.status).toBe(200);
       expect(response.body).toEqual(SAMPLE_RESULT);
       expect(mockDraft).toHaveBeenCalledWith({ brief: VALID_BRIEF, hints: { type: 'poll' } });
+    });
+  });
+
+  describe('the no-leak error path (security pass)', () => {
+    // Pins errorHandler's existing production behaviour against a raw throw
+    // from the drafting service - e.g. the Anthropic client itself throwing
+    // (a network fault, a malformed response, anything not already caught as
+    // a DraftUnavailableError/DraftRejectedError). The generic-message branch
+    // only fires under NODE_ENV=production; asserted explicitly rather than
+    // assumed from the surrounding test run.
+    const ORIGINAL_NODE_ENV = process.env.NODE_ENV;
+
+    afterEach(() => {
+      process.env.NODE_ENV = ORIGINAL_NODE_ENV;
+    });
+
+    it('a raw throw from the client answers 500 "Internal server error" with no key, brief or model text leaked', async () => {
+      process.env.NODE_ENV = 'production';
+      const leakyMessage =
+        'Anthropic request failed: key sk-ant-api03-super-secret-value, ' +
+        `model claude-opus-5, brief "${VALID_BRIEF}"`;
+      mockDraft.mockRejectedValue(new Error(leakyMessage));
+      const app = buildApp({ id: 'admin-1', role: 'researcher_admin' });
+
+      const response = await request(listening(app))
+        .post('/api/opportunities/draft-from-brief')
+        .send({ brief: VALID_BRIEF });
+
+      expect(response.status).toBe(500);
+      expect(response.body.error).toBe('Internal server error');
+      const body = JSON.stringify(response.body);
+      expect(body).not.toMatch(/sk-ant/i);
+      expect(body).not.toMatch(/claude-opus-5/i);
+      expect(body).not.toContain(VALID_BRIEF);
+      expect(mockQuery).not.toHaveBeenCalled();
     });
   });
 });

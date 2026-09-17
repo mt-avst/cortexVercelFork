@@ -449,6 +449,7 @@ const assembleDraft = (model: ModelDraftOutput, hints: DraftHints | undefined, b
 const extraInvariantIssues = (payload: Record<string, unknown>): string[] => {
   const issues: string[] = [];
   const type = payload.type as string;
+  const deliveryMode = payload.delivery_mode as string | undefined;
   const inlineSurvey = payload.inline_survey as { steps?: { type: string }[] } | undefined;
 
   if (inlineSurvey?.steps) {
@@ -456,6 +457,22 @@ const extraInvariantIssues = (payload: Record<string, unknown>): string[] => {
     if (asked > maxQuestionsFor(type)) {
       issues.push(`inline_survey.steps: ${TOO_MANY_QUESTIONS_MESSAGE}`);
     }
+  }
+
+  // `CreateOpportunitySchema` declares both `inline_study` and `inline_survey`
+  // optional - a legitimate stance for a hand-authored PATCH that keeps an
+  // already-linked study, but wrong for a fresh draft, which has no study to
+  // keep. Without this, a model output that resolved a type but supplied no
+  // content (a bare `{type, title, purpose_one_liner}`) passes
+  // `CreateOpportunitySchema.safeParse` outright and the endpoint returns a
+  // 200 with an empty, unusable draft - no retry, no signal to the researcher
+  // that anything is missing.
+  if (type === 'unmoderated' && !payload.inline_study) {
+    issues.push('inline_study: An unmoderated study needs at least one task');
+  }
+
+  if (QUESTION_CARRYING_TYPES.has(type) && deliveryMode === 'native' && !inlineSurvey) {
+    issues.push('inline_survey: A native poll, question or survey needs at least one question');
   }
 
   return issues;

@@ -200,6 +200,44 @@ describe('draftOpportunityFromBrief - delivery resolution', () => {
   });
 });
 
+describe('draftOpportunityFromBrief - a resolved type with no content is refused, not returned empty', () => {
+  // CreateOpportunitySchema declares inline_study/inline_survey optional (a
+  // legitimate stance for an update that keeps an already-linked study), so
+  // without the invariant this content-free output would pass safeParse
+  // outright and hand the researcher a 200 with nothing to review.
+  const emptyCases: Array<[string, Record<string, unknown>]> = [
+    ['unmoderated', {}],
+    ['poll', { delivery_mode: 'native' }],
+    ['question', { delivery_mode: 'native' }],
+    ['survey', { delivery_mode: 'native' }]
+  ];
+
+  it.each(emptyCases)(
+    'a %s draft with no steps retries once, then 422s rather than returning an empty draft',
+    async (type, extra) => {
+      const empty = modelOutputFor(type, extra);
+      mockParse.mockResolvedValueOnce(parsedResponse(empty));
+      mockParse.mockResolvedValueOnce(parsedResponse(empty));
+
+      await expect(draftOpportunityFromBrief({ brief: BRIEF })).rejects.toMatchObject({
+        statusCode: 422
+      });
+      expect(mockParse).toHaveBeenCalledTimes(MAX_MODEL_CALLS);
+    }
+  );
+
+  it('an external poll/survey/question with no steps is fine - it has nothing to fill in Cortex', async () => {
+    mockParse.mockResolvedValueOnce(
+      parsedResponse(modelOutputFor('poll', { delivery_mode: 'external' }))
+    );
+
+    const result = await draftOpportunityFromBrief({ brief: BRIEF });
+
+    expect(result.draft.type).toBe('poll');
+    expect(result.draft.inline_survey).toBeUndefined();
+  });
+});
+
 describe('draftOpportunityFromBrief - question drafts contain exactly one step', () => {
   it('a single-step question draft succeeds', async () => {
     mockParse.mockResolvedValueOnce(
