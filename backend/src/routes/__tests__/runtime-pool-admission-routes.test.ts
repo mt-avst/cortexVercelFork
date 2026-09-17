@@ -228,6 +228,7 @@ describe('the admin studies router', () => {
     'GET /studies/:studyId': 'admin',
     'GET /studies/:studyId/results': 'admin',
     'GET /studies/:studyId/results.csv': 'admin',
+    'GET /studies/:studyId/usage': 'admin',
     'POST /studies': 'admin',
     'PUT /studies/:studyId': 'admin'
   };

@@ -4,6 +4,7 @@ import { requireAdmin } from '../middleware/authenticate';
 import { perUserLimiter } from '../middleware/per-user-rate-limit';
 import { logger } from '../utils/logger';
 import { asyncHandler, ForbiddenError, NotFoundError } from '../utils/errorHandler';
+import { pool } from '../config';
 import {
   canWriteStudy,
   createStudy,
@@ -11,6 +12,7 @@ import {
   getStudyById,
   isStudiesPersistenceConfigured,
   listStudies,
+  listStudyUsage,
   updateStudy,
   type StudyRequester,
   type StudyWriteFailure
@@ -603,6 +605,31 @@ router.get('/studies/:studyId', requireAdmin, studyReadLimiter, asyncHandler(asy
   // key off the response rather than sending a value the client has to
   // interpret.
   return res.json({ study: stored.study, steps: stored.steps, can_edit, answer_counts });
+}));
+
+/**
+ * GET /api/firsthand/studies/:studyId/usage - which opportunities currently
+ * serve this task list / question set to participants (D4, "used by N
+ * studies").
+ *
+ * Contract: 200 always. `{ count: number, studies: Array<{ id: string, title:
+ * string, status: string }> }`, `count === studies.length`. Never 404: a study
+ * id nothing references - including one that was never created - answers
+ * `{ count: 0, studies: [] }` rather than an error, because an author asking
+ * "would editing this list disturb someone else's study" gets the same true
+ * answer either way. See `listStudyUsage` for why the query runs against
+ * Cortex's own database rather than the firsthand runtime pool every sibling
+ * route on this file uses.
+ *
+ * requireAdmin gated exactly like every other `/studies` route here. No
+ * further scoping: the response is the same opportunity metadata (id, title,
+ * status) `GET /api/opportunities` already treats as open to any
+ * researcher_admin - see the metadata-openness note above `GET /studies` -
+ * and it carries no participant data.
+ */
+router.get('/studies/:studyId/usage', requireAdmin, studyReadLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const studies = await listStudyUsage(pool, req.params.studyId);
+  return res.json({ count: studies.length, studies });
 }));
 
 // PUT /api/firsthand/studies/:studyId - update a study

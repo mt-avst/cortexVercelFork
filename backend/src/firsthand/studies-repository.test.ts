@@ -436,6 +436,53 @@ describe("countStudyTasks", () => {
   });
 });
 
+// listStudyUsage never touches the runtime pool - it queries whichever
+// database the caller hands it - so these need none of the DATABASE_URL /
+// __firsthandRuntimePool wiring the suites above and below reset around.
+// See the Queryable comment in studies-repository.ts for why the caller
+// supplies the pool rather than this file importing one.
+describe("listStudyUsage", () => {
+  const fakeMainDatabase = (rows: Array<{ id: string; title: string; status: string }>) => ({
+    query: vi.fn().mockResolvedValue({ rows })
+  });
+
+  it("returns the opportunities that reference this task list", async () => {
+    const studiesRepository = await import("./studies-repository");
+    const rows = [
+      { id: "opp-1", title: "Onboarding survey", status: "published" },
+      { id: "opp-2", title: "Retention pulse", status: "draft" }
+    ];
+
+    const result = await studiesRepository.listStudyUsage(fakeMainDatabase(rows), "study_shared");
+
+    expect(result).toEqual(rows);
+  });
+
+  it("returns an empty list, not an error, for a study nothing references", async () => {
+    const studiesRepository = await import("./studies-repository");
+
+    const result = await studiesRepository.listStudyUsage(fakeMainDatabase([]), "study_unused");
+
+    expect(result).toEqual([]);
+  });
+
+  // No string-concatenated SQL: the id is a bound parameter, proven by sending
+  // one that would break out of a concatenated query if it were ever built
+  // that way.
+  it("binds the study id as a query parameter rather than interpolating it", async () => {
+    const studiesRepository = await import("./studies-repository");
+    const mainDatabase = fakeMainDatabase([]);
+    const hostileId = "study_shared'; DROP TABLE opportunities; --";
+
+    await studiesRepository.listStudyUsage(mainDatabase, hostileId);
+
+    const [sql, params] = mainDatabase.query.mock.calls[0];
+    expect(String(sql)).not.toContain("DROP TABLE");
+    expect(String(sql)).toContain("$1");
+    expect(params).toEqual([hostileId]);
+  });
+});
+
 describe("studies repository ownership", () => {
   const owner = { userId: "user-owner", isSuperadmin: false };
   const intruder = { userId: "user-intruder", isSuperadmin: false };
