@@ -157,14 +157,15 @@ describe('OpportunityForm - the share link OpportunityForm computes for Review (
   describe('shareLinkStartable', () => {
     it('is false for a published test with no sessions', async () => {
       vi.mocked(getOpportunity).mockResolvedValue(
-        OPPORTUNITY({ type: 'test', status: 'published' }) as never
+        OPPORTUNITY({ type: 'test', status: 'published', meeting_location_optional: 'Zoom' }) as never
       );
       vi.mocked(getSessions).mockResolvedValue([] as never);
       renderEdit();
-      // Test and interview land on Session Management, not Basic Information,
-      // on load (see the `landedForRef` comment in OpportunityForm.tsx) - so
-      // there is no title field to wait on here, unlike the poll cases above.
-      await screen.findByText('stub: session management');
+      // D5: every shape, test and interview included, now lands on Basic
+      // Information (step 1) - `walkToReview` clicks through from wherever
+      // the author is standing, so waiting for the title field here works
+      // exactly as it does for the poll cases above.
+      await screen.findByDisplayValue('A poll the author already wrote');
       walkToReview();
 
       expect(screen.getByText(/Participants cannot start this yet/i)).toBeInTheDocument();
@@ -172,7 +173,7 @@ describe('OpportunityForm - the share link OpportunityForm computes for Review (
 
     it('is true for the same published test once it has one session', async () => {
       vi.mocked(getOpportunity).mockResolvedValue(
-        OPPORTUNITY({ type: 'test', status: 'published' }) as never
+        OPPORTUNITY({ type: 'test', status: 'published', meeting_location_optional: 'Zoom' }) as never
       );
       vi.mocked(getSessions).mockResolvedValue([
         {
@@ -187,7 +188,8 @@ describe('OpportunityForm - the share link OpportunityForm computes for Review (
         }
       ] as never);
       renderEdit();
-      await screen.findByText('stub: session management');
+      // D5: lands on Basic Information now, same as every other shape.
+      await screen.findByDisplayValue('A poll the author already wrote');
       walkToReview();
 
       expect(screen.queryByText(/Participants cannot start this yet/i)).not.toBeInTheDocument();
@@ -195,7 +197,7 @@ describe('OpportunityForm - the share link OpportunityForm computes for Review (
 
     it('is true for a published interview once it has one session, mirroring test', async () => {
       vi.mocked(getOpportunity).mockResolvedValue(
-        OPPORTUNITY({ type: 'interview', status: 'published' }) as never
+        OPPORTUNITY({ type: 'interview', status: 'published', meeting_location_optional: 'Zoom' }) as never
       );
       vi.mocked(getSessions).mockResolvedValue([
         {
@@ -210,7 +212,8 @@ describe('OpportunityForm - the share link OpportunityForm computes for Review (
         }
       ] as never);
       renderEdit();
-      await screen.findByText('stub: session management');
+      // D5: lands on Basic Information now, same as every other shape.
+      await screen.findByDisplayValue('A poll the author already wrote');
       walkToReview();
 
       expect(screen.queryByText(/Participants cannot start this yet/i)).not.toBeInTheDocument();

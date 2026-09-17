@@ -72,10 +72,12 @@ const renderEdit = () =>
     </MemoryRouter>
   );
 
-// Edit mode of a moderated opportunity OPENS on Session Management, so the
-// loaded signal is the sessions stub, and every other step is reached
-// through the step nav.
-const awaitLoaded = () => screen.findByText('stub: session management');
+// D5: edit mode now opens on Basic Information (step 1) for every shape,
+// including moderated ones - it used to open on Session Management for
+// exactly this type, so the loaded signal was the sessions stub. The Title
+// field is the step-1-agnostic landmark: every step this file visits
+// (Consent, Session Management) is reached through the step nav from here.
+const awaitLoaded = () => screen.findByLabelText(/^Title/i);
 
 const goToStep = (name: RegExp) => {
   const steps = screen

@@ -874,18 +874,11 @@ describe('exiting the form', () => {
         </Routes>
       </MemoryRouter>
     );
-    // Test and interview land on Session Management the moment the load
-    // resolves, so wait for THAT step rather than for a Basic Information
-    // field. The title input is not on screen at this point, and waiting for
-    // it used to work only because the landing step was applied by an effect
-    // one render AFTER the content appeared - the same window that let an
-    // author's own click be undone. Nothing renders step 1 with this data any
-    // more, so the wait has to name the step the author actually lands on.
-    await screen.findByRole('navigation', { name: 'Form steps' });
-    await strip().findByRole('button', { name: /Session Management/i });
-
-    // Back to Basic Information to make a real, savable change.
-    fireEvent.click(steps()[0]);
+    // D5: every shape, interview included, lands on Basic Information (step
+    // 1) now - this used to wait for the Session Management step instead,
+    // because that was where an interview opened. The title input is the
+    // change this helper actually needs to make, and it is on screen from
+    // the first render this way.
     await screen.findByDisplayValue('An interview about the export flow');
     typeInto(/^Title/i, 'An interview about the export flow, revised');
 
@@ -958,17 +951,24 @@ describe('exiting the form', () => {
  * through a create. This is the edit-load landing: the author opens something
  * that already exists and the form chooses a step for them.
  *
- * Untested until now, on either side of the fix. The rule lived in a `useEffect`
- * keyed on the loaded values, and moving it into `loadOpportunity` deliberately
- * preserved it - but nothing in the suite would have said so if it had not.
- * Changing the landing to `? 1 : 1`, so tests and interviews open at the
- * beginning like everything else, passed all 110 files and 1472 tests.
+ * D5: every shape now lands on step 1, deliberately, including test and
+ * interview. This file used to pin the opposite - a moderated edit landed on
+ * Session Management - on the theory that booking a slot is a moderated
+ * study's first job. That theory did not survive contact with a real
+ * capture: it fired on a DRAFT as readily as a published study, and it
+ * dropped the author on an unlabelled step 3 (the strip's current-step chip
+ * reads "Needs attention" rather than "Current step" whenever the step you
+ * are standing on also has a problem) next to a second, unrelated red flag on
+ * step 1 they had not been told about either (verify-claims 14). Landing on
+ * step 1 unconditionally removed that ambiguity for every shape at once; a
+ * moderated author who wants the sessions step first now has one click to it
+ * from the header's "Manage time slots" control instead.
  *
  * Asserted on `aria-current="step"` rather than on a field that happens to
- * render, because the step a field belongs to is a proxy and the proxy is what
- * went wrong before: the old test waited for a Basic Information input, which
- * for an interview only appeared during the window the landing effect had not
- * closed yet.
+ * render, because the step a field belongs to is a proxy and the proxy is
+ * what went wrong before: an old version of this test waited for a Basic
+ * Information input, which for an interview only appeared during the window
+ * the landing effect had not closed yet.
  */
 describe('opening an opportunity that already exists', () => {
   const openExisting = async (type: string, id: string) => {
@@ -997,29 +997,36 @@ describe('opening an opportunity that already exists', () => {
   const standingOn = async () =>
     (await strip().findByRole('button', { current: 'step' })).textContent;
 
-  // The case the rewrite set out to keep: these two are edited to manage their
-  // sessions, so that is where their authors are put.
-  it.each(['interview', 'test'])(
-    'lands the author on Session Management for a %s',
-    async (type) => {
-      await openExisting(type, `opp-${type}-landing`);
-
-      await waitFor(async () =>
-        expect(await standingOn()).toMatch(/Session Management/)
-      );
-    }
-  );
-
-  // The other half of the same rule, and the half that makes the assertion
-  // above mean something: without it, a landing that sent EVERY type to
-  // Session Management would pass.
-  it.each(['survey', 'poll', 'unmoderated'])(
-    'lands the author at the beginning for a %s',
+  // Every shape lands at the beginning now - test and interview included,
+  // which is the half of the rule that changed. `survey`/`poll`/`unmoderated`
+  // are the control: they always landed here, so this also proves the
+  // landing is not accidentally sending everything to the WRONG fixed step.
+  it.each(['interview', 'test', 'survey', 'poll', 'unmoderated'])(
+    'lands the author at the beginning (Basic Information) for a %s',
     async (type) => {
       await openExisting(type, `opp-${type}-landing`);
 
       await waitFor(async () =>
         expect(await standingOn()).toMatch(/Basic Information/)
+      );
+    }
+  );
+
+  // The sessions step still exists on these two shapes - the author is no
+  // longer walked there automatically, but it has not been removed, and the
+  // header's "Manage time slots" control (D5) is the one click there now.
+  it.each(['interview', 'test'])(
+    'still reaches Session Management in one click, via "Manage time slots"',
+    async (type) => {
+      await openExisting(type, `opp-${type}-landing`);
+      await waitFor(async () =>
+        expect(await standingOn()).toMatch(/Basic Information/)
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: /Manage time slots/i }));
+
+      await waitFor(async () =>
+        expect(await standingOn()).toMatch(/Session Management/)
       );
     }
   );
