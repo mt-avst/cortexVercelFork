@@ -246,3 +246,72 @@ export const findPublishProblem = (
 
   return null;
 };
+
+/**
+ * Every unmet publish requirement for this shape, not just the first.
+ *
+ * `findPublishProblem` above answers "may this write proceed", so a Draft
+ * gets `null` by construction (the `willBePublished` gate) and a moderated
+ * study missing both its venue and its slots is told about only whichever
+ * gate is checked first. Review needs a different question - "what would
+ * this study need before it could publish" - and that question has the same
+ * answer whether the study is a Draft or already Published, so this function
+ * does NOT consult `willBePublished` at all (audit row 4 / row 16: a
+ * moderated author fixed the venue, came back, and only THEN learned about
+ * the empty slots; a Draft's Review showed no checklist at all).
+ *
+ * Deliberately a SEPARATE walk of the same rules rather than a refactor of
+ * `findPublishProblem` to share code with it, so nothing is inserted next to
+ * that function's mutation-canary anchor
+ * (`publish-gate-refuses-slotless-bookable`) and it stays byte-for-byte as it
+ * was. The two are proven to agree on single-problem shapes by the "every
+ * type has an explicit decision" test in `publish-readiness.test.ts`, which
+ * runs both.
+ */
+export const findPublishProblems = (
+  input: PublishReadinessInput
+): PublishProblem[] => {
+  if (input.type === "unmoderated") {
+    if (!input.hasLinkedStudy && !input.hasInlineStudy) {
+      return [
+        {
+          code: input.removingLinkedStudy
+            ? "unmoderated_study_removed"
+            : "unmoderated_study_required"
+        }
+      ];
+    }
+    return [];
+  }
+
+  // Moderated types can fail BOTH independent gates at once - a live session
+  // with neither a venue nor a slot is missing two unrelated things, and
+  // audit row 5 found seeded studies in exactly that state. Both are checked
+  // and both are reported, in the same order `findPublishProblem` checks them
+  // (location before slot) so a caller showing only the first item still
+  // agrees with the singular function about which one that is.
+  if (MODERATED_CONSENT_TYPES.has(input.type)) {
+    const problems: PublishProblem[] = [];
+    if (input.hasMeetingLocation === false) {
+      problems.push({ code: "meeting_location_required" });
+    }
+    if (input.hasBookableSlot === false) {
+      problems.push({ code: "bookable_slot_required" });
+    }
+    return problems;
+  }
+
+  if (runsNativeSurvey(input.type, input.deliveryMode)) {
+    return input.hasLinkedStudy || input.hasInlineSurvey
+      ? []
+      : [{ code: "native_survey_study_required" }];
+  }
+
+  if (QUESTION_CARRYING_TYPES.has(input.type)) {
+    if (!isPublishableExternalLink(input.externalLink)) {
+      return [{ code: "external_link_required" }];
+    }
+  }
+
+  return [];
+};
