@@ -5,7 +5,7 @@ import { getMyCalendarEvents, getAvailability, calendarConnectUrl } from '../api
 import { createSessions, deleteAllSessions } from '../api/client';
 import { logger } from '../utils/logger';
 
-import { formatDateTime, formatClockTime, formatStudyDate } from '../utils/datetime';
+import { formatDateTime, formatClockTime, formatStudyDate, sharedZoneOffset } from '../utils/datetime';
 /**
  * Safely convert a potentially Date or string value to ISO string
  * This handles runtime type inconsistencies from API responses
@@ -40,7 +40,8 @@ import {
   ArrowLeft,
   ArrowRight,
   Plus,
-  Undo2
+  Undo2,
+  Copy
 } from 'lucide-react';
 import StepActions from './OpportunityForm/StepActions';
 
@@ -176,6 +177,18 @@ export const PAST_SLOT_GRACE_MS = 60_000;
 /** A slot whose start is far enough in the past that the server would refuse it. */
 export const slotIsPast = (slot: { start: string }): boolean =>
   new Date(slot.start).getTime() < Date.now() - PAST_SLOT_GRACE_MS;
+
+/**
+ * A real session whose time has already gone (row 9).
+ *
+ * By END time, not start: a session that is still running counts as current,
+ * and one that finished a minute ago is past. The Existing Sessions summary
+ * ("Total slots" / "Remaining") must exclude these - a capacity nobody can
+ * book into any more is not a slot "available", and summing it in alongside
+ * genuinely open sessions overstates what the study can still do.
+ */
+const sessionIsPast = (session: { end_time: string }): boolean =>
+  new Date(session.end_time).getTime() < Date.now();
 
 /**
  * Whether the timeline can draw a slot WHERE IT ACTUALLY IS.
@@ -390,6 +403,29 @@ const slotsToDraw = (
   protectedKeys: ProtectedKeys
 ): AvailableSlot[] => pruneOverlaps(filterByDuration(slots, durationMinutes, protectedKeys), protectedKeys);
 
+/**
+ * Whether an existing calendar event occupies this slot's time (row 8).
+ *
+ * Module scope, like `daysInRange` above, for the same reason: the table's
+ * per-day "Select all" counted only the slots this returns false for, while
+ * the headline counter above it counted every generated cell regardless -
+ * 159 slots available against a Select-all sum of 129, the 30-slot gap being
+ * exactly the conflicting cells. One function, used by both, so the headline
+ * can only ever agree with what a click can actually do.
+ */
+const slotConflictsWithEvents = (
+  slot: { start: string; end: string },
+  events: ReadonlyArray<{ start: string; end: string }>
+): boolean => {
+  const slotStart = new Date(slot.start);
+  const slotEnd = new Date(slot.end);
+  return events.some(event => {
+    const eventStart = new Date(event.start);
+    const eventEnd = new Date(event.end);
+    return slotStart < eventEnd && slotEnd > eventStart;
+  });
+};
+
 const CalendarView: React.FC<CalendarViewProps> = ({
   events,
   availableSlots,
@@ -450,16 +486,9 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     return isConfirmed;
   };
 
-  const isSlotBusy = (slot: AvailableSlot) => {
-    const slotStart = new Date(slot.start);
-    const slotEnd = new Date(slot.end);
-    
-    return events.some(event => {
-      const eventStart = new Date(event.start);
-      const eventEnd = new Date(event.end);
-      return (slotStart < eventEnd && slotEnd > eventStart);
-    });
-  };
+  // Delegates to the module-level version so the headline counter in the
+  // parent (row 8) agrees with what this grid draws as blocked.
+  const isSlotBusy = (slot: AvailableSlot) => slotConflictsWithEvents(slot, events);
 
   const isSlotAllocated = (slot: AvailableSlot) => {
     const slotStart = new Date(slot.start);
@@ -1426,24 +1455,27 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                   const title = slotTooltip(slot, status);
                   const aria = `${dayName}, ${title}${zone ? `, ${zone}` : ''}`;
 
-                  // Blocked or past: not the researcher's to act on. A static,
-                  // named chip that still states why in its accessible name.
-                  // `role="img"` (V-6): an aria-label on a bare <span> is a
-                  // name on a generic element, which assistive tech exposes
-                  // inconsistently; role="img" makes the name - which carries
-                  // the blocked/past state - a first-class label.
+                  // Blocked or past: not the researcher's to act on. A
+                  // disabled BUTTON, not `role="img"` (row 8): a calendar
+                  // conflict or a past slot is a state a control is in, not a
+                  // picture, and a screen reader announcing "image" where a
+                  // slot should be told a user nothing they could act on. A
+                  // native disabled button carries the same accessible name
+                  // and reads as a control - dimmed, not actionable - which is
+                  // what this chip actually is.
                   if (status.isBlocked || status.isPast) {
                     return (
-                      <span
+                      <button
                         key={slotKeyOf(slot)}
+                        type="button"
                         className={`admin-chip ${status.isPast ? 'admin-chip-past' : 'admin-chip-blocked'}`}
                         title={title}
-                        role="img"
                         aria-label={aria}
+                        disabled
                       >
                         <Lock size={12} aria-hidden="true" />
                         {label}
-                      </span>
+                      </button>
                     );
                   }
 
@@ -1549,6 +1581,72 @@ const CalendarView: React.FC<CalendarViewProps> = ({
 };
 
 /**
+ * `Fri 11 Sept, 19:00-19:45 GMT+1` - one line for a session's date and time
+ * range (row 33).
+ *
+ * The Existing Sessions table used to call `formatDateTime` once per column -
+ * Start Time and End Time - each repeating the full weekday and a YEAR that
+ * added nothing (every session here is within a few months of today), plus
+ * its own zone. A 29-character string wrapped over five lines in an 84px
+ * column. This states the date once, the range once, and the zone once - and
+ * only when start and end actually share one (`sharedZoneOffset`), the same
+ * caution the grid's own zone caption takes.
+ */
+const formatSessionRange = (session: Pick<Session, 'start_time' | 'end_time'>): string => {
+  const date = new Intl.DateTimeFormat('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  }).format(new Date(session.start_time));
+  const startTime = formatClockTime(session.start_time) ?? '';
+  const endTime = formatClockTime(session.end_time) ?? '';
+  const range = endTime ? `${startTime}-${endTime}` : startTime;
+  const zone = sharedZoneOffset([session.start_time, session.end_time]);
+  return zone ? `${date}, ${range} ${zone}` : `${date}, ${range}`;
+};
+
+/**
+ * A small control that copies a session's full meeting link (row 20).
+ *
+ * The Location/Link column truncates long links to keep the table readable,
+ * which left no way to get the untruncated value - the truncated text itself
+ * is not what a researcher wants to paste into an invite. Module scope, not
+ * inline in the row: a copy control needs its own transient "copied" state,
+ * and one per row would be a fresh closure per render if it lived there.
+ */
+const CopyLinkButton: React.FC<{ value: string }> = ({ value }) => {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
+  const handleCopy = async () => {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+    } catch (error) {
+      logger.debug('Could not copy the meeting link', { errorMessage: String(error) });
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      className="btn btn-link btn-sm p-0 ms-1"
+      onClick={handleCopy}
+      aria-label="Copy meeting link"
+      title={copied ? 'Copied' : 'Copy meeting link'}
+    >
+      <Copy size={12} aria-hidden="true" />
+    </button>
+  );
+};
+
+/**
  * The session list (row 6).
  *
  * The DEFAULT view now, and no longer read-only: editing a study opens here on
@@ -1586,6 +1684,66 @@ const ListView: React.FC<{
   const orderedSessions = [...sessions]
     .filter((session) => session.id !== pendingRemovalId)
     .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
+
+  // Row 9: a session whose end time has already gone is grouped apart from
+  // the ones a participant can still book, and left out of the summary below.
+  const upcomingSessions = orderedSessions.filter((session) => !sessionIsPast(session));
+  const pastSessions = orderedSessions.filter((session) => sessionIsPast(session));
+
+  const renderSessionRow = (session: Session, isPast: boolean) => {
+    // Booked sessions are not removable here, for the same reason Reset All
+    // refuses them: dropping a booked slot would strand the participant who
+    // booked it. Row 20: that is a healthy, ordinary state - not a fault - so
+    // it reads as a neutral tag, and there is no trash control to disable,
+    // because there is nothing this row could ever do with a click on one.
+    const hasBookings = session.booked_count > 0;
+    return (
+      <tr key={session.id} className={isPast ? 'text-muted' : undefined}>
+        <td>
+          {formatSessionRange(session)}
+          {isPast && <span className="badge bg-secondary ms-2">Past</span>}
+        </td>
+        <td>
+          {session.booked_count} of {session.capacity} booked
+        </td>
+        <td>
+          <span className={`badge ${session.remaining > 0 ? 'bg-success' : 'bg-danger'}`}>
+            {session.remaining}
+          </span>
+        </td>
+        <td>
+          {session.location_or_meet_link_optional && (
+            <span className="d-inline-flex align-items-center">
+              <small className="text-muted">
+                {session.location_or_meet_link_optional.length > 30
+                  ? `${session.location_or_meet_link_optional.substring(0, 30)}...`
+                  : session.location_or_meet_link_optional
+                }
+              </small>
+              <CopyLinkButton value={session.location_or_meet_link_optional} />
+            </span>
+          )}
+        </td>
+        <td className="text-end">
+          {hasBookings ? (
+            <span className="badge bg-secondary">
+              {session.booked_count} booked
+            </span>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-outline-danger btn-sm"
+              onClick={() => onRemove(session)}
+              disabled={disabled || loading}
+              aria-label={`Remove session on ${formatSessionRange(session)}`}
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
+        </td>
+      </tr>
+    );
+  };
 
   return (
     <div className="list-view">
@@ -1649,8 +1807,10 @@ const ListView: React.FC<{
           <div className="d-flex align-items-center gap-3">
             {sessions.length > 0 && (
               <small className="text-muted">
-                Total slots: {sessions.reduce((sum, s) => sum + s.capacity, 0)} •
-                Remaining: {sessions.reduce((sum, s) => sum + s.remaining, 0)}
+                {/* Row 9: past sessions are excluded - a capacity nobody can
+                    book into any more is not a slot "available". */}
+                Total slots: {upcomingSessions.reduce((sum, s) => sum + s.capacity, 0)} •
+                Remaining: {upcomingSessions.reduce((sum, s) => sum + s.remaining, 0)}
               </small>
             )}
             {/* Reaches the calendar grid from the list. Hidden when embedded
@@ -1669,31 +1829,40 @@ const ListView: React.FC<{
           </div>
         </div>
         <div className="card-body">
-          {sessions.length === 0 ? (
+          {orderedSessions.length === 0 ? (
+            // Row 2: reachable now - this was gated behind `sessions.length >
+            // 0` at the ONLY call site of this component, so this branch could
+            // never run. Embedded beneath the table picker, the CTA below is
+            // dropped: the picker above is already the mechanism for adding a
+            // slot, and repeating it here would be a second, redundant one.
             <div className="text-center text-muted py-4">
               <CalendarX size={32} className="text-muted" />
               <p className="mt-2 mb-1">No sessions yet</p>
               <p className="mb-3">
-                <small>Add time slots for participants to book.</small>
+                <small>
+                  {embedded
+                    ? 'Choose a time slot above to add one.'
+                    : 'Add time slots for participants to book.'}
+                </small>
               </p>
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                onClick={onAddSlots}
-                disabled={disabled}
-              >
-                <Plus size={14} className="me-1" />
-                Add slots
-              </button>
+              {!embedded && (
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={onAddSlots}
+                  disabled={disabled}
+                >
+                  <Plus size={14} className="me-1" />
+                  Add slots
+                </button>
+              )}
             </div>
           ) : (
             <div className="table-responsive momentum-table-container">
               <table className="table">
                 <thead>
                   <tr>
-                    <th scope="col">Start Time</th>
-                    <th scope="col">End Time</th>
-                    <th scope="col">Capacity</th>
+                    <th scope="col">Session</th>
                     <th scope="col">Booked</th>
                     <th scope="col">Remaining</th>
                     <th scope="col">Location/Link</th>
@@ -1701,58 +1870,17 @@ const ListView: React.FC<{
                   </tr>
                 </thead>
                 <tbody>
-                  {orderedSessions.map((session) => {
-                    // Booked sessions are not removable here, for the same
-                    // reason Reset All refuses them: dropping a booked slot
-                    // would strand the participant who booked it.
-                    const hasBookings = session.booked_count > 0;
-                    // Row 2: a booked slot cannot be removed, and the reason is
-                    // stated as VISIBLE text in the cell rather than hidden in a
-                    // `title` on a disabled button (which a keyboard or screen-
-                    // reader user never reaches).
-                    const cannotRemoveReason = `Cannot remove: ${session.booked_count} booking${session.booked_count === 1 ? '' : 's'}`;
-                    return (
-                      <tr key={session.id}>
-                        <td>{formatDateTime(session.start_time)}</td>
-                        <td>{formatDateTime(session.end_time)}</td>
-                        <td>{session.capacity}</td>
-                        <td>{session.booked_count}</td>
-                        <td>
-                          <span className={`badge ${session.remaining > 0 ? 'bg-success' : 'bg-danger'}`}>
-                            {session.remaining}
-                          </span>
-                        </td>
-                        <td>
-                          {session.location_or_meet_link_optional && (
-                            <small className="text-muted">
-                              {session.location_or_meet_link_optional.length > 30
-                                ? `${session.location_or_meet_link_optional.substring(0, 30)}...`
-                                : session.location_or_meet_link_optional
-                              }
-                            </small>
-                          )}
-                        </td>
-                        <td className="text-end">
-                          {hasBookings ? (
-                            <span className="text-danger small d-inline-flex align-items-center gap-1">
-                              <Lock size={14} aria-hidden="true" />
-                              {cannotRemoveReason}
-                            </span>
-                          ) : (
-                            <button
-                              type="button"
-                              className="btn btn-outline-danger btn-sm"
-                              onClick={() => onRemove(session)}
-                              disabled={disabled || loading}
-                              aria-label={`Remove session on ${formatDateTime(session.start_time)}`}
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          )}
+                  {upcomingSessions.map((session) => renderSessionRow(session, false))}
+                  {pastSessions.length > 0 && (
+                    <>
+                      <tr>
+                        <td colSpan={5} className="text-muted small fw-semibold pt-3">
+                          Past sessions
                         </td>
                       </tr>
-                    );
-                  })}
+                      {pastSessions.map((session) => renderSessionRow(session, true))}
+                    </>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -2403,6 +2531,13 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
    * counter reports this instead of `drawnSlots.length` in table view, because
    * the table is not paged - reporting the grid's on-screen page there read
    * "20 slots available" beside a table showing every day (review finding).
+   *
+   * Also excludes calendar-conflict slots (row 8): this used to count every
+   * generated cell, including ones a click cannot act on, so "159 slots
+   * available" sat beside a Select-all sum of 129 - the 30-slot gap being
+   * exactly the conflicting cells. `slotConflictsWithEvents` is the SAME
+   * predicate the table's own per-day chips use to decide "blocked", so the
+   * headline can only ever agree with what is actually pickable.
    */
   const tableSlotCount = React.useMemo(() => {
     const inRange = new Set(
@@ -2410,9 +2545,30 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
     );
     return slotsToDraw(displaySlots, durationMinutes, protectedSlotKeys).filter(slot => {
       const when = new Date(slot.start);
-      return !Number.isNaN(when.getTime()) && inRange.has(when.toDateString());
+      return (
+        !Number.isNaN(when.getTime()) &&
+        inRange.has(when.toDateString()) &&
+        !slotConflictsWithEvents(slot, calendarEvents)
+      );
     }).length;
-  }, [displaySlots, durationMinutes, protectedSlotKeys, startDate, endDate, excludeWeekends]);
+  }, [displaySlots, durationMinutes, protectedSlotKeys, startDate, endDate, excludeWeekends, calendarEvents]);
+
+  /**
+   * Existing sessions the Calendar view's grid cannot draw at all (row 39).
+   *
+   * The grid only ever visits days inside `daysInRange(startDate, endDate,
+   * excludeWeekends)` - a session dated outside that window is never looked
+   * up, never drawn, and (unlike the Table view, whose Existing Sessions list
+   * shows every session regardless of date) nothing on the Calendar view says
+   * so. A study with four sessions could show one and state nothing about the
+   * other three.
+   */
+  const sessionsOutsideCalendarRange = React.useMemo(() => {
+    const drawnDates = new Set(
+      daysInRange(startDate, endDate, excludeWeekends).map(d => d.toDateString())
+    );
+    return sessions.filter((session) => !drawnDates.has(new Date(session.start_time).toDateString()));
+  }, [sessions, startDate, endDate, excludeWeekends]);
 
   const handleAddManualSlot = useCallback(() => {
     setManualError('');
@@ -3553,6 +3709,17 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                       Please select a timeslot duration (15, 30, 45, or 60 minutes) to view available slots.
                     </div>
                   )}
+                  {sessionsOutsideCalendarRange.length > 0 && (
+                    <div className="alert alert-warning mb-3" role="alert">
+                      <AlertTriangle size={16} className="me-2" />
+                      {sessionsOutsideCalendarRange.length} existing session
+                      {sessionsOutsideCalendarRange.length === 1 ? '' : 's'}{' '}
+                      {sessionsOutsideCalendarRange.length === 1 ? 'falls' : 'fall'} outside{' '}
+                      {formatStudyDate(startDate)}–{formatStudyDate(endDate)} and{' '}
+                      {sessionsOutsideCalendarRange.length === 1 ? "isn't" : "aren't"} drawn here.
+                      Switch to Table view to see and manage {sessionsOutsideCalendarRange.length === 1 ? 'it' : 'them'}.
+                    </div>
+                  )}
                   <CalendarView
                     key={`calendar-${startDate.toISOString()}-${endDate.toISOString()}-${sessions.length}`}
                     layout="calendar"
@@ -3600,21 +3767,23 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                     excludeWeekends={excludeWeekends}
                     sessions={sessions}
                   />
-                  {sessions.length > 0 && (
-                    <div className="mt-4">
-                      <ListView
-                        key={`list-${sessions.length}`}
-                        sessions={sessions}
-                        isTemporary={isTemporary}
-                        onRemove={handleRemoveSession}
-                        onAddSlots={() => setViewMode('grid')}
-                        disabled={disabled}
-                        loading={loading}
-                        pendingRemovalId={pendingRemoval?.id}
-                        embedded
-                      />
-                    </div>
-                  )}
+                  {/* Row 2: no `sessions.length > 0` gate here any more - this
+                      was ListView's ONLY call site, so wrapping it made its
+                      own zero-sessions branch dead code (verifier claim 13).
+                      ListView states "No sessions yet" itself now. */}
+                  <div className="mt-4">
+                    <ListView
+                      key={`list-${sessions.length}`}
+                      sessions={sessions}
+                      isTemporary={isTemporary}
+                      onRemove={handleRemoveSession}
+                      onAddSlots={() => setViewMode('grid')}
+                      disabled={disabled}
+                      loading={loading}
+                      pendingRemovalId={pendingRemoval?.id}
+                      embedded
+                    />
+                  </div>
                 </>
               )}
             </div>
