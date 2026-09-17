@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import OpportunityForm, { FIELD_LOCATIONS } from '../OpportunityForm';
 import { summarisedErrorKeys } from './helpers/error-summary';
+import { chooseStudyType } from './helpers/study-type-picker';
 
 /*
  * D6 - field homes. Each field is asked on the step it belongs to, within the
@@ -61,11 +62,7 @@ const renderForm = () =>
     </MemoryRouter>
   );
 
-const selectType = (value: string) => {
-  fireEvent.change(screen.getByRole('combobox', { name: /Research Study Type/i }), {
-    target: { value },
-  });
-};
+const selectType = (value: string) => chooseStudyType(value);
 
 const setTitle = (value: string) =>
   fireEvent.change(screen.getByLabelText(/^Title/i), { target: { value } });

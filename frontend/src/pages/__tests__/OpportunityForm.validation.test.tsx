@@ -14,6 +14,7 @@ import {
   summaryMessageFor,
   summaryMessages,
 } from './helpers/error-summary';
+import { chooseStudyType } from './helpers/study-type-picker';
 
 /*
  * D1 - one validation rule set, one vocabulary, reachable by keyboard.
@@ -60,11 +61,8 @@ const renderForm = () =>
     </MemoryRouter>
   );
 
-const selectType = (value: string) => {
-  fireEvent.change(screen.getByRole('combobox', { name: /Research Study Type/i }), {
-    target: { value },
-  });
-};
+const selectType = (value: string, delivery: 'native' | 'external' = 'external') =>
+  chooseStudyType(value, delivery);
 
 const setTitle = (value: string) =>
   fireEvent.change(screen.getByLabelText(/^Title/i), { target: { value } });
@@ -332,11 +330,11 @@ describe('Continue can never pass what Submit refuses', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Continue(:|$)/ }));
 
     expect(summarisedErrorKeys()).toEqual(['type']);
-    // Left on the step that HOLDS the field: the type selector is still on
+    // Left on the step that HOLDS the field: the type picker is still on
     // screen, so the author was not advanced past the choice. (The strip is
     // absent with no type, so this is asserted by the body, not by the strip.)
     expect(
-      screen.getByRole('combobox', { name: /Research Study Type/i })
+      screen.getByRole('radiogroup', { name: /study type/i })
     ).toBeInTheDocument();
   });
 
@@ -708,10 +706,9 @@ describe('a summary link lands on the item it names', () => {
    */
   const refuseOnAnEmptyQuestion = async () => {
     renderForm();
-    selectType('survey');
+    selectType('survey', 'native');
     setTitle('Developer experience pulse');
     setPurpose('Ten short questions about the tools you use every day');
-    fireEvent.click(screen.getByLabelText(/In Cortex/i));
 
     // Through the step strip: C3's forward control on step 2 is ALSO named
     // "Continue: Questions", so an unscoped match is ambiguous.
@@ -850,10 +847,9 @@ describe('a per-item message renumbers when its item moves', () => {
   /** A native survey whose SECOND question is empty, refused from Review. */
   const refuseOnTheSecondQuestion = async () => {
     renderForm();
-    selectType('survey');
+    selectType('survey', 'native');
     setTitle('Developer experience pulse');
     setPurpose('Ten short questions about the tools you use every day');
-    fireEvent.click(screen.getByLabelText(/In Cortex/i));
 
     const strip = within(
       screen.getByRole('navigation', { name: 'Form steps' })
@@ -906,13 +902,13 @@ describe('a per-item message renumbers when its item moves', () => {
 
 describe('blur does not flag a field the author never filled', () => {
   it('says nothing when they tab through a blank form', () => {
-    // `type`, `title` and `purpose` are the first three tab stops on a new
-    // form. Validating unconditionally on blur meant simply LOOKING at the form
-    // raised three assertive refusals before a character was typed. Nothing did
-    // that before D1, because no input on this step wired `onBlur` at all.
+    // Title and purpose are the first text tab stops on a new form (the type is
+    // now a card picker, not a blurred field). Validating unconditionally on
+    // blur meant simply LOOKING at the form raised assertive refusals before a
+    // character was typed. Nothing did that before D1, because no input on this
+    // step wired `onBlur` at all.
     renderForm();
 
-    fireEvent.blur(screen.getByRole('combobox', { name: /Research Study Type/i }));
     fireEvent.blur(screen.getByLabelText(/^Title/i));
     fireEvent.blur(screen.getByLabelText(/purpose/i));
 
@@ -995,10 +991,9 @@ describe('the "at least two answers" rule waits until focus leaves the group', (
   /** A native survey with one single-choice question, on the Questions step. */
   const aChoiceQuestion = async () => {
     renderForm();
-    selectType('survey');
+    selectType('survey', 'native');
     setTitle('Developer experience pulse');
     setPurpose('Ten short questions about the tools you use every day');
-    fireEvent.click(screen.getByLabelText(/In Cortex/i));
 
     const strip = within(
       screen.getByRole('navigation', { name: 'Form steps' })

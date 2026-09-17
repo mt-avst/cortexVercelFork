@@ -20,6 +20,7 @@ import {
   summarisedErrorKeys,
   summaryMessageFor,
 } from './helpers/error-summary';
+import { chooseStudyType } from './helpers/study-type-picker';
 import { createOpportunity, getFirstHandStudies, getOpportunity, updateOpportunity } from '../../api/client';
 import { getFirstHandStudy } from '../../api/firsthand-studies';
 
@@ -289,17 +290,14 @@ const renderForm = () =>
     </MemoryRouter>
   );
 
-const selectType = (value: string) => {
-  fireEvent.change(screen.getByRole('combobox', { name: /Research Study Type/i }), {
-    target: { value },
-  });
-};
+const selectType = (value: string, delivery: 'native' | 'external' = 'external') =>
+  chooseStudyType(value, delivery);
 
 describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
   it('renders the create form for an admin without loading an opportunity', () => {
     renderForm();
     expect(
-      screen.getByRole('combobox', { name: /Research Study Type/i })
+      screen.getByRole('radiogroup', { name: /study type/i })
     ).toBeInTheDocument();
     // Status (#111) is no longer on the first step - it moved to Review, the
     // last decision on the form rather than the first. See
@@ -323,10 +321,10 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     expect(
       screen.queryByRole('button', { name: /External Link/i })
     ).not.toBeInTheDocument();
-    // ...and the type helper copy no longer names an internal product.
+    // ...and the picker card names it the way every other surface does.
     expect(
-      screen.getByText('Self-guided, recorded in the browser')
-    ).toBeInTheDocument();
+      screen.getByRole('radio', { name: 'Recorded session' })
+    ).toHaveAttribute('aria-checked', 'true');
   });
 
   it('keeps the External Link tab for poll and hides the Task List tab', () => {
@@ -1377,8 +1375,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
 
       // The switch itself.
       fireEvent.click(screen.getByRole('button', { name: /Basic Info/i }));
-      selectType('survey');
-      fireEvent.click(screen.getByLabelText(/In Cortex/i));
+      selectType('survey', 'native');
 
       fireEvent.click(screen.getByRole('button', { name: /Questions/i }));
 
@@ -1408,8 +1405,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     it('clears the copy and its provenance when switching from a copied set of questions to unmoderated', async () => {
       vi.mocked(getFirstHandStudy).mockResolvedValueOnce(linkedStudy({ kind: 'survey' }));
       renderForm();
-      selectType('survey');
-      fireEvent.click(screen.getByLabelText(/In Cortex/i));
+      selectType('survey', 'native');
 
       fireEvent.change(screen.getByLabelText(/^Title/i), {
         target: { value: 'Developer experience pulse' }
@@ -1832,9 +1828,9 @@ describe('OpportunityForm - a refused action always says so', () => {
 
     await screen.findByRole('alert', { name: /There is a problem/i });
     expect(summarisedErrorKeys()).toEqual(['type']);
-    // Left on the step that holds the field, with the field itself marked.
+    // Left on the step that holds the field, with the picker group marked.
     expect(
-      screen.getByRole('combobox', { name: /Research Study Type/i })
+      screen.getByRole('radiogroup', { name: /study type/i })
     ).toBeInvalid();
     // The SAME sentence in both places. A summary that paraphrases the field is
     // two vocabularies wearing one coat, which is what D1 deleted.

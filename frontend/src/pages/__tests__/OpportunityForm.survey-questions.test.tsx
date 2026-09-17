@@ -9,6 +9,7 @@ import { SURVEY_CONSENT_TEMPLATE } from '@shared/firsthand/consent-templates';
 import { createOpportunity, getFirstHandStudies, getOpportunity, updateOpportunity } from '../../api/client';
 import { getFirstHandStudy } from '../../api/firsthand-studies';
 import { inlineErrorText, summarisedErrorKeys } from './helpers/error-summary';
+import { studyTypeCard } from './helpers/study-type-picker';
 
 /**
  * The shape of an identity minted for a question that has never been saved.
@@ -292,7 +293,7 @@ describe("the hand-off Consent step confirms the external tool's consent (WZ-18)
   const openExternalPollConsent = async (
     user: ReturnType<typeof userEvent.setup>
   ) => {
-    await user.selectOptions(screen.getByLabelText(/Research Study Type/i), 'poll');
+    await user.click(studyTypeCard('poll', 'external'));
     await user.type(screen.getByLabelText(/^Title/i), 'How was the export flow');
     await user.type(
       screen.getByLabelText(/^Purpose/i),
@@ -347,7 +348,7 @@ describe("the hand-off Consent step confirms the external tool's consent (WZ-18)
 
 describe('authoring a native survey', () => {
   const fillBasics = async (user: ReturnType<typeof userEvent.setup>) => {
-    await user.selectOptions(screen.getByLabelText(/Research Study Type/i), 'survey');
+    await user.click(studyTypeCard('survey', 'native'));
     await user.type(screen.getByLabelText(/^Title/i), 'Developer experience pulse');
     await user.type(
       screen.getByLabelText(/^Purpose/i),
@@ -359,12 +360,16 @@ describe('authoring a native survey', () => {
     const user = userEvent.setup();
     renderForm();
 
-    await user.selectOptions(
-      screen.getByLabelText(/Research Study Type/i),
-      'unmoderated'
-    );
+    await user.click(studyTypeCard('unmoderated'));
 
-    expect(screen.queryByText(/Where participants answer/i)).toBeNull();
+    // A recorded study is one card with no delivery variant - there is no
+    // "in an external tool" alternative to pick.
+    expect(
+      screen.getByRole('radio', { name: 'Recorded session' })
+    ).toHaveAttribute('aria-checked', 'true');
+    expect(
+      screen.queryByRole('radio', { name: /Recorded session, in an external tool/i })
+    ).toBeNull();
   });
 
   /**
@@ -380,10 +385,7 @@ describe('authoring a native survey', () => {
     const fillQuestionBasics = async (
       user: ReturnType<typeof userEvent.setup>
     ) => {
-      await user.selectOptions(
-        screen.getByLabelText(/Research Study Type/i),
-        'question'
-      );
+      await user.click(studyTypeCard('question', 'native'));
       await user.type(screen.getByLabelText(/^Title/i), 'One thing');
       await user.type(
         screen.getByLabelText(/^Purpose/i),
@@ -392,22 +394,22 @@ describe('authoring a native survey', () => {
     };
 
     it('offers the delivery choice, which it never used to have', async () => {
-      const user = userEvent.setup();
       renderForm();
 
-      await user.selectOptions(
-        screen.getByLabelText(/Research Study Type/i),
-        'question'
-      );
-
-      expect(screen.getByText(/Where participants answer/i)).toBeInTheDocument();
+      // A one-question study now has two cards - in Cortex and in an external
+      // tool - which is the delivery choice it never used to carry.
+      expect(
+        screen.getByRole('radio', { name: 'One question, in Cortex' })
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('radio', { name: 'One question, in an external tool' })
+      ).toBeInTheDocument();
     });
 
     it('sends the authored question as inline_survey, natively delivered', async () => {
       const user = userEvent.setup();
       renderForm();
       await fillQuestionBasics(user);
-      await user.click(screen.getByLabelText(/In Cortex/i));
 
       await user.click(screen.getByRole('button', { name: /Question/i }));
       await user.click(screen.getByRole('button', { name: /^Add question$/i }));
@@ -449,7 +451,6 @@ describe('authoring a native survey', () => {
       const user = userEvent.setup();
       renderForm();
       await fillQuestionBasics(user);
-      await user.click(screen.getByLabelText(/In Cortex/i));
       await user.click(screen.getByRole('button', { name: /Question/i }));
 
       await user.click(screen.getByRole('button', { name: /^Add question$/i }));
@@ -463,7 +464,6 @@ describe('authoring a native survey', () => {
       const user = userEvent.setup();
       renderForm();
       await fillBasics(user);
-      await user.click(screen.getByLabelText(/In Cortex/i));
       await user.click(screen.getByRole('button', { name: /Questions/i }));
 
       await user.click(screen.getByRole('button', { name: /^Add question$/i }));
@@ -477,12 +477,13 @@ describe('authoring a native survey', () => {
   it('swaps the third tab when the author chooses to run it in Cortex', async () => {
     const user = userEvent.setup();
     renderForm();
-    await fillBasics(user);
 
+    // The external card first: the third step is External Link.
+    await user.click(studyTypeCard('survey', 'external'));
     expect(screen.getByText('External Link')).toBeInTheDocument();
 
-    await user.click(screen.getByLabelText(/In Cortex/i));
-
+    // Choosing the in-Cortex card swaps it for Questions.
+    await user.click(studyTypeCard('survey', 'native'));
     await waitFor(() => expect(screen.getByText('Questions')).toBeInTheDocument());
     expect(screen.queryByText('External Link')).toBeNull();
   });
@@ -498,7 +499,6 @@ describe('authoring a native survey', () => {
     const user = userEvent.setup();
     renderForm();
     await fillBasics(user);
-    await user.click(screen.getByLabelText(/In Cortex/i));
 
     await user.click(screen.getByRole('button', { name: /Questions/i }));
     await user.click(screen.getByRole('button', { name: /^Add question$/i }));
@@ -536,7 +536,6 @@ describe('authoring a native survey', () => {
     const user = userEvent.setup();
     renderForm();
     await fillBasics(user);
-    await user.click(screen.getByLabelText(/In Cortex/i));
 
     await user.click(screen.getByRole('button', { name: /Questions/i }));
     await user.click(screen.getByRole('button', { name: /^Add question$/i }));
@@ -559,7 +558,6 @@ describe('authoring a native survey', () => {
     const user = userEvent.setup();
     renderForm();
     await fillBasics(user);
-    await user.click(screen.getByLabelText(/In Cortex/i));
 
     await user.click(screen.getByRole('button', { name: /Questions/i }));
     await user.click(screen.getByRole('button', { name: /^Add question$/i }));
@@ -601,7 +599,6 @@ describe('authoring a native survey', () => {
     const user = userEvent.setup();
     renderForm();
     await fillBasics(user);
-    await user.click(screen.getByLabelText(/In Cortex/i));
 
     await user.click(screen.getByRole('button', { name: /Questions/i }));
     await user.click(screen.getByRole('button', { name: /^Add question$/i }));
@@ -634,7 +631,6 @@ describe('authoring a native survey', () => {
     const user = userEvent.setup();
     renderForm();
     await fillBasics(user);
-    await user.click(screen.getByLabelText(/In Cortex/i));
 
     await user.click(screen.getByRole('button', { name: /Questions/i }));
     await user.click(screen.getByRole('button', { name: /^Add question$/i }));
@@ -673,7 +669,6 @@ describe('authoring a native survey', () => {
     const user = userEvent.setup();
     renderForm();
     await fillBasics(user);
-    await user.click(screen.getByLabelText(/In Cortex/i));
 
     await user.click(screen.getByRole('button', { name: /Questions/i }));
     await user.click(screen.getByRole('button', { name: /^Add question$/i }));
@@ -714,7 +709,6 @@ describe('authoring a native survey', () => {
     const user = userEvent.setup();
     renderForm();
     await fillBasics(user);
-    await user.click(screen.getByLabelText(/In Cortex/i));
 
     await user.click(screen.getByRole('button', { name: /Questions/i }));
     await user.click(screen.getByRole('button', { name: /^Add question$/i }));
@@ -758,7 +752,6 @@ describe('authoring a native survey', () => {
     const user = userEvent.setup();
     renderForm();
     await fillBasics(user);
-    await user.click(screen.getByLabelText(/In Cortex/i));
 
     await user.click(screen.getByRole('button', { name: /Questions/i }));
     await user.click(screen.getByRole('button', { name: /^Add question$/i }));
@@ -820,7 +813,6 @@ describe('authoring a native survey', () => {
     const user = userEvent.setup();
     renderForm();
     await fillBasics(user);
-    await user.click(screen.getByLabelText(/In Cortex/i));
     await user.click(screen.getByRole('button', { name: /Questions/i }));
 
     expect(screen.getByText(/nothing to estimate from yet/i)).toBeInTheDocument();
@@ -845,7 +837,6 @@ describe('authoring a native survey', () => {
     const user = userEvent.setup();
     renderForm();
     await fillBasics(user);
-    await user.click(screen.getByLabelText(/In Cortex/i));
 
     await user.click(screen.getByRole('button', { name: /Questions/i }));
     await user.click(screen.getByRole('button', { name: /^Add question$/i }));
@@ -874,7 +865,6 @@ describe('authoring a native survey', () => {
     const user = userEvent.setup();
     renderForm();
     await fillBasics(user);
-    await user.click(screen.getByLabelText(/In Cortex/i));
 
     await user.click(screen.getByRole('button', { name: /Questions/i }));
     await user.click(screen.getByRole('button', { name: /^Add question$/i }));
@@ -912,7 +902,6 @@ describe('authoring a native survey', () => {
     const user = userEvent.setup();
     renderForm();
     await fillBasics(user);
-    await user.click(screen.getByLabelText(/In Cortex/i));
 
     await user.click(screen.getByRole('button', { name: /Questions/i }));
     await user.click(screen.getByRole('button', { name: /^Add question$/i }));
@@ -946,7 +935,6 @@ describe('authoring a native survey', () => {
     const user = userEvent.setup();
     renderForm();
     await fillBasics(user);
-    await user.click(screen.getByLabelText(/In Cortex/i));
 
     await user.click(screen.getByRole('button', { name: /Questions/i }));
     await user.click(screen.getByRole('button', { name: /^Add question$/i }));
@@ -966,7 +954,6 @@ describe('authoring a native survey', () => {
     const user = userEvent.setup();
     renderForm();
     await fillBasics(user);
-    await user.click(screen.getByLabelText(/In Cortex/i));
 
     await user.click(screen.getByRole('button', { name: /Questions/i }));
     // Added and left empty, which is what an author does when they change
@@ -974,7 +961,7 @@ describe('authoring a native survey', () => {
     await user.click(screen.getByRole('button', { name: /^Add question$/i }));
 
     await user.click(screen.getByRole('button', { name: /Basic Information/i }));
-    await user.click(screen.getByLabelText(/In an external tool/i));
+    await user.click(studyTypeCard('survey', 'external'));
     await user.click(screen.getByRole('button', { name: /External Link/i }));
     await user.type(
       screen.getByLabelText(/External Link/i),
@@ -1104,7 +1091,6 @@ describe('authoring a native survey', () => {
     const user = userEvent.setup();
     renderForm();
     await fillBasics(user);
-    await user.click(screen.getByLabelText(/In Cortex/i));
 
     await user.click(screen.getByRole('button', { name: /Questions/i }));
     await user.click(screen.getByRole('button', { name: /^Add question$/i }));
@@ -1114,7 +1100,7 @@ describe('authoring a native survey', () => {
     );
 
     await user.click(screen.getByRole('button', { name: /Basic Information/i }));
-    await user.click(screen.getByLabelText(/In an external tool/i));
+    await user.click(studyTypeCard('survey', 'external'));
 
     await user.click(screen.getByRole('button', { name: /External Link/i }));
     await user.type(
@@ -1153,13 +1139,12 @@ describe('starting a survey from an existing set of questions', () => {
    * below against this surface's own wording, ids and payload key.
    */
   const fillNativeSurvey = async (user: ReturnType<typeof userEvent.setup>) => {
-    await user.selectOptions(screen.getByLabelText(/Research Study Type/i), 'survey');
+    await user.click(studyTypeCard('survey', 'native'));
     await user.type(screen.getByLabelText(/^Title/i), 'Developer experience pulse');
     await user.type(
       screen.getByLabelText(/^Purpose/i),
       'Ten short questions about the tools you use every day'
     );
-    await user.click(screen.getByLabelText(/In Cortex/i));
     await user.click(screen.getByRole('button', { name: /Questions/i }));
   };
 

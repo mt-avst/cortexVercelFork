@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import OpportunityForm from '../OpportunityForm';
 import { getOpportunity, updateOpportunity } from '../../api/client';
+import { chooseStudyType } from './helpers/study-type-picker';
 
 vi.mock('../../contexts/AuthContext', () => ({
   useAuth: () => ({
@@ -97,11 +98,8 @@ const strip = () => within(screen.getByRole('navigation', { name: 'Form steps' }
 /** Every step button, in the order the strip renders them. */
 const steps = () => strip().getAllByRole('button');
 
-const selectType = (value: string) => {
-  fireEvent.change(screen.getByRole('combobox', { name: /Research Study Type/i }), {
-    target: { value },
-  });
-};
+const selectType = (value: string, delivery: 'native' | 'external' = 'external') =>
+  chooseStudyType(value, delivery);
 
 const typeInto = (label: RegExp, value: string) => {
   fireEvent.change(screen.getByLabelText(label), { target: { value } });
@@ -109,8 +107,7 @@ const typeInto = (label: RegExp, value: string) => {
 
 /** The native survey path: Questions on step 3, Consent on step 4. */
 const selectNativeSurvey = () => {
-  selectType('survey');
-  fireEvent.click(screen.getByLabelText(/In Cortex/i));
+  selectType('survey', 'native');
 };
 
 const fillBasics = () => {
@@ -549,7 +546,7 @@ describe('the strip reports steps other than the first', () => {
     // uncleared, the flag is a dead end: the badge says fix this and there is
     // nothing on the step to fix.
     fireEvent.click(steps()[0]);
-    fireEvent.click(screen.getByLabelText(/In an external tool/i));
+    selectType('survey', 'external');
 
     expect(steps()[2]).toHaveTextContent('External Link');
     expect(steps()[2]).not.toHaveTextContent('Needs attention');

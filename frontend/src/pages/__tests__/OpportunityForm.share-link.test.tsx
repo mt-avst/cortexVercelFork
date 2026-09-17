@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import OpportunityForm from '../OpportunityForm';
 import { getOpportunity, getSessions } from '../../api/client';
+import { chooseStudyType } from './helpers/study-type-picker';
 
 /**
  * #108: the participant share link, threaded from OpportunityForm into
@@ -114,9 +115,7 @@ beforeEach(() => {
 describe('OpportunityForm - the share link OpportunityForm computes for Review (#108)', () => {
   it('is null before the opportunity has ever been saved', () => {
     renderCreate();
-    fireEvent.change(screen.getByLabelText(/Research Study Type/i), {
-      target: { value: 'poll' }
-    });
+    chooseStudyType('poll');
     fireEvent.change(screen.getByLabelText(/^Title/i), {
       target: { value: 'A study with a long enough title' }
     });

@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import OpportunityForm from '../OpportunityForm';
 import { opportunityFormRoutes } from '../OpportunityForm.routes';
+import { studyTypeCard } from './helpers/study-type-picker';
 
 /**
  * E1's participant preview, reached from the authoring form.
@@ -86,13 +87,12 @@ const authorOneQuestion = async (
   user: ReturnType<typeof userEvent.setup>,
   prompt: string
 ) => {
-  await user.selectOptions(screen.getByLabelText(/Research Study Type/i), 'survey');
+  await user.click(studyTypeCard('survey', 'native'));
   await user.type(screen.getByLabelText(/^Title/i), 'Developer experience pulse');
   await user.type(
     screen.getByLabelText(/^Purpose/i),
     'Ten short questions about the tools you use every day'
   );
-  await user.click(screen.getByLabelText(/In Cortex/i));
 
   await user.click(screen.getByRole('button', { name: /Questions/i }));
   await user.click(screen.getByRole('button', { name: /^Add question$/i }));

@@ -11,3 +11,4 @@ export { default as ScreenerStep } from './ScreenerStep';
 export { default as SurveyQuestionsTab } from './SurveyQuestionsTab';
 export { default as StepActions } from './StepActions';
 export { default as StepNav } from './StepNav';
+export { default as StudyTypePicker } from './StudyTypePicker';

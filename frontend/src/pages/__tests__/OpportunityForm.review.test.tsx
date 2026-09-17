@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import OpportunityForm from '../OpportunityForm';
 import { createOpportunity, createSessions, getOpportunity, updateOpportunity } from '../../api/client';
 import { PUBLISH_PROBLEM_MESSAGES } from '@shared/firsthand/publish-readiness';
+import { chooseStudyType } from './helpers/study-type-picker';
 import { EXTERNAL_LINK_PROTOCOL_MESSAGE } from '@shared/firsthand/url-safety';
 import { summaryLinkFor } from './helpers/error-summary';
 import {
@@ -175,7 +176,7 @@ const fillBasics = (
   type: string,
   { title = 'A study with a long enough title' } = {}
 ) => {
-  fireEvent.change(screen.getByLabelText(/Research Study Type/i), { target: { value: type } });
+  chooseStudyType(type);
   fireEvent.change(screen.getByLabelText(/^Title/i), { target: { value: title } });
   fireEvent.change(screen.getByLabelText(/^Purpose/i), {
     target: { value: 'A purpose long enough to pass validation' }
@@ -374,7 +375,7 @@ describe('the Edit links open the step that owns each section', () => {
   it('on the survey twin, which uses the other consent vocabulary', () => {
     renderCreate();
     fillBasics('survey');
-    fireEvent.click(screen.getByLabelText(/in Cortex/i));
+    chooseStudyType('survey', 'native');
     walkForward();
 
     fireEvent.click(screen.getByRole('button', { name: 'Edit Questions' }));
@@ -485,7 +486,7 @@ describe('a publish that would be refused is previewed, never blocked', () => {
   it('previews the native survey refusal, which is a different rule from the external one', () => {
     renderCreate();
     fillBasics('survey');
-    fireEvent.click(screen.getByLabelText(/in Cortex/i));
+    chooseStudyType('survey', 'native');
     walkForward();
     setStatus('published');
 
@@ -727,9 +728,7 @@ describe('the time slots confirmed on the session step are written by the commit
 
     // Back to step 1 and change the type.
     fireEvent.click(strip()[0]);
-    fireEvent.change(screen.getByLabelText(/Research Study Type/i), {
-      target: { value: 'poll' }
-    });
+    chooseStudyType('poll');
     walkForward();
     fireEvent.click(strip()[2]);
     fireEvent.change(screen.getByLabelText(/External Link/i), {
@@ -1099,7 +1098,7 @@ describe('the review-step preview is offered only where a preview can render (WZ
     // on `unmoderated` specifically.
     renderCreate();
     fillBasics('survey');
-    fireEvent.click(screen.getByLabelText(/In Cortex/i));
+    chooseStudyType('survey', 'native');
     walkForward();
 
     expect(currentStepName()).toMatch(/Review/);
