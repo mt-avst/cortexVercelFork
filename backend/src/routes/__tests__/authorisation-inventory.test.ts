@@ -667,6 +667,7 @@ const EXPECTED_AUTHORISATION: Record<string, Verdict> = {
   'DELETE /api/firsthand/studies/:studyId': 'admin',
   'GET /api/firsthand/studies/:studyId/results': 'admin',
   'GET /api/firsthand/studies/:studyId/results.csv': 'admin',
+  'GET /api/firsthand/studies/:studyId/usage': 'admin',
 
   // cron.ts - mounted straight on the app
   'GET /api/cron/send-reminders': 'in-handler-secret',
@@ -690,7 +691,7 @@ const EXPECTED_AUTHORISATION: Record<string, Verdict> = {
  * guards cannot notice the table changing - which is the whole point of a
  * count here.
  */
-const EXPECTED_ROUTE_COUNT = 98;
+const EXPECTED_ROUTE_COUNT = 99;
 
 /** Every router file in `src/routes`, read off disk rather than listed. */
 const ROUTER_FILES = fs
