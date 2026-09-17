@@ -1,7 +1,26 @@
+/**
+ * TZ pinned BEFORE any import (vitest runs each file in its own module
+ * context, so this must be the very first statement): the assertion below
+ * checks the exact rendered string "Fri 11 Sept, 19:00-19:45 GMT+1", which is
+ * only what a Europe/London (BST) reader sees. A UTC CI runner rendered
+ * "18:00-18:45 GMT+0" for the identical fixture and failed by finding
+ * nothing - this test passed locally only because the author's machine is in
+ * Europe/London. Pinning makes the string deterministic on ANY runner rather
+ * than switching to a looser, TZ-tolerant matcher that would prove the
+ * format less precisely.
+ *
+ * Restored in `afterAll` because `process.env` is a real process-level
+ * global, not scoped per test file - vitest's module isolation does not
+ * protect against a worker thread running a LATER file with the mutated TZ
+ * still set, if that worker is reused across files.
+ */
+const ORIGINAL_TZ = process.env.TZ;
+process.env.TZ = 'Europe/London';
+
 import React from 'react';
 import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 
 import AdminSessionManager from '../AdminSessionManager';
 import { getAvailability } from '../../api/client';
@@ -16,6 +35,10 @@ import { getAvailability } from '../../api/client';
  * ("Fri 11 Sept, 19:00-19:45 GMT+1") and one combined booked/capacity reading
  * ("1 of 1 booked").
  */
+
+afterAll(() => {
+  process.env.TZ = ORIGINAL_TZ;
+});
 
 vi.mock('../../api/client', () => ({
   getAvailability: vi.fn(),
