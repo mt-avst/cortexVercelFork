@@ -166,7 +166,14 @@
   padding: 0;
   border: none;
   background: none;
-  color: var(--fs-accent);
+  /*
+   * `--fs-accent-strong`, not the identity `--fs-accent` (#FF5A1F): at this
+   * size (0.875rem) the identity step measures ~3:1 against the light cream
+   * surface, below WCAG AA's 4.5:1 for text. `--fs-accent-strong` is the
+   * theme's own "text-safe fill step" for exactly this case (~5.18:1 on
+   * white) - see `_themes.css`'s comment beside both tokens.
+   */
+  color: var(--fs-accent-strong);
   font-weight: 600;
   font-size: 0.875rem;
   text-align: right;
