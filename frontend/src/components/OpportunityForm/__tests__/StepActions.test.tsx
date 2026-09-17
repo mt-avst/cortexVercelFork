@@ -196,8 +196,20 @@ describe('StepActions - onNext is unaffected by justSaved', () => {
   });
 });
 
-describe('StepActions - onSaveAndExit', () => {
-  it('renders Save and exit independently of justSaved', () => {
+/**
+ * D9 (row 24): "Save and exit" is deleted from the row. Drafts autosave, and
+ * Exit to dashboard already covers a deliberate exit, so the middle button
+ * was a second way to do something the row already did - and, per
+ * verify-claims #10, the one whose position drifted up to 74px as its two
+ * neighbours resized around it.
+ *
+ * `onSaveAndExit` is still accepted (see the prop's own comment in
+ * StepActions.tsx - a caller in OpportunityForm.tsx, which this build does
+ * not touch, may still pass it) but must never render anything, whether or
+ * not a handler is given.
+ */
+describe('StepActions - D9: no "Save and exit" (row 24)', () => {
+  it('never renders "Save and exit", even when onSaveAndExit is passed', () => {
     render(
       <StepActions
         onSubmit={noop}
@@ -209,6 +221,109 @@ describe('StepActions - onSaveAndExit', () => {
         justSaved
       />
     );
-    expect(screen.getByRole('button', { name: /Save and exit/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Save and exit/ })).not.toBeInTheDocument();
+  });
+
+  it('never renders it on the forward-control shape either', () => {
+    render(
+      <StepActions
+        onNext={noop}
+        nextLabel="Content & Details"
+        onSaveAndExit={vi.fn()}
+        isEdit
+        saving={false}
+        disabled={false}
+      />
+    );
+    expect(screen.queryByRole('button', { name: /Save and exit/ })).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * D9: one commit colour, fixed-width Previous/Continue/terminal buttons.
+ */
+describe('StepActions - D9: one commit colour, fixed-width nav buttons (row 24)', () => {
+  it('the terminal button defaults to btn-primary, not btn-success - one colour with Continue', () => {
+    render(
+      <StepActions onSubmit={noop} submitLabel="Create opportunity" isEdit={false} saving={false} disabled={false} />
+    );
+    const button = screen.getByRole('button', { name: 'Create opportunity' });
+    expect(button).toHaveClass('btn-primary');
+    expect(button).not.toHaveClass('btn-success');
+  });
+
+  it('an explicit submitVariant is still honoured, for a caller that opts back in', () => {
+    render(
+      <StepActions
+        onSubmit={noop}
+        submitLabel="Create opportunity"
+        submitVariant="success"
+        isEdit={false}
+        saving={false}
+        disabled={false}
+      />
+    );
+    expect(screen.getByRole('button', { name: 'Create opportunity' })).toHaveClass('btn-success');
+  });
+
+  it('Previous, Continue and the terminal button all carry the fixed-width class', () => {
+    render(
+      <StepActions
+        onPrevious={noop}
+        previousLabel="Basic Information"
+        onNext={noop}
+        nextLabel="Task List"
+        isEdit
+        saving={false}
+        disabled={false}
+      />
+    );
+    expect(screen.getByRole('button', { name: /^Previous:/ })).toHaveClass('step-actions__nav-button');
+    expect(screen.getByRole('button', { name: /^Task List/ })).toHaveClass('step-actions__nav-button');
+  });
+
+  it('the row itself carries the sticky class', () => {
+    const { container } = render(
+      <StepActions onSubmit={noop} submitLabel="Create opportunity" isEdit={false} saving={false} disabled={false} />
+    );
+    expect(container.querySelector('.step-actions')).toBeInTheDocument();
+  });
+
+  it('the terminal button carries a stable, colour-independent hook for other tests to find it by', () => {
+    // OpportunityForm.save-confirmation.test.tsx used to find this control by
+    // `.btn-success`; D9 made that class a moving target (it is `btn-primary`
+    // by default now, and callers may still opt into `success`). This class
+    // is never conditional on `submitVariant`.
+    render(
+      <StepActions
+        onSubmit={noop}
+        submitLabel="Create opportunity"
+        submitVariant="success"
+        isEdit={false}
+        saving={false}
+        disabled={false}
+      />
+    );
+    expect(screen.getByRole('button', { name: 'Create opportunity' })).toHaveClass('step-actions__submit');
+  });
+
+  it('the per-step Save Changes shortcut is btn-primary too - "one commit colour" means every commit control', () => {
+    // Row 24's own finding: the shortcut was still green (btn-success) after
+    // the terminal button became btn-primary, so the row disagreed with
+    // itself about which colour means "commit". Both are the commit action;
+    // D9's fix is one colour for all of them, not just the terminal one.
+    render(
+      <StepActions
+        onNext={noop}
+        nextLabel="Content & Details"
+        onSave={noop}
+        isEdit
+        saving={false}
+        disabled={false}
+      />
+    );
+    const shortcut = screen.getByRole('button', { name: 'Save Changes' });
+    expect(shortcut).toHaveClass('btn-primary');
+    expect(shortcut).not.toHaveClass('btn-success');
   });
 });
