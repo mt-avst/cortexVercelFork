@@ -49,12 +49,15 @@ interface StepNavProps {
  * button holds exactly one line of title and one line of state on a single
  * fixed-height row.
  *
- * The accessible name still grows past the visible text - "Step 3 of 4 Task
- * List What the participant does Needs attention" - and stays a superset of
- * what it was: `describeStepPosition` is still rendered, in a `.sr-only`
- * span, so a screen reader hears the same sentence it always did even though
- * a sighted author now sees a numeral in its place. Nothing here renders
- * another step's title, which is what would break the negative assertions.
+ * The accessible name still carries the position sentence past the visible
+ * text - "Step 3 of 4 Task List Needs attention" - even though a sighted
+ * author now sees a numeral where that sentence used to be visible:
+ * `describeStepPosition` is still rendered, in a `.sr-only` span, so a screen
+ * reader hears the same position it always did. The step DESCRIPTION ("What
+ * the participant does" and so on) is not part of that any more - D7 drops
+ * it from the DOM entirely, for every step, not just visually - so it is no
+ * longer part of the accessible name either. Nothing here renders another
+ * step's title, which is what would break the negative assertions.
  */
 const StepNav: React.FC<StepNavProps> = ({ steps, activeStepId, statusOf, onSelect }) => (
   <nav className="nav nav-tabs border-0 nav-tabs-form" aria-label="Form steps">

@@ -190,7 +190,11 @@ const StepActions: React.FC<StepActionsProps> = ({
       ) : (
         <button
           type="button"
-          className={`btn btn-${submitVariant} step-actions__nav-button px-5 py-2 fw-semibold`}
+          /* `step-actions__submit`: a stable hook for tests that need to find
+             THIS control without matching on its colour class (D9 changed
+             that) or its text (which is the very thing under test in some of
+             those - "Save changes" / "Saved" / "Updating..."). */
+          className={`btn btn-${submitVariant} step-actions__nav-button step-actions__submit px-5 py-2 fw-semibold`}
           onClick={onSubmit}
           disabled={disabled}
           style={{ fontSize: '0.95rem' }}

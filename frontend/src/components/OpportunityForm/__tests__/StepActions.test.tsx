@@ -288,4 +288,22 @@ describe('StepActions - D9: one commit colour, fixed-width nav buttons (row 24)'
     );
     expect(container.querySelector('.step-actions')).toBeInTheDocument();
   });
+
+  it('the terminal button carries a stable, colour-independent hook for other tests to find it by', () => {
+    // OpportunityForm.save-confirmation.test.tsx used to find this control by
+    // `.btn-success`; D9 made that class a moving target (it is `btn-primary`
+    // by default now, and callers may still opt into `success`). This class
+    // is never conditional on `submitVariant`.
+    render(
+      <StepActions
+        onSubmit={noop}
+        submitLabel="Create opportunity"
+        submitVariant="success"
+        isEdit={false}
+        saving={false}
+        disabled={false}
+      />
+    );
+    expect(screen.getByRole('button', { name: 'Create opportunity' })).toHaveClass('step-actions__submit');
+  });
 });
