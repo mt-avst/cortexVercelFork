@@ -536,6 +536,9 @@ const EXPECTED_AUTHORISATION: Record<string, Verdict> = {
   // opportunities.ts
   'GET /api/opportunities': 'optional-session+live-role',
   'POST /api/opportunities': 'admin',
+  // D13 AI study drafting (docs/AI-STUDY-DRAFTING-SPEC.md). Writes nothing;
+  // same admin gate as every other opportunity write.
+  'POST /api/opportunities/draft-from-brief': 'admin',
   'GET /api/opportunities/:id': 'optional-session+live-role',
   'PATCH /api/opportunities/:id': 'admin',
   'DELETE /api/opportunities/:id': 'admin',
@@ -691,7 +694,7 @@ const EXPECTED_AUTHORISATION: Record<string, Verdict> = {
  * guards cannot notice the table changing - which is the whole point of a
  * count here.
  */
-const EXPECTED_ROUTE_COUNT = 99;
+const EXPECTED_ROUTE_COUNT = 100;
 
 /** Every router file in `src/routes`, read off disk rather than listed. */
 const ROUTER_FILES = fs

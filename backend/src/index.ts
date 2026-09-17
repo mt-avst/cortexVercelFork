@@ -12,6 +12,7 @@ import { applyServerTimeouts } from './server-timeouts';
 import { createDatabaseHealthProbe } from './utils/deepHealth';
 import { errorHandler } from './utils/errorHandler';
 import { getBuildRevision } from './utils/buildInfo';
+import { isAiDraftingConfigured } from './services/study-drafter';
 import { sessionCookieName } from './utils/hostCookie';
 import { buildCsrfProtection, CSRF_ERROR_CODE } from './middleware/csrf';
 import { sendDueReminders } from './services/reminders';
@@ -260,6 +261,14 @@ app.get('/api/health', healthLimiter, (_req: express.Request, res: express.Respo
         // needs to ask it. It is a commit sha rather than recon detail: it says
         // nothing about the state of the system, only which source produced it.
         revision: getBuildRevision(),
+        // D13: the ONLY carrier the frontend has for whether the AI drafting
+        // panel may show at all (docs/AI-STUDY-DRAFTING-SPEC.md's open "flag
+        // carrier" decision, resolved here rather than left pending). A plain
+        // boolean, not a secret - it says whether the capability is switched
+        // on, never anything about the key itself. Reported on both paths,
+        // same reasoning as revision: fail-closed callers should still learn
+        // "off" from a degraded response rather than getting nothing.
+        aiDrafting: isAiDraftingConfigured(),
         timestamp: new Date().toISOString(),
       });
     })
