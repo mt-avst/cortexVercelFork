@@ -16,6 +16,10 @@ import {
   relativeDayLabel,
   QuickFilter,
 } from '../utils/adminDashboard';
+import {
+  isPublishedButNotWorking,
+  PUBLISHED_NOT_WORKING_LABEL
+} from '../lib/opportunity-authoring/step-status';
 import { logger } from '../utils/logger';
 import PendingApprovals from '../components/PendingApprovals';
 import AdminFeedback from '../components/AdminFeedback';
@@ -881,8 +885,31 @@ const Admin: React.FC = () => {
                                 </span>
                               </td>
                               <td className="col-status" data-label="Status">
+                                {/*
+                                  Row 6: four seeded PUBLISHED studies fail their
+                                  own publish readiness (no questions, no
+                                  external link, no venue) while this cell read
+                                  the same as any working study. One word,
+                                  shared with the Review identity card
+                                  (`ReviewStep.tsx`), for "published but not
+                                  working" - computed here from what the
+                                  dashboard's own list response already carries.
+                                  See `isPublishedButNotWorking`'s own comment
+                                  for the one class of breakage this cannot see
+                                  from these fields alone (a native survey or
+                                  unmoderated study with no content).
+                                */}
                                 <span className={`admin-study-status admin-study-status--${opportunity.status}`}>
-                                  {getDisplayStatus(opportunity.status)}
+                                  {isPublishedButNotWorking(opportunity.status, {
+                                    type: opportunity.type,
+                                    deliveryMode: opportunity.delivery_mode,
+                                    hasLinkedStudy: Boolean(opportunity.firsthand_study_id),
+                                    externalLink: opportunity.external_link_optional,
+                                    sessionCount: (opportunity.sessions ?? []).length,
+                                    meetingLocation: opportunity.meeting_location_optional
+                                  })
+                                    ? PUBLISHED_NOT_WORKING_LABEL
+                                    : getDisplayStatus(opportunity.status)}
                                 </span>
                                 {opportunity.status === 'closed' && (
                                   <span className="badge bg-dark ms-1">Auto-closed</span>
