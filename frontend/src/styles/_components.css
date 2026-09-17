@@ -13054,6 +13054,30 @@ body.theme-light .btn-ghost-danger {
   white-space: normal;
 }
 
+/* ------------------------------------------------------------
+   STEP ACTIONS (row 24 / D9)
+
+   Sticky so the primary action stays reachable without scrolling a long
+   step - the whole point of a bottom action row is that it is always there.
+   Previous/Continue/the terminal button share one fixed floor width so the
+   row does not reflow as the label changes: measured 202-306px unclamped
+   (verify-claims #10, "Continue: Session Management" the widest), because
+   the label carries the destination step's name. A min-width rather than a
+   fixed one lets an exceptionally long label still grow past the floor
+   instead of clipping the text a screen reader also reads as the button's
+   name.
+   ------------------------------------------------------------ */
+.step-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  background: var(--bg-card);
+}
+
+.step-actions__nav-button {
+  min-width: 260px;
+}
+
 /* ============================================================
    RECORDED STUDY EXPECTATIONS
    What the participant is agreeing to, stated above the CTA.

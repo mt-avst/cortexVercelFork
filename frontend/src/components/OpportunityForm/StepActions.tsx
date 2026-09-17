@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, ArrowRight, CheckCircle, DoorOpen, Save } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CheckCircle, Save } from 'lucide-react';
 
 /**
  * The forward control, which is one thing or the other and never both. Written
@@ -52,14 +52,12 @@ type StepActionsProps = ForwardControl &
   /** The green shortcut. Given only for an edit that has changed something. */
   onSave?: () => void;
   /**
-   * Save what is here and leave, on EVERY step.
-   *
-   * The row already had a Save shortcut and it was given only on an edit that
-   * had changed something, which leaves the commonest unfinished-work case -
-   * a create, halfway down step two - with no way out that keeps the work
-   * except walking forward to Review. Passed in rather than derived here for
-   * the same reason the labels are: this component does not get to decide
-   * which controls a step has.
+   * D9: "Save and exit" is deleted from this row - drafts autosave, and
+   * Exit to dashboard already covers leaving deliberately, so the row had
+   * three ways to stop and two of them did the same job. This prop is kept,
+   * unused, purely so a caller that still passes it (OpportunityForm.tsx,
+   * which this build does not touch) keeps typechecking; nothing here reads
+   * it any more. See run/W5.md, row 24, for the caller-side note.
    */
   onSaveAndExit?: () => void;
   isEdit: boolean;
@@ -112,19 +110,27 @@ const StepActions: React.FC<StepActionsProps> = ({
   onSubmit,
   submitLabel,
   onSave,
-  onSaveAndExit,
   isEdit,
   saving,
   disabled,
-  submitVariant = 'success',
+  /*
+   * D9: one commit colour. This used to default to 'success', which painted
+   * the Review step's terminal button green while every other step's Continue
+   * was orange - the one control on the row that changes meaning (and now,
+   * colour) is the last one an author presses, which is exactly the control
+   * that should look the least surprising. No caller passes submitVariant
+   * explicitly (grepped: only this default is ever in effect), so this one
+   * line is the whole fix.
+   */
+  submitVariant = 'primary',
   justSaved = false
 }) => (
-  <div className="border-top mt-4 pt-4">
+  <div className="step-actions border-top mt-4 pt-4">
     <div className="d-flex justify-content-between align-items-center gap-2">
       {onPrevious ? (
         <button
           type="button"
-          className="btn btn-outline-secondary px-5 py-2 fw-semibold"
+          className="btn btn-outline-secondary step-actions__nav-button px-5 py-2 fw-semibold"
           onClick={onPrevious}
           style={{ fontSize: '0.95rem' }}
         >
@@ -162,23 +168,19 @@ const StepActions: React.FC<StepActionsProps> = ({
         </button>
       )}
 
-      {onSaveAndExit && (
-        <button
-          type="button"
-          className="btn btn-outline-primary px-4 py-2 fw-semibold"
-          onClick={onSaveAndExit}
-          disabled={disabled}
-          style={{ fontSize: '0.95rem' }}
-        >
-          <DoorOpen size={16} className="me-2" />
-          Save and exit
-        </button>
-      )}
+      {/*
+        D9: "Save and exit" is deleted. Drafts autosave (there is nothing
+        this button saved that the next autosave tick would not have), and
+        Exit to dashboard already covers leaving on purpose. It also used to
+        sit as the middle child of this space-between row, so it drifted up
+        to 74px between steps as its two neighbours resized - deleting it
+        removes that drift along with the control.
+      */}
 
       {onNext ? (
         <button
           type="button"
-          className="btn btn-primary px-5 py-2 fw-semibold"
+          className="btn btn-primary step-actions__nav-button px-5 py-2 fw-semibold"
           onClick={onNext}
           style={{ fontSize: '0.95rem' }}
         >
@@ -188,7 +190,7 @@ const StepActions: React.FC<StepActionsProps> = ({
       ) : (
         <button
           type="button"
-          className={`btn btn-${submitVariant} px-5 py-2 fw-semibold`}
+          className={`btn btn-${submitVariant} step-actions__nav-button px-5 py-2 fw-semibold`}
           onClick={onSubmit}
           disabled={disabled}
           style={{ fontSize: '0.95rem' }}
