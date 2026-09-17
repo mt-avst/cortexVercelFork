@@ -10,37 +10,39 @@ import ConfirmationModal from '../components/ConfirmationModal';
 import {
   createFirstHandStudy,
   getFirstHandStudy,
+  getFirstHandStudyUsage,
   updateFirstHandStudy,
+  type FirstHandStudyUsage,
 } from '../api/firsthand-studies';
 import { Alert, Button, Card, CardBody, StatusBadge } from '../components/ui';
 import { isStudyReadOnly, type StudyViewer } from '../utils/studyOwnership';
-import type { FirstHandStudy } from '../api/types';
-import {
-  RATING_SCALE_BOUNDS,
-  type StepConfig,
-  type StudyStep
-} from '@shared/firsthand/contract';
+import type { FirstHandStudy, OpportunityFormData } from '../api/types';
+import type { StudyStep } from '@shared/firsthand/contract';
+import { toStudySteps, type InlineStudyStep } from '@shared/firsthand/inline-study';
+import { toSurveySteps, type SurveyQuestion } from '@shared/firsthand/survey-authoring';
 import { CUSTOM_CONSENT_TEMPLATE_ID } from '@shared/firsthand/consent-templates';
-import { authorableSurveyStepTypes } from '@shared/firsthand/survey-authoring';
-
-/** What a researcher calls each survey question type, keyed on the vocabulary. */
-const SURVEY_TYPE_LABELS: Record<
-  (typeof authorableSurveyStepTypes)[number],
-  string
-> = {
-  instruction: 'Section text (no answer)',
-  open_text: 'Free text',
-  single_choice: 'Choose one',
-  multi_choice: 'Choose several',
-  rating: 'Rating scale',
-  nps: 'Recommendation score (0 to 10)'
-};
+import {
+  authoredStepsOf,
+  toInlineStudyPayloadStep,
+  toInlineStudyStep,
+  toSurveyPayloadStep,
+  toSurveyQuestion,
+  withStoredIdentity,
+} from '../lib/opportunity-authoring/hydrate-study';
+import type { WithClientId } from '../lib/opportunity-authoring/client-ids';
+import { getPrimaryTargetUrl } from '../lib/recording/task-target';
+import FirstHandStudyTab, {
+  type FirstHandStudyTabFormData,
+} from '../components/OpportunityForm/FirstHandStudyTab';
+import SurveyQuestionsTab, {
+  type InlineSurveyFormFields,
+} from '../components/OpportunityForm/SurveyQuestionsTab';
+import ReadOnlyStudyContent from '../components/OpportunityForm/ReadOnlyStudyContent';
 import {
   createStudyRequestSchema,
   updateStudyRequestSchema,
 } from '@shared/firsthand/study-input';
 
-type StepType = StudyStep['type'];
 type StudyStatus = 'draft' | 'launched' | 'archived';
 
 /**
@@ -56,46 +58,6 @@ const STUDY_STATUS_BADGE: Record<StudyStatus, 'draft' | 'published' | 'closed'> 
   launched: 'published',
   archived: 'closed'
 };
-
-type StepDraft = {
-  step_id: string;
-  order: number;
-  type: StepType;
-  prompt: string;
-  target_url: string;
-  helper_text: string;
-  is_required: boolean;
-  options: string;
-  /**
-   * Per-type question settings, for the survey vocabulary. Held as the object
-   * rather than flattened into strings like `options` is, because the contract
-   * validates its shape and a round-trip through text would have to reconstruct
-   * it exactly.
-   */
-  config?: StepConfig;
-};
-
-/**
- * Step ids are namespaced by their study, because they are NOT scoped to it in
- * storage: `firsthand.study_steps.id` is a global `TEXT PRIMARY KEY`
- * (0004_firsthand_studies.sql) and `insertStudySteps` writes `step_id` straight
- * into it.
- *
- * The old default was `step_${order}` zero-padded, so every study started with
- * `step_001` and the SECOND study anyone authored here failed on a unique
- * violation. This route reports it as a 400 `create_failed` carrying the raw
- * Postgres text (`routes/firsthand.ts` catches locally); the inline path, which
- * lets `mapDatabaseError` see the 23505, reports the same cause as a misleading
- * 409 "Resource already exists". Either way the author's only way out was to
- * rename the ids by hand. The inline authoring path fixed this for itself; this
- * is the same fix for the editor.
- *
- * The field stays user-editable, so a determined author can still collide by
- * typing another study's id. That is a deliberate mistake rather than the
- * default behaviour, which is what this closes.
- */
-const stepIdFor = (studyId: string, sequence: number): string =>
-  `${studyId}_step_${String(sequence).padStart(3, '0')}`;
 
 /**
  * A study id of the same shape the server mints: `study_<uuid v4>`.
@@ -130,124 +92,20 @@ const mintStudyId = (): string => {
 };
 
 /**
- * The lowest sequence number not already claimed by a step in this form.
+ * Whether this task list would be saved with tasks but no starting page.
  *
- * Sequence is deliberately NOT the step's `order`: removing a step renumbers
- * every `order` after it but leaves the step ids alone, so `order` is reused
- * while an id is not. Deriving a new id from `order` therefore reissues an id a
- * surviving step still holds - remove step 1 of three, add a step, and the new
- * step claims `_step_003` a second time. That is caught by `validateSteps` as a
- * "Duplicate step_id", which is a dead end the author cannot act on. Scanning
- * for a free sequence also copes with studies authored before ids were
- * namespaced, whose steps carry bare `step_001` and claim nothing here.
- *
- * Sequences freed by a removal ARE reused once nothing holds them. Accepted
- * knowingly: `participant_responses.step_id` is free text with no FK, so a
- * recycled id conflates old responses with the new step for anything that
- * aggregates across sessions. Nothing does today - playback resolves prompts
- * from the session's frozen step snapshot, not the live table.
- *
- * Ids are compared trimmed, because `stepDraftToPayload` trims before sending:
- * an untrimmed compare would read a pasted "..._step_002 " as a different id,
- * hand the same sequence out again, and land on the very "Duplicate step_id"
- * this exists to avoid.
- */
-const nextStepId = (current: ReadonlyArray<StepDraft>, studyId: string): string => {
-  const taken = new Set(current.map((step) => step.step_id.trim()));
-  let sequence = current.length + 1;
-  while (taken.has(stepIdFor(studyId, sequence))) {
-    sequence += 1;
-  }
-
-  return stepIdFor(studyId, sequence);
-};
-
-/** One past the highest order in use, so a non-contiguous set cannot repeat one. */
-const nextStepOrder = (current: ReadonlyArray<StepDraft>): number =>
-  current.reduce((highest, step) => Math.max(highest, step.order), 0) + 1;
-
-const defaultStep = (order: number, stepId: string): StepDraft => ({
-  step_id: stepId,
-  order,
-  type: 'instruction',
-  prompt: '',
-  target_url: '',
-  helper_text: '',
-  is_required: false,
-  options: '',
-  config: undefined,
-});
-
-const stepDraftFromStep = (step: StudyStep): StepDraft => ({
-  step_id: step.step_id,
-  order: step.order,
-  type: step.type,
-  prompt: step.prompt,
-  target_url: step.target_url ?? '',
-  helper_text: step.helper_text ?? '',
-  is_required: step.is_required ?? false,
-  options: step.options ? step.options.join('\n') : '',
-  config: step.config,
-});
-
-const stepDraftToPayload = (draft: StepDraft): StudyStep => {
-  const base: StudyStep = {
-    step_id: draft.step_id.trim(),
-    order: draft.order,
-    type: draft.type,
-    prompt: draft.prompt.trim(),
-  };
-
-  if (draft.target_url.trim()) {
-    base.target_url = draft.target_url.trim();
-  }
-
-  if (draft.helper_text.trim()) {
-    base.helper_text = draft.helper_text.trim();
-  }
-
-  if (draft.is_required) {
-    base.is_required = true;
-  }
-
-  if (draft.type === 'single_choice' || draft.type === 'multi_choice') {
-    base.options = draft.options
-      .split('\n')
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
-  }
-
-  // Carried through rather than dropped. Without this, opening a survey study
-  // here and saving it silently stripped every rating's scale - and the
-  // contract then refuses the save for a field the editor never showed, so the
-  // study becomes uneditable with no way to see why.
-  if (draft.config) {
-    base.config = draft.config;
-  }
-
-  return base;
-};
-
-/**
- * Whether a study has task steps but no task-page URL on any of them.
- *
- * A task list with task steps but no `target_url` anywhere records the participant's
- * whole screen with nothing pre-opened, and they never see the guided
- * open-and-share step. That is correct for a survey-style task list, but is almost
- * always an accidental omission for a product test - so the editor forces a
- * conscious choice rather than saving it silently. `end` steps are terminal
- * markers, never task steps, so they are ignored.
+ * A single, study-level Starting URL (the same field the wizard's Task List
+ * step carries) replaces the old per-task Target URL, so this no longer needs
+ * to search step by step - it needs only to know whether there ARE tasks and
+ * whether the one URL that would apply to all of them is blank. Empty is
+ * correct for a survey-style task list with no page to test; the checkbox
+ * below exists so that is a conscious choice rather than a silent gap.
  */
 export function studyMissingTaskPageUrl(
-  steps: ReadonlyArray<{ type: string; target_url?: string | null }>
+  steps: ReadonlyArray<unknown>,
+  targetUrl: string
 ): boolean {
-  const taskSteps = steps.filter((step) => step.type !== 'end');
-  const hasTargetUrl = taskSteps.some(
-    (step) =>
-      typeof step.target_url === 'string' && step.target_url.trim().length > 0
-  );
-
-  return taskSteps.length > 0 && !hasTargetUrl;
+  return steps.length > 0 && targetUrl.trim().length === 0;
 }
 
 /** Pull a human-readable message out of an axios/unknown save error. */
@@ -303,9 +161,20 @@ type StudyEditorFormProps = {
 };
 
 /**
- * The study authoring form. Ported from FirstHand `study-editor.tsx`: same field
- * set, step model, and the missing-task-page-URL acknowledgement gate, reskinned
- * onto Cortex's Momentum form classes and backed by the in-process studies CRUD.
+ * The study authoring form - now a thin shell around the wizard's own Tasks
+ * body (D4).
+ *
+ * This surface used to duplicate task authoring entirely: its own Task id,
+ * Target URL, Helper text, Required and Options controls, a bespoke Add/Remove,
+ * and a second vocabulary for the same content the wizard's Task List step
+ * already collects. That gave one stored study two authoring surfaces that
+ * disagreed - a `_step_end` completion marker editable only here, and a task
+ * reordered in one that could not be reordered back in the other (Petra,
+ * "the two task-list editors - my ruling"). `FirstHandStudyTab` is now the ONE
+ * editor for a task list's steps, mounted here standalone rather than inside
+ * an opportunity; this form supplies only what a task list needs and the
+ * wizard's own step does not carry - Title, Intro text, Consent text and
+ * Status - plus the save.
  */
 export function StudyEditorForm({
   initialStudy,
@@ -317,24 +186,12 @@ export function StudyEditorForm({
   // No `isEditing &&` guard: the create form has no initialStudy, so
   // isStudyReadOnly already answers false for it.
   const readOnly = isStudyReadOnly(initialStudy, viewer);
-  /**
-   * Which vocabulary this study is written in, and so which controls the editor
-   * offers. A study created before the column existed reads as `recorded`,
-   * which is what it is. New studies made here are recorded too - a survey is
-   * authored on its opportunity, where the questions belong to the thing being
-   * asked rather than to a reusable script.
-   */
-  const isSurvey = initialStudy?.kind === 'survey';
+
   const [title, setTitle] = useState(initialStudy?.title ?? '');
   const [introText, setIntroText] = useState(initialStudy?.intro_text ?? '');
   const [consentText, setConsentText] = useState(
     initialStudy?.consent_text ?? ''
   );
-  const [brandName, setBrandName] = useState(initialStudy?.brand_name ?? '');
-  const [durationMinutes, setDurationMinutes] = useState(
-    initialStudy?.estimated_duration_minutes?.toString() ?? ''
-  );
-  const [locale, setLocale] = useState(initialStudy?.locale ?? 'en-GB');
   const [status, setStatus] = useState<StudyStatus>(
     (initialStudy?.status as StudyStatus | undefined) ?? 'draft'
   );
@@ -342,38 +199,59 @@ export function StudyEditorForm({
   // the server would otherwise mint the id only once the study is inserted -
   // too late for the step ids travelling in the same request - so it is
   // generated here and sent as `id`, which createStudyRequestSchema accepts.
-  // The same shape the server uses: study_<uuid>.
   const [studyId, setStudyId] = useState(() => initialStudy?.id ?? mintStudyId());
 
-  const [steps, setSteps] = useState<StepDraft[]>(() => {
-    if (initialSteps && initialSteps.length > 0) {
-      return initialSteps
-        .filter((step) => step.type !== 'end')
-        .slice()
-        .sort((left, right) => left.order - right.order)
-        .map(stepDraftFromStep);
-    }
-
-    return [defaultStep(1, stepIdFor(studyId, 1))];
-  });
   /**
-   * The completion marker every authoring path appends after the authored
-   * steps (row 3). It is never an editor-facing task: the standalone editor
-   * used to fold it into `steps` and render it as a fifth, removable card -
-   * one more than the wizard's Task List ever shows for the same study,
-   * because the wizard's authoring vocabulary never carries it at all
-   * (`toStudySteps`/`toSurveySteps` append it on the way OUT).
-   *
-   * Held apart from `steps` rather than filtered at render time so every
-   * index-based handler above (`removeStep`, `changeStepType`, reordering)
-   * keeps operating on task steps only - folding it back in for render and
-   * unfolding it for each handler would be the same bug rewritten five times.
-   * Not itself editable, so it needs no state setter; it is carried through to
-   * the save payload unchanged, at the position after the last authored step.
+   * Which vocabulary this study is written in - fixed at create and never
+   * editable (see study-input.ts). A create form has no `initialStudy`, so it
+   * is never in the survey vocabulary: every authoring path that mints a
+   * survey-kind study does so inline, from the wizard's own Questions step -
+   * this page's create form has only ever produced recorded task lists (see
+   * `mintStudyId`, called unconditionally). Editing an EXISTING survey study
+   * is the one case this page must still serve, via the wizard's own
+   * `SurveyQuestionsTab` rather than the recorded-only `FirstHandStudyTab`.
    */
-  const endStepRef = useRef<StudyStep | null>(
-    initialSteps?.find((step) => step.type === 'end') ?? null
+  const isSurveyKind = initialStudy?.kind === 'survey';
+
+  const initialAuthoredSteps = authoredStepsOf(initialSteps ?? []);
+  // `withStoredIdentity`, not a fresh `withClientIds`: this is an EDIT, and an
+  // edit must carry each step's identity forward so a save does not renumber
+  // it and orphan whatever has already been recorded against it (see
+  // hydrate-study.ts). A create has nothing stored to recover, so its steps
+  // start with no identity and one is minted the first time a task is typed.
+  const [steps, setSteps] = useState<WithClientId<InlineStudyStep>[]>(() =>
+    isSurveyKind
+      ? []
+      : withStoredIdentity(
+          initialAuthoredSteps.map(toInlineStudyStep),
+          initialAuthoredSteps,
+          studyId
+        )
   );
+  const [questions, setQuestions] = useState<WithClientId<SurveyQuestion>[]>(() =>
+    isSurveyKind
+      ? withStoredIdentity(
+          initialAuthoredSteps.map(toSurveyQuestion),
+          initialAuthoredSteps,
+          studyId
+        )
+      : []
+  );
+  const [targetUrl, setTargetUrl] = useState(
+    initialSteps ? getPrimaryTargetUrl(initialSteps) ?? '' : ''
+  );
+  const [durationMinutes, setDurationMinutes] = useState<number | undefined>(
+    initialStudy?.estimated_duration_minutes ?? undefined
+  );
+  // `false` on load whenever there is something loaded to be false about - a
+  // stored duration was decided by a human, and re-deriving the estimate would
+  // silently overwrite that decision on the very next save (see
+  // copiedRecordedFields in hydrate-study.ts for the same rule). A brand new
+  // list has no stored decision, so it starts automatic.
+  const [durationAuto, setDurationAuto] = useState<boolean | undefined>(
+    initialStudy ? false : undefined
+  );
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /**
@@ -385,9 +263,7 @@ export function StudyEditorForm({
    * without the parent re-fetching and remounting this form, because a remount
    * would discard exactly the local edits the conflict exists to protect. And a
    * successful save advances the row, so a form that stayed open would fail its
-   * own precondition on the second save - this one does navigate away today, but
-   * a state variable makes that an incidental fact rather than a load-bearing
-   * one.
+   * own precondition on the second save.
    */
   const [expectedUpdatedAt, setExpectedUpdatedAt] = useState<string | undefined>(
     initialStudy?.updated_at
@@ -404,36 +280,30 @@ export function StudyEditorForm({
   const [acknowledgedNoTaskPageUrl, setAcknowledgedNoTaskPageUrl] =
     useState(false);
 
-  // A SURVEY has no page under test, so the missing-task-page warning does not
-  // apply to it - and unacknowledged it blocks the save outright, which made
-  // every survey study unsaveable here. The warning exists because a recorded
-  // study with no target degrades to a start button with no open-and-share
-  // sequence; a survey never had that sequence to lose.
-  const missingTaskPageUrl = !isSurvey && studyMissingTaskPageUrl(steps);
+  // A survey has no page under test at all, so the missing-task-page warning
+  // - which asks "add a Starting URL, or confirm this is survey-style" -
+  // cannot apply to a study that is already, unconditionally, survey-style.
+  const missingTaskPageUrl = !isSurveyKind && studyMissingTaskPageUrl(steps, targetUrl);
 
   /**
    * Unsaved-changes guarding (row 25).
    *
-   * The editor had none: its Back link was a plain `<Link>` and it registered no
-   * guard, so an author who had typed into it lost the lot on one click - the
-   * `beforeunload` browser gate never fires on an in-app route change either.
-   *
-   * `isDirty` compares a signature of the live fields against the FIRST render's,
-   * which equals the loaded study because the state above is seeded from
-   * `initialStudy`. A read-only viewer cannot change anything, so it never
-   * guards; a create form guards only once its default has actually been typed
-   * into. The signature is a string comparison, not deep equality, so it costs
-   * nothing per render.
+   * `isDirty` compares a signature of the live fields against the FIRST
+   * render's, which equals the loaded study because the state above is seeded
+   * from `initialStudy`. A read-only viewer cannot change anything, so it
+   * never guards; a create form guards only once its default has actually
+   * been typed into.
    */
   const currentEditSignature = JSON.stringify({
     title,
     introText,
     consentText,
-    brandName,
-    durationMinutes,
-    locale,
     status,
     steps,
+    questions,
+    targetUrl,
+    durationMinutes,
+    durationAuto,
   });
   const openingEditSignatureRef = useRef<string | null>(null);
   if (openingEditSignatureRef.current === null) {
@@ -460,13 +330,10 @@ export function StudyEditorForm({
   /**
    * The in-app cousin of the browser gate (WZ-13 pattern, as OpportunityForm).
    *
-   * The Back link and the Header's own links navigate straight through
-   * react-router, so a dirty author who clicks one bypasses `beforeunload`. The
-   * page registers this guard on the shared `NavigationGuardProvider` (mounted
-   * above both the page's Back link and the Header in `AppChromeLayout`); a
-   * `GuardedLink` consults it and, when it intercepts, the confirmation below
-   * owns what happens next. A thin wrapper over a ref keeps the registration
-   * stable while always seeing the latest dirty state.
+   * The Back link navigates straight through react-router, so a dirty author
+   * who clicks it bypasses `beforeunload`. The page registers this guard on
+   * the shared `NavigationGuardProvider`; a `GuardedLink` consults it and, when
+   * it intercepts, the confirmation below owns what happens next.
    */
   const latestGuardRef = useRef<(destination: string) => boolean>(() => false);
   latestGuardRef.current = (destination: string): boolean => {
@@ -481,116 +348,71 @@ export function StudyEditorForm({
     return () => registerGuard(null);
   }, [registerGuard]);
 
-  const addStep = () => {
-    setSteps((current) => [
-      ...current,
-      // `order` is taken from the highest in use, not from the step count, for
-      // the same reason the id is: `validateSteps` rejects a duplicate order but
-      // never requires them to be contiguous, so a study stored with orders
-      // 1, 3, 4 (reachable through the API) would make a count-derived order
-      // repeat 4 and fail the save with an unactionable "Duplicate step order".
-      defaultStep(nextStepOrder(current), nextStepId(current, studyId)),
-    ]);
-  };
-
-  /**
-   * Swap in a fresh study id, carrying the step ids that are namespaced by the
-   * old one across with it. Ids the author typed themselves are left alone -
-   * they were a deliberate choice, and rewriting them would be a surprise.
-   */
-  const remintStudyId = (previousId: string) => {
-    const nextId = mintStudyId();
-    const previousPrefix = `${previousId}_step_`;
-
-    setStudyId(nextId);
-    setSteps((current) =>
-      current.map((step) =>
-        step.step_id.trim().startsWith(previousPrefix)
-          ? {
-              ...step,
-              step_id: `${nextId}_step_${step.step_id
-                .trim()
-                .slice(previousPrefix.length)}`,
-            }
-          : step
-      )
-    );
-  };
-
-  const removeStep = (index: number) => {
-    setSteps((current) =>
-      current
-        .filter((_, idx) => idx !== index)
-        .map((step, idx) => ({ ...step, order: idx + 1 }))
-    );
-  };
-
-  /**
-   * Change a survey question's type, dropping the settings that no longer
-   * apply. Hiding them is not enough: an NPS question carrying a rating's
-   * scale_max is refused by the contract, so a leftover fails the save with an
-   * error about a control the editor is no longer showing.
-   */
-  const changeStepType = (
-    index: number,
-    type: (typeof authorableSurveyStepTypes)[number]
+  // One handler for both tabs - only one is ever mounted, since `isSurveyKind`
+  // is fixed for the life of this form, and the two vocabularies' field names
+  // never collide (`inline_study_*` vs `inline_survey_*`).
+  const handleTabFieldChange = (
+    field: string,
+    value: string | number | boolean | undefined
   ) => {
-    setSteps((current) =>
-      current.map((step, idx) =>
-        idx === index
-          ? {
-              ...step,
-              type,
-              options:
-                type === 'single_choice' || type === 'multi_choice'
-                  ? step.options
-                  : '',
-              // Dropped on an instruction for the same reason as the config: it
-              // cannot be answered, so a required flag on one is stored state
-              // that means nothing.
-              is_required: type === 'instruction' ? false : step.is_required,
-              config: type === 'rating' ? { scale_max: step.config?.scale_max ?? 5 } : undefined
-            }
-          : step
-      )
-    );
+    switch (field) {
+      case 'inline_study_target_url':
+        setTargetUrl(typeof value === 'string' ? value : '');
+        break;
+      case 'inline_study_duration_minutes':
+      case 'inline_survey_duration_minutes':
+        setDurationMinutes(
+          typeof value === 'number' ? value : undefined
+        );
+        break;
+      case 'inline_study_duration_auto':
+      case 'inline_survey_duration_auto':
+        setDurationAuto(Boolean(value));
+        break;
+      default:
+        // 'study_source' and friends: unreachable here, since the source
+        // choice only ever offers itself with no existing content to hide -
+        // and both tabs are mounted here only once a study already exists,
+        // hasLinkedStudy true, or (FirstHandStudyTab only) with the choice
+        // force-hidden. Nothing to do.
+        break;
+    }
+  };
+
+  // The opportunity's own "this is published" flag, translated: the wizard's
+  // Tasks/Questions bodies only ever compare this to the literal 'published',
+  // so the task list's OWN status ('launched' means published) is mapped onto
+  // it rather than widening what either tab reads.
+  const publishedFlag = status === 'launched' ? 'published' : status;
+
+  const tabFormData: FirstHandStudyTabFormData = {
+    status: publishedFlag,
+    inline_study_steps: steps,
+    inline_study_target_url: targetUrl,
+    inline_study_duration_minutes: durationMinutes,
+    inline_study_duration_auto: durationAuto,
+    firsthand_study_id: initialStudy?.id,
   };
 
   /**
-   * The one-way repair for a legacy typed step in a RECORDED study. Keeps the
-   * step_id, so responses already stored against it are not orphaned.
-   *
-   * `config` is cleared because stepDraftToPayload emits it for any type. The
-   * options are NOT cleared, and that is deliberate rather than an oversight:
-   * both the payload and the editor key off the type, so once the step is an
-   * instruction the options are unreachable either way. A mutation proved a
-   * clear here changes nothing observable.
+   * `SurveyQuestionsTab` takes a full `OpportunityFormData`, unmodified here -
+   * unlike `FirstHandStudyTab`, it has no narrowed prop type of its own, and
+   * widening it is outside this change's file ownership. This is a plain,
+   * self-consistent stand-in rather than any real opportunity: `type:
+   * 'survey'` keeps `maxQuestionsFor` at the ordinary (not one-question)
+   * ceiling, and nothing else the tab reads (`purpose_one_liner`,
+   * `default_duration_minutes`) is ever rendered or sent anywhere from here.
    */
-  const convertToInstruction = (index: number) => {
-    setSteps((current) =>
-      current.map((step, idx) =>
-        idx === index
-          ? { ...step, type: 'instruction', config: undefined }
-          : step
-      )
-    );
-  };
-
-  const updateStep = <K extends keyof StepDraft>(
-    index: number,
-    field: K,
-    value: StepDraft[K]
-  ) => {
-    setSteps((current) =>
-      current.map((step, idx) =>
-        idx === index
-          ? {
-              ...step,
-              [field]: value,
-            }
-          : step
-      )
-    );
+  const surveyTabFormData: OpportunityFormData & InlineSurveyFormFields = {
+    type: 'survey',
+    title,
+    purpose_one_liner: '',
+    default_duration_minutes: 30,
+    status: publishedFlag === 'published' ? 'published' : 'draft',
+    inline_survey_questions: questions,
+    inline_survey_duration_minutes: durationMinutes,
+    inline_survey_duration_auto: durationAuto,
+    firsthand_study_id: initialStudy?.id,
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -605,14 +427,18 @@ export function StudyEditorForm({
       return;
     }
 
-    const authoredSteps = steps.map(stepDraftToPayload);
-    // The completion marker (row 3) is carried through unedited, at the
-    // position after the last authored task, rather than sourced from
-    // `steps` - it was deliberately kept out of that state so no handler
-    // above can touch it.
-    const stepsPayload = endStepRef.current
-      ? [...authoredSteps, { ...endStepRef.current, order: authoredSteps.length + 1 }]
-      : authoredSteps;
+    // `toStudySteps`/`toSurveySteps` each append the completion marker (row 3)
+    // themselves, with the same fixed, non-authorable prompt - the same calls
+    // the wizard's own Task List/Questions steps make on save. There is
+    // nothing of a stored marker to carry through: every authoring path
+    // writes the identical step, every time.
+    const stepsPayload = isSurveyKind
+      ? toSurveySteps(questions.map(toSurveyPayloadStep), studyId)
+      : toStudySteps(
+          steps.map(toInlineStudyPayloadStep),
+          studyId,
+          targetUrl.trim() || undefined
+        );
 
     const payload = {
       // Sent on create so the study row's id matches the prefix already baked
@@ -621,15 +447,8 @@ export function StudyEditorForm({
       title: title.trim(),
       intro_text: introText.trim(),
       consent_text: consentText.trim(),
-      // Carried through so this surface cannot silently reclassify a study.
-      //
-      // The server resolves the classification from the wording, and with no
-      // claim it can only compare against the CURRENT version of the template.
-      // So the day a version 2 ships, an author who opens a study running on
-      // verbatim version 1 wording and changes only its title would have it
-      // rewritten to `custom` - wording that is approved, permanently badged as
-      // not. Sending what was loaded is the whole of the fix; the claim is
-      // still verified against the text on the way in, so this grants nothing.
+      // Carried through so this surface cannot silently reclassify a study -
+      // see the identical reasoning in hydrate-study.ts.
       ...(initialStudy?.consent_template_id &&
       initialStudy.consent_template_id !== CUSTOM_CONSENT_TEMPLATE_ID
         ? {
@@ -637,38 +456,20 @@ export function StudyEditorForm({
             consent_template_version: initialStudy.consent_template_version ?? null
           }
         : {}),
-      brand_name: brandName.trim() || undefined,
-      estimated_duration_minutes: durationMinutes
-        ? Number(durationMinutes)
-        : undefined,
-      locale: locale.trim() || undefined,
+      estimated_duration_minutes: durationMinutes,
       status,
       steps: stepsPayload,
     };
 
-    // Validate client-side against the shared contract before hitting the API,
-    // so obvious mistakes (empty required copy, unsafe target URLs) surface
-    // immediately with the same field rules the backend enforces. Validate with
-    // the schema for the operation so the parsed value matches the CRUD call.
     setError(null);
     setConflict(null);
     setSubmitting(true);
 
     try {
       if (isEditing) {
-        // The id is dropped rather than sent and ignored. The update route
-        // takes it from its own path, and the update schema is now strict, so
-        // sending a field the server does not act on is exactly the kind of
-        // thing strictness exists to surface. The schema still tolerates it,
-        // deliberately, so a bundle cached across a deploy keeps working.
         const { id: _unusedOnUpdate, ...updatePayload } = payload;
         const parsed = updateStudyRequestSchema.safeParse({
           ...updatePayload,
-          // The optimistic-concurrency precondition. Omitted rather than sent
-          // as null when the study was served without one: the schema takes
-          // `string | undefined`, and an absent precondition means "no claim"
-          // on the server, which is the honest reading of a row whose
-          // `updated_at` never reached this form.
           ...(expectedUpdatedAt ? { expected_updated_at: expectedUpdatedAt } : {})
         });
         if (!parsed.success) {
@@ -690,11 +491,6 @@ export function StudyEditorForm({
       const conflictUpdatedAt = staleStudyUpdatedAt(caught);
 
       if (conflictUpdatedAt) {
-        // Nothing else is touched: no field is reset, no navigation happens, no
-        // remount is triggered. The author's edits are the thing being
-        // protected, so the only state that moves is the precondition itself -
-        // advanced to what is now stored, which is what turns "save again" from
-        // a guaranteed second refusal into a deliberate overwrite.
         setExpectedUpdatedAt(conflictUpdatedAt);
         setConflict({ occurred: true });
         setError(null);
@@ -710,7 +506,7 @@ export function StudyEditorForm({
       // form. Re-mint so the next attempt is a fresh insert. Create only: on
       // update the id comes from the route and re-minting would be meaningless.
       if (!isEditing) {
-        remintStudyId(studyId);
+        setStudyId(mintStudyId());
       }
     } finally {
       setSubmitting(false);
@@ -727,19 +523,6 @@ export function StudyEditorForm({
         </Alert>
       ) : null}
 
-      {/*
-        A conflict is a warning, not a danger: nothing is broken and nothing is
-        lost. It is modelled on the missing-task-page block below, which is the
-        other banner here that asks the author to do something rather than just
-        telling them a thing failed.
-
-        The link opens a NEW TAB deliberately. "Reload" is the obvious
-        affordance and it is the wrong one: every field in this form comes from
-        a one-shot useState initialiser, so reloading means remounting, and
-        remounting means discarding the very edits that were just refused. A
-        second tab shows the saved version beside the unsaved one, which is what
-        an author actually needs in order to decide what to keep.
-      */}
       {conflict ? (
         <Alert variant="warning" className="mb-4" id="study-conflict-notice">
           <strong>Somebody else saved this task list while you were editing.</strong>
@@ -768,18 +551,6 @@ export function StudyEditorForm({
         </Alert>
       ) : null}
 
-      {/* One fieldset rather than a `disabled` prop on every control: the
-          native cascade covers each input, textarea, select and button inside
-          it, so a control added later cannot forget to opt in. The backend is
-          still the authority - this only stops an author filling in a form
-          whose save is going to 403.
-
-          minInlineSize because a bare fieldset carries a UA
-          `min-inline-size: min-content`, which would stop it shrinking with
-          the Bootstrap grid rows inside it on a narrow viewport. Inline rather
-          than a class: there is no such utility in styles/_utilities.css.
-          aria-describedby so a screen reader reaching the disabled controls is
-          told why they are disabled. */}
       <fieldset
         aria-describedby={readOnly ? 'study-read-only-notice' : undefined}
         className="border-0 p-0 m-0"
@@ -827,304 +598,61 @@ export function StudyEditorForm({
           />
         </div>
 
-        <div className="row g-3">
-          <div className="col-md-6">
-            <div className="form-group mb-3">
-              <label className="form-label" htmlFor="study-brand">
-                Brand
-              </label>
-              <input
-                className="form-control"
-                id="study-brand"
-                onChange={(event) => setBrandName(event.target.value)}
-                value={brandName}
-              />
-            </div>
-          </div>
-
-          <div className="col-md-6">
-            <div className="form-group mb-3">
-              <label className="form-label" htmlFor="study-duration">
-                Estimated duration (minutes)
-              </label>
-              <input
-                className="form-control"
-                id="study-duration"
-                min={1}
-                onChange={(event) => setDurationMinutes(event.target.value)}
-                type="number"
-                value={durationMinutes}
-              />
-            </div>
-          </div>
-
-          <div className="col-md-6">
-            <div className="form-group mb-3">
-              <label className="form-label" htmlFor="study-locale">
-                Locale
-              </label>
-              <input
-                className="form-control"
-                id="study-locale"
-                onChange={(event) => setLocale(event.target.value)}
-                value={locale}
-              />
-            </div>
-          </div>
-
-          <div className="col-md-6">
-            <div className="form-group mb-3">
-              <label className="form-label" htmlFor="study-status">
-                Status
-              </label>
-              <select
-                className="form-select"
-                id="study-status"
-                onChange={(event) =>
-                  setStatus(event.target.value as StudyStatus)
-                }
-                value={status}
-              >
-                <option value="draft">draft</option>
-                <option value="launched">published</option>
-                <option value="archived">archived</option>
-              </select>
-            </div>
-          </div>
+        <div className="form-group mb-4" style={{ maxWidth: '16rem' }}>
+          <label className="form-label" htmlFor="study-status">
+            Status
+          </label>
+          <select
+            className="form-select"
+            id="study-status"
+            onChange={(event) =>
+              setStatus(event.target.value as StudyStatus)
+            }
+            value={status}
+          >
+            <option value="draft">draft</option>
+            <option value="launched">published</option>
+            <option value="archived">archived</option>
+          </select>
         </div>
 
-        <h2 className="h5 mt-4 mb-3">Tasks</h2>
-
-        <ol className="list-unstyled">
-          {steps.map((step, index) => (
-            <li className="mb-4" key={index}>
-              <Card padding="md" hoverable={false}>
-                <CardBody>
-                  <p className="fw-semibold mb-3">Task {step.order}</p>
-
-                  <div className="form-group mb-3">
-                    <label className="form-label" htmlFor={`step-id-${index}`}>
-                      Task id
-                    </label>
-                    <input
-                      className="form-control"
-                      id={`step-id-${index}`}
-                      onChange={(event) =>
-                        updateStep(index, 'step_id', event.target.value)
-                      }
-                      required
-                      value={step.step_id}
-                    />
-                  </div>
-
-                  {/* A RECORDED study has no response-type selector: sessions
-                      record screen and voice, so participants answer out loud.
-                      New steps are instructions (see defaultStep). Legacy typed
-                      steps keep their type, and the options editor below still
-                      renders for a legacy choice step so it stays editable.
-
-                      A SURVEY is the opposite - everything is typed - so it
-                      gets the full survey vocabulary here. */}
-                  {isSurvey && step.type !== 'end' ? (
-                    <div className="form-group mb-3">
-                      <label className="form-label" htmlFor={`step-type-${index}`}>
-                        Type
-                      </label>
-                      <select
-                        className="form-control form-select"
-                        id={`step-type-${index}`}
-                        value={step.type}
-                        disabled={readOnly}
-                        onChange={(event) =>
-                          changeStepType(
-                            index,
-                            event.target
-                              .value as (typeof authorableSurveyStepTypes)[number]
-                          )
-                        }
-                      >
-                        {authorableSurveyStepTypes.map((type) => (
-                          <option key={type} value={type}>
-                            {SURVEY_TYPE_LABELS[type]}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  ) : (
-                    /**
-                     * A one-way repair for a legacy typed step.
-                     *
-                     * The type selector is gone from recorded authoring, so an
-                     * inherited open_text or single_choice step could have its
-                     * prompt edited but never its type - and those steps are
-                     * unanswerable now, because the runner renders no inputs.
-                     * Delete-and-re-add would lose the step_id and orphan every
-                     * response already stored against it.
-                     *
-                     * One way on purpose: there is no route back to a type this
-                     * editor cannot otherwise produce.
-                     */
-                    step.type !== 'instruction' &&
-                    step.type !== 'end' && (
-                      <div className="alert alert-warning py-2 px-3 mb-3">
-                        <div className="mb-2">
-                          This task asks for a typed answer, which a recorded
-                          session cannot collect - participants answer out loud.
-                        </div>
-                        <button
-                          className="btn btn-sm btn-outline-secondary"
-                          disabled={readOnly}
-                          onClick={() => convertToInstruction(index)}
-                          type="button"
-                        >
-                          Convert to a spoken instruction
-                        </button>
-                        <div className="form-text mt-1">
-                          Keeps the task and its answers. Cannot be undone.
-                        </div>
-                      </div>
-                    )
-                  )}
-                  <div className="form-group mb-3">
-                    <label
-                      className="form-label"
-                      htmlFor={`step-prompt-${index}`}
-                    >
-                      Prompt
-                    </label>
-                    <textarea
-                      className="form-control"
-                      id={`step-prompt-${index}`}
-                      onChange={(event) =>
-                        updateStep(index, 'prompt', event.target.value)
-                      }
-                      required
-                      rows={2}
-                      value={step.prompt}
-                    />
-                  </div>
-
-                  {isSurvey ? null : (
-                  <div className="form-group mb-3">
-                    <label
-                      className="form-label"
-                      htmlFor={`step-target-${index}`}
-                    >
-                      Target URL
-                    </label>
-                    <input
-                      className="form-control"
-                      id={`step-target-${index}`}
-                      onChange={(event) =>
-                        updateStep(index, 'target_url', event.target.value)
-                      }
-                      placeholder="https://..."
-                      value={step.target_url}
-                    />
-                    <div className="form-text">
-                      The page the participant opens and records. Leave blank only
-                      for a survey-style step with no product to test.
-                    </div>
-                  </div>
-                  )}
-
-                  <div className="form-group mb-3">
-                    <label
-                      className="form-label"
-                      htmlFor={`step-helper-${index}`}
-                    >
-                      Helper text
-                    </label>
-                    <input
-                      className="form-control"
-                      id={`step-helper-${index}`}
-                      onChange={(event) =>
-                        updateStep(index, 'helper_text', event.target.value)
-                      }
-                      value={step.helper_text}
-                    />
-                  </div>
-
-                  <div className="form-check mb-3">
-                    <input
-                      className="form-check-input"
-                      id={`step-required-${index}`}
-                      checked={step.is_required}
-                      onChange={(event) =>
-                        updateStep(index, 'is_required', event.target.checked)
-                      }
-                      type="checkbox"
-                    />
-                    <label
-                      className="form-check-label"
-                      htmlFor={`step-required-${index}`}
-                    >
-                      Required
-                    </label>
-                  </div>
-
-                  {isSurvey && step.type === 'rating' ? (
-                    <div className="form-group mb-3">
-                      <label
-                        className="form-label"
-                        htmlFor={`step-scale-${index}`}
-                      >
-                        Points on the scale
-                      </label>
-                      <input
-                        className="form-control"
-                        id={`step-scale-${index}`}
-                        max={RATING_SCALE_BOUNDS.max}
-                        min={RATING_SCALE_BOUNDS.min}
-                        disabled={readOnly}
-                        onChange={(event) =>
-                          updateStep(index, 'config', {
-                            ...step.config,
-                            scale_max: Number(event.target.value)
-                          })
-                        }
-                        style={{ maxWidth: '8rem' }}
-                        type="number"
-                        value={step.config?.scale_max ?? ''}
-                      />
-                    </div>
-                  ) : null}
-
-                  {step.type === 'single_choice' || step.type === 'multi_choice' ? (
-                    <div className="form-group mb-3">
-                      <label
-                        className="form-label"
-                        htmlFor={`step-options-${index}`}
-                      >
-                        Options (one per line)
-                      </label>
-                      <textarea
-                        className="form-control"
-                        id={`step-options-${index}`}
-                        onChange={(event) =>
-                          updateStep(index, 'options', event.target.value)
-                        }
-                        rows={3}
-                        value={step.options}
-                      />
-                    </div>
-                  ) : null}
-
-                  {steps.length > 1 ? (
-                    <Button
-                      variant="outline-danger"
-                      size="sm"
-                      onClick={() => removeStep(index)}
-                      type="button"
-                    >
-                      Remove task
-                    </Button>
-                  ) : null}
-                </CardBody>
-              </Card>
-            </li>
-          ))}
-        </ol>
+        {/*
+          D4: the wizard's own Tasks/Questions body, mounted standalone.
+          `hasLinkedStudy` is true only once this list is a persisted study of
+          its own - which is also exactly when it could be shared with other
+          opportunities - so the shared-list notice (row 12) fetches and names
+          a real count only for an existing list, never for one still being
+          created. `FirstHandStudyTab`'s `hideSourceChoice` is always on: this
+          editor has no "start from a copy" flow, and offering the chooser to a
+          blank, unlinked list would be a control this page cannot honour.
+          `SurveyQuestionsTab` needs no such flag - it is reachable here only
+          when editing an EXISTING survey study, where `hasLinkedStudy` is
+          already true and its own source choice is already suppressed.
+        */}
+        {isSurveyKind ? (
+          <SurveyQuestionsTab
+            formData={surveyTabFormData}
+            validationErrors={{}}
+            handleInputChange={handleTabFieldChange}
+            handleQuestionsChange={setQuestions}
+            hasLinkedStudy={isEditing}
+            studyIsReadOnly={readOnly}
+            readOnlyReason={null}
+            onCopyFromStudy={async () => null}
+          />
+        ) : (
+          <FirstHandStudyTab
+            formData={tabFormData}
+            validationErrors={{}}
+            handleInputChange={handleTabFieldChange}
+            handleStepsChange={setSteps}
+            hasLinkedStudy={isEditing}
+            studyIsReadOnly={readOnly}
+            readOnlyReason={null}
+            onCopyFromStudy={async () => null}
+            hideSourceChoice
+          />
+        )}
 
         {missingTaskPageUrl ? (
           <Alert variant="warning" className="mb-4">
@@ -1132,7 +660,7 @@ export function StudyEditorForm({
             <p className="mb-2">
               Participants will be asked to share their screen with nothing
               pre-opened, and won't see the guided open-and-share step. Add a
-              Target URL to a task step, or confirm this is a survey-style task list.
+              Starting URL above, or confirm this is a survey-style task list.
             </p>
             <div className="form-check">
               <input
@@ -1152,16 +680,6 @@ export function StudyEditorForm({
         ) : null}
 
         <div className="d-flex gap-2">
-          {/*
-            Row 35: `variant="secondary"` -> `.btn-secondary` -> `color:
-            var(--text-primary)`, which in the light theme is `--fs-ink`
-            (#14213d) - navy, while the wizard's own "Add task"/"Add question"
-            (QuestionList.tsx) are `btn-outline-primary`, the shared orange
-            token. Matched here rather than hard-coding a new hex.
-          */}
-          <Button variant="outline-primary" onClick={addStep} type="button">
-            Add task
-          </Button>
           <Button
             variant="primary"
             disabled={
@@ -1180,9 +698,6 @@ export function StudyEditorForm({
       Row 25: the confirmation the in-app guard opens. `pendingExit` holds the
       exact destination the intercepted link was heading to, so confirming sends
       the author there rather than to a recomputed guess. Staying just closes it.
-
-      Mounted only when there is a pending exit, so an idle editor does not carry
-      the modal's theme dependency - it is offscreen work with nothing to show.
     */}
     {pendingExit !== null && (
       <ConfirmationModal
@@ -1207,8 +722,104 @@ export function StudyEditorForm({
 }
 
 /**
+ * The read-only half of the library (D4): a task list's name, its content,
+ * and - the thing neither editor had before - which studies use it.
+ *
+ * Deliberately plain text and lists rather than disabled form controls: a
+ * disabled textarea still reads as an editing surface that happens to be
+ * switched off (see `ReadOnlyStudyContent`'s own reasoning), and this page's
+ * whole point is that editing lives elsewhere - one click away, via "Edit
+ * this list", never here.
+ */
+function StudyDetail({
+  study,
+  steps,
+  usage,
+  usageError,
+  readOnly,
+  onEdit,
+}: {
+  study: FirstHandStudy;
+  steps: StudyStep[];
+  usage: FirstHandStudyUsage | null;
+  usageError: boolean;
+  readOnly: boolean;
+  onEdit: () => void;
+}) {
+  const status = (study.status as StudyStatus | undefined) ?? 'draft';
+  const items = authoredStepsOf(steps).map(toInlineStudyStep);
+
+  return (
+    <div>
+      <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-1">
+        <p className="text-uppercase fw-semibold text-muted mb-0">
+          Researcher workspace
+        </p>
+        <StatusBadge status={STUDY_STATUS_BADGE[status]} />
+      </div>
+      <h1 className="h3 mb-3">{study.title}</h1>
+
+      <section className="mb-4">
+        <h2 className="h6 text-uppercase text-muted mb-2">Intro text</h2>
+        <p className="mb-0">{study.intro_text}</p>
+      </section>
+
+      <section className="mb-4">
+        <h2 className="h6 text-uppercase text-muted mb-2">Consent text</h2>
+        <p className="mb-0">{study.consent_text}</p>
+      </section>
+
+      <section className="mb-4">
+        <h2 className="h6 text-uppercase text-muted mb-2">Tasks</h2>
+        <ReadOnlyStudyContent items={items} noun="task" />
+      </section>
+
+      <section className="mb-4">
+        <h2 className="h6 text-uppercase text-muted mb-2">Used by</h2>
+        {usageError ? (
+          <p className="text-muted mb-0">Could not load which studies use this task list.</p>
+        ) : usage === null ? (
+          <p className="text-muted mb-0">Loading…</p>
+        ) : usage.count === 0 ? (
+          <p className="text-muted mb-0">No studies use this task list yet.</p>
+        ) : (
+          <>
+            <p className="mb-2">
+              Used by {usage.count} {usage.count === 1 ? 'study' : 'studies'}.
+            </p>
+            <ul className="mb-0">
+              {usage.studies.map((used) => (
+                <li key={used.id}>
+                  {used.title} <span className="text-muted">({used.status})</span>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </section>
+
+      {readOnly ? (
+        <Alert variant="info" className="mb-0">
+          Another researcher owns this task list. Ask them, or a superadmin,
+          to make changes.
+        </Alert>
+      ) : (
+        <Button variant="primary" onClick={onEdit} type="button">
+          Edit this list
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/**
  * Authoring page for `/admin/studies/new` and `/admin/studies/:id/edit`.
  * Admin-gated via AuthContext (the backend studies CRUD is `requireAdmin`).
+ *
+ * D4: `/admin/studies/:id/edit` now opens on the read-only detail view - the
+ * library, not a second editor - with an explicit "Edit this list" to switch
+ * into the wizard's own Tasks body. A brand new list has nothing to view, so
+ * `/admin/studies/new` opens straight into that same editor.
  */
 const StudyEditor: React.FC = () => {
   const { user, loading } = useAuth();
@@ -1221,6 +832,15 @@ const StudyEditor: React.FC = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [study, setStudy] = useState<FirstHandStudy | null>(null);
   const [steps, setSteps] = useState<StudyStep[]>([]);
+  const [usage, setUsage] = useState<FirstHandStudyUsage | null>(null);
+  const [usageError, setUsageError] = useState(false);
+  const [mode, setMode] = useState<'detail' | 'edit'>(isEdit ? 'detail' : 'edit');
+
+  // A new id (navigating from one list's page to another's) starts back on
+  // the detail view - "edit" is per-visit, not a fact about the route.
+  useEffect(() => {
+    setMode(isEdit ? 'detail' : 'edit');
+  }, [id, isEdit]);
 
   useEffect(() => {
     // Wait for auth to resolve and only fetch for an admin - the render below
@@ -1233,6 +853,8 @@ const StudyEditor: React.FC = () => {
     let cancelled = false;
     setLoadingStudy(true);
     setLoadError(null);
+    setUsage(null);
+    setUsageError(false);
 
     getFirstHandStudy(id)
       .then((result) => {
@@ -1252,6 +874,14 @@ const StudyEditor: React.FC = () => {
       })
       .finally(() => {
         if (!cancelled) setLoadingStudy(false);
+      });
+
+    getFirstHandStudyUsage(id)
+      .then((result) => {
+        if (!cancelled) setUsage(result);
+      })
+      .catch(() => {
+        if (!cancelled) setUsageError(true);
       });
 
     return () => {
@@ -1282,6 +912,8 @@ const StudyEditor: React.FC = () => {
     return <Navigate to="/" replace />;
   }
 
+  const readOnly = isStudyReadOnly(study ?? undefined, user);
+
   return (
     <div className="py-4">
       {/*
@@ -1298,23 +930,6 @@ const StudyEditor: React.FC = () => {
 
       <Card padding="lg" hoverable={false}>
         <CardBody>
-          <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-1">
-            <p className="text-uppercase fw-semibold text-muted mb-0">
-              Researcher workspace
-            </p>
-            {isEdit && study?.status && (
-              <StatusBadge status={STUDY_STATUS_BADGE[study.status as StudyStatus]} />
-            )}
-          </div>
-          <h1 className="h3 mb-2">
-            {isEdit ? `Edit ${study?.title ?? 'task list'}` : 'New Task List'}
-          </h1>
-          <p className="text-muted mb-4">
-            {isEdit
-              ? 'Changes apply to new participant sessions. Sessions already in flight keep their original task payload.'
-              : 'Define the intro copy, consent and task sequence. An unmoderated study references the task list id once published.'}
-          </p>
-
           {isEdit && loadingStudy ? (
             <div className="d-flex justify-content-center py-5">
               <div
@@ -1330,12 +945,40 @@ const StudyEditor: React.FC = () => {
               <strong>Could not load task list.</strong>
               <p className="mb-0">{loadError}</p>
             </Alert>
-          ) : (
-            <StudyEditorForm
-              initialStudy={isEdit ? study ?? undefined : undefined}
-              initialSteps={isEdit ? steps : undefined}
-              viewer={user}
+          ) : isEdit && mode === 'detail' && study ? (
+            <StudyDetail
+              study={study}
+              steps={steps}
+              usage={usage}
+              usageError={usageError}
+              readOnly={readOnly}
+              onEdit={() => setMode('edit')}
             />
+          ) : (
+            <>
+              <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-1">
+                <p className="text-uppercase fw-semibold text-muted mb-0">
+                  Researcher workspace
+                </p>
+                {isEdit && study?.status && (
+                  <StatusBadge status={STUDY_STATUS_BADGE[study.status as StudyStatus]} />
+                )}
+              </div>
+              <h1 className="h3 mb-2">
+                {isEdit ? `Edit ${study?.title ?? 'task list'}` : 'New Task List'}
+              </h1>
+              <p className="text-muted mb-4">
+                {isEdit
+                  ? 'Changes apply to new participant sessions. Sessions already in flight keep their original task payload.'
+                  : 'Define the intro copy, consent and task sequence. An unmoderated study references the task list id once published.'}
+              </p>
+
+              <StudyEditorForm
+                initialStudy={isEdit ? study ?? undefined : undefined}
+                initialSteps={isEdit ? steps : undefined}
+                viewer={user}
+              />
+            </>
           )}
         </CardBody>
       </Card>

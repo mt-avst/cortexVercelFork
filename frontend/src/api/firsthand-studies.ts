@@ -77,6 +77,31 @@ export const updateFirstHandStudy = async (
 };
 
 /**
+ * D4: which opportunities currently serve a task list to participants ("used
+ * by N studies"), backing both the library's detail page and the wizard's
+ * Tasks-step shared-list notice (row 12). The route never 404s - a study id
+ * nothing references answers `{ count: 0, studies: [] }` - so this has no
+ * separate not-found handling either.
+ */
+export interface FirstHandStudyUsageOpportunity {
+  id: string;
+  title: string;
+  status: string;
+}
+
+export interface FirstHandStudyUsage {
+  count: number;
+  studies: FirstHandStudyUsageOpportunity[];
+}
+
+export const getFirstHandStudyUsage = async (
+  studyId: string
+): Promise<FirstHandStudyUsage> => {
+  const response = await api.get(`/firsthand/studies/${encodeURIComponent(studyId)}/usage`);
+  return response.data;
+};
+
+/**
  * Whether a failed request was refused by a rate limiter rather than lost.
  *
  * The difference matters to what the author is told to do next. Every other
