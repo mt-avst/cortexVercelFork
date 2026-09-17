@@ -111,6 +111,36 @@ describe('ConsentStep - locked by default', () => {
   });
 });
 
+/**
+ * Row 31: `_reset.css` sets `svg { display: block }`, so the padlock icon
+ * dropped onto its own line above "Locked to the approved wording..." instead
+ * of sitting inline with it - the same failure mode `.admin-th-sort-caret`
+ * already documents a fix for. And "Customise consent wording" was the one
+ * slate `btn-outline-secondary` among a form full of orange
+ * `btn-outline-primary` add-controls (Add task, Add question, Add answer).
+ */
+describe('ConsentStep - the locked-state control and its icon (row 31)', () => {
+  it('keeps the padlock inline with its sentence, not stacked above it', () => {
+    renderStep();
+
+    const sentence = screen.getByText(/Locked to the approved wording/i);
+    // `d-inline-flex` overrides the block display the global svg reset would
+    // otherwise force onto the icon.
+    expect(sentence.querySelector('svg')).toHaveClass('d-inline-flex');
+  });
+
+  it('joins the add family - orange, like every other add-style control', () => {
+    renderStep();
+
+    expect(
+      screen.getByRole('button', { name: /Customise consent wording/i })
+    ).toHaveClass('btn-outline-primary');
+    expect(
+      screen.getByRole('button', { name: /Customise consent wording/i })
+    ).not.toHaveClass('btn-outline-secondary');
+  });
+});
+
 describe('ConsentStep - the deliberate override', () => {
   it('unlocks the field without changing what would be saved', () => {
     const { onChange } = renderStep();
