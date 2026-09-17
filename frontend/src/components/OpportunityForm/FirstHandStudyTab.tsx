@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
 import { getFirstHandStudies } from '../../api/client';
-import { FirstHandStudy, OpportunityFormData } from '../../api/types';
+import { FirstHandStudy } from '../../api/types';
 import type { WithClientId } from '../../lib/opportunity-authoring/client-ids';
 import { estimateRecordedMinutes } from '../../lib/opportunity-authoring/estimate-duration';
 import type { StudyReadOnlyReason } from '../../lib/opportunity-authoring/hydrate-study';
@@ -16,7 +16,7 @@ import ReadOnlyStudyContent from './ReadOnlyStudyContent';
 import StudyProvenanceNote from './StudyProvenanceNote';
 import StudySourceChoice, { type StudySourceMode } from './StudySourceChoice';
 import StudySourcePicker from './StudySourcePicker';
-import type { FirstHandStudyWithSteps } from '../../api/firsthand-studies';
+import { getFirstHandStudyUsage, type FirstHandStudyWithSteps } from '../../api/firsthand-studies';
 import FieldError from './FieldError';
 import { resolveMessage } from '../../lib/opportunity-authoring/error-summary';
 
@@ -64,6 +64,19 @@ export type InlineStudyFormFields = {
   copied_from_at?: string;
 };
 
+/**
+ * The subset of the opportunity form's own fields this tab actually reads.
+ *
+ * Narrowed from `OpportunityFormData & InlineStudyFormFields` - which is what
+ * the wizard still passes, and remains structurally assignable here - so the
+ * standalone task-list editor (`StudyEditor.tsx`, D4) can build a plain object
+ * of its own rather than fabricate an entire opportunity to satisfy this prop.
+ * `status` is whichever "this content is already live" flag the caller owns:
+ * the wizard's opportunity status, or the standalone editor's own task-list
+ * status mapped onto the one value this tab compares against, `'published'`.
+ */
+export type FirstHandStudyTabFormData = InlineStudyFormFields & { status?: string };
+
 interface FirstHandStudyTabProps {
   /**
    * Revalidate one field on blur, by the same rules a save runs.
@@ -72,7 +85,7 @@ interface FirstHandStudyTabProps {
    * `inline_study_steps.1.options`, not `options`.
    */
   onBlurField?: (errorKey: string) => void;
-  formData: OpportunityFormData & InlineStudyFormFields;
+  formData: FirstHandStudyTabFormData;
   validationErrors: Record<string, string>;
   handleInputChange: (field: string, value: FormFieldValue) => void;
   /** Steps are an array, which handleInputChange's scalar signature cannot carry. */
@@ -114,6 +127,16 @@ interface FirstHandStudyTabProps {
   onPreviewStudy?: (study: FirstHandStudyWithSteps) => void;
   /** Decides whether a row reads as "Yours". */
   currentUserId?: string;
+  /**
+   * Forces the source choice off regardless of `hasLinkedStudy` (D4).
+   *
+   * The standalone task-list editor sets `hasLinkedStudy` purely to gate the
+   * shared-list notice (true only once the list is an existing, persisted
+   * study) and never wants the copy chooser this tab otherwise offers a
+   * brand-new, unlinked list - it has no "start from a copy" flow of its own.
+   * The wizard never passes this, so its behaviour is unchanged.
+   */
+  hideSourceChoice?: boolean;
 }
 
 /**
@@ -139,7 +162,8 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
   readOnlyReason,
   onCopyFromStudy,
   onPreviewStudy,
-  currentUserId
+  currentUserId,
+  hideSourceChoice = false
 }) => {
   const [studies, setStudies] = useState<FirstHandStudy[]>([]);
   const [loading, setLoading] = useState(true);
@@ -154,9 +178,41 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
   // The survey twin carries the reasoning for all three of these. They are
   // written the same way on both surfaces deliberately: the defect this project
   // keeps producing is a property pinned on one twin and not the other.
-  const offeringSourceChoice = !hasLinkedStudy && !studyIsReadOnly;
+  const offeringSourceChoice = !hasLinkedStudy && !studyIsReadOnly && !hideSourceChoice;
   const choosingSource = offeringSourceChoice && sourceMode === 'copy';
   const showChooser = choosingSource && (!copiedFromId || chooserOpen);
+
+  /**
+   * Row 12: how many studies this linked list is shared with, once the usage
+   * endpoint (D4 backend) answers. Fetched only when the notice below could
+   * actually show it - a read-only or unlinked list never renders it, and a
+   * list with no `firsthand_study_id` yet (content typed inline, never saved)
+   * has nothing to look up. `null` covers "not fetched", "still loading" and
+   * "the lookup failed" alike; the notice falls back to the un-numbered
+   * sentence for all three rather than assert a count it does not have.
+   */
+  const [usage, setUsage] = useState<{ count: number } | null>(null);
+  const linkedStudyId = formData.firsthand_study_id;
+
+  useEffect(() => {
+    if (!hasLinkedStudy || studyIsReadOnly || !linkedStudyId) {
+      setUsage(null);
+      return;
+    }
+
+    let cancelled = false;
+    getFirstHandStudyUsage(linkedStudyId)
+      .then((result) => {
+        if (!cancelled) setUsage(result);
+      })
+      .catch(() => {
+        if (!cancelled) setUsage(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hasLinkedStudy, studyIsReadOnly, linkedStudyId]);
 
   useEffect(() => {
     // Only the chooser needs the list. Skip the request (and its cost) when
@@ -261,14 +317,18 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
         {/*
           Row 12: only Review told the author this list is shared, editing it
           in place rather than authoring content that belongs to this
-          opportunity alone. No count of the studies it is linked to yet - the
-          usage endpoint that answers that lands in a later wave - so this says
-          only that it is shared, not by how much.
+          opportunity alone. Now that the usage endpoint (D4 backend) exists,
+          this names the real count once it answers; until then - still
+          loading, no id to look up yet, or the lookup failed - it falls back
+          to naming the fact of sharing without a number.
         */}
         {hasLinkedStudy && !studyIsReadOnly && (
           <div className="alert alert-info py-2 px-3 mb-4" style={{ fontSize: '0.875rem' }}>
-            This is a shared task list. Changes here apply everywhere it is
-            linked, not only to this study.
+            {usage
+              ? `This task list is used by ${usage.count} ${
+                  usage.count === 1 ? 'study' : 'studies'
+                }. Changes here apply to all of them, for new sessions only.`
+              : 'This is a shared task list. Changes here apply everywhere it is linked, not only to this study.'}
           </div>
         )}
 
