@@ -24,6 +24,7 @@ const renderControl = (
       automatic
       estimate={7}
       derivedFrom="6 questions"
+      itemNoun="question"
       onValueChange={onValueChange}
       onAutomaticChange={onAutomaticChange}
       {...props}
@@ -70,6 +71,19 @@ describe('while the estimate is in force', () => {
 
     expect(screen.getByText(/nothing to estimate from yet/i)).toBeInTheDocument();
     expect(field()).toHaveValue(null);
+  });
+
+  /**
+   * Row 19: this control is shared between the Task List step and the
+   * Questions step, and the empty-state prompt used to say "Add a question"
+   * unconditionally - wrong advice on the Task List step, which has no
+   * question to add. The noun follows the step it is rendered on.
+   */
+  it('names the noun the step actually authors, in the empty-state prompt', () => {
+    renderControl({ estimate: null, itemNoun: 'task', derivedFrom: '0 tasks' });
+
+    expect(screen.getByText(/Add a task and this fills in/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Add a question/i)).not.toBeInTheDocument();
   });
 });
 

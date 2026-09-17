@@ -218,7 +218,11 @@ const ConsentStep: React.FC<ConsentStepProps> = ({
       <div className="form-section mb-5" data-testid="consent-step">
         {heading}
         <p className="text-muted" data-testid="consent-unavailable">
-          This study&rsquo;s consent wording could not be loaded, so it is not
+          {/* Row 36: a curly &rsquo; entity here, against a straight
+              apostrophe typed directly everywhere else this app's rendered
+              copy has one (e.g. StudyEditor.tsx: "won't see the guided
+              open-and-share step"). */}
+          This study's consent wording could not be loaded, so it is not
           shown here. Reload the page to try again.
         </p>
       </div>
@@ -371,13 +375,25 @@ const ConsentStep: React.FC<ConsentStepProps> = ({
             {consentText}
           </blockquote>
           <p className="text-muted" style={{ fontSize: '0.875rem' }}>
-            <Lock size={14} className="me-1" aria-hidden="true" />
+            {/* `_reset.css` sets `svg { display: block }`, so an inline icon
+                drops onto its own line above the text unless told otherwise -
+                the same fix `.admin-th-sort-caret` already carries for the
+                same reason (row 31). */}
+            <Lock
+              size={14}
+              className="me-1 d-inline-flex"
+              style={{ verticalAlign: '-0.15em' }}
+              aria-hidden="true"
+            />
             Locked to the approved wording. Customise it only if this study needs
             to say something different.
           </p>
           <button
             type="button"
-            className="btn btn-outline-secondary btn-sm"
+            // Every other add-style control on this form (Add task, Add
+            // question, Add answer) is btn-outline-primary; this one was the
+            // lone slate btn-outline-secondary among them (row 31).
+            className="btn btn-outline-primary btn-sm"
             onClick={() => setUnlocked(true)}
           >
             Customise consent wording

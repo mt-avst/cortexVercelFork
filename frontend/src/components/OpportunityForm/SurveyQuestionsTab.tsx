@@ -298,6 +298,16 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
   const estimate = estimateSurveyMinutes(questions);
   const automaticDuration = formData.inline_survey_duration_auto !== false;
 
+  /**
+   * Row 18: a `question` opportunity asks exactly one question (see
+   * `maxQuestionsFor`), but this step authored every string in the plural -
+   * "Questions", "How do you want to add questions?", "No questions yet" -
+   * while the strip tab for the very same step already read "Question"
+   * singular. Pinned here so this step's own copy agrees with its cap, which
+   * is otherwise stated nowhere the author can see.
+   */
+  const isSingleQuestion = formData.type === 'question';
+
   return (
     <div className="tab-pane active">
       <div className="form-section mb-5">
@@ -319,10 +329,12 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
               className="h4 mb-1 section-title"
               style={{ fontSize: '1.5rem', lineHeight: '1.3', fontWeight: '600' }}
             >
-              Questions
+              {isSingleQuestion ? 'Question' : 'Questions'}
             </h2>
             <p className="mb-0 section-description" style={{ fontSize: '0.95rem' }}>
-              What the participant is asked, answered here in Cortex
+              {isSingleQuestion
+                ? 'What the participant is asked, answered here in Cortex. A one-question study asks exactly one question.'
+                : 'What the participant is asked, answered here in Cortex'}
             </p>
           </div>
         </div>
@@ -344,6 +356,20 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
           </div>
         )}
 
+        {/*
+          Row 12: only Review told the author this set of questions is shared,
+          editing it in place rather than authoring content that belongs to
+          this opportunity alone. No count of the studies it is linked to yet -
+          the usage endpoint that answers that lands in a later wave - so this
+          says only that it is shared, not by how much.
+        */}
+        {hasLinkedStudy && !studyIsReadOnly && (
+          <div className="alert alert-info py-2 px-3 mb-4" style={{ fontSize: '0.875rem' }}>
+            This is a shared set of questions. Changes here apply everywhere it
+            is linked, not only to this study.
+          </div>
+        )}
+
         {offeringSourceChoice && (
           <StudySourceChoice
             noun="question"
@@ -356,7 +382,11 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
               setChooserOpen(false);
               handleInputChange('study_source', mode);
             }}
-            copyLabel="Start from an existing set of questions"
+            copyLabel={
+              isSingleQuestion
+                ? 'Start from an existing question'
+                : 'Start from an existing set of questions'
+            }
           />
         )}
 
@@ -400,12 +430,27 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
               onPreviewStudy={onPreviewStudy}
               currentUserId={currentUserId}
               noun="question"
-              setNoun="set of questions"
+              setNoun={isSingleQuestion ? 'question' : 'set of questions'}
               idPrefix="survey"
             />
           </div>
         ) : (
           <>
+            {/*
+              Row 11: this step lets a published study's questions be removed
+              and reordered with no word that a session may already be under
+              way on them. The standalone Task Lists editor has always said so
+              (`StudyEditor.tsx`, "Sessions already in flight keep their
+              original task payload") - the wizard never did.
+            */}
+            {formData.status === 'published' && (
+              <div className="alert alert-warning py-2 px-3 mb-4" style={{ fontSize: '0.875rem' }}>
+                This study is published. Changes apply to new participant
+                sessions - sessions already in flight keep their original
+                question set.
+              </div>
+            )}
+
             <div className="row">
               <div className="col-12 col-md-6">
                 <DurationEstimate
@@ -418,6 +463,7 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
                   derivedFrom={`${questions.length} ${
                     questions.length === 1 ? 'question' : 'questions'
                   }`}
+                  itemNoun="question"
                   onValueChange={(value) =>
                     handleInputChange('inline_survey_duration_minutes', value)
                   }
@@ -451,7 +497,11 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
                  a poll or a survey. The cap is the only thing separating the
                  two shapes now that both run in SurveyRunner. */
               maxItems={maxQuestionsFor(formData.type)}
-              emptyMessage="No questions yet. Add the first thing you want to ask."
+              emptyMessage={
+                isSingleQuestion
+                  ? 'No question yet. Add the one thing you want to ask.'
+                  : 'No questions yet. Add the first thing you want to ask.'
+              }
               answerCounts={answerCounts}
               renderTypeFields={({ item, index, update }) => (
                 <>

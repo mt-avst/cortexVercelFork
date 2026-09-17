@@ -212,6 +212,62 @@ describe('StudyEditorForm - edit', () => {
     expect(mockedCreate).not.toHaveBeenCalled();
   });
 
+  /**
+   * Row 3: the standalone editor showed five task cards for a study the
+   * wizard shows as four - the fifth was the `_step_end` completion marker,
+   * editable and removable here even though no authoring path ever writes
+   * one by hand.
+   */
+  describe('the completion marker (row 3)', () => {
+    const withEndMarker = {
+      id: 'study_abc',
+      title: 'Existing study',
+      intro_text: 'Existing intro',
+      consent_text: 'Existing consent',
+      status: 'launched' as const,
+    };
+
+    const stepsWithEndMarker = [
+      {
+        step_id: 'study_abc_step_1',
+        order: 1,
+        type: 'instruction' as const,
+        prompt: 'Do the thing',
+        target_url: 'https://example.com',
+      },
+      {
+        step_id: 'study_abc_step_end',
+        order: 2,
+        type: 'end' as const,
+        prompt: 'Thanks - that is the end of the study.',
+      },
+    ];
+
+    it('excludes the end marker from the editable task list', () => {
+      renderForm({ initialStudy: withEndMarker, initialSteps: stepsWithEndMarker });
+
+      // One real task, not two - the terminator gets no card of its own.
+      expect(screen.getAllByLabelText('Task id')).toHaveLength(1);
+      expect(screen.getByLabelText('Task id')).toHaveValue('study_abc_step_1');
+    });
+
+    it('still saves the end marker unedited, after the last authored task', async () => {
+      renderForm({ initialStudy: withEndMarker, initialSteps: stepsWithEndMarker });
+
+      fireEvent.click(screen.getByRole('button', { name: /Save changes/i }));
+
+      await waitFor(() => expect(mockedUpdate).toHaveBeenCalledTimes(1));
+      const steps = mockedUpdate.mock.calls[0][1].steps ?? [];
+      expect(steps).toHaveLength(2);
+      expect(steps[1]).toMatchObject({
+        step_id: 'study_abc_step_end',
+        type: 'end',
+        order: 2,
+        prompt: 'Thanks - that is the end of the study.',
+      });
+    });
+  });
+
   describe('optimistic concurrency', () => {
     const editableStudy = {
       id: 'study_abc',
@@ -1025,5 +1081,70 @@ describe('StudyEditor page - unsaved-changes guard (row 25)', () => {
 
     expect(await screen.findByText('Task lists index')).toBeInTheDocument();
     expect(screen.queryByText('Leave without saving?')).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * Row 35: this page was a bare page (no card) where every wizard screen sits
+ * inside one, and its "Add task" button was navy (`btn-secondary` ->
+ * `--text-primary` -> `--fs-ink` #14213d in the light theme) against the
+ * wizard's own orange `btn-outline-primary` Add task/Add question.
+ */
+describe('StudyEditor page - shell parity (row 35)', () => {
+  const renderPage = () =>
+    render(
+      <MemoryRouter initialEntries={['/admin/studies/study_abc/edit']}>
+        <Routes>
+          <Route path="/admin/studies/:id/edit" element={<StudyEditor />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+  beforeEach(() => {
+    mockedUseAuth.mockReturnValue({
+      user: { id: 'user-owner', role: 'researcher_admin' },
+      loading: false,
+    });
+    mockedGet.mockResolvedValue({
+      study: {
+        id: 'study_abc',
+        title: 'My study',
+        intro_text: 'Intro',
+        consent_text: 'Consent',
+        status: 'launched',
+        owner_user_id: 'user-owner',
+      },
+      steps: [
+        {
+          step_id: 'study_abc_step_001',
+          order: 1,
+          type: 'instruction',
+          prompt: 'Do the thing',
+          target_url: 'https://example.com/checkout',
+        },
+      ],
+    } as never);
+  });
+
+  it('wraps the page content in a card, like every wizard screen', async () => {
+    renderPage();
+
+    const heading = await screen.findByRole('heading', { name: /Edit My study/i });
+    expect(heading.closest('.card')).not.toBeNull();
+  });
+
+  it('shows the study status as a pill, not plain uppercase text', async () => {
+    renderPage();
+
+    await screen.findByRole('heading', { name: /Edit My study/i });
+    expect(screen.getByText('Published').className).toMatch(/rounded-full/);
+  });
+
+  it('gives "Add task" the shared orange token, not the navy secondary button', async () => {
+    renderPage();
+
+    const addTask = await screen.findByRole('button', { name: 'Add task' });
+    expect(addTask).toHaveClass('btn-outline-primary');
+    expect(addTask).not.toHaveClass('btn-secondary');
   });
 });

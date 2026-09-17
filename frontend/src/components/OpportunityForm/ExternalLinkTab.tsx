@@ -39,7 +39,12 @@ const ExternalLinkTab: React.FC<ExternalLinkTabProps> = ({
               External Link
             </h2>
             <p className="mb-0 section-description" style={{ fontSize: '0.95rem' }}>
-              Configure the external tool for polls, surveys, and questions
+              {/* Row 36: this read "for polls, surveys, and questions" on
+                  every shape, including a one-question study - which is not
+                  a plural "questions" study, it is exactly one question. */}
+              {formData.type === 'question'
+                ? 'Configure the external tool for this one-question study'
+                : 'Configure the external tool for polls, surveys, and questions'}
             </p>
           </div>
         </div>
