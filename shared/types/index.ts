@@ -572,6 +572,12 @@ export interface OpportunityFormData {
   // A client-side confirmation folded into the External Link step - not
   // persisted (the save payload is a typed whitelist that omits it), shown on
   // Review. Defaults true when loading an already-published study.
+  //
+  // ponytail: client-only affirmation, not persisted -> lost on reload, and a
+  //   reopened published study is assumed confirmed (Review shows the neutral
+  //   "Handled by the external tool" for it, never "confirmed by the author").
+  //   Upgrade path: persist it as an opportunity column + a publish gate.
+  //   -> cto/AdaptaLabs#136
   external_consent_confirmed?: boolean;
 
   // Task List tab (unmoderated type)

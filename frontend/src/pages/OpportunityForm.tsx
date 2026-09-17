@@ -1679,7 +1679,10 @@ const OpportunityForm: React.FC = () => {
         default_duration_minutes: opportunity.default_duration_minutes,
         external_link_optional: opportunity.external_link_optional || '',
         // Row 13: not persisted, so an already-published external study is
-        // treated as already affirmed for Review's sake; a draft loads unconfirmed.
+        // treated as already affirmed for Review's sake (shown neutrally, not as
+        // an author action); a draft loads unconfirmed.
+        // ponytail: client-only, lost on reload, published assumed-confirmed
+        //   -> cto/AdaptaLabs#136 (persist + publish-gate)
         external_consent_confirmed: opportunity.status === 'published',
         firsthand_study_id: opportunity.firsthand_study_id || '',
         participant_type_required: opportunity.participant_type_required || 'any',
@@ -1729,7 +1732,10 @@ const OpportunityForm: React.FC = () => {
         default_duration_minutes: opportunity.default_duration_minutes,
         external_link_optional: opportunity.external_link_optional || '',
         // Row 13: not persisted, so an already-published external study is
-        // treated as already affirmed for Review's sake; a draft loads unconfirmed.
+        // treated as already affirmed for Review's sake (shown neutrally, not as
+        // an author action); a draft loads unconfirmed.
+        // ponytail: client-only, lost on reload, published assumed-confirmed
+        //   -> cto/AdaptaLabs#136 (persist + publish-gate)
         external_consent_confirmed: opportunity.status === 'published',
         firsthand_study_id: opportunity.firsthand_study_id || '',
         participant_type_required: opportunity.participant_type_required || 'any' as const,
@@ -2898,8 +2904,8 @@ const OpportunityForm: React.FC = () => {
    * about the 140 limit on some paths, and a `javascript:` external link was
    * called "not a valid URL" here and something else on submit. Two of the six
    * cases were unreachable in any case, because the inputs they named never
-   * wired `onBlur` - the prop was threaded into `BasicInfoTab` and
-   * `ContentDetailsTab` and used by neither.
+   * wired `onBlur` - the prop was threaded into `BasicInfoTab` and used by
+   * neither.
    *
    * Now it runs the collector and takes ONE key out of the answer. Every field
    * with a rule is covered by construction, including the indexed per-question

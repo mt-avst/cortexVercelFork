@@ -350,13 +350,6 @@ const itemsForStep = (step: ReviewStepRef, input: ReviewSummaryInput): ReviewIte
       return items;
     }
 
-    case 'content': {
-      // D6 moved every field this step carried onto the step it belongs on, so
-      // the check-answers screen has nothing to summarise here (2a keeps the
-      // step; 2c collapses it).
-      return [];
-    }
-
     case 'questions': {
       const items: ReviewItem[] = [
         {
@@ -412,10 +405,15 @@ const itemsForStep = (step: ReviewStepRef, input: ReviewSummaryInput): ReviewIte
         },
         // Row 13: consent folds into this step, so its affirmation is summarised
         // here rather than on a Consent step the hand-off no longer has.
+        //
+        // The confirmed line is NEUTRAL and factual (row 14's wording), not "confirmed
+        // by the author": the affirmation is client-only and never persisted, and
+        // a reopened published study defaults to confirmed, so attributing the
+        // action to the author would claim something that may not have happened.
         {
           label: 'Consent',
           value: input.externalConsentConfirmed
-            ? 'The external tool collects it - confirmed by the author'
+            ? 'Handled by the external tool'
             : 'Not yet confirmed',
           note: 'Cortex records only that a participant followed the link.',
           missing: !input.externalConsentConfirmed

@@ -138,7 +138,7 @@ describe('ReviewStep - the summary', () => {
 /**
  * Row 30: Review's own H2 was the one step heading missing the inline
  * `fontSize: '1.5rem'` every other step's heading carries
- * (`BasicInfoTab.tsx`, `ContentDetailsTab.tsx`, and the rest), so it
+ * (`BasicInfoTab.tsx`, `ScreenerStep.tsx`, and the rest), so it
  * rendered 13px against their 18px.
  */
 describe('ReviewStep - the H2 matches the other step headings (row 30)', () => {

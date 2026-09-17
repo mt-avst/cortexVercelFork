@@ -899,10 +899,12 @@ describe('buildReviewSummary', () => {
       );
       // No consent section exists on the external shape.
       expect(findSection(confirmed, 'consent')).toBeUndefined();
+      // Neutral and factual, NOT "confirmed by the author": the affirmation is
+      // client-only and a reopened published study defaults to confirmed, so
+      // attributing the action to the author could claim what never happened.
       const confirmedItem = findItem(findSection(confirmed, 'externalLink'), 'Consent');
-      expect(confirmedItem?.value).toBe(
-        'The external tool collects it - confirmed by the author'
-      );
+      expect(confirmedItem?.value).toBe('Handled by the external tool');
+      expect(confirmedItem?.value).not.toMatch(/confirmed by the author/i);
       expect(confirmedItem?.missing).not.toBe(true);
 
       // Unconfirmed reads as an unmet requirement.
