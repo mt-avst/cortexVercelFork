@@ -88,6 +88,12 @@ import {
 import { ANALYTICS_TIME_ZONE, toAnalyticsDateString, weekOverWeekChange } from '../utils/analytics-dates';
 import { resolveStudyDuration } from '../firsthand/study-duration';
 import { isOpportunityOwner } from '../utils/opportunityOwnership';
+import {
+  draftOpportunityFromBrief,
+  DraftBriefRequestSchema,
+  isAiDraftingConfigured,
+  DraftUnavailableError
+} from '../services/study-drafter';
 
 import { Opportunity, CreateOpportunityRequest, UpdateOpportunityRequest, Session, CreateSessionRequest, isAdminRole } from '../types';
 
@@ -280,6 +286,17 @@ const screenerSubmitLimiter = perUserLimiter(
 );
 
 /**
+ * D13 AI drafting. 10 a minute per admin - the spec's own ceiling
+ * (docs/AI-STUDY-DRAFTING-SPEC.md), well above how often a researcher
+ * plausibly redrafts a brief, and tight enough to matter: each call is a real
+ * Anthropic spend, unlike the DB-only writes the limiters above bound.
+ */
+const draftLimiter = perUserLimiter(
+  10,
+  'Too many draft requests in a short time. Wait a minute and try again.'
+);
+
+/**
  * Clears both limiters for one caller. A test seam, and only that.
  *
  * The counters live in an in-process MemoryStore that outlives an individual
@@ -301,6 +318,7 @@ export function resetParticipantRouteLimits(userId: string): void {
   surveyResultsLimiter.resetKey(userId);
   opportunityWriteLimiter.resetKey(userId);
   screenerSubmitLimiter.resetKey(userId);
+  draftLimiter.resetKey(userId);
 }
 
 /**
@@ -2126,6 +2144,32 @@ router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOp
   };
   
   res.status(201).json(opportunity);
+}));
+
+/**
+ * POST /api/opportunities/draft-from-brief - D13 AI study drafting.
+ *
+ * docs/AI-STUDY-DRAFTING-SPEC.md. Writes NOTHING to Postgres and never touches
+ * the FirstHand runtime pool - it calls the Claude API, validates the result
+ * against the same `CreateOpportunitySchema` a real create POST uses, and
+ * hands the researcher back a draft to review. Nothing is created until the
+ * researcher's own explicit save, exactly as today.
+ *
+ * Guards, in mount order: `requireAdmin` (same gate as every other write),
+ * then `draftLimiter` (10/minute per admin - a real Anthropic spend per call,
+ * unlike the DB-only writes the sibling limiters bound), then body validation.
+ * `isAiDraftingConfigured()` is checked before any of that work is wasted on a
+ * request the deployment cannot serve - the beta manifest sets neither flag
+ * nor key, so this answers 503 today, and the frontend hides the whole panel
+ * on that response rather than showing an error.
+ */
+router.post('/draft-from-brief', requireAdmin, draftLimiter, validateRequest(DraftBriefRequestSchema), asyncHandler(async (req: Request, res: Response) => {
+  if (!isAiDraftingConfigured()) {
+    throw new DraftUnavailableError();
+  }
+
+  const result = await draftOpportunityFromBrief(req.body);
+  res.status(200).json(result);
 }));
 
 // PATCH /api/opportunities/:id - Update opportunity

@@ -86,6 +86,8 @@ import {
   type AuthoringKind,
   type StudyReadOnlyReason
 } from '../lib/opportunity-authoring/hydrate-study';
+import { appliedDraftFields } from '../lib/opportunity-authoring/apply-draft';
+import type { DraftedOpportunity } from '../api/client';
 import type { StudySourceMode } from '../components/OpportunityForm/StudySourceChoice';
 import ParticipantPreview, {
   PreviewParticipantButton
@@ -4719,6 +4721,21 @@ const OpportunityForm: React.FC = () => {
     return null;
   };
 
+  /**
+   * D13, W9: "Apply to form" on the AI drafting panel. A plain merge of the
+   * fields the draft actually filled onto existing formData - the same
+   * `setFormData(prev => ({ ...prev, ...x }))` shape `handleUseExistingStudy`
+   * uses for the "copy an existing study" flow just above, because it is
+   * exactly the same kind of event: an unsaved draft becoming form state, with
+   * fresh client ids already minted by `appliedDraftFields`. Only ever wired
+   * on the NEW-study route (see the `onApplyDraft` prop passed to
+   * BasicInfoTab below) - nothing here saves, creates a study or publishes
+   * anything.
+   */
+  const handleApplyDraft = (draft: DraftedOpportunity) => {
+    setFormData((prev) => ({ ...prev, ...appliedDraftFields(draft) }));
+  };
+
   const handleQuestionsChange = (questions: WithClientId<SurveyQuestion>[]) => {
     const previous = formData.inline_survey_questions;
     setFormData(prev => ({ ...prev, inline_survey_questions: questions }));
@@ -5534,6 +5551,12 @@ const OpportunityForm: React.FC = () => {
                         validationErrors={validationErrors}
                         handleInputChange={handleInputChange}
                         handleBlur={handleBlur}
+                        // D13, W9: new-study route only, per the spec's own
+                        // "Edit route" open decision - redrafting a SAVED
+                        // opportunity is a different interaction with its own
+                        // look, not yet built. Omitting the prop on edit is
+                        // what makes StudyTypePicker withhold the panel there.
+                        onApplyDraft={isEdit ? undefined : handleApplyDraft}
                       />
 
                       {continueControl && (

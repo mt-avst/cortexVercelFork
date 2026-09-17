@@ -276,6 +276,110 @@ export const duplicateOpportunity = async (id: string): Promise<Opportunity> => 
   return response.data;
 };
 
+/**
+ * D13 AI study drafting (docs/AI-STUDY-DRAFTING-SPEC.md). One step of one
+ * type or step, in the same shape `inline_study`/`inline_survey` are already
+ * declared in - see `frontend/src/lib/opportunity-authoring/apply-draft.ts`
+ * for how a whole draft maps onto the form.
+ */
+export interface DraftedOpportunityStep {
+  type: string;
+  prompt: string;
+  options?: string[];
+  config?: Record<string, number | string>;
+  helper_text?: string;
+  is_required?: boolean;
+}
+
+/**
+ * What `POST /opportunities/draft-from-brief` returns as `draft` - the same
+ * shape a real create POST would accept, consent already filled from the
+ * template and status already forced to 'draft'. Deliberately NOT
+ * `CreateOpportunityRequest`: that shared interface has not kept up with the
+ * backend's own create schema (it is missing `delivery_mode`, `inline_study`
+ * and `inline_survey`), and widening it is a separate, larger change than
+ * this feature.
+ */
+export interface DraftedOpportunity {
+  type: 'test' | 'poll' | 'survey' | 'question' | 'interview' | 'unmoderated';
+  delivery_mode?: 'native' | 'external';
+  title: string;
+  purpose_one_liner: string;
+  description_optional?: string;
+  product_optional?: string;
+  participant_type_required?: 'any' | 'internal' | 'external' | 'specific';
+  participant_type_specific_details?: string;
+  default_duration_minutes?: number;
+  external_link_optional?: string;
+  status: 'draft';
+  consent_text?: string;
+  consent_template_id?: string | null;
+  consent_template_version?: number | null;
+  inline_study?: {
+    target_url?: string;
+    consent_text: string;
+    consent_template_id?: string;
+    consent_template_version?: number;
+    estimated_duration_minutes?: number;
+    steps: DraftedOpportunityStep[];
+  };
+  inline_survey?: {
+    consent_text: string;
+    consent_template_id?: string;
+    consent_template_version?: number;
+    estimated_duration_minutes?: number;
+    steps: DraftedOpportunityStep[];
+  };
+}
+
+export interface DraftOpportunityResponse {
+  draft: DraftedOpportunity;
+  /** Things the model inferred rather than read off the brief. */
+  assumptions: string[];
+  /** Things the brief did not say, left for the researcher to fill in. */
+  gaps: string[];
+  /** Field names the draft actually populated, for the review panel. */
+  filled: string[];
+}
+
+/**
+ * Ask the backend to draft an opportunity from a plain-English brief.
+ * Server-side only - the Anthropic key never reaches the browser. Writes
+ * nothing: the caller applies the result to the (unsaved) form and the
+ * researcher's own save is what persists anything, exactly as today.
+ *
+ * A longer timeout than the shared default (10s): a real drafting call
+ * reasons over the brief before answering and can legitimately take longer
+ * than an ordinary CRUD request.
+ */
+export const draftOpportunityFromBrief = async (
+  brief: string,
+  hints?: { type?: string; delivery_mode?: 'native' | 'external' }
+): Promise<DraftOpportunityResponse> => {
+  const response = await api.post(
+    '/opportunities/draft-from-brief',
+    { brief, ...(hints ? { hints } : {}) },
+    { timeout: 60000 }
+  );
+  return response.data;
+};
+
+/**
+ * Whether the AI drafting panel may show at all (D13). Reads the same
+ * unauthenticated `/api/health` field the beta manifest gates - see
+ * `backend/src/index.ts`. Fails CLOSED on any error (network, 5xx, a
+ * malformed body): the panel hiding is always the safe outcome, never an
+ * error the researcher has to make sense of.
+ */
+export const getAiDraftingAvailable = async (): Promise<boolean> => {
+  try {
+    const response = await api.get('/health');
+    return response.data?.aiDrafting === true;
+  } catch {
+    return false;
+  }
+};
+
 export const getRecordedStudyBrief = async (opportunityId: string): Promise<import('@shared/types').RecordedStudyBrief> => {
   const response = await api.get(`/opportunities/${opportunityId}/recorded-study-brief`);
   return response.data;
