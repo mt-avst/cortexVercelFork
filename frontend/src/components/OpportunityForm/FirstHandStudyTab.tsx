@@ -258,6 +258,20 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
           </div>
         )}
 
+        {/*
+          Row 12: only Review told the author this list is shared, editing it
+          in place rather than authoring content that belongs to this
+          opportunity alone. No count of the studies it is linked to yet - the
+          usage endpoint that answers that lands in a later wave - so this says
+          only that it is shared, not by how much.
+        */}
+        {hasLinkedStudy && !studyIsReadOnly && (
+          <div className="alert alert-info py-2 px-3 mb-4" style={{ fontSize: '0.875rem' }}>
+            This is a shared task list. Changes here apply everywhere it is
+            linked, not only to this study.
+          </div>
+        )}
+
         {offeringSourceChoice && (
           <StudySourceChoice
             noun="task"
@@ -324,6 +338,21 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
           </div>
         ) : (
           <>
+            {/*
+              Row 11: this step lets a published study's tasks be removed and
+              reordered with no word that a session may already be under way
+              on them. The standalone Task Lists editor has always said so
+              (`StudyEditor.tsx`, "Sessions already in flight keep their
+              original task payload") - the wizard never did.
+            */}
+            {formData.status === 'published' && (
+              <div className="alert alert-warning py-2 px-3 mb-4" style={{ fontSize: '0.875rem' }}>
+                This study is published. Changes apply to new participant
+                sessions - sessions already in flight keep their original task
+                payload.
+              </div>
+            )}
+
             <div className="row">
               <div className="col-12 col-md-8">
                 <div className="form-group mb-4">
@@ -394,6 +423,7 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
                   derivedFrom={`${steps.length} ${
                     steps.length === 1 ? 'task' : 'tasks'
                   }`}
+                  itemNoun="task"
                   onValueChange={(value) =>
                     handleInputChange('inline_study_duration_minutes', value)
                   }

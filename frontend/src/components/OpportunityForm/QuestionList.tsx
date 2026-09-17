@@ -480,7 +480,19 @@ function QuestionList<T extends AuthoredItem>({
                         <AlertCircle size={14} aria-hidden="true" /> Needs attention
                       </span>
                     )}
-                    <span className="question-card__toggle">
+                    {/*
+                      Row 32: `.question-card__toggle` underlines this text
+                      (question-list.css), which makes "Edit" read as its own
+                      link sitting inside a bigger button - when the whole
+                      row, not just this word, is what toggles the card. The
+                      underline is a CSS-file change outside this file's
+                      boundary, so it is overridden inline here instead of
+                      left to mislead.
+                    */}
+                    <span
+                      className="question-card__toggle"
+                      style={{ textDecoration: 'none' }}
+                    >
                       {expanded ? 'Collapse' : 'Edit'}
                     </span>
                   </button>

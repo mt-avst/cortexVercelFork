@@ -15,6 +15,14 @@ interface DurationEstimateProps {
   error?: string;
   /** "6 questions", "3 tasks" - what the estimate was derived from. */
   derivedFrom: string;
+  /**
+   * The singular noun for what this step authors - "task" or "question" -
+   * used only in the empty-state prompt (row 19). It used to read "Add a
+   * question" unconditionally, which was simply wrong on the Task List step:
+   * the noun must follow the step this control is rendered on, not assume
+   * the survey twin is the only caller.
+   */
+  itemNoun: string;
   onValueChange: (value: number | undefined) => void;
   onAutomaticChange: (automatic: boolean) => void;
   /** Revalidate this field on blur, by the same rules a save runs. */
@@ -41,6 +49,7 @@ const DurationEstimate: React.FC<DurationEstimateProps> = ({
   estimate,
   error,
   derivedFrom,
+  itemNoun,
   onValueChange,
   onAutomaticChange,
   onBlur
@@ -86,7 +95,7 @@ const DurationEstimate: React.FC<DurationEstimateProps> = ({
             // Nothing to add up yet. "Automatically estimated from your 0
             // questions" reads as a broken sentence and describes a number that
             // is not there.
-            <>There is nothing to estimate from yet. Add a question and this fills in.{' '}</>
+            <>There is nothing to estimate from yet. Add a {itemNoun} and this fills in.{' '}</>
           ) : (
             <>
               <span className="duration-estimate__value">Automatically estimated</span>{' '}
