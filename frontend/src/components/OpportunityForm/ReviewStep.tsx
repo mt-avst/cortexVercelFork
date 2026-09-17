@@ -2,10 +2,18 @@ import React from 'react';
 import { AlertCircle, AlertTriangle } from 'lucide-react';
 
 import type { ReviewSection } from '../../lib/opportunity-authoring/review-summary';
+import { PUBLISHED_NOT_WORKING_LABEL } from '../../lib/opportunity-authoring/step-status';
 import FieldError from './FieldError';
 import ShareOpportunityLink from '../ShareOpportunityLink';
 import type { User } from '@shared/types';
 import './review-step.css';
+
+/** One publish blocker, already resolved to the step that fixes it. */
+interface PublishProblemPreview {
+  message: string;
+  stepId: number;
+  stepTitle: string;
+}
 
 interface ReviewStepProps {
   sections: ReviewSection[];
@@ -17,7 +25,24 @@ interface ReviewStepProps {
    */
   header: { title: string; typeLabel: string };
   /** The publish refusal this opportunity would get, or null. */
-  publishRefusal: { message: string; stepId: number; stepTitle: string } | null;
+  publishRefusal: PublishProblemPreview | null;
+  /**
+   * Every unmet publish requirement, not just the first (audit row 4 / row
+   * 16): a moderated study missing both its venue and its slots is told
+   * about only one of them through `publishRefusal` above, and a moderated
+   * author who fixed the first was sent back a screen later for the second.
+   *
+   * Optional and purely additive. When it holds one or more entries, it
+   * replaces the single `publishRefusal` alert below with a checklist of
+   * all of them; omitted, or empty, the single-alert behaviour is
+   * unchanged. `OpportunityForm.tsx` does not build this yet - it still
+   * only computes `publishRefusal` from `findPublishProblem` (singular) -
+   * so wiring `findPublishProblems` (plural, `shared/firsthand/publish-
+   * readiness.ts`) through to this prop is a follow-up outside this
+   * component's own file. See `ReviewStep.test.tsx` for coverage of what
+   * this component does once it has one.
+   */
+  publishProblems?: PublishProblemPreview[];
   /** Open a step, focusing a control when one is named. */
   onEdit: (stepId: number, focusFieldId?: string) => void;
   /**
@@ -74,6 +99,38 @@ interface ReviewStepProps {
 }
 
 /**
+ * The standfirst under the "Review" heading, pinned per save model (audit
+ * row 16).
+ *
+ * A create has no server baseline at all, so "Nothing has been saved yet" is
+ * simply true. An edit is either autosaving (a draft - the timer already
+ * persists every settled change) or it is not (a published study, which the
+ * autosave guard deliberately leaves alone) - and only the second of those
+ * two is where "Any change you have not already saved is still only on this
+ * screen" is a TRUE claim. Before this, every edit read that sentence,
+ * including an autosaving draft where it was false the moment the timer next
+ * fired.
+ *
+ * Read from the live `status` rather than from the form's own
+ * `autosaveApplies` (which OpportunityForm.tsx computes from the STORED
+ * status, precisely so flipping this screen's own Status control does not
+ * switch autosave off mid-sentence) because that value is not threaded to
+ * this component. The one case they can disagree - the moment between
+ * choosing Published here and that choice actually saving - reads the
+ * published wording a beat early, which is the direction that undersells
+ * autosave rather than overselling it.
+ */
+const reviewStandfirst = (isEdit: boolean, status: 'draft' | 'published'): string => {
+  if (!isEdit) {
+    return 'Your last chance to check everything before the study is created. Nothing has been saved yet.';
+  }
+  if (status === 'draft') {
+    return 'Check everything before you save. Changes on this screen are saved automatically as you go.';
+  }
+  return 'Check everything before you save. Any change you have not already saved is still only on this screen.';
+};
+
+/**
  * The check-answers screen, and nothing that decides what is on it.
  *
  * Every fact this component shows - which sections exist, what each item
@@ -93,12 +150,16 @@ interface ReviewStepProps {
  * something decided elsewhere - it IS the decision, and it lives directly on
  * this component rather than as a `ReviewSection` because a section is
  * read-only content with an "Edit" button that opens some other step, and
- * there is no other step to open for a choice that belongs here.
+ * there is no other step to open for a choice that belongs here. It renders
+ * last on the page, in a footer with the share block beneath it (audit row
+ * 30): every section above is a fact about the CONFIGURATION, and this is
+ * the one act the whole screen exists to lead up to.
  */
 const ReviewStep: React.FC<ReviewStepProps> = ({
   sections,
   header,
   publishRefusal,
+  publishProblems,
   onEdit,
   isEdit,
   status,
@@ -106,189 +167,232 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
   statusError,
   shareLink,
   role
-}) => (
-  <div className="form-section mb-5" data-testid="review-step">
-    <div className="mb-4">
-      <h2 className="h4 mb-1 section-title">Review</h2>
-      <p className="mb-0 section-description">
-        {isEdit
-          ? 'Check everything before you save. Any change you have not already saved is still only on this screen.'
-          : 'Your last chance to check everything before the study is created. Nothing has been saved yet.'}
-      </p>
-    </div>
+}) => {
+  // A published study can already be stored broken (row 6): a study minted
+  // before a rule existed, or edited by a path that bypassed it. `Published`
+  // alone would say nothing is wrong; `publishRefusal`/`publishProblems` here
+  // are the SAME preview the alert below reads, so the pill cannot disagree
+  // with the banner sitting a few lines under it.
+  const hasPublishProblem =
+    Boolean(publishRefusal) || Boolean(publishProblems && publishProblems.length > 0);
 
-    {/*
-      The identity card (WZ-17): the study's title as the largest text, then a
-      row of two pills - the type label and the current draft/published state.
-      Read-only orientation; the Status control below remains the one place the
-      state is actually chosen, and this pill only reflects it. Anchoring the
-      screen here is why the publish-refusal alert now sits directly beneath it.
-    */}
-    <div className="review-header" data-testid="review-header">
-      <h3
-        className={`review-header__title${header.title ? '' : ' review-header__title--empty validation-error'}`}
-      >
-        {/*
-          A missing title is a REQUIRED field short of a value, not a stylistic
-          blank - and title is not a publish-readiness code, so the refusal
-          alert never mentions it. This is the one place it shows before Save,
-          so it is flagged the way every other missing value on this screen is:
-          an icon and the words "No title yet", never colour alone.
-        */}
-        {header.title || (
-          <>
-            <AlertCircle size={18} className="me-1" aria-hidden="true" />
-            No title yet
-          </>
-        )}
-      </h3>
-      <div className="review-header__pills">
-        <span className="review-header__pill review-header__pill--type">
-          {header.typeLabel}
-        </span>
-        {status === 'draft' ? (
-          <span className="review-header__pill review-header__pill--draft">
-            <AlertTriangle size={14} className="me-1" aria-hidden="true" />
-            Draft
-          </span>
-        ) : (
-          <span className="review-header__pill review-header__pill--published">
-            Published
-          </span>
-        )}
-      </div>
-    </div>
-
-    {publishRefusal && (
-      <div className="alert alert-warning" role="alert">
-        <AlertTriangle size={16} className="me-2" aria-hidden="true" />
-        {publishRefusal.message}{' '}
-        {/*
-          Never disabled. The server is the authority on whether this
-          opportunity may be published, and a disabled button that turns out
-          to be wrong - because this preview drifted from the server's own
-          rule, or because the author fixes the problem some other way first -
-          is a control the author cannot recover from without leaving the
-          page. A clickable link to the offending step costs nothing when the
-          preview is right and loses nothing when it is not: the save itself
-          still enforces the rule either way.
-        */}
-        <button
-          type="button"
-          className="btn btn-link p-0 align-baseline"
-          onClick={() => onEdit(publishRefusal.stepId)}
+  return (
+    <div className="form-section mb-5" data-testid="review-step">
+      <div className="mb-4">
+        <h2
+          className="h4 mb-1 section-title"
+          style={{ fontSize: '1.5rem', lineHeight: '1.3', fontWeight: '600' }}
         >
-          Go to {publishRefusal.stepTitle}
-        </button>
+          Review
+        </h2>
+        <p className="mb-0 section-description">{reviewStandfirst(isEdit, status)}</p>
       </div>
-    )}
 
-    {sections.map((section) => (
-      <div key={section.stepKey} className="border rounded p-3 mb-3">
-        <div className="d-flex justify-content-between align-items-start mb-2">
-          <h3 className="h6 mb-0">{section.title}</h3>
+      {/*
+        The identity card (WZ-17): the study's title as the largest text, then a
+        row of two pills - the type label and the current draft/published state.
+        Read-only orientation; the Status control below remains the one place the
+        state is actually chosen, and this pill only reflects it. Anchoring the
+        screen here is why the publish-refusal alert now sits directly beneath it.
+      */}
+      <div className="review-header" data-testid="review-header">
+        <h3
+          className={`review-header__title${header.title ? '' : ' review-header__title--empty validation-error'}`}
+        >
           {/*
-            The accessible name is "Edit {title}", not a bare "Edit" -
-            `getByRole` matches an accessible name as a SUBSTRING by default,
-            so a screen with several bare "Edit" buttons is a screen where a
-            test (or a screen-reader user scanning by role) cannot tell which
-            one it has landed on.
+            A missing title is a REQUIRED field short of a value, not a stylistic
+            blank - and title is not a publish-readiness code, so the refusal
+            alert never mentions it. This is the one place it shows before Save,
+            so it is flagged the way every other missing value on this screen is:
+            an icon and the words "No title yet", never colour alone.
           */}
-          <button
-            type="button"
-            className="btn btn-outline-secondary btn-sm"
-            onClick={() => onEdit(section.stepId, section.focusFieldId)}
-          >
-            Edit {section.title}
-          </button>
+          {header.title || (
+            <>
+              <AlertCircle size={18} className="me-1" aria-hidden="true" />
+              No title yet
+            </>
+          )}
+        </h3>
+        <div className="review-header__pills">
+          <span className="review-header__pill review-header__pill--type">
+            {header.typeLabel}
+          </span>
+          {status === 'draft' ? (
+            <span className="review-header__pill review-header__pill--draft">
+              <AlertTriangle size={14} className="me-1" aria-hidden="true" />
+              Draft
+            </span>
+          ) : hasPublishProblem ? (
+            <span className="review-header__pill review-header__pill--broken">
+              <AlertTriangle size={14} className="me-1" aria-hidden="true" />
+              {PUBLISHED_NOT_WORKING_LABEL}
+            </span>
+          ) : (
+            <span className="review-header__pill review-header__pill--published">
+              Published
+            </span>
+          )}
         </div>
-        <dl className="review-dl">
-          {section.items.map((item) => (
-            <React.Fragment key={item.label}>
-              <dt>{item.label}</dt>
-              <dd className={item.missing ? 'validation-error' : undefined}>
-                {/*
-                  Never colour alone: a missing value is marked by the icon
-                  and the word, not only by whatever colour `validation-error`
-                  resolves to, so the distinction survives greyscale, colour
-                  blindness, and being read aloud.
-                */}
-                {item.missing && (
-                  <AlertCircle size={14} className="me-1" aria-hidden="true" />
-                )}
-                {item.value}
-                {item.note && <div className="form-text">{item.note}</div>}
-              </dd>
-            </React.Fragment>
-          ))}
-        </dl>
       </div>
-    ))}
 
-    {/*
-      The last decision on the form, deliberately last on the page too (#111).
-      Every section above is a fact about the CONFIGURATION; this one is the
-      act of publishing it, and it is not itself a fact being reviewed - there
-      is nothing to "Edit" here, only a choice to make, so it renders as a live
-      control rather than another read-only card with an Edit button.
-    */}
-    <div className="border rounded p-3 mb-3">
-      <h3 id="status-heading" className="h6 mb-2">Status</h3>
-      <div id="status-help" className="form-text mb-2">
-        {status === 'draft' ? (
-          <strong className="text-warning">
-            <AlertTriangle size={14} className="me-1" aria-hidden="true" />
-            DRAFT - Not visible to users. Change to Published to make visible.
-          </strong>
-        ) : (
-          'Published studies are visible to all users'
+      {publishProblems && publishProblems.length > 0 ? (
+        <div className="alert alert-warning" role="alert">
+          <AlertTriangle size={16} className="me-2" aria-hidden="true" />
+          <p className="mb-2">This study cannot be published yet:</p>
+          <ul className="mb-0 ps-3">
+            {publishProblems.map((problem) => (
+              <li key={problem.stepId}>
+                {problem.message}{' '}
+                <button
+                  type="button"
+                  className="btn btn-link p-0 align-baseline"
+                  onClick={() => onEdit(problem.stepId)}
+                >
+                  Go to {problem.stepTitle}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        publishRefusal && (
+          <div className="alert alert-warning" role="alert">
+            <AlertTriangle size={16} className="me-2" aria-hidden="true" />
+            {publishRefusal.message}{' '}
+            {/*
+              Never disabled. The server is the authority on whether this
+              opportunity may be published, and a disabled button that turns out
+              to be wrong - because this preview drifted from the server's own
+              rule, or because the author fixes the problem some other way first -
+              is a control the author cannot recover from without leaving the
+              page. A clickable link to the offending step costs nothing when the
+              preview is right and loses nothing when it is not: the save itself
+              still enforces the rule either way.
+            */}
+            <button
+              type="button"
+              className="btn btn-link p-0 align-baseline"
+              onClick={() => onEdit(publishRefusal.stepId)}
+            >
+              Go to {publishRefusal.stepTitle}
+            </button>
+          </div>
+        )
+      )}
+
+      {/*
+        Each section is a rule under a title, not a bordered box (audit row
+        30): six identical boxes holding one row or twelve read as six
+        equally-weighted cards regardless of how much any of them actually
+        held. The Edit control is a fixed, short "Edit" rather than "Edit
+        {title}" so every one sits at the same x position - the accessible
+        name still carries the full "Edit {title}" via `aria-label`, so a
+        screen reader (or a test scanning by role) still tells them apart.
+      */}
+      {sections.map((section) => (
+        <section key={section.stepKey} className="review-section">
+          <div className="review-section__header">
+            <h3 className="review-section__title">{section.title}</h3>
+            <button
+              type="button"
+              className="review-section__edit"
+              aria-label={`Edit ${section.title}`}
+              onClick={() => onEdit(section.stepId, section.focusFieldId)}
+            >
+              Edit
+            </button>
+          </div>
+          <dl className="review-dl">
+            {section.items.map((item) => (
+              <React.Fragment key={item.label}>
+                <dt>{item.label}</dt>
+                <dd className={item.missing ? 'validation-error' : undefined}>
+                  {/*
+                    Never colour alone: a missing value is marked by the icon
+                    and the word, not only by whatever colour `validation-error`
+                    resolves to, so the distinction survives greyscale, colour
+                    blindness, and being read aloud.
+                  */}
+                  {item.missing && (
+                    <AlertCircle size={14} className="me-1" aria-hidden="true" />
+                  )}
+                  {item.value}
+                  {item.note && <div className="form-text">{item.note}</div>}
+                </dd>
+              </React.Fragment>
+            ))}
+          </dl>
+        </section>
+      ))}
+
+      {/*
+        The footer (audit row 30): Status - the one live decision on this
+        screen - and the share block it gates, both moved to the very end,
+        after every read-only section. Every section above is a fact ABOUT
+        the study; these two are the act of publishing it and the value that
+        follows from doing so, so they read as what the screen builds up to
+        rather than one more card among the summaries.
+      */}
+      <div className="review-footer">
+        <div className="border rounded p-3 mb-3">
+          <h3 id="status-heading" className="h6 mb-2">Status</h3>
+          <div id="status-help" className="form-text mb-2">
+            {status === 'draft' ? (
+              <strong className="text-warning">
+                <AlertTriangle size={14} className="me-1" aria-hidden="true" />
+                DRAFT - Not visible to users. Change to Published to make visible.
+              </strong>
+            ) : (
+              'Published studies are visible to all users'
+            )}
+          </div>
+          <select
+            id="status"
+            className={`form-select ${statusError ? 'is-invalid' : ''}`}
+            style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto', maxWidth: '360px' }}
+            value={status}
+            onChange={(e) => onStatusChange(e.target.value as 'draft' | 'published')}
+            aria-labelledby="status-heading"
+            aria-describedby={statusError ? 'status-error status-help' : 'status-help'}
+            aria-invalid={statusError ? 'true' : 'false'}
+          >
+            <option value="draft">Draft - Not visible to users</option>
+            <option value="published">Published - Visible to users</option>
+          </select>
+          {statusError && <FieldError id="status-error">{statusError}</FieldError>}
+        </div>
+
+        {/*
+          The tester's own words: "as a key action now, I'm looking to get a
+          sharable link to send to participants... I've done the work of setting
+          it up, now here's your value." Placed directly under Status because that
+          is the decision this block is downstream of - draft shows a hint,
+          published shows the live link, and nothing renders until the study has
+          an id to link to at all.
+        */}
+        {shareLink && status === 'published' && (
+          <ShareOpportunityLink
+            opportunityId={shareLink.opportunityId}
+            status={status}
+            role={role}
+            startable={shareLink.startable}
+          />
+        )}
+
+        {shareLink && status === 'draft' && (
+          <div className="card mb-4">
+            <div className="card-body">
+              <h2 className="h6 mb-2">Share this study</h2>
+              <p className="text-muted mb-0" style={{ fontSize: '0.875rem' }}>
+                Publish to share this link. Once this study is published,
+                its participant link appears here to copy.
+              </p>
+            </div>
+          </div>
         )}
       </div>
-      <select
-        id="status"
-        className={`form-select ${statusError ? 'is-invalid' : ''}`}
-        style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto', maxWidth: '360px' }}
-        value={status}
-        onChange={(e) => onStatusChange(e.target.value as 'draft' | 'published')}
-        aria-labelledby="status-heading"
-        aria-describedby={statusError ? 'status-error status-help' : 'status-help'}
-        aria-invalid={statusError ? 'true' : 'false'}
-      >
-        <option value="draft">Draft - Not visible to users</option>
-        <option value="published">Published - Visible to users</option>
-      </select>
-      {statusError && <FieldError id="status-error">{statusError}</FieldError>}
     </div>
-
-    {/*
-      The tester's own words: "as a key action now, I'm looking to get a
-      sharable link to send to participants... I've done the work of setting
-      it up, now here's your value." Placed directly under Status because that
-      is the decision this block is downstream of - draft shows a hint,
-      published shows the live link, and nothing renders until the study has
-      an id to link to at all.
-    */}
-    {shareLink && status === 'published' && (
-      <ShareOpportunityLink
-        opportunityId={shareLink.opportunityId}
-        status={status}
-        role={role}
-        startable={shareLink.startable}
-      />
-    )}
-
-    {shareLink && status === 'draft' && (
-      <div className="card mb-4">
-        <div className="card-body">
-          <h2 className="h6 mb-2">Share this study</h2>
-          <p className="text-muted mb-0" style={{ fontSize: '0.875rem' }}>
-            Publish to share this link. Once this study is published,
-            its participant link appears here to copy.
-          </p>
-        </div>
-      </div>
-    )}
-  </div>
-);
+  );
+};
 
 export default ReviewStep;

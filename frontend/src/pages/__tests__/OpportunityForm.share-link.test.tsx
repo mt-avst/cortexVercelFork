@@ -172,6 +172,11 @@ describe('OpportunityForm - the share link OpportunityForm computes for Review (
     });
 
     it('is true for the same published test once it has one session', async () => {
+      // `meeting_location_optional` is set so this isolates the SLOT gate:
+      // since row 5 wired `shareLinkStartable` to ANY publish blocker, an
+      // empty venue would otherwise fail this test for a reason unrelated to
+      // what it is about, the same way `publish-readiness.test.ts` holds the
+      // other moderated signal satisfied when it isolates one gate.
       vi.mocked(getOpportunity).mockResolvedValue(
         OPPORTUNITY({ type: 'test', status: 'published', meeting_location_optional: 'Zoom' }) as never
       );
@@ -196,6 +201,8 @@ describe('OpportunityForm - the share link OpportunityForm computes for Review (
     });
 
     it('is true for a published interview once it has one session, mirroring test', async () => {
+      // See the note on the "test" case above: the venue is set so this
+      // isolates the slot gate from the (also now-relevant) location gate.
       vi.mocked(getOpportunity).mockResolvedValue(
         OPPORTUNITY({ type: 'interview', status: 'published', meeting_location_optional: 'Zoom' }) as never
       );
@@ -217,6 +224,29 @@ describe('OpportunityForm - the share link OpportunityForm computes for Review (
       walkToReview();
 
       expect(screen.queryByText(/Participants cannot start this yet/i)).not.toBeInTheDocument();
+    });
+
+    it('is false for a published poll with a publish blocker (a publish blocker hides the share link)', async () => {
+      // Row 5 / row 17: an opportunity can already sit in the database as
+      // `status: 'published'` with content that would itself fail the publish
+      // gate - this poll has no external link and nothing linked, so its own
+      // Review banner names `external_link_required`. Before the fix, the
+      // share block ignored that banner entirely and still offered a
+      // copyable link, on the same screen that said the study could not
+      // start.
+      vi.mocked(getOpportunity).mockResolvedValue(
+        OPPORTUNITY({
+          type: 'poll',
+          status: 'published',
+          external_link_optional: ''
+        }) as never
+      );
+      vi.mocked(getSessions).mockResolvedValue([] as never);
+      renderEdit();
+      await screen.findByDisplayValue('A poll the author already wrote');
+      walkToReview();
+
+      expect(screen.getByText(/Participants cannot start this yet/i)).toBeInTheDocument();
     });
 
     it('is true for a published poll regardless of sessions - it has no session surface at all', async () => {
