@@ -41,9 +41,22 @@ interface StepNavProps {
  *    `.nav-link`. Changing both the semantics and every caller in one step
  *    would mean the callers could no longer disagree with the change.
  *
- * The accessible name grows - "Step 3 of 4 Task List What the participant does
- * Needs attention" - and stays a superset of what it was, so the substring
- * matchers those call sites use still match. Nothing here renders another
+ * D7 (Aicher-style step strip): the three-line stacked strip - position,
+ * title, description, then state - ragged its top edge by up to 32px and
+ * jumped 16px in total height between an odd and an even step (both from
+ * `_components.css`, see the comments there). The fix drops the description
+ * and swaps the "Step X of Y" position line for a plain numeral, so every
+ * button holds exactly one line of title and one line of state on a single
+ * fixed-height row.
+ *
+ * The accessible name still carries the position sentence past the visible
+ * text - "Step 3 of 4 Task List Needs attention" - even though a sighted
+ * author now sees a numeral where that sentence used to be visible:
+ * `describeStepPosition` is still rendered, in a `.sr-only` span, so a screen
+ * reader hears the same position it always did. The step DESCRIPTION ("What
+ * the participant does" and so on) is not part of that any more - D7 drops
+ * it from the DOM entirely, for every step, not just visually - so it is no
+ * longer part of the accessible name either. Nothing here renders another
  * step's title, which is what would break the negative assertions.
  */
 const StepNav: React.FC<StepNavProps> = ({ steps, activeStepId, statusOf, onSelect }) => (
@@ -57,38 +70,44 @@ const StepNav: React.FC<StepNavProps> = ({ steps, activeStepId, statusOf, onSele
         <button
           key={step.id}
           type="button"
-          className={`nav-link border-0 py-3 px-4 opportunity-form-tab step-tab ${
+          className={`nav-link border-0 px-4 opportunity-form-tab step-tab ${
             isActive ? 'active fw-bold' : 'fw-semibold'
           }`}
           /* `step`, not `page`: the strip moves within one page. */
           aria-current={isActive ? 'step' : undefined}
           onClick={() => onSelect(step.id)}
         >
-          <div className="text-center">
-            <span className="step-tab__position">{describeStepPosition(index, steps.length)}</span>
-            <div className={`tab-title tab-title-dynamic ${isActive ? 'active' : ''}`}>
-              {step.title}
-            </div>
-            <small className={`tab-description tab-description-dynamic ${isActive ? 'active' : ''}`}>
-              {step.description}
-            </small>
-            {/*
-              The icon is decorative and the words are not. A screen reader
-              reads the label as part of the button's name; a sighted author
-              gets the shape as well as the colour, which is the whole reason
-              there is an icon at all.
-            */}
-            <span
-              className={`step-tab__status step-tab__status--${status}${
-                /* The same token B2 gave the question cards, so a failing step
-                   and a failing question inside it are one colour with one
-                   definition rather than two that drift. */
-                status === 'needsAttention' ? ' validation-error' : ''
-              }`}
-            >
-              <StatusIcon size={13} className="me-1" aria-hidden="true" />
-              {STEP_STATUS_LABEL[status]}
+          <div className="step-tab__content">
+            {/* Decorative stand-in for the position sentence below: a sighted
+                author reads the number, a screen reader reads the sentence. */}
+            <span className="step-tab__index" aria-hidden="true">
+              {index + 1}
             </span>
+            <div className="step-tab__body">
+              <span className="step-tab__position sr-only">
+                {describeStepPosition(index, steps.length)}
+              </span>
+              <div className={`tab-title tab-title-dynamic step-tab__title ${isActive ? 'active' : ''}`}>
+                {step.title}
+              </div>
+              {/*
+                The icon is decorative and the words are not. A screen reader
+                reads the label as part of the button's name; a sighted author
+                gets the shape as well as the colour, which is the whole reason
+                there is an icon at all.
+              */}
+              <span
+                className={`step-tab__status step-tab__status--${status}${
+                  /* The same token B2 gave the question cards, so a failing step
+                     and a failing question inside it are one colour with one
+                     definition rather than two that drift. */
+                  status === 'needsAttention' ? ' validation-error' : ''
+                }`}
+              >
+                <StatusIcon size={13} className="me-1" aria-hidden="true" />
+                {STEP_STATUS_LABEL[status]}
+              </span>
+            </div>
           </div>
         </button>
       );

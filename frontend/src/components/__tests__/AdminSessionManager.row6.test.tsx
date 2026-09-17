@@ -264,7 +264,7 @@ describe('Row 2 - slot removal is a deferred, undoable commit', () => {
 });
 
 describe('Row 2 - the footer matches every other step (StepActions)', () => {
-  it('renders the shared StepActions row, including Save and exit', async () => {
+  it('renders the shared StepActions row, not a bespoke one', async () => {
     renderManager({
       onContinue: vi.fn(),
       onContinueLabel: 'Review',
@@ -276,11 +276,17 @@ describe('Row 2 - the footer matches every other step (StepActions)', () => {
     } as never);
     await settle();
 
-    // "Save and exit" is the StepActions marker - the bespoke footer never had
-    // one, so its presence proves the shared row is what renders here now.
+    // "Save and exit" used to be the StepActions marker here - the bespoke
+    // footer never had one, so its presence proved the shared row was what
+    // rendered. D9 (row 24 of the shell/palette plan) deletes that control
+    // from StepActions entirely, so it can no longer serve as the marker;
+    // the `.step-actions` class it always carries, and the colon-prefixed
+    // "Previous: X" / "Continue: Y" wording the bespoke footer never used,
+    // prove the same thing now.
     expect(
-      screen.getByRole('button', { name: /Save and exit/i })
-    ).toBeInTheDocument();
+      screen.queryByRole('button', { name: /Save and exit/i })
+    ).not.toBeInTheDocument();
+    expect(document.querySelector('.step-actions')).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'Previous: Consent' })
     ).toBeInTheDocument();
