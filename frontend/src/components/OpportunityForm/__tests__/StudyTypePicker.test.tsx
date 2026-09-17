@@ -1,8 +1,20 @@
 import React from 'react';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 
 import StudyTypePicker from '../StudyTypePicker';
+import { getAiDraftingAvailable } from '../../../api/client';
+
+vi.mock('../../../api/client', async () => {
+  const actual = await vi.importActual<typeof import('../../../api/client')>(
+    '../../../api/client'
+  );
+  return {
+    ...actual,
+    getAiDraftingAvailable: vi.fn(),
+    draftOpportunityFromBrief: vi.fn()
+  };
+});
 
 /*
  * D2 - the study-type picker. Nine cards replace the old "Research Study Type"
@@ -113,17 +125,42 @@ describe('StudyTypePicker - the type validation error', () => {
   });
 });
 
-describe('StudyTypePicker - the D13 front-door AI shell (dormant)', () => {
-  it('offers the prompt but leaves the Suggest control inert', () => {
+describe('StudyTypePicker - the D13 front-door AI panel (wired by W9)', () => {
+  // DescribeIt itself (the live textarea, Suggest flow, review list, Apply/
+  // Discard) is covered in its own suite, DescribeIt.test.tsx. These tests
+  // pin the CONTRACT StudyTypePicker owns: the panel is opt-in via
+  // `onApplyDraft`, and it is StudyTypePicker's job to mount or withhold it -
+  // never to render it unconditionally the way the dormant shell used to.
+  it('renders no AI panel at all when the caller passes no onApplyDraft (the edit route)', () => {
     renderPicker();
-    const prompt = screen.getByTestId('front-door-ai-prompt');
-    expect(
-      within(prompt).getByLabelText(/What do you want to find out/i)
-    ).toBeInTheDocument();
-    // Not wired yet (W9 lands the real thing): the control is present but inert.
-    expect(
-      within(prompt).getByRole('button', { name: /Suggest a type/i })
-    ).toBeDisabled();
+    expect(screen.queryByTestId('front-door-ai-prompt')).toBeNull();
+  });
+
+  it('mounts the panel when onApplyDraft is provided and drafting is available', async () => {
+    vi.mocked(getAiDraftingAvailable).mockResolvedValue(true);
+    renderPicker({ onApplyDraft: vi.fn() });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('front-door-ai-prompt')).toBeInTheDocument();
+    });
+    expect(screen.getByLabelText(/What do you want to find out/i)).toBeInTheDocument();
+  });
+
+  it('stays hidden when onApplyDraft is provided but drafting is unavailable', async () => {
+    vi.mocked(getAiDraftingAvailable).mockResolvedValue(false);
+    renderPicker({ onApplyDraft: vi.fn() });
+
+    await waitFor(() => {
+      expect(vi.mocked(getAiDraftingAvailable)).toHaveBeenCalled();
+    });
+    expect(screen.queryByTestId('front-door-ai-prompt')).toBeNull();
+  });
+
+  it('does not mount the panel on the locked (published, row-7) view even with onApplyDraft passed', () => {
+    vi.mocked(getAiDraftingAvailable).mockResolvedValue(true);
+    renderPicker({ type: 'survey', deliveryMode: 'native', isPublished: true, onApplyDraft: vi.fn() });
+
+    expect(screen.queryByTestId('front-door-ai-prompt')).toBeNull();
   });
 });
 

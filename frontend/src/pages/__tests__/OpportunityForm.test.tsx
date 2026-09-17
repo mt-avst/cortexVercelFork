@@ -71,6 +71,16 @@ vi.mock('../../api/client', () => ({
     { id: 'study_demo', title: 'Demo Study', status: 'launched', kind: 'recorded' },
     { id: 'study_demo_survey', title: 'Demo Survey', status: 'launched', kind: 'survey' },
   ]),
+  // D13, W9: DescribeIt (mounted by StudyTypePicker on the new-study route)
+  // checks this on every mount. Resolving false keeps the AI panel hidden
+  // for every test in this file, which is the correct default here - none of
+  // them is about AI drafting, and a form this size is not the place to
+  // exercise a second async panel's own behaviour (that lives in
+  // DescribeIt.test.tsx). Unmocked, this call falls through to the real
+  // export and `undefined` for draftOpportunityFromBrief below, which throws
+  // inside a component effect - see the comment above this factory.
+  getAiDraftingAvailable: vi.fn().mockResolvedValue(false),
+  draftOpportunityFromBrief: vi.fn(),
 }));
 
 // The single-study getter the form calls in edit mode to read back what the

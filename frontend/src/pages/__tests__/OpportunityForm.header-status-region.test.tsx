@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import OpportunityForm from '../OpportunityForm';
 import { opportunityFormRoutes } from '../OpportunityForm.routes';
-import { createOpportunity, deleteOpportunity, getOpportunity, updateOpportunity } from '../../api/client';
+import { createOpportunity, deleteOpportunity, getAiDraftingAvailable, getOpportunity, updateOpportunity } from '../../api/client';
 import { chooseStudyType } from './helpers/study-type-picker';
 
 /**
@@ -36,6 +36,12 @@ vi.mock('../../contexts/ThemeContext', () => ({
 vi.mock('../../components/AdminSessionManager', () => ({ default: () => null }));
 
 vi.mock('../../api/client', () => ({
+  // D13, W9: StudyTypePicker mounts DescribeIt on the new-study route, and it
+  // checks this on every mount - unmocked, this call resolves to `undefined`
+  // and throws inside a component effect. False keeps the AI panel hidden,
+  // which is the correct default for a suite that is not about AI drafting.
+  getAiDraftingAvailable: vi.fn().mockResolvedValue(false),
+  draftOpportunityFromBrief: vi.fn(),
   createOpportunity: vi.fn(),
   updateOpportunity: vi.fn(),
   deleteOpportunity: vi.fn(),
@@ -113,6 +119,10 @@ beforeEach(() => {
   vi.mocked(createOpportunity).mockResolvedValue({ id: 'opp-new' } as never);
   vi.mocked(updateOpportunity).mockResolvedValue({ id: 'opp-1' } as never);
   vi.mocked(deleteOpportunity).mockResolvedValue(undefined as never);
+  // D13, W9: this file's `vi.restoreAllMocks()` wipes the factory's default
+  // implementation after the first test - see the same comment in
+  // OpportunityForm.autosave.test.tsx.
+  vi.mocked(getAiDraftingAvailable).mockResolvedValue(false);
 });
 
 afterEach(() => {

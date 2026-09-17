@@ -145,7 +145,9 @@ describe('the opportunities router', () => {
     'POST /:id/recorded-study-session': 'participant',
     'POST /:id/screener': 'admin',
     'POST /:id/sessions': 'admin',
-    'POST /:id/survey-session': 'participant'
+    'POST /:id/survey-session': 'participant',
+    // D13 AI study drafting: plain admin authoring, no runtime-pool work.
+    'POST /draft-from-brief': 'admin'
   };
 
   it('puts every route in the lane that was decided for it', () => {
