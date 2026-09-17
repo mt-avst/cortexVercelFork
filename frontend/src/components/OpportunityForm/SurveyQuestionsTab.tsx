@@ -406,6 +406,21 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
           </div>
         ) : (
           <>
+            {/*
+              Row 11: this step lets a published study's questions be removed
+              and reordered with no word that a session may already be under
+              way on them. The standalone Task Lists editor has always said so
+              (`StudyEditor.tsx`, "Sessions already in flight keep their
+              original task payload") - the wizard never did.
+            */}
+            {formData.status === 'published' && (
+              <div className="alert alert-warning py-2 px-3 mb-4" style={{ fontSize: '0.875rem' }}>
+                This study is published. Changes apply to new participant
+                sessions - sessions already in flight keep their original
+                question set.
+              </div>
+            )}
+
             <div className="row">
               <div className="col-12 col-md-6">
                 <DurationEstimate
