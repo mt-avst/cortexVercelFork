@@ -1,10 +1,10 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { StudyEditorForm } from '../StudyEditor';
-import { updateFirstHandStudy } from '../../api/firsthand-studies';
+import { getFirstHandStudyUsage, updateFirstHandStudy } from '../../api/firsthand-studies';
 
 /**
  * Editing a study in the Task Lists area, for both vocabularies.
@@ -18,7 +18,16 @@ import { updateFirstHandStudy } from '../../api/firsthand-studies';
 vi.mock('../../api/firsthand-studies', () => ({
   createFirstHandStudy: vi.fn(),
   updateFirstHandStudy: vi.fn().mockResolvedValue({}),
-  getFirstHandStudy: vi.fn()
+  getFirstHandStudy: vi.fn(),
+  getFirstHandStudyUsage: vi.fn().mockResolvedValue({ count: 0, studies: [] })
+}));
+
+// D4: both the recorded and survey editing paths now run through QuestionList,
+// which renders a ConfirmationModal for its remove-confirmation dialog - that
+// reads useTheme even before the dialog opens. A light stub is enough; this
+// suite is not about the palette. Mirrors StudyEditor.test.tsx.
+vi.mock('../../contexts/ThemeContext', () => ({
+  useTheme: () => ({ isDarkMode: false }),
 }));
 
 const navigate = vi.fn();
@@ -83,6 +92,8 @@ describe('StudyEditor - a survey study', () => {
       />
     );
 
+    // The card starts collapsed; its summary carries the prompt.
+    fireEvent.click(screen.getByRole('button', { name: /How easy was that/i }));
     expect(screen.getByLabelText(/^Type$/i)).toBeInTheDocument();
   });
 
@@ -117,6 +128,7 @@ describe('StudyEditor - a survey study', () => {
       />
     );
 
+    fireEvent.click(screen.getByRole('button', { name: /How easy was that/i }));
     await user.selectOptions(screen.getByLabelText(/^Type$/i), 'nps');
 
     const payload = await save(user);
@@ -149,13 +161,16 @@ describe('StudyEditor - a survey study', () => {
       />
     );
 
+    // The card starts collapsed; its summary carries the prompt.
+    fireEvent.click(screen.getByRole('button', { name: /How easy was that/i }));
+
     // One selector for the rating question, and none for the marker.
     expect(screen.getAllByLabelText(/^Type$/i)).toHaveLength(1);
   });
 });
 
 describe('StudyEditor - a recorded study', () => {
-  it('still offers no type selector', () => {
+  it('still offers no type selector', async () => {
     render(
       <StudyEditorForm
         initialStudy={recordedStudy}
@@ -163,11 +178,19 @@ describe('StudyEditor - a recorded study', () => {
         viewer={viewer}
       />
     );
+    await waitFor(() => expect(getFirstHandStudyUsage).toHaveBeenCalled());
 
     expect(screen.queryByLabelText(/^Type$/i)).toBeNull();
   });
 
-  it('offers the one-way repair on a legacy typed step', () => {
+  /**
+   * D4 supersedes the standalone editor's own one-way "Convert to a spoken
+   * instruction" repair: the wizard's Tasks body (`FirstHandStudyTab`, now the
+   * ONE editor for both surfaces) never offered a converter for a legacy typed
+   * step - it labels the card for what it is and leaves the step, and its
+   * options, editable in place. That is now this surface's behaviour too.
+   */
+  it('labels a legacy typed step for what it is, rather than offering a converter', async () => {
     render(
       <StudyEditorForm
         initialStudy={recordedStudy}
@@ -175,13 +198,17 @@ describe('StudyEditor - a recorded study', () => {
         viewer={viewer}
       />
     );
+    // Let the tab's own usage lookup settle before asserting, so its state
+    // update lands inside this test rather than warning after it.
+    await waitFor(() => expect(getFirstHandStudyUsage).toHaveBeenCalled());
 
+    expect(screen.getByText(/Typed answer \(legacy\)/i)).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: /Convert to a spoken instruction/i })
-    ).toBeInTheDocument();
+      screen.queryByRole('button', { name: /Convert to a spoken instruction/i })
+    ).toBeNull();
   });
 
-  it('does not offer it on a step that is already an instruction', () => {
+  it('labels an ordinary task as a task, not as legacy', async () => {
     render(
       <StudyEditorForm
         initialStudy={recordedStudy}
@@ -189,17 +216,18 @@ describe('StudyEditor - a recorded study', () => {
         viewer={viewer}
       />
     );
+    await waitFor(() => expect(getFirstHandStudyUsage).toHaveBeenCalled());
 
-    expect(
-      screen.queryByRole('button', { name: /Convert to a spoken instruction/i })
-    ).toBeNull();
+    expect(screen.queryByText(/legacy/i)).toBeNull();
   });
 
   /**
    * Keeping the step_id is the whole point: delete-and-re-add would orphan
-   * every response already stored against it.
+   * every response already stored against it. With no conversion path left,
+   * the property that matters is that editing the prompt does not silently
+   * drop the rest of a legacy choice step on the way through a save.
    */
-  it('converts in place, keeping the step id and dropping the options', async () => {
+  it('keeps a legacy choice step\'s options and identity through a save that never touched them', async () => {
     const user = userEvent.setup();
     render(
       <StudyEditorForm
@@ -219,21 +247,12 @@ describe('StudyEditor - a recorded study', () => {
       />
     );
 
-    await user.click(
-      screen.getByRole('button', { name: /Convert to a spoken instruction/i })
-    );
-
     const payload = await save(user);
 
     expect(payload.steps?.[0]).toMatchObject({
       step_id: 'study_recorded_step_1',
-      type: 'instruction'
+      type: 'single_choice',
+      options: ['Yes', 'No']
     });
-    // Asserted on the payload AND on the screen. The payload alone cannot see
-    // this clear: stepDraftToPayload only emits options for a choice type, so
-    // once the type is an instruction the options are gone whatever the draft
-    // holds. The editor no longer offering them is the distinct property.
-    expect(payload.steps?.[0]).not.toHaveProperty('options');
-    expect(screen.queryByLabelText(/Options \(one per line\)/i)).toBeNull();
   });
 });

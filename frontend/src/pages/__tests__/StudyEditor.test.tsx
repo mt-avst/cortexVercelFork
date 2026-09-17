@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -12,6 +12,7 @@ import { NavigationGuardProvider } from '../../contexts/NavigationGuardContext';
 import {
   createFirstHandStudy,
   getFirstHandStudy,
+  getFirstHandStudyUsage,
   updateFirstHandStudy,
 } from '../../api/firsthand-studies';
 import { useAuth } from '../../contexts/AuthContext';
@@ -22,6 +23,7 @@ vi.mock('../../api/firsthand-studies', () => ({
   createFirstHandStudy: vi.fn().mockResolvedValue({ study: {}, steps: [] }),
   updateFirstHandStudy: vi.fn().mockResolvedValue({ study: {}, steps: [] }),
   getFirstHandStudy: vi.fn(),
+  getFirstHandStudyUsage: vi.fn().mockResolvedValue({ count: 0, studies: [] }),
 }));
 
 // The page (not the form) reads useAuth. Mocked rather than wrapped in a real
@@ -39,10 +41,12 @@ vi.mock('../../contexts/ThemeContext', () => ({
 const mockedCreate = vi.mocked(createFirstHandStudy);
 const mockedUpdate = vi.mocked(updateFirstHandStudy);
 const mockedGet = vi.mocked(getFirstHandStudy);
+const mockedUsage = vi.mocked(getFirstHandStudyUsage);
 const mockedUseAuth = vi.mocked(useAuth) as unknown as ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockedUsage.mockResolvedValue({ count: 0, studies: [] });
 });
 
 const renderForm = (props: Parameters<typeof StudyEditorForm>[0] = {}) =>
@@ -54,6 +58,7 @@ const renderForm = (props: Parameters<typeof StudyEditorForm>[0] = {}) =>
 
 /** Fill the fields the shared schema requires so a submit actually reaches the API. */
 const fillRequiredFields = (overrides: { title?: string } = {}) => {
+  fireEvent.click(screen.getByRole('button', { name: 'Add task' }));
   fireEvent.change(screen.getByLabelText('Title'), {
     target: { value: overrides.title ?? 'A study' },
   });
@@ -63,10 +68,10 @@ const fillRequiredFields = (overrides: { title?: string } = {}) => {
   fireEvent.change(screen.getByLabelText('Consent text'), {
     target: { value: 'Consent' },
   });
-  fireEvent.change(screen.getAllByLabelText('Prompt')[0], {
+  fireEvent.change(screen.getByLabelText('What the participant sees *'), {
     target: { value: 'Do the thing' },
   });
-  fireEvent.change(screen.getAllByLabelText('Target URL')[0], {
+  fireEvent.change(screen.getByLabelText('Starting URL'), {
     target: { value: 'https://example.com/checkout' },
   });
 };
@@ -75,24 +80,18 @@ const fillRequiredFields = (overrides: { title?: string } = {}) => {
 // Pure helper: the missing-task-page-URL gate
 // ---------------------------------------------------------------------------
 describe('studyMissingTaskPageUrl', () => {
-  it('is true when a task step has no target url', () => {
-    expect(
-      studyMissingTaskPageUrl([{ type: 'instruction', target_url: '' }])
-    ).toBe(true);
+  it('is true when there are tasks but no starting url', () => {
+    expect(studyMissingTaskPageUrl([{ type: 'instruction' }], '')).toBe(true);
   });
 
-  it('is false when any task step has a target url', () => {
+  it('is false once a starting url is set', () => {
     expect(
-      studyMissingTaskPageUrl([
-        { type: 'instruction', target_url: 'https://example.com' },
-      ])
+      studyMissingTaskPageUrl([{ type: 'instruction' }], 'https://example.com')
     ).toBe(false);
   });
 
-  it('ignores end steps (a study of only end steps is not missing a task page)', () => {
-    expect(studyMissingTaskPageUrl([{ type: 'end', target_url: '' }])).toBe(
-      false
-    );
+  it('is false with no tasks at all - nothing to miss a page for', () => {
+    expect(studyMissingTaskPageUrl([], '')).toBe(false);
   });
 });
 
@@ -100,17 +99,19 @@ describe('studyMissingTaskPageUrl', () => {
 // Create flow
 // ---------------------------------------------------------------------------
 describe('StudyEditorForm - create', () => {
-  it('renders the create action and a first step by default', () => {
+  it('renders the create action, with no starting task', () => {
     renderForm();
     expect(
       screen.getByRole('button', { name: /Create task list/i })
     ).toBeInTheDocument();
-    expect(screen.getByText('Task 1')).toBeInTheDocument();
+    expect(
+      screen.getByText(/No tasks yet\. Add the first thing/i)
+    ).toBeInTheDocument();
   });
 
-  it('warns and blocks submit when a task step has no target url, then unblocks on acknowledgement', () => {
+  it('warns and blocks submit when a task has no starting url, then unblocks on acknowledgement', () => {
     renderForm();
-    // Default step is an instruction with no target url -> warning + disabled.
+    fireEvent.click(screen.getByRole('button', { name: 'Add task' }));
     expect(screen.getByText('No task page URL set')).toBeInTheDocument();
     const submit = screen.getByRole('button', { name: /Create task list/i });
     expect(submit).toBeDisabled();
@@ -121,8 +122,9 @@ describe('StudyEditorForm - create', () => {
     expect(submit).not.toBeDisabled();
   });
 
-  it('submits a valid study to createFirstHandStudy', async () => {
+  it('submits a valid study to createFirstHandStudy, with one study-level starting url', async () => {
     renderForm();
+    fireEvent.click(screen.getByRole('button', { name: 'Add task' }));
 
     fireEvent.change(screen.getByLabelText('Title'), {
       target: { value: 'Checkout study' },
@@ -133,10 +135,10 @@ describe('StudyEditorForm - create', () => {
     fireEvent.change(screen.getByLabelText('Consent text'), {
       target: { value: 'You consent to recording' },
     });
-    fireEvent.change(screen.getByLabelText('Prompt'), {
+    fireEvent.change(screen.getByLabelText('What the participant sees *'), {
       target: { value: 'Buy a product' },
     });
-    fireEvent.change(screen.getByLabelText('Target URL'), {
+    fireEvent.change(screen.getByLabelText('Starting URL'), {
       target: { value: 'https://example.com/checkout' },
     });
 
@@ -145,12 +147,32 @@ describe('StudyEditorForm - create', () => {
     await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(1));
     const payload = mockedCreate.mock.calls[0][0];
     expect(payload.title).toBe('Checkout study');
+    expect(payload.id).toMatch(/^study_/);
     expect(payload.steps[0].target_url).toBe('https://example.com/checkout');
+    expect(payload.steps[0].step_id.startsWith(`${payload.id}_`)).toBe(true);
     expect(mockedUpdate).not.toHaveBeenCalled();
   });
 
-  it('rejects an unsafe target URL client-side (shared url-safety) and does not call the API', async () => {
+  /**
+   * D4 drops the Locale field from the UI, but the pre-D4 form always sent
+   * 'en-GB' as its own default. Omitting the field on create entirely would
+   * leave a new list `locale = null` in storage, which nothing chose - so the
+   * default is still sent, just hidden. An edit must never carry it (it would
+   * overwrite a stored locale on every save), so this is create-only.
+   */
+  it('sends the en-GB locale default on create, as a hidden default', async () => {
     renderForm();
+    fillRequiredFields({ title: 'Locale default study' });
+
+    fireEvent.click(screen.getByRole('button', { name: /Create task list/i }));
+
+    await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(1));
+    expect(mockedCreate.mock.calls[0][0].locale).toBe('en-GB');
+  });
+
+  it('rejects an unsafe starting url client-side (shared url-safety) and does not call the API', async () => {
+    renderForm();
+    fireEvent.click(screen.getByRole('button', { name: 'Add task' }));
 
     fireEvent.change(screen.getByLabelText('Title'), {
       target: { value: 'Unsafe study' },
@@ -161,12 +183,12 @@ describe('StudyEditorForm - create', () => {
     fireEvent.change(screen.getByLabelText('Consent text'), {
       target: { value: 'Consent' },
     });
-    fireEvent.change(screen.getByLabelText('Prompt'), {
+    fireEvent.change(screen.getByLabelText('What the participant sees *'), {
       target: { value: 'Open the page' },
     });
     // A javascript: URL is rejected by the shared stepSchema (isSafeTargetUrl),
     // so the editor blocks the save before it ever reaches the API.
-    fireEvent.change(screen.getByLabelText('Target URL'), {
+    fireEvent.change(screen.getByLabelText('Starting URL'), {
       target: { value: 'javascript:alert(1)' },
     });
 
@@ -204,19 +226,26 @@ describe('StudyEditorForm - edit', () => {
     });
 
     expect(screen.getByLabelText('Title')).toHaveValue('Existing study');
+    expect(screen.getByLabelText('Starting URL')).toHaveValue('https://example.com');
     const submit = screen.getByRole('button', { name: /Save changes/i });
     fireEvent.click(submit);
 
     await waitFor(() => expect(mockedUpdate).toHaveBeenCalledTimes(1));
     expect(mockedUpdate.mock.calls[0][0]).toBe('study_abc');
     expect(mockedCreate).not.toHaveBeenCalled();
+    // The en-GB default is create-only: an update must never carry it, or
+    // every edit would silently overwrite whatever locale the study actually
+    // stores.
+    expect(mockedUpdate.mock.calls[0][1]).not.toHaveProperty('locale');
   });
 
   /**
    * Row 3: the standalone editor showed five task cards for a study the
    * wizard shows as four - the fifth was the `_step_end` completion marker,
-   * editable and removable here even though no authoring path ever writes
-   * one by hand.
+   * editable and removable there even though no authoring path ever writes
+   * one by hand. It is no longer offered as an editable row anywhere in this
+   * form (there is no per-task identity field left to render it through) and
+   * is still carried through to the save, unedited.
    */
   describe('the completion marker (row 3)', () => {
     const withEndMarker = {
@@ -243,12 +272,15 @@ describe('StudyEditorForm - edit', () => {
       },
     ];
 
-    it('excludes the end marker from the editable task list', () => {
+    it('excludes the end marker from the editable task list', async () => {
       renderForm({ initialStudy: withEndMarker, initialSteps: stepsWithEndMarker });
+      // Let the tab's own usage lookup settle before asserting, so its state
+      // update lands inside this test rather than warning after it.
+      await waitFor(() => expect(mockedUsage).toHaveBeenCalled());
 
       // One real task, not two - the terminator gets no card of its own.
-      expect(screen.getAllByLabelText('Task id')).toHaveLength(1);
-      expect(screen.getByLabelText('Task id')).toHaveValue('study_abc_step_1');
+      const list = screen.getByRole('list', { name: 'tasks in this list' });
+      expect(within(list).getAllByRole('listitem')).toHaveLength(1);
     });
 
     it('still saves the end marker unedited, after the last authored task', async () => {
@@ -473,14 +505,6 @@ describe('StudyEditorForm - edit', () => {
   /**
    * This surface has to carry the consent classification it loaded, or it will
    * silently reclassify studies the day a second template version ships.
-   *
-   * The server resolves the classification from the wording, and with no claim
-   * it can only compare against the CURRENT version. So after a v2, an author
-   * who opens a study running on verbatim v1 wording and changes only its
-   * TITLE would have the row rewritten to `custom` - approved wording,
-   * permanently badged as unapproved, from an edit that never touched consent.
-   * Harmless today, invisible until it is expensive, which is exactly why it is
-   * pinned now.
    */
   it('carries the consent classification it loaded back into the save', async () => {
     renderForm({
@@ -545,6 +569,105 @@ describe('StudyEditorForm - edit', () => {
     // it would be a claim the schema now insists travels with the wording.
     expect('consent_template_id' in payload).toBe(false);
   });
+
+  it('preserves a stored task\'s identity across a save, rather than renumbering it', async () => {
+    // Renumbering would detach whatever has already been recorded against the
+    // stored step id - see withStoredIdentity in hydrate-study.ts.
+    renderForm({
+      initialStudy: {
+        id: 'study_abc',
+        title: 'Existing study',
+        intro_text: 'Existing intro',
+        consent_text: 'Existing consent',
+        status: 'launched',
+      },
+      initialSteps: [
+        {
+          step_id: 'study_abc_step_001',
+          order: 1,
+          type: 'instruction',
+          prompt: 'Do the thing',
+          target_url: 'https://example.com',
+        },
+      ],
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Save changes/i }));
+
+    await waitFor(() => expect(mockedUpdate).toHaveBeenCalledTimes(1));
+    const steps = mockedUpdate.mock.calls[0][1].steps ?? [];
+    expect(steps[0].step_id).toBe('study_abc_step_001');
+  });
+
+  it('gives a freshly created study its own minted id, prefixed onto its step', async () => {
+    renderForm();
+    fillRequiredFields({ title: 'Prefixed study' });
+
+    fireEvent.click(screen.getByRole('button', { name: /Create task list/i }));
+    await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(1));
+
+    const payload = mockedCreate.mock.calls[0][0];
+    expect(payload.id).toMatch(/^study_/);
+    expect(payload.steps[0].step_id.startsWith(`${payload.id}_`)).toBe(true);
+  });
+
+  it('still mints a study id where crypto.randomUUID is unavailable', async () => {
+    // `randomUUID` is secure-context only, so it is absent over plain http -
+    // a dev server reached from another machine by IP, or an http staging
+    // host. `getRandomValues` is not, which is what the fallback is built on.
+    //
+    // It has to be SHADOWED, not deleted: `randomUUID` lives on
+    // `Crypto.prototype`, so `delete crypto.randomUUID` removes nothing and
+    // the real method shows through - which made an earlier version of this
+    // test pass against a build with no fallback at all.
+    const hadOwn = Object.prototype.hasOwnProperty.call(crypto, 'randomUUID');
+    Object.defineProperty(crypto, 'randomUUID', {
+      value: undefined,
+      configurable: true,
+      writable: true,
+    });
+    const randomBytes = vi.spyOn(crypto, 'getRandomValues');
+
+    try {
+      expect(typeof crypto.randomUUID).not.toBe('function');
+      renderForm();
+      fillRequiredFields({ title: 'Insecure context study' });
+      fireEvent.click(screen.getByRole('button', { name: /Create task list/i }));
+      await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(1));
+
+      const payload = mockedCreate.mock.calls[0][0];
+      expect(payload.id).toMatch(
+        /^study_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+      );
+      expect(payload.steps[0].step_id.startsWith(`${payload.id}_`)).toBe(true);
+      // A CSPRNG, not Math.random: this value becomes a primary key.
+      expect(randomBytes).toHaveBeenCalled();
+    } finally {
+      randomBytes.mockRestore();
+      if (!hadOwn) {
+        // @ts-expect-error - drop the shadow so the prototype method shows again.
+        delete crypto.randomUUID;
+      }
+    }
+  });
+
+  it('re-mints the study id after a failed create, so a retry is not a second collision', async () => {
+    mockedCreate.mockRejectedValueOnce(new Error('Network timeout'));
+
+    renderForm();
+    fillRequiredFields({ title: 'Retried study' });
+    fireEvent.click(screen.getByRole('button', { name: /Create task list/i }));
+    await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole('button', { name: /Create task list/i }));
+    await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(2));
+
+    const first = mockedCreate.mock.calls[0][0];
+    const retry = mockedCreate.mock.calls[1][0];
+
+    expect(retry.id).not.toBe(first.id);
+    expect(retry.id).toMatch(/^study_/);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -597,8 +720,6 @@ describe('StudyEditorForm - read only', () => {
     owner_user_id: 'user-owner',
   };
   const intruder = { id: 'user-intruder', role: 'researcher_admin' };
-  // A task step with a target URL, so the unrelated missing-task-page-URL gate
-  // is not what disables the submit in these assertions.
   const steps = [
     {
       step_id: 'study_abc_step_001',
@@ -621,15 +742,22 @@ describe('StudyEditorForm - read only', () => {
     // The whole fieldset, not just the button: the consent copy is the field
     // the attack rewrites, so it must not look editable either.
     expect(screen.getByLabelText('Consent text')).toBeDisabled();
-    expect(screen.getByRole('button', { name: /Add task/i })).toBeDisabled();
+    // The tasks body swaps to a plain read-only list rather than an editor
+    // with disabled controls (ReadOnlyStudyContent) - there is no "Add task"
+    // to disable in the first place.
+    expect(screen.queryByRole('button', { name: /Add task/i })).not.toBeInTheDocument();
+    expect(screen.getByTestId('read-only-study-content')).toBeInTheDocument();
   });
 
-  it('leaves the owner’s own study fully editable', () => {
+  it('leaves the owner’s own study fully editable', async () => {
     renderForm({
       initialStudy: ownedElsewhere,
       initialSteps: steps,
       viewer: { id: 'user-owner', role: 'researcher_admin' },
     });
+    // Let the tab's own usage lookup settle before asserting, so its state
+    // update lands inside this test rather than warning after it.
+    await waitFor(() => expect(mockedUsage).toHaveBeenCalled());
 
     expect(screen.queryByText('Read only')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Consent text')).toBeEnabled();
@@ -647,301 +775,7 @@ describe('StudyEditorForm - read only', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Step id namespacing
-//
-// `firsthand.study_steps.id` is a GLOBAL `TEXT PRIMARY KEY`, not scoped per
-// study, and `insertStudySteps` writes `step_id` straight into it. Position-only
-// defaults (`step_001`, `step_002`) therefore made the SECOND study authored
-// here fail on a unique violation, surfaced as a misleading 409 "Resource
-// already exists" about the study. These tests state the contract that closes
-// it: default step ids are unique per study, and unique within one.
-// ---------------------------------------------------------------------------
-describe('StudyEditorForm - step id namespacing', () => {
-  const existingStudy = {
-    id: 'study_abc',
-    title: 'Existing study',
-    intro_text: 'Existing intro',
-    consent_text: 'Existing consent',
-    status: 'launched',
-  } as const;
-
-  it('gives two freshly-created task lists disjoint step ids', async () => {
-    const first = renderForm();
-    fillRequiredFields({ title: 'First study' });
-    fireEvent.click(screen.getByRole('button', { name: /Create task list/i }));
-    await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(1));
-    first.unmount();
-
-    const second = renderForm();
-    fillRequiredFields({ title: 'Second study' });
-    fireEvent.click(screen.getByRole('button', { name: /Create task list/i }));
-    await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(2));
-    second.unmount();
-
-    const firstIds = mockedCreate.mock.calls[0][0].steps.map(
-      (step) => step.step_id
-    );
-    const secondIds = mockedCreate.mock.calls[1][0].steps.map(
-      (step) => step.step_id
-    );
-
-    expect(firstIds).toHaveLength(1);
-    expect(secondIds).toHaveLength(1);
-    // The regression: both studies used to default to `step_001`, so the second
-    // create hit a primary-key collision on a row the first study owned.
-    expect(firstIds.filter((id) => secondIds.includes(id))).toEqual([]);
-  });
-
-  it('sends the minted study id on create, and prefixes every step with it', async () => {
-    renderForm();
-    fillRequiredFields({ title: 'Prefixed study' });
-    fireEvent.click(screen.getByRole('button', { name: /Add task/i }));
-    fireEvent.change(screen.getAllByLabelText('Prompt')[1], {
-      target: { value: 'Second task' },
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: /Create task list/i }));
-    await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(1));
-
-    const payload = mockedCreate.mock.calls[0][0];
-    // Without the id on the payload the server mints its own, and the prefix
-    // baked into the step ids names a study that does not exist.
-    expect(payload.id).toMatch(/^study_/);
-    // Pin the whole sequence, not just the prefix: asserting only `startsWith`
-    // would accept an id built from a timestamp or a second uuid.
-    expect(payload.steps.map((step) => step.step_id)).toEqual([
-      `${payload.id}_step_001`,
-      `${payload.id}_step_002`,
-    ]);
-  });
-
-  it('re-mints the study id after a failed create, so a retry is not a second collision', async () => {
-    mockedCreate.mockRejectedValueOnce(new Error('Network timeout'));
-
-    renderForm();
-    fillRequiredFields({ title: 'Retried study' });
-    fireEvent.click(screen.getByRole('button', { name: /Create task list/i }));
-    await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(1));
-
-    // Retry the identical form.
-    fireEvent.click(screen.getByRole('button', { name: /Create task list/i }));
-    await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(2));
-
-    const first = mockedCreate.mock.calls[0][0];
-    const retry = mockedCreate.mock.calls[1][0];
-
-    // Without this the study may already be committed under `first.id`, and
-    // every retry collides on studies_pkey forever.
-    expect(retry.id).not.toBe(first.id);
-    expect(retry.id).toMatch(/^study_/);
-    // The step ids must follow the new id, or the prefix names a study that
-    // does not exist.
-    expect(retry.steps.map((step) => step.step_id)).toEqual([
-      `${retry.id}_step_001`,
-    ]);
-  });
-
-  it('does not hand out a sequence held by an id with surrounding whitespace', async () => {
-    renderForm({
-      initialStudy: existingStudy,
-      initialSteps: [
-        {
-          step_id: 'study_abc_step_001',
-          order: 1,
-          type: 'instruction',
-          prompt: 'One',
-          target_url: 'https://example.com',
-        },
-      ],
-    });
-
-    // The payload trims, so a spaced id claims the untrimmed sequence too.
-    fireEvent.change(screen.getByLabelText('Task id'), {
-      target: { value: '  study_abc_step_002  ' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: /Add task/i }));
-    fireEvent.change(screen.getAllByLabelText('Prompt')[1], {
-      target: { value: 'Second task' },
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: /Save changes/i }));
-    await waitFor(() => expect(mockedUpdate).toHaveBeenCalledTimes(1));
-
-    const ids = (mockedUpdate.mock.calls[0][1].steps ?? []).map(
-      (step) => step.step_id
-    );
-    expect(ids).toEqual(['study_abc_step_002', 'study_abc_step_003']);
-    expect(new Set(ids).size).toBe(ids.length);
-  });
-
-  it('takes a new step order from the highest in use, not the step count', async () => {
-    renderForm({
-      initialStudy: existingStudy,
-      // Non-contiguous orders are reachable through the API; `validateSteps`
-      // rejects a duplicate order but never requires contiguity.
-      initialSteps: [
-        {
-          step_id: 'study_abc_step_001',
-          order: 1,
-          type: 'instruction',
-          prompt: 'One',
-          target_url: 'https://example.com',
-        },
-        {
-          step_id: 'study_abc_step_004',
-          order: 4,
-          type: 'instruction',
-          prompt: 'Four',
-          target_url: 'https://example.com',
-        },
-      ],
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: /Add task/i }));
-    fireEvent.change(screen.getAllByLabelText('Prompt')[2], {
-      target: { value: 'New task' },
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: /Save changes/i }));
-    await waitFor(() => expect(mockedUpdate).toHaveBeenCalledTimes(1));
-
-    const orders = (mockedUpdate.mock.calls[0][1].steps ?? []).map(
-      (step) => step.order
-    );
-    // A count-derived order would repeat 4 and fail with "Duplicate step order".
-    expect(orders).toEqual([1, 4, 5]);
-  });
-
-  it('gives a step added to an existing study that study\'s prefix, and leaves stored ids alone', async () => {
-    renderForm({
-      initialStudy: existingStudy,
-      initialSteps: [
-        {
-          // A legacy bare id, written before namespacing existed.
-          step_id: 'step_001',
-          order: 1,
-          type: 'instruction',
-          prompt: 'Do the thing',
-          target_url: 'https://example.com',
-        },
-      ],
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: /Add task/i }));
-    fireEvent.change(screen.getAllByLabelText('Prompt')[1], {
-      target: { value: 'Second task' },
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: /Save changes/i }));
-    await waitFor(() => expect(mockedUpdate).toHaveBeenCalledTimes(1));
-
-    const [studyId, payload] = mockedUpdate.mock.calls[0];
-    expect(studyId).toBe('study_abc');
-    // Rewriting a stored step id would orphan the responses recorded against it.
-    expect(payload.steps?.[0].step_id).toBe('step_001');
-    expect(payload.steps?.[1].step_id).toBe('study_abc_step_002');
-    // The update route takes the id from the URL; sending one in the body would
-    // be an unused, client-controlled primary key.
-    expect(Object.prototype.hasOwnProperty.call(payload, 'id')).toBe(false);
-  });
-
-  it('still mints a study id where crypto.randomUUID is unavailable', async () => {
-    // `randomUUID` is secure-context only, so it is absent over plain http.
-    // `getRandomValues` is not, which is what the fallback is built on.
-    //
-    // It has to be SHADOWED, not deleted: `randomUUID` lives on
-    // `Crypto.prototype`, so `delete crypto.randomUUID` removes nothing and the
-    // real method shows through - which made an earlier version of this test
-    // pass against a build with no fallback at all.
-    const hadOwn = Object.prototype.hasOwnProperty.call(crypto, 'randomUUID');
-    Object.defineProperty(crypto, 'randomUUID', {
-      value: undefined,
-      configurable: true,
-      writable: true,
-    });
-    const randomBytes = vi.spyOn(crypto, 'getRandomValues');
-
-    try {
-      expect(typeof crypto.randomUUID).not.toBe('function');
-      renderForm();
-      fillRequiredFields({ title: 'Insecure context study' });
-      fireEvent.click(screen.getByRole('button', { name: /Create task list/i }));
-      await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(1));
-
-      const payload = mockedCreate.mock.calls[0][0];
-      expect(payload.id).toMatch(
-        /^study_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
-      );
-      expect(payload.steps[0].step_id).toBe(`${payload.id}_step_001`);
-      // A CSPRNG, not Math.random: this value becomes a primary key.
-      expect(randomBytes).toHaveBeenCalled();
-    } finally {
-      randomBytes.mockRestore();
-      if (!hadOwn) {
-        // @ts-expect-error - drop the shadow so the prototype method shows again.
-        delete crypto.randomUUID;
-      }
-    }
-  });
-
-  it('does not reissue a step id that a surviving step still holds', async () => {
-    renderForm({
-      initialStudy: existingStudy,
-      initialSteps: [
-        {
-          step_id: 'study_abc_step_001',
-          order: 1,
-          type: 'instruction',
-          prompt: 'One',
-          target_url: 'https://example.com',
-        },
-        {
-          step_id: 'study_abc_step_002',
-          order: 2,
-          type: 'instruction',
-          prompt: 'Two',
-          target_url: 'https://example.com',
-        },
-        {
-          step_id: 'study_abc_step_003',
-          order: 3,
-          type: 'instruction',
-          prompt: 'Three',
-          target_url: 'https://example.com',
-        },
-      ],
-    });
-
-    // Removing step 1 renumbers the survivors' `order` to 1 and 2 but leaves
-    // their ids at _002 and _003, so an id derived from position reissues _003.
-    fireEvent.click(screen.getAllByRole('button', { name: /Remove task/i })[0]);
-    fireEvent.click(screen.getByRole('button', { name: /Add task/i }));
-    fireEvent.change(screen.getAllByLabelText('Prompt')[2], {
-      target: { value: 'New task' },
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: /Save changes/i }));
-    await waitFor(() => expect(mockedUpdate).toHaveBeenCalledTimes(1));
-
-    const ids = (mockedUpdate.mock.calls[0][1].steps ?? []).map(
-      (step) => step.step_id
-    );
-    expect(ids).toEqual([
-      'study_abc_step_002',
-      'study_abc_step_003',
-      'study_abc_step_004',
-    ]);
-    expect(new Set(ids).size).toBe(ids.length);
-  });
-});
-
-// ---------------------------------------------------------------------------
 // The page, not the form
-//
-// Every test above hands StudyEditorForm an explicit `viewer`, so deleting
-// `viewer={user}` where the page renders the form would kill the whole
-// affordance with a green suite. This renders the page for real, through
-// useAuth and the study fetch, so that wire is covered too.
 // ---------------------------------------------------------------------------
 describe('StudyEditor page', () => {
   const renderPage = () =>
@@ -953,38 +787,7 @@ describe('StudyEditor page', () => {
       </MemoryRouter>
     );
 
-  it('passes the signed-in user through, so a study owned elsewhere is read only', async () => {
-    mockedUseAuth.mockReturnValue({
-      user: { id: 'user-intruder', role: 'researcher_admin' },
-      loading: false,
-    });
-    mockedGet.mockResolvedValue({
-      study: {
-        id: 'study_abc',
-        title: 'Someone else’s study',
-        intro_text: 'Intro',
-        consent_text: 'Original consent',
-        status: 'launched',
-        owner_user_id: 'user-owner',
-      },
-      steps: [
-        {
-          step_id: 'study_abc_step_001',
-          order: 1,
-          type: 'instruction',
-          prompt: 'Do the thing',
-          target_url: 'https://example.com/checkout',
-        },
-      ],
-    });
-
-    renderPage();
-
-    expect(await screen.findByText('Read only')).toBeInTheDocument();
-    expect(screen.getByLabelText('Consent text')).toBeDisabled();
-  });
-
-  it('leaves the owner their own study', async () => {
+  it('opens on the read-only detail view for an existing list', async () => {
     mockedUseAuth.mockReturnValue({
       user: { id: 'user-owner', role: 'researcher_admin' },
       loading: false,
@@ -1011,8 +814,155 @@ describe('StudyEditor page', () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText('Consent text')).toBeEnabled();
-    expect(screen.queryByText('Read only')).not.toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'My study' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Edit this list' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Title')).not.toBeInTheDocument();
+  });
+
+  it('shows the real usage count and studies on the detail view (D4/row 12)', async () => {
+    mockedUseAuth.mockReturnValue({
+      user: { id: 'user-owner', role: 'researcher_admin' },
+      loading: false,
+    });
+    mockedGet.mockResolvedValue({
+      study: {
+        id: 'study_abc',
+        title: 'My study',
+        intro_text: 'Intro',
+        consent_text: 'Consent',
+        status: 'launched',
+        owner_user_id: 'user-owner',
+      },
+      steps: [],
+    });
+    mockedUsage.mockResolvedValue({
+      count: 2,
+      studies: [
+        { id: 'opp_1', title: 'Checkout study', status: 'published' },
+        { id: 'opp_2', title: 'Onboarding study', status: 'draft' },
+      ],
+    });
+
+    renderPage();
+
+    await screen.findByText(/Used by 2 studies/i);
+    expect(mockedUsage).toHaveBeenCalledWith('study_abc');
+    expect(screen.getByText(/Checkout study/)).toBeInTheDocument();
+    expect(screen.getByText(/Onboarding study/)).toBeInTheDocument();
+  });
+
+  it('says nothing uses a list the usage endpoint reports empty', async () => {
+    mockedUseAuth.mockReturnValue({
+      user: { id: 'user-owner', role: 'researcher_admin' },
+      loading: false,
+    });
+    mockedGet.mockResolvedValue({
+      study: {
+        id: 'study_abc',
+        title: 'My study',
+        intro_text: 'Intro',
+        consent_text: 'Consent',
+        status: 'draft',
+        owner_user_id: 'user-owner',
+      },
+      steps: [],
+    });
+    mockedUsage.mockResolvedValue({ count: 0, studies: [] });
+
+    renderPage();
+
+    expect(
+      await screen.findByText(/No studies use this task list yet/i)
+    ).toBeInTheDocument();
+  });
+
+  it('switches into the wizard\'s Tasks body when "Edit this list" is clicked', async () => {
+    mockedUseAuth.mockReturnValue({
+      user: { id: 'user-owner', role: 'researcher_admin' },
+      loading: false,
+    });
+    mockedGet.mockResolvedValue({
+      study: {
+        id: 'study_abc',
+        title: 'My study',
+        intro_text: 'Intro',
+        consent_text: 'Consent',
+        status: 'launched',
+        owner_user_id: 'user-owner',
+      },
+      steps: [
+        {
+          step_id: 'study_abc_step_001',
+          order: 1,
+          type: 'instruction',
+          prompt: 'Do the thing',
+          target_url: 'https://example.com/checkout',
+        },
+      ],
+    });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit this list' }));
+
+    expect(await screen.findByLabelText('Title')).toHaveValue('My study');
+    // The task card starts collapsed; its summary carries the prompt.
+    expect(screen.getByText('Do the thing')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Save changes/i })
+    ).toBeInTheDocument();
+  });
+
+  it('does not offer "Edit this list" on a study owned elsewhere', async () => {
+    mockedUseAuth.mockReturnValue({
+      user: { id: 'user-intruder', role: 'researcher_admin' },
+      loading: false,
+    });
+    mockedGet.mockResolvedValue({
+      study: {
+        id: 'study_abc',
+        title: 'Someone else’s study',
+        intro_text: 'Intro',
+        consent_text: 'Original consent',
+        status: 'launched',
+        owner_user_id: 'user-owner',
+      },
+      steps: [],
+    });
+
+    renderPage();
+
+    await screen.findByRole('heading', { name: /Someone else/ });
+    expect(
+      screen.queryByRole('button', { name: 'Edit this list' })
+    ).not.toBeInTheDocument();
+  });
+
+  describe('a brand new list', () => {
+    const renderNewPage = () =>
+      render(
+        <MemoryRouter initialEntries={['/admin/studies/new']}>
+          <Routes>
+            <Route path="/admin/studies/new" element={<StudyEditor />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+    it('opens straight into the editor - there is nothing yet to view', () => {
+      mockedUseAuth.mockReturnValue({
+        user: { id: 'user-owner', role: 'researcher_admin' },
+        loading: false,
+      });
+
+      renderNewPage();
+
+      expect(screen.getByLabelText('Title')).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /Create task list/i })
+      ).toBeInTheDocument();
+      expect(mockedGet).not.toHaveBeenCalled();
+      expect(mockedUsage).not.toHaveBeenCalled();
+    });
   });
 });
 
@@ -1061,6 +1011,7 @@ describe('StudyEditor page - unsaved-changes guard (row 25)', () => {
   it('intercepts Back with a confirm dialog once a field has been edited', async () => {
     renderGuardedPage();
 
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit this list' }));
     const title = await screen.findByLabelText('Title');
     fireEvent.change(title, { target: { value: 'My study, revised' } });
 
@@ -1075,7 +1026,7 @@ describe('StudyEditor page - unsaved-changes guard (row 25)', () => {
   it('lets Back navigate straight through on a clean editor', async () => {
     renderGuardedPage();
 
-    // Wait for the form, then leave without touching anything.
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit this list' }));
     await screen.findByLabelText('Title');
     fireEvent.click(screen.getByRole('link', { name: 'Back to task lists' }));
 
@@ -1129,20 +1080,21 @@ describe('StudyEditor page - shell parity (row 35)', () => {
   it('wraps the page content in a card, like every wizard screen', async () => {
     renderPage();
 
-    const heading = await screen.findByRole('heading', { name: /Edit My study/i });
+    const heading = await screen.findByRole('heading', { name: 'My study' });
     expect(heading.closest('.card')).not.toBeNull();
   });
 
   it('shows the study status as a pill, not plain uppercase text', async () => {
     renderPage();
 
-    await screen.findByRole('heading', { name: /Edit My study/i });
+    await screen.findByRole('heading', { name: 'My study' });
     expect(screen.getByText('Published').className).toMatch(/rounded-full/);
   });
 
   it('gives "Add task" the shared orange token, not the navy secondary button', async () => {
     renderPage();
 
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit this list' }));
     const addTask = await screen.findByRole('button', { name: 'Add task' });
     expect(addTask).toHaveClass('btn-outline-primary');
     expect(addTask).not.toHaveClass('btn-secondary');
