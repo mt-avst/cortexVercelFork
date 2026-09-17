@@ -264,6 +264,37 @@ describe('D11 - past sessions stay out of the count', () => {
   });
 });
 
+describe('D11 - the grid counter equals the pickable cells', () => {
+  it('does not count a slot the grid disables (confirmed/created), and disables its cell', async () => {
+    // A generated slot that is already CONFIRMED (in confirmedSlots) renders as
+    // a disabled "created" cell - not the researcher's to pick here, removal
+    // lives in the list. The readout must exclude it the same way the grid
+    // disables it; `isConfirmed`/`isAllocated` join the exclusion so the counter
+    // equals the pickable cells. Without it this reads "1 slots available" over
+    // a grid whose only cell is disabled.
+    const slot = slotAt(10);
+    vi.mocked(getAvailability).mockResolvedValue({
+      available_slots: [slot],
+      total_slots: 1,
+      duration_minutes: 30,
+      time_range: { start: slot.start, end: slot.end },
+    } as never);
+    // Restored on mount for a temporary study (the branch that keeps stored
+    // confirmed slots rather than clearing them when there are no sessions).
+    sessionStorage.setItem('confirmedSlots_opp-1', JSON.stringify([`${slot.start}|${slot.end}`]));
+
+    renderManager({ isTemporary: true, sessions: [] });
+    await settle();
+
+    const grid = await screen.findByRole('grid', { name: /days as rows/i });
+    const cell = within(grid).getByTitle(/Session confirmed/i);
+    expect(cell.closest('button')).toBeDisabled();
+
+    const readout = await screen.findByText(/\d+ slots available/i);
+    expect(readout.textContent).toMatch(/\b0 slots available/i);
+  });
+});
+
 describe('D11 - the generator lives in a side panel', () => {
   it('defaults the working hours to 09:00 and 17:00', async () => {
     renderManager();

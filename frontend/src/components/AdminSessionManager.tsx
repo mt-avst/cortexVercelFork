@@ -2073,6 +2073,12 @@ const SessionStatusBand: React.FC<{ sessions: Session[] }> = ({ sessions }) => {
   const total = sessions.length;
   const past = sessions.filter(sessionIsPast).length;
   const upcoming = sessions.filter(session => !sessionIsPast(session));
+  // ponytail: these facets assume capacity 1 (which this UI always creates), so
+  //   they do NOT partition `total`: a partially-booked capacity>1 session is
+  //   both `booked` (booked_count>0) and `bookable` (remaining>0). The backend
+  //   permits capacity>=1, so if multi-capacity authoring ever lands here,
+  //   define whether the band counts SESSIONS or SEATS and split these facets
+  //   accordingly. Unexercised today.
   const booked = upcoming.filter(session => session.booked_count > 0).length;
   const bookable = upcoming.filter(session => session.remaining > 0).length;
 
@@ -2740,6 +2746,12 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
    * is the SAME predicate `tableSlotCount` below uses, so the two views can
    * only ever agree with each other and with what a click can actually do.
    */
+  // ponytail: this Calendar counter excludes calendar-conflict slots but not
+  //   isAllocated (non-exact overlap of a session) or isConfirmed, which the
+  //   view still disables - the same gap gridBookableCount now closes. Left
+  //   consistent with W2 rather than reworked mid-redesign.
+  //   -> follow-up: fold the allocated/confirmed exclusion into all three
+  //   counters together, sharing one predicate.
   const drawnSlots = React.useMemo(() => {
     const onScreen = visibleDayKeys(startDate, endDate, excludeWeekends, currentPage, daysPerPage);
     return slotsToDraw(displaySlots, durationMinutes, protectedSlotKeys).filter(slot => {
@@ -2775,6 +2787,9 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
    * predicate the table's own per-day chips use to decide "blocked", so the
    * headline can only ever agree with what is actually pickable.
    */
+  // ponytail: same shared gap as drawnSlots above - excludes conflicts but not
+  //   isAllocated/isConfirmed. Kept as W2 shipped it; the consistent fix across
+  //   all three counters is the follow-up noted at drawnSlots.
   const tableSlotCount = React.useMemo(() => {
     const inRange = new Set(
       daysInRange(startDate, endDate, excludeWeekends).map(d => d.toDateString())
@@ -2792,25 +2807,43 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
   /**
    * What the D11 grid's readout reports: the slots a researcher can actually
    * PICK from the grid - in range, within (or drawn beside) working hours, and
-   * neither a calendar conflict, nor past, nor an already-created session.
-   * `slotConflictsWithEvents` is the same predicate the grid's cells classify
-   * by and the same one `tableSlotCount` above uses, so the readout can only
-   * ever agree with what a click can do - the "counter equals selectable"
-   * truth W2 shipped, carried onto the new surface.
+   * none of the states the grid renders as a DISABLED cell: a calendar
+   * conflict, a past slot, an already-created session (exact key), a confirmed
+   * slot, or one allocated to a session at a non-exact boundary. The last two
+   * matter because the grid disables them too (they render as `created` /
+   * `conflict`), so counting them would over-report vs the pickable cells - the
+   * "counter equals selectable" truth W2 shipped, carried onto the new surface.
    */
   const gridBookableCount = React.useMemo(() => {
     const inRange = new Set(
       daysInRange(startDate, endDate, excludeWeekends).map(d => d.toDateString())
     );
+    // Overlaps a real session at a NON-exact boundary - describeSlot marks this
+    // `isAllocated` and the grid disables it. An exact-key match is an existing
+    // session, excluded separately via sessionSlotKeys.
+    const isAllocated = (slot: AvailableSlot): boolean => {
+      const slotStart = new Date(slot.start).getTime();
+      const slotEnd = new Date(slot.end).getTime();
+      return sessions.some(session => {
+        const sessionStart = new Date(session.start_time).getTime();
+        const sessionEnd = new Date(session.end_time).getTime();
+        const overlaps = slotStart < sessionEnd && slotEnd > sessionStart;
+        const exact = slotStart === sessionStart && slotEnd === sessionEnd;
+        return overlaps && !exact;
+      });
+    };
     return slotsToDraw(displaySlots, durationMinutes, protectedSlotKeys).filter(slot => {
       const when = new Date(slot.start);
       if (Number.isNaN(when.getTime())) return false;
       if (!inRange.has(when.toDateString())) return false;
       if (slotConflictsWithEvents(slot, calendarEvents)) return false;
       if (slotIsPast(slot)) return false;
-      return !sessionSlotKeys.has(slotKeyOf(slot));
+      const key = slotKeyOf(slot);
+      if (sessionSlotKeys.has(key)) return false;
+      if (confirmedSlots.has(key)) return false;
+      return !isAllocated(slot);
     }).length;
-  }, [displaySlots, durationMinutes, protectedSlotKeys, startDate, endDate, excludeWeekends, calendarEvents, sessionSlotKeys]);
+  }, [displaySlots, durationMinutes, protectedSlotKeys, startDate, endDate, excludeWeekends, calendarEvents, sessionSlotKeys, confirmedSlots, sessions]);
 
   /**
    * Existing sessions the Calendar view's grid cannot draw at all (row 39),
@@ -3711,8 +3744,12 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       <div className="calendar-mode">
 
           {/* D11 surface styles. Token-based and theme-aware: no forced
-              overrides and no hard-coded near-white or red literals - the row 3
-              source guard keeps those out. */}
+              overrides, and none of the row-3 forbidden literals (the near-white
+              muted rgba, the red focus border). White text appears only on the
+              AA-safe accent fill (--accent-fill-text-safe), never on a raw
+              brand-orange background - the accent-fill AA guard in
+              AdminSessionManager.inline-style.test.ts fails by name if that
+              pairing ever creeps back. */}
           <style>{`
             .session-status-band { display:flex; flex-wrap:wrap; gap:22px; align-items:center;
               border:1px solid var(--border-card); border-radius: var(--card-radius, 8px);
@@ -3771,10 +3808,15 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
               padding:2px 3px; line-height:1.1; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
             .session-cellbtn-time { pointer-events:none; }
             .session-cellbtn-available:hover { border-color: var(--brand-orange-500); }
-            .session-cellbtn-selected { background: var(--brand-orange-500);
-              border-color: var(--brand-orange-700); color:#fff; }
-            .session-cellbtn-booked { background: var(--brand-orange-500);
-              border-color: var(--brand-orange-700); color:#fff; cursor:not-allowed; }
+            /* --accent-fill-text-safe is the accent FILL proven >= 4.5:1 under
+               white text in both themes (5.77 dark / 5.18 light); brand-orange-500
+               under white is only ~2.6:1, below AA for the .62rem cell label. The
+               text-carrying accent cells fill with the text-safe token, not the
+               raw ramp step - so no white text sits on a brand-orange fill here. */
+            .session-cellbtn-selected { background: var(--accent-fill-text-safe);
+              border-color: var(--accent-fill-text-safe); color:#fff; }
+            .session-cellbtn-booked { background: var(--accent-fill-text-safe);
+              border-color: var(--accent-fill-text-safe); color:#fff; cursor:not-allowed; }
             .session-cellbtn-created { border-color: var(--brand-orange-700); cursor:not-allowed; }
             .session-cellbtn-conflict { border-style:dashed; cursor:not-allowed; color: var(--text-muted);
               background: repeating-linear-gradient(45deg, var(--bg-app) 0, var(--bg-app) 3px, transparent 3px, transparent 6px); }
