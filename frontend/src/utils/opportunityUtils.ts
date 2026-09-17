@@ -1,6 +1,7 @@
 // Utility functions for opportunity-related operations
 
 import { Opportunity } from '../api/types';
+import { runsNativeSurvey, QUESTION_CARRYING_TYPES } from '@shared/firsthand/delivery';
 
 /**
  * Checks if an opportunity type uses external links (no sessions)
@@ -362,6 +363,232 @@ export const opportunityMatchesRoles = (
   opportunity: Pick<Opportunity, 'target_roles'>,
   activeRoles: readonly string[]
 ): boolean => rolesIntersect(opportunity.target_roles, activeRoles);
+
+/**
+ * BROWSE FACETS (phase 2) - client-side narrowing of the already-loaded
+ * published set. Every axis operates on the loaded studies; there is no new
+ * list query. See the cap caveat: valid only while the published count is at or
+ * below the list endpoint's cap (mirrored in PUBLISHED_LIST_CAP below).
+ */
+
+export type StudyDelivery = 'in_app' | 'external';
+
+/**
+ * How a participant reaches the study: inside Cortex, or handed off to a
+ * third-party form. Only a question-carrying type (poll/survey/question) set to
+ * EXTERNAL delivery hands off; a native survey, a recorded study, a test and an
+ * interview all run in-app. Derived from `runsNativeSurvey` so this and the
+ * authoring/detail surfaces cannot disagree about what "native" means.
+ */
+export const getStudyDelivery = (
+  opportunity: Pick<Opportunity, 'type' | 'delivery_mode'>
+): StudyDelivery => {
+  // Strip a status suffix the list API has been seen concatenating onto the type
+  // (baseTypeOf's reason for existing), and use the STRIPPED value everywhere -
+  // runsNativeSurvey does an exact set membership, so passing the raw type would
+  // read `surveypublished` as not-question-carrying and mis-file a native survey.
+  const type = baseTypeOf(opportunity.type);
+  const isQuestionCarrying = QUESTION_CARRYING_TYPES.has(type);
+  return isQuestionCarrying && !runsNativeSurvey(type, opportunity.delivery_mode)
+    ? 'external'
+    : 'in_app';
+};
+
+export const DELIVERY_LABELS: Record<StudyDelivery, string> = {
+  in_app: 'In Cortex',
+  external: 'External hand-off',
+};
+
+export type StudyTimeBucket = 'under_5' | '5_15' | '15_30' | '30_plus' | 'unspecified';
+
+/** The buckets in display order, with their participant-facing labels. */
+export const STUDY_TIME_BUCKETS: readonly { key: StudyTimeBucket; label: string }[] = [
+  { key: 'under_5', label: 'Under 5 min' },
+  { key: '5_15', label: '5-15 min' },
+  { key: '15_30', label: '15-30 min' },
+  { key: '30_plus', label: '30+ min' },
+  { key: 'unspecified', label: 'Not specified' },
+];
+
+const TIME_BUCKET_LABEL: Record<StudyTimeBucket, string> = STUDY_TIME_BUCKETS.reduce(
+  (acc, b) => ({ ...acc, [b.key]: b.label }),
+  {} as Record<StudyTimeBucket, string>
+);
+
+export const timeBucketLabel = (bucket: StudyTimeBucket): string => TIME_BUCKET_LABEL[bucket];
+
+const bucketForMinutes = (minutes: number): StudyTimeBucket =>
+  minutes < 5 ? 'under_5' : minutes < 15 ? '5_15' : minutes < 30 ? '15_30' : '30_plus';
+
+/**
+ * A coarse time-commitment bucket, DERIVED PER TYPE - never a stored field -
+ * mirroring exactly what the detail page tells a participant taking part:
+ *
+ *  - test / interview: `default_duration_minutes` (the researcher set it)
+ *  - recorded (unmoderated): the estimate lives on the STUDY, not the list
+ *    payload, so the browse list has no figure and reads "Not specified"; when a
+ *    caller does have the estimate (the detail page) it is passed and bucketed,
+ *    so this stays the one source of truth. `default_duration_minutes` is
+ *    NOT NULL DEFAULT 30 and meaningless for this type, so it is never read.
+ *  - native survey/poll/question: an honest qualitative expectation - a survey
+ *    is "a few minutes", a poll or single question one interaction - both under 5
+ *  - external hand-off (and anything unrecognised): Cortex never sees the form,
+ *    so no time is claimed - "Not specified"
+ */
+export const getStudyTimeBucket = (
+  opportunity: Pick<Opportunity, 'type' | 'default_duration_minutes' | 'delivery_mode'> & {
+    estimated_duration_minutes?: number | null;
+  }
+): StudyTimeBucket => {
+  const type = baseTypeOf(opportunity.type);
+
+  if (type === 'test' || type === 'interview') {
+    return bucketForMinutes(opportunity.default_duration_minutes);
+  }
+
+  if (type === 'unmoderated') {
+    return opportunity.estimated_duration_minutes != null
+      ? bucketForMinutes(opportunity.estimated_duration_minutes)
+      : 'unspecified';
+  }
+
+  // The STRIPPED type, for the same reason as getStudyDelivery above.
+  if (runsNativeSurvey(type, opportunity.delivery_mode)) {
+    return 'under_5';
+  }
+
+  return 'unspecified';
+};
+
+/**
+ * The active facet selection. An empty axis is NO constraint on that axis;
+ * within an axis the values are OR'd; across axes they are AND'd.
+ */
+export interface StudyFacetSelection {
+  roles: string[];
+  types: string[];
+  deliveries: StudyDelivery[];
+  timeBuckets: StudyTimeBucket[];
+}
+
+// Frozen so this shared cleared-value singleton cannot have its axes reassigned
+// and poisoned for every consumer. The arrays themselves are never mutated in
+// place - `toggle` always returns a new array and setFacetSelection replaces the
+// whole object - so the object freeze plus that pure-update contract is the
+// guarantee (the arrays stay typed mutable because StudyFacetSelection is).
+export const EMPTY_FACET_SELECTION: StudyFacetSelection = Object.freeze({
+  roles: [],
+  types: [],
+  deliveries: [],
+  timeBuckets: [],
+});
+
+export const facetSelectionCount = (selection: StudyFacetSelection): number =>
+  selection.roles.length +
+  selection.types.length +
+  selection.deliveries.length +
+  selection.timeBuckets.length;
+
+/**
+ * The list endpoint's hard cap on returned published studies
+ * (backend `MAX_OPPORTUNITIES_RETURNED`, opportunities.ts), mirrored here as a
+ * literal and pinned in a test.
+ *
+ * Client-side faceting is complete only while the published set is at or below
+ * this. Crucially, the list endpoint does NOT silently truncate above it: it
+ * queries `LIMIT cap + 1` and returns HTTP 413 when the count exceeds the cap
+ * (opportunities.ts). So a rendered list is always the WHOLE published set - a
+ * successful response can never be a truncated page - which is why there is no
+ * "showing the first N" notice here: it could never correctly fire (exactly-cap
+ * is the complete set; over-cap fails the request outright). When the count
+ * approaches the cap, faceting moves server-side (phase 3), which will also give
+ * the >cap case a real listing instead of a 413. If the backend constant changes,
+ * this literal and its pinning test change with it - the coupling is enforced by
+ * the test, not the type system (they cannot import across the bundle boundary).
+ */
+export const PUBLISHED_LIST_CAP = 1000;
+
+export interface FacetOptions {
+  roles: string[];
+  types: string[];
+  deliveries: StudyDelivery[];
+  timeBuckets: StudyTimeBucket[];
+}
+
+/**
+ * The facet options actually PRESENT across the loaded studies, so a participant
+ * is never offered a value that matches nothing. Roles keep the viewer's own
+ * profile roles first (then the rest, case-insensitively de-duplicated); types,
+ * deliveries and time buckets come out in a stable canonical order.
+ */
+export const deriveFacetOptions = (
+  opportunities: readonly Opportunity[],
+  profileRoles: readonly string[] = []
+): FacetOptions => {
+  const roleFirstSpelling = new Map<string, string>();
+  const presentTypes = new Set<string>();
+  const presentDeliveries = new Set<StudyDelivery>();
+  const presentBuckets = new Set<StudyTimeBucket>();
+
+  const addRole = (role: string) => {
+    const key = role.trim().toLowerCase();
+    if (key && !roleFirstSpelling.has(key)) {
+      roleFirstSpelling.set(key, role.trim());
+    }
+  };
+
+  // Viewer's own profile roles first, but only the ones some study advertises.
+  const advertised = new Set<string>();
+  for (const opp of opportunities) {
+    presentTypes.add(baseTypeOf(opp.type));
+    presentDeliveries.add(getStudyDelivery(opp));
+    presentBuckets.add(getStudyTimeBucket(opp));
+    for (const role of opp.target_roles ?? []) {
+      advertised.add(role.trim().toLowerCase());
+    }
+  }
+  for (const role of profileRoles) {
+    if (advertised.has(role.trim().toLowerCase())) {
+      addRole(role);
+    }
+  }
+  for (const opp of opportunities) {
+    for (const role of opp.target_roles ?? []) {
+      addRole(role);
+    }
+  }
+
+  const CANONICAL_TYPES = ['test', 'unmoderated', 'survey', 'poll', 'interview', 'question'];
+  return {
+    roles: [...roleFirstSpelling.values()],
+    types: CANONICAL_TYPES.filter((t) => presentTypes.has(t)),
+    deliveries: (['in_app', 'external'] as StudyDelivery[]).filter((d) => presentDeliveries.has(d)),
+    timeBuckets: STUDY_TIME_BUCKETS.map((b) => b.key).filter((k) => presentBuckets.has(k)),
+  };
+};
+
+/** AND across axes, OR within each axis; an empty axis imposes no constraint. */
+export const opportunityPassesFacets = (
+  opportunity: Pick<Opportunity, 'type' | 'default_duration_minutes' | 'delivery_mode' | 'target_roles'>,
+  selection: StudyFacetSelection
+): boolean => {
+  if (selection.roles.length > 0 && !rolesIntersect(opportunity.target_roles, selection.roles)) {
+    return false;
+  }
+  if (selection.types.length > 0 && !selection.types.includes(baseTypeOf(opportunity.type))) {
+    return false;
+  }
+  if (selection.deliveries.length > 0 && !selection.deliveries.includes(getStudyDelivery(opportunity))) {
+    return false;
+  }
+  if (
+    selection.timeBuckets.length > 0 &&
+    !selection.timeBuckets.includes(getStudyTimeBucket(opportunity))
+  ) {
+    return false;
+  }
+  return true;
+};
 
 /**
  * The countdown for a known closing time.
