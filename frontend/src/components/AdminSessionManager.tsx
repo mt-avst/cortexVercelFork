@@ -121,14 +121,24 @@ interface CalendarViewProps {
   protectedSlotKeys: ReadonlySet<string>;
   /**
    * Which presentation to draw the same pickable slots in:
-   * - 'table' - day-grouped selectable chips, the DEFAULT picker (Mav & Petra
-   *   asked for the table to lead and the calendar to be optional)
-   * - 'calendar' - the time-axis grid, kept as the optional power view
+   * - 'grid' - the D11 time-axis grid: days as rows, hours as columns, the
+   *   DEFAULT picking surface (approved wireframe PNM41RsfTkKJiQW48KoPtv)
+   * - 'table' - day-grouped selectable chips, kept reachable
+   * - 'calendar' - the positioned timeline, kept as the optional power view
+   *   (and the one the #95 gutter row lives in)
    *
-   * Both layouts share every selection helper below, so a slot behaves
+   * All three layouts share every selection helper below, so a slot behaves
    * identically whichever one is on screen.
    */
-  layout?: 'calendar' | 'table';
+  layout?: 'calendar' | 'table' | 'grid';
+  /**
+   * The working-hours window the D11 grid draws as its hour COLUMNS (default
+   * 09:00-17:00). The grid widens this to include any slot that falls outside
+   * it, so a slot is never added-but-undrawn - the same guarantee the timeline
+   * gutter gives - but working hours are what it opens on, not the whole day.
+   */
+  workStartHour?: number;
+  workEndHour?: number;
   /**
    * Whether the surrounding step is read-only (saving in flight, or an edit
    * still loading). The table picker disables its chips and select-all while it
@@ -443,6 +453,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   sessions,
   protectedSlotKeys,
   layout = 'calendar',
+  workStartHour = 9,
+  workEndHour = 17,
   disabled = false
 }) => {
   /**
@@ -1535,6 +1547,148 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     );
   };
 
+  /**
+   * The D11 time-axis grid: days as ROWS, hours as COLUMNS (approved wireframe
+   * PNM41RsfTkKJiQW48KoPtv). One cell per (day, hour); the slots that START in
+   * that hour stack inside it, so a :00 and a :30 both show without the grid
+   * needing a column per half-hour. Every cell is a real control - available is
+   * a pickable button, and booked / calendar-conflict / past are DISABLED
+   * buttons, never `role="img"` (the a11y fix W2 shipped for the chip table,
+   * carried here). Drawn with ARIA grid roles rather than a `<table>` element so
+   * the ListView table beneath it stays the page's only `role="table"`.
+   */
+  const renderGridLayout = () => {
+    if (!durationMinutes) {
+      return (
+        <div className="alert alert-info mb-0" role="alert">
+          <Info size={18} className="me-2" />
+          Choose a timeslot duration above to see slots you can offer.
+        </div>
+      );
+    }
+
+    // Hour columns: the working-hours window, WIDENED to include any slot that
+    // falls outside it - a slot added off-hours is drawn where it can be
+    // clicked rather than silently dropped, the same guarantee the timeline
+    // gutter gives (#95). Working hours are just where the grid opens.
+    const slotStartHours = cleanedSlots
+      .map(slot => new Date(slot.start).getHours())
+      .filter(hour => !Number.isNaN(hour));
+    const slotEndHours = cleanedSlots
+      .map(slot => {
+        const end = new Date(slot.end);
+        const start = new Date(slot.start);
+        if (Number.isNaN(end.getTime()) || Number.isNaN(start.getTime())) return NaN;
+        // The hour the slot needs a column up to; a :30-ending slot still lives
+        // in its start hour's column, so ceil to the hour it reaches into.
+        return end.getHours() + (end.getMinutes() > 0 ? 1 : 0);
+      })
+      .filter(hour => !Number.isNaN(hour));
+    const firstHour = Math.min(workStartHour, ...(slotStartHours.length ? slotStartHours : [workStartHour]));
+    const lastHour = Math.max(workEndHour, ...(slotEndHours.length ? slotEndHours : [workEndHour]));
+    const hours: number[] = [];
+    for (let hour = firstHour; hour < lastHour; hour++) hours.push(hour);
+
+    const pad2 = (n: number) => String(n).padStart(2, '0');
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    if (allDays.length === 0) {
+      return (
+        <div className="alert alert-info mb-0" role="alert">
+          <Info size={18} className="me-2" />
+          No days in this date range. Widen the range or include weekends in the panel.
+        </div>
+      );
+    }
+
+    return (
+      <div className="session-grid-wrap">
+        <div
+          className="session-grid"
+          role="grid"
+          aria-label="Session slots - days as rows, hours as columns"
+          style={{ gridTemplateColumns: `minmax(104px, 1.4fr) repeat(${hours.length}, minmax(38px, 1fr))` }}
+        >
+          <div className="session-grid-row session-grid-headrow" role="row">
+            <span className="session-grid-corner" role="columnheader">Day / hour</span>
+            {hours.map(hour => (
+              <span key={hour} className="session-grid-hourhead" role="columnheader">
+                {pad2(hour)}
+              </span>
+            ))}
+          </div>
+          {allDays.map(day => {
+            const key = day.toDateString();
+            const isPastDay = day < startOfToday;
+            const daySlots = pruneOverlaps(allSlotsByDate[key] || [], protectedSlotKeys)
+              .slice()
+              .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+            return (
+              <div key={key} className={`session-grid-row${isPastDay ? ' session-grid-pastrow' : ''}`} role="row">
+                <span className="session-grid-dayhead" role="rowheader">
+                  {formatDate(day.toISOString())}
+                  {isPastDay && <span className="session-grid-pasttag"> · past</span>}
+                </span>
+                {hours.map(hour => {
+                  const cellSlots = daySlots.filter(
+                    slot => new Date(slot.start).getHours() === hour
+                  );
+                  return (
+                    <span key={hour} className="session-grid-cell" role="gridcell">
+                      {cellSlots.length === 0 ? (
+                        <span className="session-grid-empty" aria-hidden="true" />
+                      ) : (
+                        cellSlots.map(slot => {
+                          const status = describeSlot(slot);
+                          // One state class, mutually exclusive, matching the
+                          // legend. An existing session (created/booked) is
+                          // shown but NOT pickable here - it is removed in the
+                          // list beneath, which carries the booked-count guard,
+                          // so the grid never offers a second delete affordance.
+                          let stateClass = 'available';
+                          if (status.isBusy || status.isAllocated) stateClass = 'conflict';
+                          else if (status.session && status.session.booked_count > 0) stateClass = 'booked';
+                          else if (status.session || status.isConfirmed) stateClass = 'created';
+                          else if (status.isPast) stateClass = 'past';
+                          else if (status.isSelected) stateClass = 'selected';
+                          // Only a free slot the researcher can newly pick, or
+                          // one they have already selected (toggle off), is
+                          // interactive. Booked, conflicting, past and existing
+                          // sessions are disabled buttons - never `role="img"`.
+                          const pickable = stateClass === 'available' || stateClass === 'selected';
+                          const label = slotTimeLabel(slot) ?? formatTime(slot.start);
+                          return (
+                            <button
+                              key={slotKeyOf(slot)}
+                              type="button"
+                              className={`session-cellbtn session-cellbtn-${stateClass}`}
+                              aria-pressed={status.isSelected || status.isConfirmed}
+                              disabled={!pickable}
+                              title={slotTooltip(slot, status)}
+                              aria-label={slotTooltip(slot, status)}
+                              onClick={() => clickSlot(slot, status)}
+                            >
+                              <span className="session-cellbtn-time">{label}</span>
+                            </button>
+                          );
+                        })
+                      )}
+                    </span>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  if (layout === 'grid') {
+    return renderGridLayout();
+  }
+
   if (layout === 'table') {
     return renderTableLayout();
   }
@@ -1903,6 +2057,63 @@ const ListView: React.FC<{
   );
 };
 
+/**
+ * The summary-first status band (D11).
+ *
+ * The step opens with WHERE THE STUDY STANDS, not the tool: "No slots yet" when
+ * there are none, otherwise a one-line read of the study's own slots -
+ * "N slots total · N bookable · N booked · N past". Bookable is upcoming
+ * capacity that can still be booked (remaining > 0), so it excludes past slots
+ * and fully-booked ones, consistent with W2's "counter equals selectable"
+ * truth. The four figures are FACETS of the study's sessions, not the
+ * generator's availability grid - a researcher reads it to answer "is this
+ * study bookable yet", which the old "159 slots available" headline never did.
+ */
+const SessionStatusBand: React.FC<{ sessions: Session[] }> = ({ sessions }) => {
+  const total = sessions.length;
+  const past = sessions.filter(sessionIsPast).length;
+  const upcoming = sessions.filter(session => !sessionIsPast(session));
+  // ponytail: these facets assume capacity 1 (which this UI always creates), so
+  //   they do NOT partition `total`: a partially-booked capacity>1 session is
+  //   both `booked` (booked_count>0) and `bookable` (remaining>0). The backend
+  //   permits capacity>=1, so if multi-capacity authoring ever lands here,
+  //   define whether the band counts SESSIONS or SEATS and split these facets
+  //   accordingly. Unexercised today.
+  const booked = upcoming.filter(session => session.booked_count > 0).length;
+  const bookable = upcoming.filter(session => session.remaining > 0).length;
+
+  if (total === 0) {
+    return (
+      <div
+        className="session-status-band session-status-band-empty"
+        role="status"
+        data-testid="session-status-band"
+      >
+        <div className="session-band-seg">
+          <span className="session-band-n">No slots yet</span>
+          <span className="session-band-k">add slots on the grid, or in the panel</span>
+        </div>
+      </div>
+    );
+  }
+
+  const seg = (n: number, label: string, key = false) => (
+    <div className="session-band-seg">
+      <span className={`session-band-n${key ? ' session-band-key' : ''}`}>{n}</span>
+      <span className="session-band-k">{label}</span>
+    </div>
+  );
+
+  return (
+    <div className="session-status-band" role="status" data-testid="session-status-band">
+      {seg(total, 'slots total', true)}
+      {seg(bookable, 'bookable')}
+      {seg(booked, 'booked')}
+      {seg(past, 'past')}
+    </div>
+  );
+};
+
 const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
   opportunityId,
   sessions,
@@ -2051,12 +2262,13 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
     : 'Confirm & continue';
   const [confirmedSlots, setConfirmedSlots] = useState<Set<string>>(getStoredConfirmedSlots);
   
-  // View mode. Defaults to the LIST (row 6), not the calendar grid: editing a
-  // study opens on a plain list of the sessions that already exist - including
-  // ones outside the grid's tomorrow-to-+7-days window, which the grid never
-  // showed at rest - and the calendar is the opt-in tool for adding more. This
-  // mirrors the participant Table-default shipped in !365/!366.
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
+  // View mode (D11). Defaults to the time-axis GRID - days as rows, hours as
+  // columns - which is the summary-first picking surface the approved wireframe
+  // leads with. 'calendar' is the positioned timeline (the #95 gutter lives
+  // there), 'list' is the day-grouped chip table; both stay reachable through
+  // the segmented control. The existing-sessions list renders beneath the grid
+  // and the table alike, so a study's saved slots are always in view at rest.
+  const [viewMode, setViewMode] = useState<'grid' | 'calendar' | 'list'>('grid');
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
@@ -2143,6 +2355,13 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       : 30 // Default to 30 minutes if no valid defaultDurationMinutes provided
   ); // Only allow 15, 30, 45, or 60 minutes
   const [excludeWeekends, setExcludeWeekends] = useState(true); // Exclude weekends by default
+
+  // Working hours the D11 grid opens on (its hour columns). Defaults to a
+  // 09:00-17:00 day rather than the timeline's whole 07:00-23:00 span, so the
+  // grid does not sit tall pushing the schedule below the fold. The grid widens
+  // these to include any slot that falls outside them, so nothing is hidden.
+  const [workStartHour, setWorkStartHour] = useState(9);
+  const [workEndHour, setWorkEndHour] = useState(17);
   
   // Pagination controls - now based on days instead of slots
   const [currentPage, setCurrentPage] = useState(0);
@@ -2527,6 +2746,13 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
    * is the SAME predicate `tableSlotCount` below uses, so the two views can
    * only ever agree with each other and with what a click can actually do.
    */
+  // ponytail: this Calendar counter excludes calendar-conflict slots but not
+  //   isAllocated (non-exact overlap of a session), isConfirmed, or slotIsPast -
+  //   three divergence axes the view still disables (or greys) that
+  //   gridBookableCount now closes. Left consistent with W2 rather than reworked
+  //   mid-redesign.
+  //   -> cto/AdaptaLabs#135: fold the allocated/confirmed/past exclusion into all
+  //   three counters together, sharing one predicate.
   const drawnSlots = React.useMemo(() => {
     const onScreen = visibleDayKeys(startDate, endDate, excludeWeekends, currentPage, daysPerPage);
     return slotsToDraw(displaySlots, durationMinutes, protectedSlotKeys).filter(slot => {
@@ -2562,6 +2788,9 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
    * predicate the table's own per-day chips use to decide "blocked", so the
    * headline can only ever agree with what is actually pickable.
    */
+  // ponytail: same shared gap as drawnSlots above - excludes conflicts but not
+  //   isAllocated, isConfirmed or slotIsPast. Kept as W2 shipped it; the
+  //   consistent fix across all three counters is cto/AdaptaLabs#135.
   const tableSlotCount = React.useMemo(() => {
     const inRange = new Set(
       daysInRange(startDate, endDate, excludeWeekends).map(d => d.toDateString())
@@ -2575,6 +2804,47 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       );
     }).length;
   }, [displaySlots, durationMinutes, protectedSlotKeys, startDate, endDate, excludeWeekends, calendarEvents]);
+
+  /**
+   * What the D11 grid's readout reports: the slots a researcher can actually
+   * PICK from the grid - in range, within (or drawn beside) working hours, and
+   * none of the states the grid renders as a DISABLED cell: a calendar
+   * conflict, a past slot, an already-created session (exact key), a confirmed
+   * slot, or one allocated to a session at a non-exact boundary. The last two
+   * matter because the grid disables them too (they render as `created` /
+   * `conflict`), so counting them would over-report vs the pickable cells - the
+   * "counter equals selectable" truth W2 shipped, carried onto the new surface.
+   */
+  const gridBookableCount = React.useMemo(() => {
+    const inRange = new Set(
+      daysInRange(startDate, endDate, excludeWeekends).map(d => d.toDateString())
+    );
+    // Overlaps a real session at a NON-exact boundary - describeSlot marks this
+    // `isAllocated` and the grid disables it. An exact-key match is an existing
+    // session, excluded separately via sessionSlotKeys.
+    const isAllocated = (slot: AvailableSlot): boolean => {
+      const slotStart = new Date(slot.start).getTime();
+      const slotEnd = new Date(slot.end).getTime();
+      return sessions.some(session => {
+        const sessionStart = new Date(session.start_time).getTime();
+        const sessionEnd = new Date(session.end_time).getTime();
+        const overlaps = slotStart < sessionEnd && slotEnd > sessionStart;
+        const exact = slotStart === sessionStart && slotEnd === sessionEnd;
+        return overlaps && !exact;
+      });
+    };
+    return slotsToDraw(displaySlots, durationMinutes, protectedSlotKeys).filter(slot => {
+      const when = new Date(slot.start);
+      if (Number.isNaN(when.getTime())) return false;
+      if (!inRange.has(when.toDateString())) return false;
+      if (slotConflictsWithEvents(slot, calendarEvents)) return false;
+      if (slotIsPast(slot)) return false;
+      const key = slotKeyOf(slot);
+      if (sessionSlotKeys.has(key)) return false;
+      if (confirmedSlots.has(key)) return false;
+      return !isAllocated(slot);
+    }).length;
+  }, [displaySlots, durationMinutes, protectedSlotKeys, startDate, endDate, excludeWeekends, calendarEvents, sessionSlotKeys, confirmedSlots, sessions]);
 
   /**
    * Existing sessions the Calendar view's grid cannot draw at all (row 39),
@@ -3474,115 +3744,381 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
 
       <div className="calendar-mode">
 
-          {/* The picker's own controls - date range, duration, manual entry -
-              drive the slots BOTH layouts draw, so they show for the table (the
-              default picker now) and the calendar alike. The table used to be a
-              read-only list, which is why these were once gated to the grid. */}
-          <>
-          {/* Calendar Controls */}
-          <div className="calendar-control-panel">
-            <div className="control-panel-row">
-              <div className="form-field-compact">
-                <label className="form-label-compact" htmlFor="calendarStartDate">
-                  Start Date
-                </label>
-                <input
-                  id="calendarStartDate"
-                  type="date"
-                  className="form-control form-control-sm"
-                  value={toDateInputValue(startDate)}
-                  // The server refuses a session that starts in the past (#90),
-                  // so the picker must not offer a past day (#101). Intra-day
-                  // past times are greyed in the picker below; this bounds the day.
-                  min={toDateInputValue(new Date())}
-                  onChange={(e) => {
-                    const [year, month, day] = e.target.value.split('-');
-                    const newDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), 0, 0, 0);
+          {/* D11 surface styles. Token-based and theme-aware: no forced
+              overrides, and none of the row-3 forbidden literals (the near-white
+              muted rgba, the red focus border). White text appears only on the
+              AA-safe accent fill (--accent-fill-text-safe), never on a raw
+              brand-orange background - the accent-fill AA guard in
+              AdminSessionManager.inline-style.test.ts fails by name if that
+              pairing ever creeps back. */}
+          <style>{`
+            .session-status-band { display:flex; flex-wrap:wrap; gap:22px; align-items:center;
+              border:1px solid var(--border-card); border-radius: var(--card-radius, 8px);
+              background: var(--bg-card); padding:12px 18px; margin-bottom:16px; }
+            .session-status-band-empty { border-style:dashed; }
+            .session-band-seg { display:flex; flex-direction:column; line-height:1.15; }
+            .session-band-n { font-size:1.35rem; font-weight:700; color: var(--text-primary); }
+            .session-band-key { color: var(--brand-orange-700); }
+            .session-band-k { font-size: var(--font-size-metadata, .72rem); letter-spacing:.4px;
+              text-transform:uppercase; color: var(--text-muted); }
+            .session-workarea { display:grid; grid-template-columns: minmax(0,1fr) 320px; gap:18px; align-items:start; }
+            .session-canvas { grid-column:1; min-width:0; }
+            .session-rail { grid-column:2; border:1px solid var(--border-card); border-radius: var(--card-radius, 8px);
+              background: var(--bg-card); padding:14px 16px; }
+            @media (max-width: 900px) {
+              .session-workarea { grid-template-columns: 1fr; }
+              .session-canvas, .session-rail { grid-column:1; }
+            }
+            .session-rail-sec { margin-bottom:16px; }
+            .session-rail-sec:last-child { margin-bottom:0; }
+            .session-rail-sec h4 { font-size: var(--font-size-metadata, .72rem); letter-spacing:.6px;
+              text-transform:uppercase; color: var(--text-muted); margin:0 0 10px; padding-bottom:6px;
+              border-bottom:1px solid var(--border-card); }
+            .session-rail-note { font-size: var(--font-size-metadata, .72rem); color: var(--text-muted);
+              line-height:1.5; margin:8px 0 0; }
+            .session-legend { display:flex; gap:16px; flex-wrap:wrap; align-items:center;
+              font-size: var(--font-size-metadata, .72rem); color: var(--text-muted); margin:0 0 10px; }
+            .session-legend span { display:inline-flex; align-items:center; gap:6px; }
+            .session-legend .sw { width:14px; height:14px; border-radius:3px; border:1px solid var(--border-card);
+              display:inline-block; }
+            .session-legend .sw-available { background: var(--bg-card); border-color: var(--text-muted); }
+            .session-legend .sw-booked { background: var(--brand-orange-500); border-color: var(--brand-orange-700); }
+            .session-legend .sw-conflict { border-style:dashed; border-color: var(--text-muted);
+              background: repeating-linear-gradient(45deg, var(--bg-app) 0, var(--bg-app) 3px, transparent 3px, transparent 6px); }
+            .session-legend .sw-past { background: var(--bg-app); border-color: var(--border-card); }
+            .session-grid-wrap { overflow-x:auto; border:1px solid var(--border-card); border-radius: var(--card-radius, 8px); }
+            .session-grid { display:grid; }
+            /* display:contents lets each row's cells become grid items of the
+               parent, so every column lines up across days without subgrid. The
+               role="row" stays semantic (ARIA is independent of layout). */
+            .session-grid-row { display:contents; }
+            .session-grid-headrow .session-grid-hourhead, .session-grid-corner {
+              font-size: var(--font-size-metadata, .7rem); color: var(--text-muted);
+              padding:6px 4px; text-align:center; background: var(--bg-app); border-bottom:1px solid var(--border-card); }
+            .session-grid-corner { text-align:left; padding-left:11px; position:sticky; left:0; z-index:2; }
+            .session-grid-dayhead { font-size:.8rem; color: var(--text-primary); text-align:left;
+              padding:4px 11px; position:sticky; left:0; background: var(--bg-card); white-space:nowrap;
+              border-bottom:1px solid var(--border-card); display:flex; align-items:center; }
+            .session-grid-pastrow .session-grid-dayhead { color: var(--text-muted); }
+            .session-grid-pasttag { color: var(--text-muted); }
+            .session-grid-cell { padding:3px; border-bottom:1px solid var(--border-card);
+              display:flex; flex-direction:column; gap:3px; align-items:stretch; justify-content:center; min-height:30px; }
+            .session-grid-empty { display:block; height:24px; border:1px dotted var(--border-card); border-radius:3px; }
+            .session-cellbtn { min-height:24px; border-radius:3px; border:1px solid var(--text-muted);
+              background: var(--bg-card); color: var(--text-primary); cursor:pointer; font-size:.62rem;
+              padding:2px 3px; line-height:1.1; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+            .session-cellbtn-time { pointer-events:none; }
+            .session-cellbtn-available:hover { border-color: var(--brand-orange-500); }
+            /* --accent-fill-text-safe is the accent FILL proven >= 4.5:1 under
+               white text in both themes (5.77 dark / 5.18 light); brand-orange-500
+               under white is only 3.12:1, below AA for the .62rem cell label. The
+               text-carrying accent cells fill with the text-safe token, not the
+               raw ramp step - so no white text sits on a brand-orange fill here. */
+            .session-cellbtn-selected { background: var(--accent-fill-text-safe);
+              border-color: var(--accent-fill-text-safe); color:#fff; }
+            .session-cellbtn-booked { background: var(--accent-fill-text-safe);
+              border-color: var(--accent-fill-text-safe); color:#fff; cursor:not-allowed; }
+            .session-cellbtn-created { border-color: var(--brand-orange-700); cursor:not-allowed; }
+            .session-cellbtn-conflict { border-style:dashed; cursor:not-allowed; color: var(--text-muted);
+              background: repeating-linear-gradient(45deg, var(--bg-app) 0, var(--bg-app) 3px, transparent 3px, transparent 6px); }
+            .session-cellbtn-past { background: var(--bg-app); border-color: var(--border-card);
+              color: var(--text-muted); cursor:not-allowed; opacity:.75; }
+            .session-cellbtn[disabled] { cursor:not-allowed; }
+          `}</style>
 
-                    // Validate that start date is not after end date
-                    if (newDate <= endDate) {
-                      setStartDate(newDate);
-                    } else {
-                      logger.warn('Start date cannot be after end date');
-                    }
-                  }}
-                  disabled={disabled}
-                />
+          {/* Summary-first: where the study stands, before the tooling (D11). */}
+          <SessionStatusBand sessions={sessions} />
+
+          <div className="session-workarea">
+            {/* The CANVAS: the picking surface and the schedule beneath it. */}
+            <div className="session-canvas">
+              {/* View Switcher: Grid (time-axis, default) / Calendar (timeline)
+                  / Table (chips). Calendar and Table stay reachable. */}
+              <div className="control-panel-subtle mb-2">
+                <div className="d-flex align-items-center gap-3">
+                  <div className="segmented-control">
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('grid')}
+                      disabled={disabled}
+                      className={`segmented-control-btn ${viewMode === 'grid' ? 'active' : ''}`}
+                    >
+                      <LayoutGrid size={12} />
+                      Grid
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('calendar')}
+                      disabled={disabled}
+                      className={`segmented-control-btn ${viewMode === 'calendar' ? 'active' : ''}`}
+                    >
+                      <Calendar size={12} />
+                      Calendar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('list')}
+                      disabled={disabled}
+                      className={`segmented-control-btn ${viewMode === 'list' ? 'active' : ''}`}
+                    >
+                      <List size={12} />
+                      Table
+                    </button>
+                  </div>
+
+                  {/* Refresh reloads the availability grid - only the calendar
+                      timeline shows the raw availability, so it lives with it. */}
+                  {viewMode === 'calendar' && (
+                    <button
+                      type="button"
+                      onClick={loadCalendarData}
+                      disabled={disabled || loading}
+                      title="Refresh calendar to see latest booking status"
+                      className="btn-ghost"
+                    >
+                      <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
+                      Refresh
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      logger.debug('Reset button clicked. Current state:', {
+                        sessionsLength: sessions.length,
+                        selectedSlotsSize: selectedSlots.size,
+                        confirmedSlotsSize: confirmedSlots.size,
+                        disabled: disabled,
+                        loading: loading
+                      });
+                      handleResetAllSessions();
+                    }}
+                    disabled={disabled || loading}
+                    title="Delete all sessions (only if no bookings exist)"
+                    className="btn-ghost-danger ms-auto"
+                  >
+                    <Trash2 size={11} />
+                    Reset All
+                  </button>
+                </div>
               </div>
-              <div className="form-field-compact">
-                <label className="form-label-compact" htmlFor="calendarEndDate">
-                  End Date
-                </label>
-                <input
-                  id="calendarEndDate"
-                  type="date"
-                  className="form-control form-control-sm"
-                  value={toDateInputValue(endDate)}
-                  onChange={(e) => {
-                    const [year, month, day] = e.target.value.split('-');
-                    const newDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), 23, 59, 59);
-                    
-                    // Validate that end date is not before start date
-                    if (newDate >= startDate) {
-                      setEndDate(newDate);
-                    } else {
-                      logger.warn('End date cannot be before start date');
-                    }
-                  }}
-                  disabled={disabled}
-                />
-              </div>
-              <div className="form-field-compact-sm">
-                <label className="form-label-compact" htmlFor="timeslotDuration">
-                  Timeslot (mins)
-                </label>
-                <select
-                  id="timeslotDuration"
-                  className="form-control form-control-sm"
-                  value={durationMinutes || ''}
-                  onChange={(e) => {
-                    const value = e.target.value === '' ? undefined : parseInt(e.target.value);
-                    setDurationMinutes(value);
-                  }}
-                  disabled={disabled}
-                >
-                  <option value="">Please select</option>
-                  <option value="15">15 minutes</option>
-                  <option value="30">30 minutes</option>
-                  <option value="45">45 minutes</option>
-                  <option value="60">60 minutes</option>
-                </select>
-              </div>
-              {/* Days/Page paginates the CALENDAR only - the table draws the
-                  whole range - so it is hidden in table view, where it did
-                  nothing (review finding). */}
+
+              {/* Legend: names the grid's four cell states (D11). */}
               {viewMode === 'grid' && (
-                <div className="form-field-compact-xs">
-                  <label className="form-label-compact">
-                    Days/Page
-                  </label>
-                  <select
+                <div className="session-legend" data-testid="session-grid-legend">
+                  <span><i className="sw sw-available" aria-hidden="true" />Available</span>
+                  <span><i className="sw sw-booked" aria-hidden="true" />Booked</span>
+                  <span><i className="sw sw-conflict" aria-hidden="true" />Calendar conflict (not bookable)</span>
+                  <span><i className="sw sw-past" aria-hidden="true" />Past</span>
+                </div>
+              )}
+
+              <div className="card card-glass mb-3">
+                <div className="card-body">
+                  {loading || isUpdating ? (
+                    <div className="text-center py-4">
+                      <div className="spinner-border text-primary" role="status">
+                        <span className="visually-hidden">Loading calendar...</span>
+                      </div>
+                      <div className="mt-2 text-muted">Fetching calendar data...</div>
+                    </div>
+                  ) : (
+                    <>
+                      {!durationMinutes && (
+                        <div className="alert alert-info mb-3" role="alert">
+                          <Info size={18} className="me-2" />
+                          Please select a timeslot duration (15, 30, 45, or 60 minutes) in the panel to view available slots.
+                        </div>
+                      )}
+                      {/* Sessions the grid/calendar cannot draw (row 39), shown
+                          in the two picking views (the Table list shows every
+                          session regardless of range). */}
+                      {viewMode !== 'list' &&
+                        (sessionsOutsideCalendarRange.outOfRange.length > 0 ||
+                          sessionsOutsideCalendarRange.hiddenByWeekendToggle.length > 0) && (
+                          <div className="alert alert-warning mb-3" role="alert">
+                            <AlertTriangle size={16} className="me-2" />
+                            {sessionsOutsideCalendarRange.outOfRange.length > 0 && (
+                              <span>
+                                {sessionsOutsideCalendarRange.outOfRange.length} existing session
+                                {sessionsOutsideCalendarRange.outOfRange.length === 1 ? '' : 's'}{' '}
+                                {sessionsOutsideCalendarRange.outOfRange.length === 1 ? 'falls' : 'fall'} outside{' '}
+                                {formatStudyDate(startDate)}–{formatStudyDate(endDate)} and{' '}
+                                {sessionsOutsideCalendarRange.outOfRange.length === 1 ? "isn't" : "aren't"} drawn here.{' '}
+                              </span>
+                            )}
+                            {sessionsOutsideCalendarRange.hiddenByWeekendToggle.length > 0 && (
+                              <span>
+                                {sessionsOutsideCalendarRange.hiddenByWeekendToggle.length} existing session
+                                {sessionsOutsideCalendarRange.hiddenByWeekendToggle.length === 1 ? '' : 's'} on a weekend{' '}
+                                {sessionsOutsideCalendarRange.hiddenByWeekendToggle.length === 1 ? 'is' : 'are'} hidden
+                                while weekends are excluded in the panel.{' '}
+                              </span>
+                            )}
+                            Switch to Table view to see and manage{' '}
+                            {sessionsOutsideCalendarRange.outOfRange.length +
+                              sessionsOutsideCalendarRange.hiddenByWeekendToggle.length ===
+                            1
+                              ? 'it'
+                              : 'them'}
+                            .
+                          </div>
+                        )}
+                      <CalendarView
+                        key={`${viewMode}-${startDate.toISOString()}-${endDate.toISOString()}-${sessions.length}`}
+                        layout={viewMode === 'grid' ? 'grid' : viewMode === 'calendar' ? 'calendar' : 'table'}
+                        disabled={disabled}
+                        events={calendarEvents}
+                        availableSlots={displaySlots}
+                        protectedSlotKeys={protectedSlotKeys}
+                        selectedSlots={selectedSlots}
+                        confirmedSlots={confirmedSlots}
+                        onSlotSelect={handleSlotSelect}
+                        onSlotDeselect={handleSlotDeselect}
+                        durationMinutes={durationMinutes}
+                        currentPage={currentPage}
+                        onPageChange={handlePageChange}
+                        daysPerPage={daysPerPage}
+                        startDate={startDate}
+                        endDate={endDate}
+                        excludeWeekends={excludeWeekends}
+                        workStartHour={workStartHour}
+                        workEndHour={workEndHour}
+                        sessions={sessions}
+                      />
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* The existing-sessions schedule sits beneath the grid and the
+                  table alike (row 2): a study's saved slots are always in view
+                  at rest. The timeline manages its own sessions inline, so it
+                  is the one view without the list. */}
+              {viewMode !== 'calendar' && (
+                <div className="mt-1">
+                  <ListView
+                    key={`list-${sessions.length}`}
+                    sessions={sessions}
+                    isTemporary={isTemporary}
+                    onRemove={handleRemoveSession}
+                    onAddSlots={() => setViewMode('grid')}
+                    disabled={disabled}
+                    loading={loading}
+                    pendingRemovalId={pendingRemoval?.id}
+                    embedded
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* The RAIL: the generator, defaulting to working hours, and the
+                live status - not sitting on top pushing the schedule below the
+                fold (D11). */}
+            <aside className="session-rail">
+              <div className="session-rail-sec">
+                <h4>Generate slots</h4>
+                <div className="form-field-compact mb-2">
+                  <label className="form-label-compact" htmlFor="calendarStartDate">Start Date</label>
+                  <input
+                    id="calendarStartDate"
+                    type="date"
                     className="form-control form-control-sm"
-                    value={daysPerPage}
+                    value={toDateInputValue(startDate)}
+                    // The server refuses a session that starts in the past (#90),
+                    // so the picker must not offer a past day (#101).
+                    min={toDateInputValue(new Date())}
                     onChange={(e) => {
-                      setDaysPerPage(parseInt(e.target.value));
-                      setCurrentPage(0); // Reset to first page
+                      const [year, month, day] = e.target.value.split('-');
+                      const newDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), 0, 0, 0);
+                      if (newDate <= endDate) {
+                        setStartDate(newDate);
+                      } else {
+                        logger.warn('Start date cannot be after end date');
+                      }
+                    }}
+                    disabled={disabled}
+                  />
+                </div>
+                <div className="form-field-compact mb-2">
+                  <label className="form-label-compact" htmlFor="calendarEndDate">End Date</label>
+                  <input
+                    id="calendarEndDate"
+                    type="date"
+                    className="form-control form-control-sm"
+                    value={toDateInputValue(endDate)}
+                    onChange={(e) => {
+                      const [year, month, day] = e.target.value.split('-');
+                      const newDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), 23, 59, 59);
+                      if (newDate >= startDate) {
+                        setEndDate(newDate);
+                      } else {
+                        logger.warn('End date cannot be before start date');
+                      }
+                    }}
+                    disabled={disabled}
+                  />
+                </div>
+                <div className="form-field-compact-sm mb-2">
+                  <label className="form-label-compact" htmlFor="timeslotDuration">Timeslot (mins)</label>
+                  <select
+                    id="timeslotDuration"
+                    className="form-control form-control-sm"
+                    value={durationMinutes || ''}
+                    onChange={(e) => {
+                      const value = e.target.value === '' ? undefined : parseInt(e.target.value);
+                      setDurationMinutes(value);
                     }}
                     disabled={disabled}
                   >
-                    <option value={3}>3</option>
-                    <option value={5}>5</option>
-                    <option value={7}>7</option>
-                    <option value={9}>9</option>
-                    <option value={10}>10</option>
-                    <option value={14}>14</option>
-                    <option value={21}>21</option>
-                    <option value={30}>30</option>
+                    <option value="">Please select</option>
+                    <option value="15">15 minutes</option>
+                    <option value="30">30 minutes</option>
+                    <option value="45">45 minutes</option>
+                    <option value="60">60 minutes</option>
                   </select>
                 </div>
-              )}
-              <div className="form-field-compact d-flex align-items-center pt-4">
-                <div className="form-check">
+                {/* Working hours: the D11 grid's default hour columns
+                    (09:00-17:00), so it opens on a working day, not the whole
+                    07:00-23:00 span. The grid widens these to include any slot
+                    outside them, so nothing is ever added-but-undrawn. */}
+                <div className="form-field-compact mb-2">
+                  <label className="form-label-compact">Working hours</label>
+                  <div className="d-flex align-items-center gap-2">
+                    <select
+                      className="form-control form-control-sm"
+                      value={workStartHour}
+                      aria-label="Working hours start"
+                      onChange={(e) => {
+                        const next = parseInt(e.target.value);
+                        setWorkStartHour(next);
+                        if (next >= workEndHour) setWorkEndHour(Math.min(23, next + 1));
+                      }}
+                      disabled={disabled}
+                    >
+                      {Array.from({ length: 17 }, (_, i) => i + 6).map((h) => (
+                        <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+                      ))}
+                    </select>
+                    <span className="text-muted">to</span>
+                    <select
+                      className="form-control form-control-sm"
+                      value={workEndHour}
+                      aria-label="Working hours end"
+                      onChange={(e) => {
+                        const next = parseInt(e.target.value);
+                        setWorkEndHour(next);
+                        if (next <= workStartHour) setWorkStartHour(Math.max(0, next - 1));
+                      }}
+                      disabled={disabled}
+                    >
+                      {Array.from({ length: 18 }, (_, i) => i + 6).map((h) => (
+                        <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="form-check mb-2">
                   <input
                     className="form-check-input"
                     type="checkbox"
@@ -3595,260 +4131,105 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                     Include weekends
                   </label>
                 </div>
+                {/* Days/Page paginates the timeline only. */}
+                {viewMode === 'calendar' && (
+                  <div className="form-field-compact-xs mb-2">
+                    <label className="form-label-compact">Days/Page</label>
+                    <select
+                      className="form-control form-control-sm"
+                      value={daysPerPage}
+                      onChange={(e) => {
+                        setDaysPerPage(parseInt(e.target.value));
+                        setCurrentPage(0);
+                      }}
+                      disabled={disabled}
+                    >
+                      <option value={3}>3</option>
+                      <option value={5}>5</option>
+                      <option value={7}>7</option>
+                      <option value={9}>9</option>
+                      <option value={10}>10</option>
+                      <option value={14}>14</option>
+                      <option value={21}>21</option>
+                      <option value={30}>30</option>
+                    </select>
+                  </div>
+                )}
+                <p className="session-rail-note">
+                  Defaults to working hours (09:00-17:00), weekdays only. Click a grid cell to
+                  add or remove a slot.
+                </p>
               </div>
-              <div className="control-panel-end">
-                <small className="control-panel-counter">
-                  {viewMode === 'grid' ? drawnSlots.length : tableSlotCount} slots available
-                </small>
-              </div>
-            </div>
-          </div>
 
-          {/* Manual slot entry (cto/AdaptaLabs#89 item 2) */}
-          <div className="calendar-control-panel mb-2">
-            <div className="control-panel-row">
-              <div className="form-field-compact">
-                <label className="form-label-compact" htmlFor="manualSlotDate">
-                  Add a slot: date
-                </label>
-                <input
-                  id="manualSlotDate"
-                  type="date"
-                  className="form-control form-control-sm"
-                  value={manualDate}
-                  onChange={(e) => {
-                    // Cleared here, not only on the next Add: a refusal that
-                    // survives the correction reads as a second refusal.
-                    setManualError('');
-                    setManualDate(e.target.value);
-                  }}
-                  disabled={disabled}
-                />
-              </div>
-              <div className="form-field-compact-sm">
-                <label className="form-label-compact" htmlFor="manualSlotTime">
-                  Start time
-                </label>
-                <input
-                  id="manualSlotTime"
-                  type="time"
-                  className="form-control form-control-sm"
-                  value={manualTime}
-                  onChange={(e) => {
-                    setManualError('');
-                    setManualTime(e.target.value);
-                  }}
-                  disabled={disabled}
-                />
-              </div>
-              <div className="form-field-compact d-flex align-items-center pt-4">
+              <div className="session-rail-sec">
+                <h4>Add a single slot</h4>
+                <div className="form-field-compact mb-2">
+                  <label className="form-label-compact" htmlFor="manualSlotDate">Add a slot: date</label>
+                  <input
+                    id="manualSlotDate"
+                    type="date"
+                    className="form-control form-control-sm"
+                    value={manualDate}
+                    onChange={(e) => {
+                      setManualError('');
+                      setManualDate(e.target.value);
+                    }}
+                    disabled={disabled}
+                  />
+                </div>
+                <div className="form-field-compact-sm mb-2">
+                  <label className="form-label-compact" htmlFor="manualSlotTime">Start time</label>
+                  <input
+                    id="manualSlotTime"
+                    type="time"
+                    className="form-control form-control-sm"
+                    value={manualTime}
+                    onChange={(e) => {
+                      setManualError('');
+                      setManualTime(e.target.value);
+                    }}
+                    disabled={disabled}
+                  />
+                </div>
                 <button
                   type="button"
                   className="btn btn-sm btn-outline-primary"
                   onClick={handleAddManualSlot}
                   disabled={disabled || !manualDate || !manualTime || !durationMinutes}
-                  title="Add this time as a selected slot, without using the calendar"
+                  title="Add this time as a selected slot, without using the grid"
                 >
                   <Plus size={14} className="me-1" />
                   Add slot
                 </button>
-              </div>
-              <div className="control-panel-end">
-                <small className="text-muted">
+                <p className="session-rail-note">
                   {durationMinutes
                     ? `${durationMinutes} minutes long, in your own timezone`
                     : 'Choose a timeslot duration first'}
+                </p>
+                {manualError && (
+                  <div className="alert alert-warning mt-2 mb-0 py-2" role="alert">
+                    <AlertTriangle size={14} className="me-2" />
+                    {manualError}
+                  </div>
+                )}
+              </div>
+
+              <div className="session-rail-sec">
+                <h4>Status</h4>
+                <small className="control-panel-counter">
+                  {viewMode === 'grid'
+                    ? gridBookableCount
+                    : viewMode === 'calendar'
+                      ? drawnSlots.length
+                      : tableSlotCount}{' '}
+                  slots available
                 </small>
+                <p className="session-rail-note">
+                  Slots save as you add or remove them; the Save changes control saves the
+                  rest of the study, not the slots.
+                </p>
               </div>
-            </div>
-            {manualError && (
-              <div className="alert alert-warning mt-2 mb-0 py-2" role="alert">
-                <AlertTriangle size={14} className="me-2" />
-                {manualError}
-              </div>
-            )}
-          </div>
-          </>
-
-          {/* View Switcher */}
-          <div className="control-panel-subtle mb-2">
-            <div className="d-flex align-items-center gap-3">
-              {/* Segmented Control for View Mode */}
-              <div className="segmented-control">
-                <button
-                  type="button"
-                  onClick={() => setViewMode('grid')}
-                  disabled={disabled}
-                  className={`segmented-control-btn ${viewMode === 'grid' ? 'active' : ''}`}
-                >
-                  <LayoutGrid size={12} />
-                  Calendar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode('list')}
-                  disabled={disabled}
-                  className={`segmented-control-btn ${viewMode === 'list' ? 'active' : ''}`}
-                >
-                  <List size={12} />
-                  Table
-                </button>
-              </div>
-
-              {/* Ghost Refresh Button - reloads the availability grid, so it
-                  only belongs with the grid (row 6). In the list view it
-                  reloaded nothing the view showed. */}
-              {viewMode === 'grid' && (
-                <button
-                  type="button"
-                  onClick={loadCalendarData}
-                  disabled={disabled || loading}
-                  title="Refresh calendar to see latest booking status"
-                  className="btn-ghost"
-                >
-                  <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
-                  Refresh
-                </button>
-              )}
-
-              {/* Reset Button - pushed to right */}
-              <button
-                type="button"
-                onClick={() => {
-                  logger.debug('Reset button clicked. Current state:', {
-                    sessionsLength: sessions.length,
-                    selectedSlotsSize: selectedSlots.size,
-                    confirmedSlotsSize: confirmedSlots.size,
-                    disabled: disabled,
-                    loading: loading
-                  });
-                  handleResetAllSessions();
-                }}
-                disabled={disabled || loading}
-                title="Delete all sessions (only if no bookings exist)"
-                className="btn-ghost-danger ms-auto"
-              >
-                <Trash2 size={11} />
-                Reset All
-              </button>
-            </div>
-          </div>
-
-          {/* Calendar View */}
-          <div className="card card-glass mb-3">
-            <div className="card-body">
-              {loading || isUpdating ? (
-                <div className="text-center py-4">
-                  <div className="spinner-border text-primary" role="status">
-                    <span className="visually-hidden">Loading calendar...</span>
-                  </div>
-                  <div className="mt-2 text-muted">Fetching calendar data...</div>
-                </div>
-              ) : viewMode === 'grid' ? (
-                <div>
-                  {!durationMinutes && (
-                    <div className="alert alert-info mb-3" role="alert">
-                      <Info size={18} className="me-2" />
-                      Please select a timeslot duration (15, 30, 45, or 60 minutes) to view available slots.
-                    </div>
-                  )}
-                  {(sessionsOutsideCalendarRange.outOfRange.length > 0 ||
-                    sessionsOutsideCalendarRange.hiddenByWeekendToggle.length > 0) && (
-                    <div className="alert alert-warning mb-3" role="alert">
-                      <AlertTriangle size={16} className="me-2" />
-                      {sessionsOutsideCalendarRange.outOfRange.length > 0 && (
-                        <span>
-                          {sessionsOutsideCalendarRange.outOfRange.length} existing session
-                          {sessionsOutsideCalendarRange.outOfRange.length === 1 ? '' : 's'}{' '}
-                          {sessionsOutsideCalendarRange.outOfRange.length === 1 ? 'falls' : 'fall'} outside{' '}
-                          {formatStudyDate(startDate)}–{formatStudyDate(endDate)} and{' '}
-                          {sessionsOutsideCalendarRange.outOfRange.length === 1 ? "isn't" : "aren't"} drawn here.{' '}
-                        </span>
-                      )}
-                      {sessionsOutsideCalendarRange.hiddenByWeekendToggle.length > 0 && (
-                        <span>
-                          {sessionsOutsideCalendarRange.hiddenByWeekendToggle.length} existing session
-                          {sessionsOutsideCalendarRange.hiddenByWeekendToggle.length === 1 ? '' : 's'} on a weekend{' '}
-                          {sessionsOutsideCalendarRange.hiddenByWeekendToggle.length === 1 ? 'is' : 'are'} hidden
-                          while weekends are excluded above.{' '}
-                        </span>
-                      )}
-                      Switch to Table view to see and manage{' '}
-                      {sessionsOutsideCalendarRange.outOfRange.length +
-                        sessionsOutsideCalendarRange.hiddenByWeekendToggle.length ===
-                      1
-                        ? 'it'
-                        : 'them'}
-                      .
-                    </div>
-                  )}
-                  <CalendarView
-                    key={`calendar-${startDate.toISOString()}-${endDate.toISOString()}-${sessions.length}`}
-                    layout="calendar"
-                    disabled={disabled}
-                    events={calendarEvents}
-                    availableSlots={displaySlots}
-                    protectedSlotKeys={protectedSlotKeys}
-                    selectedSlots={selectedSlots}
-                    confirmedSlots={confirmedSlots}
-                    onSlotSelect={handleSlotSelect}
-                    onSlotDeselect={handleSlotDeselect}
-                    durationMinutes={durationMinutes}
-                    currentPage={currentPage}
-                    onPageChange={handlePageChange}
-                    daysPerPage={daysPerPage}
-                    startDate={startDate}
-                    endDate={endDate}
-                    excludeWeekends={excludeWeekends}
-                    sessions={sessions}
-                  />
-                </div>
-              ) : (
-                <>
-                  {/* Table is the default picker: slots are chosen from the
-                      day-grouped chips here, so the researcher never has to
-                      switch to the calendar to select. Existing sessions are
-                      managed in the list beneath it. */}
-                  <CalendarView
-                    key={`slot-table-${startDate.toISOString()}-${endDate.toISOString()}-${sessions.length}`}
-                    layout="table"
-                    disabled={disabled}
-                    events={calendarEvents}
-                    availableSlots={displaySlots}
-                    protectedSlotKeys={protectedSlotKeys}
-                    selectedSlots={selectedSlots}
-                    confirmedSlots={confirmedSlots}
-                    onSlotSelect={handleSlotSelect}
-                    onSlotDeselect={handleSlotDeselect}
-                    durationMinutes={durationMinutes}
-                    currentPage={currentPage}
-                    onPageChange={handlePageChange}
-                    daysPerPage={daysPerPage}
-                    startDate={startDate}
-                    endDate={endDate}
-                    excludeWeekends={excludeWeekends}
-                    sessions={sessions}
-                  />
-                  {/* Row 2: no `sessions.length > 0` gate here any more - this
-                      was ListView's ONLY call site, so wrapping it made its
-                      own zero-sessions branch dead code (verifier claim 13).
-                      ListView states "No sessions yet" itself now. */}
-                  <div className="mt-4">
-                    <ListView
-                      key={`list-${sessions.length}`}
-                      sessions={sessions}
-                      isTemporary={isTemporary}
-                      onRemove={handleRemoveSession}
-                      onAddSlots={() => setViewMode('grid')}
-                      disabled={disabled}
-                      loading={loading}
-                      pendingRemovalId={pendingRemoval?.id}
-                      embedded
-                    />
-                  </div>
-                </>
-              )}
-            </div>
+            </aside>
           </div>
 
           {/*

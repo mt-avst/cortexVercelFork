@@ -104,18 +104,19 @@ beforeEach(() => {
 });
 
 describe('Row 6 defect 5 - the list is the default view and shows existing sessions first', () => {
-  it('opens on the Table picker with the existing-sessions list, not the calendar grid', async () => {
+  it('opens on the grid picker with the existing-sessions list, not the timeline', async () => {
     renderManager({
       sessions: [sessionRow('s1', '2026-08-18T18:00:00.000Z', '2026-08-18T19:00:00.000Z')] as never,
     });
     await settle();
 
-    // The Table view is the default: its slot picker (the per-day "Select all"
-    // is table-only) sits above the existing-sessions list - not the calendar.
-    expect(await screen.findByRole('button', { name: /^Select all/i })).toBeInTheDocument();
+    // Since D11 the default picking surface is the time-axis grid (days as
+    // rows, hours as columns), and the existing-sessions list sits beneath it -
+    // not the positioned timeline, whose tomorrow..+7 window never drew a study's
+    // out-of-window sessions at rest.
+    expect(await screen.findByRole('grid', { name: /days as rows/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Existing Sessions' })).toBeInTheDocument();
-    // The Table is a PICKER now, so the slot controls it needs are on screen at
-    // rest. They used to be gated to the calendar, when the Table was read-only.
+    // The generator lives in the side panel, on screen at rest.
     expect(screen.getByLabelText('Start Date')).toBeInTheDocument();
     expect(screen.getByLabelText('Add a slot: date')).toBeInTheDocument();
   });
@@ -137,17 +138,16 @@ describe('Row 6 defect 5 - the list is the default view and shows existing sessi
     renderManager({ sessions: [] });
     await settle();
 
-    // Zero sessions: the Table opens directly on the picker, so slots are chosen
+    // Zero sessions: the grid opens directly on the picker, so slots are chosen
     // here with no detour - the old "No sessions yet -> Add slots -> calendar"
-    // dead-end stays gone (Mav & Petra: pick from the table, not the calendar).
-    // Superseded by the 2026-09-17 redesign's row 2: the picker being on
-    // screen no longer means the list must say nothing about having zero
-    // sessions (verifier claim 13 - that branch was dead code). Both hold at
-    // once: the picker is still what is on screen at rest, and the status
+    // dead-end stays gone. Superseded by the 2026-09-17 redesign's row 2: the
+    // picker being on screen no longer means the list must say nothing about
+    // having zero sessions (verifier claim 13 - that branch was dead code).
+    // Both hold at once: the grid is what is on screen at rest, and the status
     // text sits beneath it rather than gating the picker behind it.
-    expect(await screen.findByRole('button', { name: /^Select all/i })).toBeInTheDocument();
+    expect(await screen.findByRole('grid', { name: /days as rows/i })).toBeInTheDocument();
     expect(screen.getByText('No sessions yet')).toBeInTheDocument();
-    // A pickable slot is a real, named button, and the picker's controls are up.
+    // A pickable slot is a real, named button, and the generator controls are up.
     expect(screen.getByRole('button', { name: /available time slot/i })).toBeInTheDocument();
     expect(screen.getByLabelText('Start Date')).toBeInTheDocument();
   });

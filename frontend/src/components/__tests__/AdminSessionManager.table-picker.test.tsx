@@ -79,9 +79,11 @@ const existingSessionAt10 = () => {
   };
 };
 
-// Renders and STAYS on the default Table view - the picker under test.
-const renderPicker = (props: Partial<ManagerProps> = {}) =>
-  render(
+// Renders and switches to the chip Table view - the picker under test. Since
+// D11 the default surface is the time-axis grid; the day-grouped chip table is
+// reachable through the segmented control, and this suite exercises it there.
+const renderPicker = (props: Partial<ManagerProps> = {}) => {
+  const utils = render(
     <MemoryRouter>
       <AdminSessionManager
         opportunityId="opp-1"
@@ -92,6 +94,9 @@ const renderPicker = (props: Partial<ManagerProps> = {}) =>
       />
     </MemoryRouter>
   );
+  fireEvent.click(screen.getByRole('button', { name: 'Table' }));
+  return utils;
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
