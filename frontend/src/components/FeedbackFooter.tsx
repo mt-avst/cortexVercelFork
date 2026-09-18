@@ -17,17 +17,11 @@ const FeedbackFooter: React.FC = () => {
   // collect it.
   if (pathname === '/feedback' || pathname.startsWith('/feedback/')) return null;
 
-  // D10: the study-setup wizard hides this footer too. 232px of permanent
-  // chrome asking a researcher for an opinion about the product while they
-  // are doing work in it is the wrong moment to ask (mav-wizard-shell) - and
-  // the wizard's own header now carries a "Feedback" item instead
-  // (OpportunityForm.tsx), so nothing is lost by hiding this one here. Both
-  // routes named explicitly rather than matched by a shared prefix: `/new`
-  // and `/:id/edit` are the only two `opportunityFormRoutes` declares
-  // (OpportunityForm.routes.tsx), each with its own `/preview` child.
-  const isStudySetupRoute =
-    /^\/admin\/opportunities\/(new|[^/]+\/edit)(\/preview)?$/.test(pathname);
-  if (isStudySetupRoute) return null;
+  // The study-setup wizard shows this footer too: it is the in-context way for
+  // anyone building a study to tell us how to improve the experience while they
+  // are in it. (D10 hid it here on the mav-wizard-shell view that permanent
+  // chrome was the wrong moment to ask; reversed by request - the feedback loop
+  // during setup is worth more than the reclaimed space.)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
