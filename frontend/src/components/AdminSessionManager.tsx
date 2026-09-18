@@ -1396,10 +1396,19 @@ const CalendarView: React.FC<CalendarViewProps> = ({
             font-size: var(--font-size-metadata); font-weight: 600; cursor: pointer; padding: 2px 4px;
           }
           .admin-slot-picker .slot-day-selectall:disabled { color: var(--text-muted); cursor: default; }
-          .admin-slot-picker .slot-chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+          /* A real grid, not flex-wrap: equal tracks lock every pod to a column
+             so the block reads as one plane with a flush right edge, and the
+             same .4rem gap on both axes gives it one rhythm. auto-fill keeps it
+             responsive - as many equal columns as the width holds. */
+          .admin-slot-picker .slot-chips {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(124px, 1fr));
+            gap: .4rem;
+          }
           .admin-slot-picker .admin-chip {
-            display: inline-flex; align-items: center; gap: .3rem;
-            border: 1px solid var(--border-card); border-radius: 999px;
+            display: inline-flex; align-items: center; justify-content: center; gap: .3rem;
+            white-space: nowrap;
+            border: 1px solid var(--border-card); border-radius: 8px;
             padding: .3rem .7rem; font-size: var(--font-size-metadata); font-weight: 500;
             background: transparent; color: var(--text-primary); cursor: pointer;
             transition: background-color .12s ease, border-color .12s ease;
@@ -1451,7 +1460,13 @@ const CalendarView: React.FC<CalendarViewProps> = ({
               </div>
               <div className="slot-chips" role="group" aria-label={`Slots on ${dayName}`}>
                 {decorated.map(({ slot, status }) => {
-                  const label = slotTimeLabel(slot) ?? formatTime(slot.start);
+                  // Visible label is the START time only: the duration is
+                  // constant across the view (set once above), so repeating
+                  // "- 08:45" on every chip tells the reader nothing new and
+                  // just costs width. The full range still reaches assistive
+                  // tech and hover through `aria` and `title` below, which are
+                  // built from slotTooltip (start-to-end + state).
+                  const label = formatTime(slot.start) || (slotTimeLabel(slot) ?? '');
                   const title = slotTooltip(slot, status);
                   const aria = `${dayName}, ${title}${zone ? `, ${zone}` : ''}`;
 
