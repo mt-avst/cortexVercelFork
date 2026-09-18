@@ -79,9 +79,8 @@ describe('AdminSessionManager - a study with zero sessions renders "No sessions 
     await settle();
 
     // The picker is still the thing on screen at rest (row 6): this is not a
-    // dead end, it is a status statement alongside it. Since D11 the picker is
-    // the time-axis grid (days as rows, hours as columns), not the chip table.
-    expect(await screen.findByRole('grid', { name: /days as rows/i })).toBeInTheDocument();
+    // dead end, it is a status statement alongside it.
+    expect(await screen.findByRole('button', { name: /^Select all/i })).toBeInTheDocument();
     expect(screen.getByText('No sessions yet')).toBeInTheDocument();
   });
 
