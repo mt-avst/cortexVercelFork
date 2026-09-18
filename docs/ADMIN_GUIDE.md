@@ -74,7 +74,7 @@ An opportunity you are **editing** opens with its steps already marked, because 
 Two controls used to look almost identical and do very different things. They are now named apart:
 
 - **Exit to dashboard**, at the top of the page, leaves the form. If you have unsaved changes it asks first, and you can choose to stay
-- **Previous: {step name}**, at the bottom of every step after the first, goes back one step and names where it is going - *Previous: Task List*, *Previous: Content & Details*
+- **Previous: {step name}**, at the bottom of every step after the first, goes back one step and names where it is going - *Previous: Task List*, *Previous: Basic Info*
 
 ### Step 1: Start Creating
 
@@ -82,44 +82,41 @@ Two controls used to look almost identical and do very different things. They ar
 2. Click **"Create New Opportunity"** button
 3. You'll see the opportunity form
 
-### Step 2: Basic Information
+### Step 2: Study type
 
-Fill in the required fields:
+The first step is picking the one study type. The picker shows six as cards, grouped by how they are scheduled:
 
-- **Type**: Select from:
-  - 🧪 **Live session**: Usability test you moderate, at a booked time
-  - 📊 **Quick poll**: Quick questions/voting
-  - 📋 **Survey**: Detailed feedback collection
-  - 💼 **Interview**: One-on-one interviews
-  - ❓ **One question**: Single question opportunities
-  - 🖥️ **Recorded session**: Usability test the participant runs alone, recorded in their browser. See [Recorded Sessions](#recorded-sessions)
+**Live studies** - you set calendar slots and participants self book:
 
-  These are the same names participants see. Cortex uses one name per type everywhere now; the older admin-only labels ("App Testing", "Unmoderated Testing") are gone.
+- 💼 **Interview**: Research interview session
+- 🧪 **Live session**: Usability test you moderate
 
-  **Live session** and **Recorded session** are one research method, not two. Both are usability tests; they differ only in whether you are present, which is why they are named as a pair. The older names ("Usability test" and "Recorded study") implied the recorded one was a different kind of study.
+**Async studies** - the participant runs it in their own time:
 
-- **Title**: Clear, descriptive title (required)
-- **Purpose (One-liner)**: Brief description shown on list (required)
-- **Description**: Full details (optional but recommended)
-- **Product**: Related product or area (optional)
-- **Default Duration**: Default session length in minutes (default: 30)
+- 🖥️ **Recorded session**: Remote unmoderated user test, recorded in the browser. See [Recorded Sessions](#recorded-sessions)
+- 📊 **Quick poll**: Quick opinion gathering
+- ❓ **One question**: Single question
+- 📋 **Survey**: Detailed feedback collection
 
-### Step 3: Where a Poll, Survey or One question is answered
+These are the same names participants see. Cortex uses one name per type everywhere; the older admin-only labels ("App Testing", "Unmoderated Testing") are gone.
 
-A Poll, a Survey or a One question can be answered in either of two places, and you choose on **Basic Information**:
+**Where a Poll, Survey or One question is answered.** When you pick one of those three, a **Where do participants answer** toggle appears on this same step:
 
-- **In an external tool** - you give Cortex the link. SurveyMonkey, Google Forms, Typeform and the rest. Cortex sends people there and counts the clicks, and the answers live in that tool. This is what every poll and survey used to be, and it is still the default
+- **In an external tool** - you give Cortex the link. SurveyMonkey, Google Forms, Typeform and the rest. Cortex sends people there and counts the clicks, and the answers live in that tool. This is the default
 - **In Cortex** - you write the questions here and the answers come back in Cortex. Nothing is recorded: no screen, no microphone, no camera
 
-Choosing **In an external tool** gives you an **External Link** step, where the link is required.
-That is where people go when they click "Open Poll/Survey".
+Choosing **In an external tool** gives you an **External Link** step, where the link is required - that is where people go when they click "Open Poll/Survey". Choosing **In Cortex** replaces that step with a **Questions** step (see [Polls and Surveys Answered in Cortex](#polls-and-surveys-answered-in-cortex)).
 
-Choosing **In Cortex** replaces that step with a **Questions** step.
-See [Polls and Surveys Answered in Cortex](#polls-and-surveys-answered-in-cortex).
+A **One question** opportunity works the same way, with one difference: it asks exactly one question. Its native step is called **Question**, and once you have written that question the "Add question" button is gone - there is nothing to add. If you want to ask more, use a Poll or a Survey.
 
-A **One question** opportunity works the same way, with one difference: it asks exactly one question.
-Its native step is called **Question**, and once you have written that question the "Add question" button is gone - there is nothing to add.
-If you want to ask more, use a Poll or a Survey.
+### Step 3: Basic Information
+
+The next step is the study's advert copy:
+
+- **Title**: Clear, descriptive title (required, 4-140 characters)
+- **Purpose (One-liner)**: Brief description shown on the list (required, 10-180 characters)
+- **Description**: Full details (optional but recommended)
+- **Product**: Related product or area (optional)
 
 ### Step 4: Add Sessions
 
@@ -201,8 +198,8 @@ Use a **Live session** or **Interview** instead when you need to be in the room.
 
 1. Go to Admin Dashboard
 2. Click **"Create New Opportunity"**
-3. On **Basic Information**, set **Research Study Type** to **"🖥️ Recorded session - Usability test the participant runs alone, recorded in the browser"**
-4. Fill in Title and Purpose as usual on **Basic Information** and **Content & Details**
+3. On the **Study type** step, choose **🖥️ Recorded session** (under Async studies)
+4. Fill in Title and Purpose on the **Basic Information** step
 
 Choosing Recorded session replaces the External Link step with a **Task List** step.
 There is no Session Management step, because there is nothing to book.
@@ -358,7 +355,7 @@ There is no declined-but-booked state to attest around: a participant who declin
 A Poll or Survey set to **In Cortex** collects its answers here rather than sending people to another tool.
 Nothing is recorded - no screen, no microphone, no camera - so it is the right shape when you want typed answers rather than to watch someone work.
 
-Choose it on **Basic Information**, under where the poll or survey is answered.
+Choose it on the **Study type** step, with the "Where do participants answer" toggle.
 That replaces the External Link step with a **Questions** step.
 
 ### Writing the questions
