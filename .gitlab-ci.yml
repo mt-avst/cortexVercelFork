@@ -491,25 +491,33 @@ mutation-canary:
   # broke, which is how !267 reddened main, and why the runner refuses a
   # filter flag (#53).
   #
-  # MR + MERGE-TRAIN ONLY, not $PROD_REF. Both the MR pipeline and the
-  # merge-train pipeline are `merge_request_event`, and the train runs the
-  # FULL manifest against the actual merge result (main + this MR) in the
-  # moments before it lands - so a post-merge run on main re-graded an
-  # identical tree, and it did so ON THE DEPLOY CRITICAL PATH: measured on
-  # !476, semantic-release and trigger-deployment-prod sat idle ~10 min
-  # waiting for this job to finish on main, every deploy. It never guarded a
-  # merge either - it runs after the merge, so it could only redden main
-  # after the fact, which is exactly what the train run prevents by grading
-  # the merge result first. Dropped here (Nick's call, this thread).
-  #   DEPENDENCY: this now leans on merge trains being ON. If trains are ever
-  #   disabled, restore `- if: '$CI_COMMIT_REF_NAME =~ $PROD_REF'` below -
-  #   without a train, an MR pipeline can go stale against an advanced main
-  #   and nothing re-grades the real main tip. Keep this and the "CI waits"
-  #   section of AGENTS.md in step.
+  # MERGE-TRAIN ONLY - not the plain MR pipeline, not $PROD_REF. The train
+  # runs the FULL manifest against the actual merge result (main + this MR)
+  # in the moments before it lands, so it is the one place the canary both
+  # sees the real tree AND gates the merge. The other two runs were
+  # duplicates of it:
+  #   - the post-merge main ($PROD_REF) run re-graded an identical tree ON
+  #     THE DEPLOY CRITICAL PATH (measured !476: semantic-release + deploy
+  #     sat idle ~10 min waiting for it), and never guarded a merge because
+  #     it runs after the merge;
+  #   - the plain MR-pipeline run graded main-at-MR-time, which the train
+  #     re-grades against the real tip seconds later anyway.
+  # `$CI_MERGE_REQUEST_EVENT_TYPE` is "merge_train" ONLY on the train
+  # pipeline ("detached"/"merged_result" on the plain MR pipeline), so this
+  # fires once per change, on the train. `changes` still evaluates - a train
+  # pipeline is a merge_request_event with the MR diff. VERIFIED on this MR's
+  # own pipelines: canary ABSENT on the MR pipeline, PRESENT on the train.
+  #   DEPENDENCY: this leans hard on merge trains being ON. With trains OFF
+  #   the canary would run NOWHERE and the merge gate would silently vanish
+  #   (a skipped entry and a passing one read identically in green) - so if
+  #   trains are ever disabled, this rule MUST change back in the same commit:
+  #   restore `- if: $CI_PIPELINE_SOURCE == "merge_request_event"` (MR run)
+  #   and, without a train, the `$PROD_REF` run too. Keep this and the
+  #   "CI waits" section of AGENTS.md in step.
   rules:
     - if: $CI_COMMIT_TAG
       when: never
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE == "merge_train"'
       changes:
         paths:
           - "backend/**/*"
