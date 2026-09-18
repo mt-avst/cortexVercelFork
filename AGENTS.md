@@ -83,16 +83,18 @@ serial before. Poll to match the job's known duration rather than
 sleeping on a fixed long timer - ten minutes of dead air past a green result is the
 recorded cost of guessing. Prefer merging with auto-merge armed so nobody watches at all.
 
-The canary runs on the MR pipeline and the merge-train pipeline (both
-`merge_request_event`), **not** on the post-merge `main` pipeline anymore
-(dropped 2026-09-18). The train grades the full manifest against the real merge
-result just before it lands, so the old `$PROD_REF` run re-graded an identical
-tree - and it sat on the deploy critical path: measured on !476, semantic-release
-and the deploy waited ~10 min for the canary on main, every deploy, and it never
-guarded a merge because it ran after the merge. This leans on merge trains being
-ON; if trains are ever disabled, restore the `$PROD_REF` rule in `.gitlab-ci.yml`
-(an MR pipeline alone can go stale against an advanced main). Keep this paragraph
-and that job's `rules:` in step.
+The canary runs on the **merge-train pipeline only** - not the plain MR
+pipeline, not the post-merge `main` pipeline (both dropped 2026-09-18, MRs
+!477 then !478). The train grades the full manifest against the real merge
+result (main + MR) just before it lands, so it is the one run that both sees
+the real tree and gates the merge; the MR-pipeline run graded main-at-MR-time
+and the `$PROD_REF` run re-graded an identical tree on the deploy critical path
+(measured !476: semantic-release + deploy idle ~10 min waiting for it). Gated on
+`$CI_MERGE_REQUEST_EVENT_TYPE == "merge_train"`. **This leans hard on merge
+trains being ON: with trains OFF the canary would run nowhere and the merge gate
+would silently vanish.** If trains are ever disabled, that rule MUST change back
+in the same commit - restore the plain `merge_request_event` MR run and the
+`$PROD_REF` main run. Keep this paragraph and that job's `rules:` in step.
 
 Never scope the canary below the full manifest: a filtered run is structurally blind to a
 pre-existing entry the same diff broke (that reddened main once already). The path gate
