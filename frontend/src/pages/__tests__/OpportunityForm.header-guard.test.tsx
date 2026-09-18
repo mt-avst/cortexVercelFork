@@ -1,11 +1,12 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import OpportunityForm from '../OpportunityForm';
 import Header from '../../components/Header';
 import { NavigationGuardProvider } from '../../contexts/NavigationGuardContext';
+import { chooseStudyType } from './helpers/study-type-picker';
 
 /**
  * WZ-13: a dirty OpportunityForm intercepts the GLOBAL Header's links.
@@ -83,8 +84,18 @@ const renderWithHeader = () =>
 const headerBrowseLink = () =>
   screen.getAllByRole('link', { name: /Browse Studies/i })[0];
 
-const typeTitle = (value: string) =>
+// Title lives on the Basic Info step now, split out of the Study type step
+// (D1/D3 reshape), so making the form dirty means choosing a type and walking
+// to it first.
+const typeTitle = (value: string) => {
+  chooseStudyType('poll');
+  fireEvent.click(
+    within(screen.getByRole('navigation', { name: 'Form steps' })).getAllByRole(
+      'button'
+    )[1]
+  );
   fireEvent.change(screen.getByLabelText(/^Title/i), { target: { value } });
+};
 
 beforeEach(() => {
   vi.clearAllMocks();

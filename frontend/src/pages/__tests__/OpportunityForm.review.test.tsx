@@ -177,16 +177,29 @@ const commitControl = () =>
   screen.queryByRole('button', { name: 'Create study' }) ??
   screen.queryByRole('button', { name: 'Save changes' });
 
-/** Fill step 1 well enough to be allowed forward. */
+/**
+ * Fill Study type and Basic Info well enough to be allowed forward.
+ *
+ * Title and Purpose live on Basic Info now, split out of the Study type step
+ * (D1/D3 reshape), so this walks the strip there to fill them, then back to
+ * Study type - leaving the walk `walkForward` does below starting from the
+ * very first step, covering the whole shape the way it did before the split.
+ */
 const fillBasics = (
   type: string,
   { title = 'A study with a long enough title' } = {}
 ) => {
   chooseStudyType(type);
+  const steps = () =>
+    within(screen.getByRole('navigation', { name: 'Form steps' })).getAllByRole(
+      'button'
+    );
+  fireEvent.click(steps()[1]);
   fireEvent.change(screen.getByLabelText(/^Title/i), { target: { value: title } });
   fireEvent.change(screen.getByLabelText(/^Purpose/i), {
     target: { value: 'A purpose long enough to pass validation' }
   });
+  fireEvent.click(steps()[0]);
 };
 
 /**
@@ -265,15 +278,16 @@ beforeEach(() => {
 
 describe('Review is the only step that commits', () => {
   it.each([
-    // The D1/D3 spine: native/recorded/moderated shapes are five steps and
-    // Review's previous is Consent. External shapes are four steps (no Consent
-    // step, row 13), so Review's previous is the link. fillBasics picks the
-    // external default for the answer-based types.
-    ['unmoderated', 5, 'Consent'],
-    ['poll', 4, 'Your link'],
-    ['question', 4, 'Your link'],
-    ['test', 5, 'Consent'],
-    ['interview', 5, 'Consent']
+    // The D1/D3 spine, split into Study type and Basic Info: native/recorded/
+    // moderated shapes are six steps and Review's previous is Consent.
+    // External shapes are five steps (no Consent step, row 13), so Review's
+    // previous is the link. fillBasics picks the external default for the
+    // answer-based types.
+    ['unmoderated', 6, 'Consent'],
+    ['poll', 5, 'Your link'],
+    ['question', 5, 'Your link'],
+    ['test', 6, 'Consent'],
+    ['interview', 6, 'Consent']
   ])(
     'on the %s path: no earlier step offers a commit control, and Review does',
     (type, expectedSteps, stepBeforeReview) => {
@@ -308,7 +322,9 @@ describe('Review is the only step that commits', () => {
   it('names the outcome differently in edit mode', async () => {
     vi.mocked(getOpportunity).mockResolvedValue(OPPORTUNITY() as never);
     renderEdit();
-    await screen.findByDisplayValue('A poll the author already wrote');
+    // Study type - the landing step since D5 - carries no Title field any
+    // more, so the strip itself is the load anchor.
+    await screen.findByRole('navigation', { name: 'Form steps' });
 
     const seen = walkForward();
 
@@ -321,6 +337,13 @@ describe('Review is the only step that commits', () => {
   it('carries no Save Changes shortcut of its own, so there is one control and one outcome', async () => {
     vi.mocked(getOpportunity).mockResolvedValue(OPPORTUNITY() as never);
     renderEdit();
+    // Title lives on Basic Info now, split out of the Study type landing
+    // step (D1/D3 reshape).
+    fireEvent.click(
+      within(await screen.findByRole('navigation', { name: 'Form steps' })).getAllByRole(
+        'button'
+      )[1]
+    );
     await screen.findByDisplayValue('A poll the author already wrote');
     fireEvent.change(screen.getByLabelText(/^Title/i), { target: { value: 'Edited so the shortcut appears' } });
 
@@ -404,7 +427,7 @@ describe('the Edit links open the step that owns each section', () => {
     // this is the same fact `getByRole`'s own name matching already reads.
     expect(
       screen.getAllByRole('button', { name: /^Edit / }).map((button) => button.getAttribute('aria-label'))
-    ).toEqual(['Edit The study', 'Edit Audience', 'Edit Task List', 'Edit Consent']);
+    ).toEqual(['Edit Study type', 'Edit Basic Info', 'Edit Audience', 'Edit Task List', 'Edit Consent']);
   });
 });
 
@@ -441,15 +464,16 @@ describe('the summary reads the form as it stands, not as it was on arrival', ()
       within(screen.getByTestId('review-step')).getByText('A study with a long enough title')
     ).toBeInTheDocument();
 
-    // Change something on step 1...
-    fireEvent.click(screen.getByRole('button', { name: 'Edit The study' }));
+    // Change something on Basic Info...
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Basic Info' }));
     fireEvent.change(screen.getByLabelText(/^Title/i), {
       target: { value: 'Renamed on a second visit' }
     });
 
-    // ...and something on step 3, so this cannot pass by step 1 alone being
-    // live. A snapshot taken on arrival would show both of the old values.
-    fireEvent.click(strip()[2]);
+    // ...and something on the Task List step, so this cannot pass by Basic
+    // Info alone being live. A snapshot taken on arrival would show both of
+    // the old values.
+    fireEvent.click(strip()[3]);
     fireEvent.change(screen.getByLabelText(/Starting URL/i), {
       target: { value: 'https://shop.example.com:8443/basket?ref=x' }
     });
@@ -668,7 +692,7 @@ describe('the commit still happens, and only from Review', () => {
     renderCreate();
     fillBasics('poll');
     walkForward();
-    fireEvent.click(strip()[2]);
+    fireEvent.click(strip()[3]);
     fireEvent.change(screen.getByLabelText(/External Link/i), {
       target: { value: 'https://example.com/poll' }
     });
@@ -684,10 +708,12 @@ describe('the time slots confirmed on the session step are written by the commit
   it('writes them for a test, from Review', async () => {
     renderCreate();
     fillBasics('test');
-    // Audience, then the session step; confirm a slot; then Consent and Review.
-    // The D1/D3 spine puts Audience before the session step and drops the
-    // separate Screener step, so a test is study -> audience -> sessions ->
-    // consent -> review.
+    // Basic Info, then Audience, then the session step; confirm a slot; then
+    // Consent and Review. The D1/D3 spine, split into Study type and Basic
+    // Info, puts Audience before the session step and drops the separate
+    // Screener step, so a test is study type -> basic info -> audience ->
+    // sessions -> consent -> review.
+    fireEvent.click(forwardControl()!);
     fireEvent.click(forwardControl()!);
     fireEvent.click(forwardControl()!);
     fireEvent.click(screen.getByRole('button', { name: 'stub: confirm one slot' }));
@@ -728,13 +754,14 @@ describe('the time slots confirmed on the session step are written by the commit
     fillBasics('test');
     fireEvent.click(forwardControl()!);
     fireEvent.click(forwardControl()!);
+    fireEvent.click(forwardControl()!);
     fireEvent.click(screen.getByRole('button', { name: 'stub: confirm one slot' }));
 
-    // Back to step 1 and change the type.
+    // Back to Study type and change the type.
     fireEvent.click(strip()[0]);
     chooseStudyType('poll');
     walkForward();
-    fireEvent.click(strip()[2]);
+    fireEvent.click(strip()[3]);
     fireEvent.change(screen.getByLabelText(/External Link/i), {
       target: { value: 'https://example.com/poll' }
     });
@@ -852,7 +879,7 @@ describe('the form itself cannot commit, only the control on Review', () => {
   };
 
   it.each([
-    ['poll', 2, 'Your link']
+    ['poll', 3, 'Your link']
   ])(
     'ignores its own submit event on the %s path, %i step(s) in (%s)',
     (type, forwardClicks, expectedStep) => {
@@ -881,7 +908,7 @@ describe('the form itself cannot commit, only the control on Review', () => {
     renderCreate();
     fillBasics('poll');
     walkForward();
-    fireEvent.click(strip()[2]);
+    fireEvent.click(strip()[3]);
     fireEvent.change(screen.getByLabelText(/External Link/i), {
       target: { value: 'https://example.com/poll' }
     });
@@ -896,7 +923,9 @@ describe('what Review says about itself depends on whether the thing exists', ()
   it('does not claim nothing has been saved when editing something that has', async () => {
     vi.mocked(getOpportunity).mockResolvedValue(OPPORTUNITY() as never);
     renderEdit();
-    await screen.findByDisplayValue('A poll the author already wrote');
+    // Study type - the landing step since D5 - carries no Title field any
+    // more, so the strip itself is the load anchor.
+    await screen.findByRole('navigation', { name: 'Form steps' });
     walkForward();
 
     /*
@@ -925,6 +954,7 @@ describe('a save that half-worked is not announced as a success', () => {
 
     renderCreate();
     fillBasics('test');
+    fireEvent.click(forwardControl()!);
     fireEvent.click(forwardControl()!);
     fireEvent.click(forwardControl()!);
     fireEvent.click(screen.getByRole('button', { name: 'stub: confirm one slot' }));
@@ -958,6 +988,7 @@ describe('a save that half-worked is not announced as a success', () => {
 
     renderCreate();
     fillBasics('test');
+    fireEvent.click(forwardControl()!);
     fireEvent.click(forwardControl()!);
     fireEvent.click(forwardControl()!);
     // On Session Management: set the venue (D6) so the only banner is the failed
@@ -1123,6 +1154,7 @@ describe('the step that is not a StepActions row still names where it goes', () 
     fillBasics('test');
     fireEvent.click(forwardControl()!);
     fireEvent.click(forwardControl()!);
+    fireEvent.click(forwardControl()!);
 
     expect(currentStepName()).toMatch(/Session Management/);
     // Screener, not Consent or Review: MR2 put the Screener step immediately
@@ -1138,17 +1170,12 @@ describe('the step that is not a StepActions row still names where it goes', () 
 describe('a refusal does not follow the author off the step that caused it', () => {
   it('clears the banner when they move on, and when they use an Edit link', () => {
     renderCreate();
-    // No type chosen, but the other basics filled, so the ONLY refusal is the
-    // missing type. The strip is hidden until a type is chosen now (WZ-18), so
-    // the refusal is triggered from the Basic Information body's own forward
-    // control rather than by clicking a step 2 tile.
-    fireEvent.change(screen.getByLabelText(/^Title/i), {
-      target: { value: 'A study with a long enough title' }
-    });
-    fireEvent.change(screen.getByLabelText(/^Purpose/i), {
-      target: { value: 'A purpose long enough to pass validation' }
-    });
-    // With no type chosen the forward control names nothing ("Continue", not
+    // No type chosen, so `type` is the ONLY possible refusal - there is
+    // nothing else to fill, since Title and Purpose live on Basic Info, a
+    // step reachable only once a type is chosen. The strip is hidden until a
+    // type is chosen (WZ-18), so the refusal is triggered from the Study
+    // type step's own forward control rather than by clicking a later tile.
+    // With no type chosen that control names nothing ("Continue", not
     // "Continue: <step>"), so match it loosely rather than with forwardControl.
     fireEvent.click(screen.getByRole('button', { name: /^Continue/i }));
     // By its own heading, not by role alone: a refused step also carries the
@@ -1163,10 +1190,12 @@ describe('a refusal does not follow the author off the step that caused it', () 
 
     // ...and so does an Edit link from Review, which is a separate code path.
     walkForward();
-    fireEvent.click(strip()[1]);
+    fireEvent.click(strip()[2]);
     fireEvent.click(screen.getByRole('button', { name: /^Continue: / }));
     walkForward();
-    fireEvent.click(screen.getByRole('button', { name: 'Edit The study' }));
+    // Title lives on Basic Info now, split out of the Study type step
+    // (D1/D3 reshape).
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Basic Info' }));
     expect(queryErrorSummary()).toBeNull();
     // The Edit link's own job, asserted here too so this cannot pass by the
     // click having done nothing at all.
@@ -1185,7 +1214,7 @@ describe('a publish that WOULD be allowed says nothing', () => {
     fillBasics('poll');
     walkForward();
     setStatus('published');
-    fireEvent.click(strip()[2]);
+    fireEvent.click(strip()[3]);
     fireEvent.change(screen.getByLabelText(/External Link/i), {
       target: { value: 'https://example.com/poll' }
     });
@@ -1202,9 +1231,10 @@ describe('a publish that WOULD be allowed says nothing', () => {
     // describe above; this is its positive control.
     renderCreate();
     fillBasics('test');
-    // The same navigation the slot-writing test above uses: two forwards reach
-    // the Session Management step, where the venue is set (D6) and the stub
-    // confirms one slot.
+    // The same navigation the slot-writing test above uses: three forwards
+    // reach the Session Management step, where the venue is set (D6) and the
+    // stub confirms one slot.
+    fireEvent.click(forwardControl()!);
     fireEvent.click(forwardControl()!);
     fireEvent.click(forwardControl()!);
     fillVenue();
@@ -1233,7 +1263,7 @@ describe('the form refuses a link the server would refuse', () => {
     fillBasics('question');
     walkForward();
     setStatus('published');
-    fireEvent.click(strip()[2]);
+    fireEvent.click(strip()[3]);
     fireEvent.change(screen.getByLabelText(/External Link/i), { target: { value: link } });
     fireEvent.click(strip()[strip().length - 1]);
     fireEvent.click(screen.getByRole('button', { name: 'Create study' }));
@@ -1251,7 +1281,7 @@ describe('the form refuses a link the server would refuse', () => {
     fillBasics('question');
     walkForward();
     setStatus('published');
-    fireEvent.click(strip()[2]);
+    fireEvent.click(strip()[3]);
     fireEvent.change(screen.getByLabelText(/External Link/i), {
       target: { value: 'http://example.com/answer' }
     });
@@ -1283,7 +1313,9 @@ describe('an opportunity stored with a bad link can still be repaired', () => {
       }) as never
     );
     renderEdit();
-    await screen.findByDisplayValue('A poll the author already wrote');
+    // Study type - the landing step since D5 - carries no Title field any
+    // more, so the strip itself is the load anchor.
+    await screen.findByRole('navigation', { name: 'Form steps' });
 
     walkForward();
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
@@ -1308,7 +1340,9 @@ describe('an opportunity stored with a bad link can still be repaired', () => {
       }) as never
     );
     renderEdit();
-    await screen.findByDisplayValue('A poll the author already wrote');
+    // Study type - the landing step since D5 - carries no Title field any
+    // more, so the strip itself is the load anchor.
+    await screen.findByRole('navigation', { name: 'Form steps' });
 
     walkForward();
     fireEvent.click(screen.getByRole('button', { name: 'Edit Your link' }));
@@ -1343,7 +1377,7 @@ describe('the field says so on blur, not only on save', () => {
     renderCreate();
     fillBasics('question');
     walkForward();
-    fireEvent.click(strip()[2]);
+    fireEvent.click(strip()[3]);
 
     fireEvent.change(linkField(), { target: { value: link } });
     fireEvent.blur(linkField());
@@ -1359,7 +1393,7 @@ describe('the field says so on blur, not only on save', () => {
     renderCreate();
     fillBasics('question');
     walkForward();
-    fireEvent.click(strip()[2]);
+    fireEvent.click(strip()[3]);
 
     fireEvent.change(linkField(), { target: { value: 'javascript:alert(1)' } });
     fireEvent.blur(linkField());

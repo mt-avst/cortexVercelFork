@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -145,6 +145,24 @@ const openQuestions = async () => {
     fireEvent.click(await screen.findByRole('button', { name: /Questions/i }));
   }
   await screen.findByRole('button', { name: 'Remove question 1' });
+};
+
+/**
+ * Edit the study's title without opening the Questions step.
+ *
+ * Title lives on the Basic Info step now, split out of the Study type
+ * landing step (D1/D3 reshape), so reaching it means walking the strip there
+ * first.
+ */
+const editTitleOnly = async (value: string) => {
+  fireEvent.click(
+    within(await screen.findByRole('navigation', { name: 'Form steps' })).getAllByRole(
+      'button'
+    )[1]
+  );
+  fireEvent.change(await screen.findByDisplayValue('Developer experience pulse'), {
+    target: { value }
+  });
 };
 
 /** How many question cards are on screen, by their own Remove controls. */
@@ -339,11 +357,9 @@ describe('removing a question people have answered', () => {
     );
 
     renderEdit();
-    // Deliberately WITHOUT opening the Questions step. The title lives on the
-    // first step, and this is the save an author makes most often.
-    fireEvent.change(await screen.findByDisplayValue('Developer experience pulse'), {
-      target: { value: 'Developer experience pulse v2' }
-    });
+    // Deliberately WITHOUT opening the Questions step. Title lives on Basic
+    // Info, and this is the save an author makes most often.
+    await editTitleOnly('Developer experience pulse v2');
     saveFromReview();
 
     // Editing the title of a survey with answers is the commonest save there
@@ -431,9 +447,7 @@ describe('removing a question people have answered', () => {
     } as never);
 
     renderEdit();
-    fireEvent.change(await screen.findByDisplayValue('Developer experience pulse'), {
-      target: { value: 'Renamed' }
-    });
+    await editTitleOnly('Renamed');
     saveFromReview();
 
     await waitFor(() => expect(updateOpportunity).toHaveBeenCalledTimes(1));
@@ -524,9 +538,7 @@ describe('removing a question people have answered', () => {
     vi.mocked(getFirstHandStudy).mockResolvedValue(study(null) as never);
 
     renderEdit();
-    fireEvent.change(await screen.findByDisplayValue('Developer experience pulse'), {
-      target: { value: 'Developer experience pulse v2' }
-    });
+    await editTitleOnly('Developer experience pulse v2');
     saveFromReview();
 
     await waitFor(() => expect(updateOpportunity).toHaveBeenCalledTimes(1));

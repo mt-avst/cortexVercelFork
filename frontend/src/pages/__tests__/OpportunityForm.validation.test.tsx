@@ -85,11 +85,28 @@ const renderForm = () =>
 const selectType = (value: string, delivery: 'native' | 'external' = 'external') =>
   chooseStudyType(value, delivery);
 
-const setTitle = (value: string) =>
-  fireEvent.change(screen.getByLabelText(/^Title/i), { target: { value } });
+/**
+ * Title and Purpose live on the Basic Info step now, split out of the Study
+ * type step (D1/D3 reshape), so setting either walks the strip there first -
+ * a no-op if already on that step. Requires a type to have been chosen
+ * already, since the strip is gated on one (WZ-18).
+ */
+const goToBasicInfo = () =>
+  fireEvent.click(
+    within(screen.getByRole('navigation', { name: 'Form steps' })).getAllByRole(
+      'button'
+    )[1]
+  );
 
-const setPurpose = (value: string) =>
+const setTitle = (value: string) => {
+  goToBasicInfo();
+  fireEvent.change(screen.getByLabelText(/^Title/i), { target: { value } });
+};
+
+const setPurpose = (value: string) => {
+  goToBasicInfo();
   fireEvent.change(screen.getByLabelText(/purpose/i), { target: { value } });
+};
 
 /** The step the author is looking at, read off the step strip. */
 const currentStepName = () =>
@@ -197,7 +214,7 @@ describe('Continue can never pass what Submit refuses', () => {
 
     continueForward();
 
-    expect(currentStepName()).toMatch(/The study/i);
+    expect(currentStepName()).toMatch(/Basic Info/i);
     expect(summarisedErrorKeys()).toEqual(['title']);
     expect(summaryMessageFor('title')).toBe(
       'Shorten the title to 140 characters or fewer'
@@ -210,7 +227,7 @@ describe('Continue can never pass what Submit refuses', () => {
 
     continueForward();
 
-    expect(currentStepName()).toMatch(/The study/i);
+    expect(currentStepName()).toMatch(/Basic Info/i);
     expect(summarisedErrorKeys()).toEqual(['purpose_one_liner']);
     expect(summaryMessageFor('purpose_one_liner')).toBe(
       'Shorten the purpose to 180 characters or fewer'
@@ -384,12 +401,12 @@ describe('Continue can never pass what Submit refuses', () => {
 
   it('keeps `type` in scope, because it decides the shape', () => {
     // Type is required before the form advances at all. The strip is hidden
-    // until a type is chosen (WZ-18), so an author cannot click past Basic
-    // Information to a later step with no type - and step 1's own Continue
-    // refuses without one. Filled everything else, the sole refusal is `type`.
+    // until a type is chosen (WZ-18), so an author cannot click past Study
+    // type to a later step with no type - and the step's own Continue
+    // refuses without one. There is nothing else to fill: Title and Purpose
+    // live on Basic Info, a step reachable only once a type is chosen, so
+    // `type` is the sole possible refusal here.
     renderForm();
-    setTitle('A perfectly serviceable title');
-    setPurpose('Find out where people stall in the checkout flow');
 
     fireEvent.click(screen.getByRole('button', { name: /^Continue(:|$)/ }));
 
@@ -512,7 +529,7 @@ describe('the error summary is reachable, and says one thing per problem', () =>
 
     fireEvent.click(summaryLinkFor('title'));
 
-    expect(currentStepName()).toMatch(/The study/i);
+    expect(currentStepName()).toMatch(/Basic Info/i);
     expect(document.activeElement?.id).toBe('title');
   });
 
@@ -626,6 +643,7 @@ describe('blur reports the same rules, on every field that has one', () => {
     // BasicInfoTab and used by no input in it.
     renderForm();
     selectType('question');
+    goToBasicInfo();
     const title = screen.getByLabelText(/^Title/i);
     fireEvent.change(title, { target: { value: 'x'.repeat(150) } });
     fireEvent.blur(title);
@@ -638,6 +656,7 @@ describe('blur reports the same rules, on every field that has one', () => {
   it('flags a short purpose on blur', () => {
     renderForm();
     selectType('question');
+    goToBasicInfo();
     const purpose = screen.getByLabelText(/purpose/i);
     fireEvent.change(purpose, { target: { value: 'too short' } });
     fireEvent.blur(purpose);
@@ -666,6 +685,7 @@ describe('blur reports the same rules, on every field that has one', () => {
     // pass every test above and make the field impossible to fill in.
     renderForm();
     selectType('question');
+    goToBasicInfo();
     const title = screen.getByLabelText(/^Title/i);
     fireEvent.change(title, { target: { value: 'x'.repeat(150) } });
     fireEvent.blur(title);
@@ -687,6 +707,7 @@ describe('blur reports the same rules, on every field that has one', () => {
     // form the moment the author left the first one.
     renderForm();
     selectType('question');
+    goToBasicInfo();
     const title = screen.getByLabelText(/^Title/i);
     fireEvent.change(title, { target: { value: 'abc' } });
     fireEvent.blur(title);
@@ -774,12 +795,12 @@ describe('a summary link lands on the item it names', () => {
     setTitle('Developer experience pulse');
     setPurpose('Ten short questions about the tools you use every day');
 
-    // Through the step strip: C3's forward control on step 2 is ALSO named
-    // "Continue: Questions", so an unscoped match is ambiguous.
+    // Through the step strip: C3's forward control on the previous step is
+    // ALSO named "Continue: Questions", so an unscoped match is ambiguous.
     const strip = within(
       screen.getByRole('navigation', { name: 'Form steps' })
     ).getAllByRole('button');
-    fireEvent.click(strip[2]);
+    fireEvent.click(strip[3]);
     fireEvent.click(await screen.findByRole('button', { name: /^Add question$/i }));
 
     walkToReview();
@@ -859,9 +880,9 @@ describe('a validation error does not outlive the field it is about', () => {
       inlineErrorText('Enter a session length between 5 and 240 minutes')
     ).toBeInTheDocument();
 
-    // The type select is back on Basic Information; switch to a type with no
+    // The type select is back on Study type; switch to a type with no
     // session step.
-    goToStep(/The study/);
+    goToStep(/Study type/);
     selectType('question');
 
     // The field is gone, so the message has to be gone...
@@ -891,9 +912,9 @@ describe('a validation error does not outlive the field it is about', () => {
     fireEvent.change(duration, { target: { value: '300' } });
     fireEvent.blur(duration);
 
-    // The type select is on Basic Information; interview still has a session
+    // The type select is on Study type; interview still has a session
     // step, so the error must survive.
-    goToStep(/The study/);
+    goToStep(/Study type/);
     selectType('interview');
 
     goToStep(/Session Management/);
@@ -918,7 +939,7 @@ describe('a per-item message renumbers when its item moves', () => {
     const strip = within(
       screen.getByRole('navigation', { name: 'Form steps' })
     ).getAllByRole('button');
-    fireEvent.click(strip[2]);
+    fireEvent.click(strip[3]);
 
     fireEvent.click(await screen.findByRole('button', { name: /^Add question$/i }));
     fireEvent.change(
@@ -966,18 +987,20 @@ describe('a per-item message renumbers when its item moves', () => {
 
 describe('blur does not flag a field the author never filled', () => {
   it('says nothing when they tab through a blank form', () => {
-    // Title and purpose are the first text tab stops on a new form (the type is
-    // now a card picker, not a blurred field). Validating unconditionally on
-    // blur meant simply LOOKING at the form raised assertive refusals before a
-    // character was typed. Nothing did that before D1, because no input on this
-    // step wired `onBlur` at all.
+    // Title and purpose are the first text tab stops on Basic Info, reached
+    // once a type is chosen (Study type carries no blurrable text field of
+    // its own - just the picker). Validating unconditionally on blur meant
+    // simply LOOKING at a field raised assertive refusals before a character
+    // was typed; this proves blurring an untouched, still-empty field raises
+    // nothing.
     renderForm();
+    selectType('question');
+    goToBasicInfo();
 
     fireEvent.blur(screen.getByLabelText(/^Title/i));
     fireEvent.blur(screen.getByLabelText(/purpose/i));
 
     expect(queryErrorSummary()).toBeNull();
-    expect(screen.queryAllByText('Choose a research study type')).toEqual([]);
     expect(screen.queryAllByText('Enter a title')).toEqual([]);
     expect(screen.queryAllByText('Enter a purpose')).toEqual([]);
   });
@@ -987,6 +1010,7 @@ describe('blur does not flag a field the author never filled', () => {
     // test above and make the whole of task 6 pointless.
     renderForm();
     selectType('question');
+    goToBasicInfo();
     const title = screen.getByLabelText(/^Title/i);
     fireEvent.change(title, { target: { value: 'abc' } });
     fireEvent.blur(title);
@@ -1001,6 +1025,7 @@ describe('blur does not flag a field the author never filled', () => {
     // error on a now-empty optional field could never be taken back.
     renderForm();
     selectType('question');
+    goToBasicInfo();
     const title = screen.getByLabelText(/^Title/i);
     fireEvent.change(title, { target: { value: 'abc' } });
     fireEvent.blur(title);
@@ -1062,7 +1087,7 @@ describe('the "at least two answers" rule waits until focus leaves the group', (
     const strip = within(
       screen.getByRole('navigation', { name: 'Form steps' })
     ).getAllByRole('button');
-    fireEvent.click(strip[2]);
+    fireEvent.click(strip[3]);
     fireEvent.click(await screen.findByRole('button', { name: /^Add question$/i }));
     fireEvent.change(screen.getByLabelText(/^Type$/i), {
       target: { value: 'single_choice' },

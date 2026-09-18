@@ -1,8 +1,6 @@
 import React from 'react';
 import { OpportunityFormData } from '../../api/types';
 import FieldError from './FieldError';
-import StudyTypePicker from './StudyTypePicker';
-import type { DraftedOpportunity } from '../../api/client';
 
 /** Form field value type for opportunity form handlers */
 type FormFieldValue = string | number | boolean | undefined;
@@ -12,41 +10,21 @@ interface BasicInfoTabProps {
   validationErrors: Record<string, string>;
   handleInputChange: (field: string, value: FormFieldValue) => void;
   handleBlur?: (field: string) => void;
-  /**
-   * D13, W9: passed straight through to StudyTypePicker, which mounts the
-   * live "Describe it" panel only when this is provided - see
-   * OpportunityForm.tsx's own comment at the call site for why it is new-only.
-   */
-  onApplyDraft?: (draft: DraftedOpportunity) => void;
 }
 
+/**
+ * Step 2, "Basic Info": the study's advert copy - Title, Purpose, Description
+ * and Product. The study-type picker that used to head this component now owns
+ * step 1 on its own, so this step is naming, not typing.
+ */
 const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
   formData,
   validationErrors,
   handleInputChange,
-  handleBlur,
-  onApplyDraft
+  handleBlur
 }) => {
   return (
     <div className="tab-pane active">
-      {/* The type choice (D2): one picker of nine cards, replacing the old
-          "Research Study Type" select and the "Where participants answer"
-          delivery radios. Selecting a card sets the existing type and
-          delivery_mode values together, and the front-door AI prompt (D13)
-          is wired by W9 - live only when onApplyDraft is provided. Row 7: a
-          published study's type is read-only behind "Change study type". */}
-      <StudyTypePicker
-        type={formData.type}
-        deliveryMode={formData.delivery_mode ?? 'external'}
-        onSelect={(nextType, nextDelivery) => {
-          handleInputChange('type', nextType);
-          handleInputChange('delivery_mode', nextDelivery);
-        }}
-        isPublished={formData.status === 'published'}
-        validationError={validationErrors.type}
-        onApplyDraft={onApplyDraft}
-      />
-
       <div className="form-section mb-5">
         <div className="d-flex align-items-center mb-4 pb-3" style={{ borderBottom: 'none' }}>
           <div>
@@ -54,7 +32,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
               Basic Information
             </h2>
             <p className="mb-0 section-description" style={{ fontSize: '0.95rem' }}>
-              Configure the study type and basic details
+              Configure the study details
             </p>
           </div>
         </div>

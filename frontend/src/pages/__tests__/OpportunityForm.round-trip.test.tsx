@@ -170,6 +170,20 @@ const renderEdit = (path: string) =>
   );
 
 /**
+ * Title lives on the Basic Info step now, split out of the Study type
+ * landing step (D1/D3 reshape), so reaching it - to read its hydrated value,
+ * or to edit it - means walking the strip there first. Safe to call more
+ * than once in a test: clicking an already-current step is a no-op.
+ */
+const goToBasicInfo = async () => {
+  fireEvent.click(
+    within(await screen.findByRole('navigation', { name: 'Form steps' })).getAllByRole(
+      'button'
+    )[1]
+  );
+};
+
+/**
  * Open every collapsed card.
  *
  * B2 collapses authored questions and tasks by default, so their prompt fields
@@ -801,6 +815,7 @@ describe('reopening an opportunity that has a task list', () => {
 
     // Editing the title is what makes hasChanges true; the assertion is about
     // what rides along with it.
+    await goToBasicInfo();
     const title = await screen.findByDisplayValue('Checkout walkthrough');
     fireEvent.change(title, { target: { value: 'Checkout walkthrough v2' } });
     fireEvent.click(await screen.findByRole('button', { name: /Save Changes/i }));
@@ -868,6 +883,7 @@ describe('reopening an opportunity that has a task list', () => {
 
       renderEdit('/admin/opportunities/opp-1/edit');
 
+      await goToBasicInfo();
       const title = await screen.findByDisplayValue('Checkout walkthrough');
       fireEvent.change(title, { target: { value: 'Checkout walkthrough v2' } });
 
@@ -895,6 +911,7 @@ describe('reopening an opportunity that has a task list', () => {
       );
 
       renderEdit('/admin/opportunities/opp-1/edit');
+      await goToBasicInfo();
       const title = await screen.findByDisplayValue('Checkout walkthrough');
       fireEvent.change(title, { target: { value: 'Checkout walkthrough v2' } });
       await save();
@@ -980,6 +997,7 @@ describe('reopening an opportunity that has a task list', () => {
         );
 
       renderEdit('/admin/opportunities/opp-1/edit');
+      await goToBasicInfo();
       const title = await screen.findByDisplayValue('Checkout walkthrough');
       fireEvent.change(title, { target: { value: 'Checkout walkthrough v2' } });
 
@@ -1005,6 +1023,7 @@ describe('reopening an opportunity that has a task list', () => {
       // The successful save re-runs `loadOpportunity`, which rebuilds the form
       // from the server - so the title field is back to the stored value here,
       // and waiting for that is also how this test knows the reload finished.
+      await goToBasicInfo();
       const reloaded = await screen.findByDisplayValue('Checkout walkthrough');
       fireEvent.change(reloaded, {
         target: { value: 'Checkout walkthrough v3' }
@@ -1153,6 +1172,7 @@ describe('reopening an opportunity that has a task list', () => {
 
     renderEdit('/admin/opportunities/opp-1/edit');
 
+    await goToBasicInfo();
     const title = await screen.findByDisplayValue('Checkout walkthrough');
     fireEvent.change(title, { target: { value: 'Checkout walkthrough v2' } });
     fireEvent.click(await screen.findByRole('button', { name: /Save Changes/i }));
@@ -1181,6 +1201,7 @@ describe('reopening an opportunity that has questions', () => {
 
     renderEdit('/admin/opportunities/opp-2/edit');
 
+    await goToBasicInfo();
     const title = await screen.findByDisplayValue('Developer experience pulse');
     fireEvent.change(title, { target: { value: 'Developer experience pulse 2026' } });
     fireEvent.click(await screen.findByRole('button', { name: /Save Changes/i }));
@@ -1230,6 +1251,7 @@ describe('reopening an opportunity that has questions', () => {
     );
 
     renderEdit('/admin/opportunities/opp-2/edit');
+    await goToBasicInfo();
     await screen.findByDisplayValue('Developer experience pulse');
     fireEvent.click(screen.getByRole('button', { name: /Questions/i }));
 
@@ -1358,7 +1380,7 @@ describe('a study this author may not change here', () => {
       'Which delivery option would you pick?'
     ]);
 
-    fireEvent.click(screen.getByRole('button', { name: /The study/i }));
+    await goToBasicInfo();
     fireEvent.change(await screen.findByDisplayValue('Checkout walkthrough'), {
       target: { value: 'Checkout walkthrough v2' }
     });
@@ -1402,7 +1424,7 @@ describe('a study this author may not change here', () => {
       await screen.findByText(/uses something this form cannot show/i)
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /The study/i }));
+    await goToBasicInfo();
     fireEvent.change(await screen.findByDisplayValue('Checkout walkthrough'), {
       target: { value: 'Checkout walkthrough v2' }
     });
@@ -1462,7 +1484,7 @@ describe('a set of questions this author may not change here', () => {
       'Would you recommend it?'
     ]);
 
-    fireEvent.click(screen.getByRole('button', { name: /The study/i }));
+    await goToBasicInfo();
     fireEvent.change(await screen.findByDisplayValue('Developer experience pulse'), {
       target: { value: 'Developer experience pulse 2026' }
     });
@@ -1488,6 +1510,7 @@ describe('a linked study the form would never render', () => {
     } as never);
 
     renderEdit('/admin/opportunities/opp-2/edit');
+    await goToBasicInfo();
     await screen.findByDisplayValue('Developer experience pulse');
 
     expect(getFirstHandStudy).not.toHaveBeenCalled();
@@ -1509,7 +1532,7 @@ describe('a linked study the form would never render', () => {
       await screen.findByText(/use something this form cannot show/i)
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /The study/i }));
+    await goToBasicInfo();
     fireEvent.change(await screen.findByDisplayValue('Developer experience pulse'), {
       target: { value: 'Developer experience pulse 2026' }
     });
@@ -1608,6 +1631,7 @@ describe('a duration the author cleared', () => {
     );
 
     renderEdit('/admin/opportunities/opp-1/edit');
+    await goToBasicInfo();
     fireEvent.change(await screen.findByDisplayValue('Checkout walkthrough'), {
       target: { value: 'Checkout walkthrough v2' }
     });
@@ -1630,6 +1654,7 @@ describe('the automatic estimate against a study that already has a duration', (
     vi.mocked(getFirstHandStudy).mockResolvedValue(study() as never);
 
     renderEdit('/admin/opportunities/opp-1/edit');
+    await goToBasicInfo();
     await screen.findByDisplayValue('Checkout walkthrough');
 
     fireEvent.change(screen.getByLabelText(/^Title/i), {
@@ -1652,6 +1677,7 @@ describe('the automatic estimate against a study that already has a duration', (
     vi.mocked(getFirstHandStudy).mockResolvedValue(study() as never);
 
     renderEdit('/admin/opportunities/opp-1/edit');
+    await goToBasicInfo();
     await screen.findByDisplayValue('Checkout walkthrough');
     fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
 
@@ -1686,6 +1712,7 @@ describe('the automatic estimate on a survey that already has one', () => {
     );
 
     renderEdit('/admin/opportunities/opp-2/edit');
+    await goToBasicInfo();
     await screen.findByDisplayValue('Developer experience pulse');
     fireEvent.click(screen.getByRole('button', { name: /Questions/i }));
 
@@ -1701,7 +1728,7 @@ describe('the automatic estimate on a survey that already has one', () => {
     // whose action row carries no Save Changes shortcut - it has `onSubmit`
     // and no `onSave`. Navigating there is also what makes this a test of
     // hasChanges() rather than of the submit button, which fires regardless.
-    fireEvent.click(screen.getByRole('button', { name: /The study/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Basic Info/i }));
     fireEvent.click(await screen.findByRole('button', { name: /Save Changes/i }));
     await waitFor(() => expect(updateOpportunity).toHaveBeenCalled());
 
@@ -1730,6 +1757,7 @@ describe('when the linked study no longer exists', () => {
 
     expect(await screen.findByText(/no longer exist/i)).toBeInTheDocument();
 
+    await goToBasicInfo();
     fireEvent.change(await screen.findByDisplayValue('Checkout walkthrough'), {
       target: { value: 'Checkout walkthrough v2' }
     });
@@ -1815,6 +1843,7 @@ describe('when the linked set of questions no longer exists', () => {
     renderEdit('/admin/opportunities/opp-2/edit');
     expect(await screen.findByText(/no longer exist/i)).toBeInTheDocument();
 
+    await goToBasicInfo();
     fireEvent.change(await screen.findByDisplayValue('Developer experience pulse'), {
       target: { value: 'Developer experience pulse 2026' }
     });
@@ -1882,6 +1911,7 @@ describe('when the linked study cannot be read', () => {
 
     // A real edit, so the Save control is rendered at all - the point is that
     // it is rendered DISABLED, not that an unchanged form hides it.
+    await goToBasicInfo();
     fireEvent.change(await screen.findByDisplayValue('Checkout walkthrough'), {
       target: { value: 'Checkout walkthrough v2' }
     });
@@ -1916,6 +1946,7 @@ describe('when the linked study cannot be read', () => {
     renderEdit('/admin/opportunities/opp-1/edit');
 
     await screen.findByText(/could not be loaded, so this study cannot be saved/i);
+    await goToBasicInfo();
 
     expect(
       await screen.findByRole('button', { name: /Continue: Audience/i })
@@ -1952,6 +1983,7 @@ describe('when the linked study cannot be read', () => {
 
     // A real edit, so the Save Changes shortcut renders at all - the point
     // below is that it renders DISABLED, on the step before Review too.
+    await goToBasicInfo();
     fireEvent.change(await screen.findByDisplayValue('Checkout walkthrough'), {
       target: { value: 'Checkout walkthrough v2' }
     });
@@ -1977,11 +2009,12 @@ describe('the Save button appearing for a change that only touches authored cont
     vi.mocked(getFirstHandStudy).mockResolvedValue(study() as never);
 
     renderEdit('/admin/opportunities/opp-1/edit');
+    await goToBasicInfo();
     await screen.findByDisplayValue('Checkout walkthrough');
     fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
     await openAllCards();
     change();
-    fireEvent.click(screen.getByRole('button', { name: /The study/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Basic Info/i }));
     return screen.queryByRole('button', { name: /Save Changes/i });
   };
 
@@ -2016,6 +2049,7 @@ describe('the Save button appearing for a change that only touches authored cont
     );
 
     renderEdit('/admin/opportunities/opp-1/edit');
+    await goToBasicInfo();
     await screen.findByDisplayValue('Checkout walkthrough');
     fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
     goToConsentStep();
@@ -2056,6 +2090,7 @@ describe('the Save button appearing for a change that only touches authored cont
     );
 
     renderEdit('/admin/opportunities/opp-1/edit');
+    await goToBasicInfo();
     await screen.findByDisplayValue('Checkout walkthrough');
     fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
     goToConsentStep();
@@ -2112,6 +2147,7 @@ describe('the Save button appearing for a change that only touches authored cont
     vi.mocked(getFirstHandStudy).mockResolvedValue(study() as never);
 
     renderEdit('/admin/opportunities/opp-1/edit');
+    await goToBasicInfo();
     await screen.findByDisplayValue('Checkout walkthrough');
 
     // Study Period lives on the Screener/Audience step now (D6).
@@ -2133,10 +2169,11 @@ describe('the Save button appearing for a change that only touches authored cont
     vi.mocked(getFirstHandStudy).mockResolvedValue(study() as never);
 
     renderEdit('/admin/opportunities/opp-1/edit');
+    await goToBasicInfo();
     await screen.findByDisplayValue('Checkout walkthrough');
     fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
     await openAllCards();
-    fireEvent.click(screen.getByRole('button', { name: /The study/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Basic Info/i }));
 
     expect(screen.queryByRole('button', { name: /Save Changes/i })).not.toBeInTheDocument();
   });
@@ -2158,6 +2195,7 @@ describe('the Save button appearing for a change that only touches authored cont
     vi.mocked(getFirstHandStudy).mockResolvedValue(study() as never);
 
     renderEdit('/admin/opportunities/opp-1/edit');
+    await goToBasicInfo();
     await screen.findByDisplayValue('Checkout walkthrough');
 
     fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
@@ -2198,6 +2236,7 @@ describe('the Save button appearing for a change that only touches authored cont
     );
 
     renderEdit('/admin/opportunities/opp-1/edit');
+    await goToBasicInfo();
     await screen.findByDisplayValue('Checkout walkthrough');
     fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
     goToConsentStep();
@@ -2221,6 +2260,7 @@ describe('the Save button appearing for a change that only touches authored cont
     );
 
     renderEdit('/admin/opportunities/opp-1/edit');
+    await goToBasicInfo();
     await screen.findByDisplayValue('Checkout walkthrough');
     fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
     await openAllCards();
@@ -2258,6 +2298,7 @@ describe('the Save button appearing for a change that only touches authored cont
     vi.mocked(getFirstHandStudy).mockResolvedValue(study() as never);
 
     renderEdit('/admin/opportunities/opp-1/edit');
+    await goToBasicInfo();
     await screen.findByDisplayValue('Checkout walkthrough');
     fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
     goToConsentStep();
@@ -2283,6 +2324,7 @@ describe('the Save button appearing for a change that only touches authored cont
       { ...recordedOpportunity, firsthand_study_id: null } as never
     );
     renderEdit('/admin/opportunities/opp-1/edit');
+    await goToBasicInfo();
     await screen.findByDisplayValue('Checkout walkthrough');
 
     fireEvent.click(screen.getByRole('button', { name: /Task List/i }));

@@ -321,17 +321,26 @@ const consentFieldId = (steps: readonly ReviewStepRef[]): string | undefined => 
 const itemsForStep = (step: ReviewStepRef, input: ReviewSummaryInput): ReviewItem[] => {
   switch (step.key) {
     case 'basics': {
-      // Title and Research Study Type used to head this section; WZ-17 PROMOTED
-      // them into the check-answers HEADER (`buildReviewHeader`), which leads
-      // the screen with the study's identity. They are deliberately not
-      // repeated here - two rows saying the same thing the header already says
-      // is exactly the duplication the promotion set out to remove - so the
-      // basics section now begins at Purpose. The header is read-only
-      // orientation; editing the title or the type still happens through this
-      // section's own "Edit Basic Information" link, which opens step 1.
-      // Purpose leads, then Description and Product - advert copy that moved
-      // here to sit with Title and Purpose (D6). Title and the type lead the
-      // check-answers HEADER (WZ-17), so they are not repeated as rows.
+      // The Study type step, on its own since the split. The type leads the
+      // check-answers HEADER too (WZ-17), but here it is the one row of its own
+      // section, so the "Edit Study type" link has something to summarise and a
+      // reason to exist - the header is read-only orientation, this section is
+      // where the type is changed. Delivery is not repeated: it is implied by
+      // the participant-facing type label and steers the experience step, not
+      // this row.
+      return [
+        {
+          label: 'Study type',
+          value: input.type ? STUDY_TYPE_LABELS[input.type] ?? 'Not chosen' : 'Not chosen',
+          missing: !input.type
+        }
+      ];
+    }
+
+    case 'basicInfo': {
+      // The advert copy, on its own Basic Info step. Purpose leads, then
+      // Description and Product. Title leads the check-answers HEADER (WZ-17),
+      // so it is not repeated as a row; the "Edit Basic Info" link lands on it.
       const items: ReviewItem[] = [
         {
           label: 'Purpose',
@@ -567,7 +576,10 @@ const itemsForStep = (step: ReviewStepRef, input: ReviewSummaryInput): ReviewIte
 };
 
 const FOCUS_FIELD_BY_KEY: Record<string, string | undefined> = {
-  basics: 'title',
+  // The Study type step: its Edit link opens the picker (the `type` radiogroup).
+  basics: 'type',
+  // The Basic Info step leads with Title, so its Edit link lands there.
+  basicInfo: 'title',
   // Content holds no fields after D6, so its Edit link opens the step without
   // moving the caret.
   content: undefined,
