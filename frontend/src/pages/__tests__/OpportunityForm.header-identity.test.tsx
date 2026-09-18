@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Routes, useLocation } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -74,8 +74,15 @@ const assertNoRenameChrome = () => {
   expect(screen.queryByRole('button', { name: /Analytics/i })).not.toBeInTheDocument();
 };
 
+// Title and Purpose live on the Basic Info step now, split out of the Study
+// type step (D1/D3 reshape), so filling them means walking there first.
 const fillCreateThreshold = (type = 'survey') => {
   chooseStudyType(type);
+  fireEvent.click(
+    within(screen.getByRole('navigation', { name: 'Form steps' })).getAllByRole(
+      'button'
+    )[1]
+  );
   fireEvent.change(screen.getByLabelText(/^Title/i), {
     target: { value: 'Developer experience pulse' }
   });

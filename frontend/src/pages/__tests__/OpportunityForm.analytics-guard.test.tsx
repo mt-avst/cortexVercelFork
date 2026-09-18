@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Routes, useLocation } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -84,6 +84,15 @@ beforeEach(() => {
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
 });
 
+// Title lives on the Basic Info step now, split out of the Study type
+// landing step (D1/D3 reshape), so reaching it means walking the strip there
+// first.
+const goToBasicInfo = async () => {
+  const nav = await screen.findByRole('navigation', { name: 'Form steps' });
+  fireEvent.click(within(nav).getAllByRole('button')[1]);
+  return screen.findByDisplayValue('Developer experience pulse');
+};
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -91,7 +100,7 @@ afterEach(() => {
 describe('Analytics goes through the same unsaved-work guard as Exit (row 10)', () => {
   it('confirms before leaving a dirty form, and does not navigate, when Analytics is clicked', async () => {
     renderEditForm();
-    await screen.findByDisplayValue('Developer experience pulse');
+    await goToBasicInfo();
 
     fireEvent.change(screen.getByLabelText(/^Title/i), {
       target: { value: 'Developer experience pulse, revised' }
@@ -107,7 +116,7 @@ describe('Analytics goes through the same unsaved-work guard as Exit (row 10)', 
 
   it('navigates straight to Analytics with no confirmation when the form is clean', async () => {
     renderEditForm();
-    await screen.findByDisplayValue('Developer experience pulse');
+    await screen.findByRole('navigation', { name: 'Form steps' });
 
     fireEvent.click(screen.getByRole('button', { name: /Analytics/i }));
 
@@ -121,7 +130,7 @@ describe('Analytics goes through the same unsaved-work guard as Exit (row 10)', 
 
   it('discards and leaves for Analytics exactly as it does for Exit to dashboard', async () => {
     renderEditForm();
-    await screen.findByDisplayValue('Developer experience pulse');
+    await goToBasicInfo();
 
     fireEvent.change(screen.getByLabelText(/^Title/i), {
       target: { value: 'Developer experience pulse, revised' }

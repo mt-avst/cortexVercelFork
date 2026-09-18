@@ -8,12 +8,12 @@ import { summarisedErrorKeys } from './helpers/error-summary';
 import { chooseStudyType } from './helpers/study-type-picker';
 
 /*
- * D6 - field homes. Each field is asked on the step it belongs to, within the
- * existing six steps (2a does not reshape the step set):
+ * D6 - field homes, updated for the reshape that split Study type and Basic
+ * Info into their own steps:
  *
  *   - Meeting Location + Default Duration -> the Session Management step
  *   - Study Period, Participant Type, Roles or skills -> the Screener/Audience step
- *   - Description + Product -> Basic Information, beside Title and Purpose
+ *   - Description + Product -> the Basic Info step, beside Title and Purpose
  *
  * The tests drive the wizard the way an author does - choose a type, walk the
  * strip - and assert a field is present on its NEW step and absent from its OLD
@@ -88,33 +88,37 @@ const goToStep = (name: RegExp) =>
     )
   );
 
+// Picks the type on the Study type step, then moves straight to Basic Info
+// (via the free-navigation strip) to name the study - the two are separate
+// steps since the split, where they used to be one.
 const fillBasics = (type: string) => {
   selectType(type);
+  goToStep(/Basic Info/);
   setTitle('A perfectly serviceable title');
   setPurpose('Find out where people stall in the checkout flow');
 };
 
 describe('D6 field homes - FIELD_LOCATIONS routes a moved field to its new step', () => {
   // Pinned as literals (not derived) so a tab renumber cannot slip past. The
-  // step ids: 3 is the type-specific step (Session Management for test/interview),
-  // 4 is the Screener step on every shape that reaches a participant.
-  it('routes Meeting Location and Default Duration to the Session Management step (3)', () => {
-    expect(FIELD_LOCATIONS.meeting_location_optional.tab).toBe(3);
-    expect(FIELD_LOCATIONS.default_duration_minutes.tab).toBe(3);
+  // step ids: 4 is the type-specific step (Session Management for test/interview),
+  // 3 is the Screener step on every shape that reaches a participant.
+  it('routes Meeting Location and Default Duration to the Session Management step (4)', () => {
+    expect(FIELD_LOCATIONS.meeting_location_optional.tab).toBe(4);
+    expect(FIELD_LOCATIONS.default_duration_minutes.tab).toBe(4);
   });
 
-  it('routes Participant Type and its criteria to the Audience step (2)', () => {
-    expect(FIELD_LOCATIONS.participant_type_required.tab).toBe(2);
-    expect(FIELD_LOCATIONS.participant_type_specific_details.tab).toBe(2);
+  it('routes Participant Type and its criteria to the Audience step (3)', () => {
+    expect(FIELD_LOCATIONS.participant_type_required.tab).toBe(3);
+    expect(FIELD_LOCATIONS.participant_type_specific_details.tab).toBe(3);
   });
 });
 
-describe('D6 field homes - The study step', () => {
-  it('asks Description on The study step, not on Audience', () => {
+describe('D6 field homes - Basic Info step', () => {
+  it('asks Description on the Basic Info step, not on Audience', () => {
     renderForm();
     fillBasics('survey');
 
-    // On The study step now (with Title and Purpose).
+    // On the Basic Info step now (with Title and Purpose).
     expect(screen.getByLabelText(/Description \(Optional\)/i)).toBeInTheDocument();
 
     // Not on the Audience step.
@@ -122,7 +126,7 @@ describe('D6 field homes - The study step', () => {
     expect(screen.queryByLabelText(/Description \(Optional\)/i)).toBeNull();
   });
 
-  it('asks Product on The study step, not on Audience', () => {
+  it('asks Product on the Basic Info step, not on Audience', () => {
     renderForm();
     fillBasics('survey');
 

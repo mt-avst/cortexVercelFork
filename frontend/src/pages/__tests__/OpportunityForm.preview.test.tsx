@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import OpportunityForm from '../OpportunityForm';
 import { opportunityFormRoutes } from '../OpportunityForm.routes';
-import { studyTypeCard } from './helpers/study-type-picker';
+import { chooseStudyType } from './helpers/study-type-picker';
 
 /**
  * E1's participant preview, reached from the authoring form.
@@ -93,7 +93,14 @@ const authorOneQuestion = async (
   user: ReturnType<typeof userEvent.setup>,
   prompt: string
 ) => {
-  await user.click(studyTypeCard('survey', 'native'));
+  chooseStudyType('survey', 'native');
+  // Title and Purpose live on the Basic Info step now, split out of the
+  // Study type step (D1/D3 reshape).
+  await user.click(
+    within(screen.getByRole('navigation', { name: 'Form steps' })).getAllByRole(
+      'button'
+    )[1]
+  );
   await user.type(screen.getByLabelText(/^Title/i), 'Developer experience pulse');
   await user.type(
     screen.getByLabelText(/^Purpose/i),
@@ -159,7 +166,7 @@ describe('opening the preview from the authoring flow', () => {
     // The form's own controls: its step strip, its forward control, and the
     // textbox holding the question being previewed.
     expect(screen.queryByRole('button', { name: /^Continue: /i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /^Step \d of 5/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Step \d of 6/ })).toBeNull();
     expect(screen.queryByRole('textbox')).toBeNull();
 
     // Stated as the WHOLE list rather than as absences: the failure that
@@ -192,9 +199,9 @@ describe('opening the preview from the authoring flow', () => {
     expect(screen.getByLabelText(/What the participant is asked/i)).toHaveValue(
       'Which tool slows you down?'
     );
-    // And the steps before it: walking back to Basic Information proves the
-    // whole draft survived, not just the step that was on screen.
-    await user.click(screen.getByRole('button', { name: /The study/i }));
+    // And the steps before it: walking back to Basic Info proves the whole
+    // draft survived, not just the step that was on screen.
+    await user.click(screen.getByRole('button', { name: /Basic Info/i }));
     expect(await screen.findByLabelText(/^Title/i)).toHaveValue(
       'Developer experience pulse'
     );

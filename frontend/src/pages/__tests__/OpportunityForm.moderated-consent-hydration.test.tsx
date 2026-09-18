@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -72,12 +72,21 @@ const renderEdit = () =>
     </MemoryRouter>
   );
 
-// D5: edit mode now opens on Basic Information (step 1) for every shape,
-// including moderated ones - it used to open on Session Management for
-// exactly this type, so the loaded signal was the sessions stub. The Title
-// field is the step-1-agnostic landmark: every step this file visits
-// (Consent, Session Management) is reached through the step nav from here.
-const awaitLoaded = () => screen.findByLabelText(/^Title/i);
+// D5: edit mode now opens on Study type (step 1) for every shape, including
+// moderated ones - it used to open on Session Management for exactly this
+// type, so the loaded signal was the sessions stub. Study type carries no
+// Title field any more (that split onto Basic Info, step 2), so this walks
+// there and lands on the Title field, which is the step-2-agnostic landmark:
+// every other step this file visits (Consent, Session Management) is reached
+// through the step nav from here.
+const awaitLoaded = async () => {
+  fireEvent.click(
+    within(await screen.findByRole('navigation', { name: 'Form steps' })).getAllByRole(
+      'button'
+    )[1]
+  );
+  return screen.findByLabelText(/^Title/i);
+};
 
 const goToStep = (name: RegExp) => {
   const steps = screen
@@ -108,7 +117,9 @@ describe('hydrating a moderated row never seeds consent it does not hold', () =>
     renderEdit();
     await awaitLoaded();
 
-    goToStep(/The study/);
+    // Already on Basic Info, where Title lives now, and its hydrated value is
+    // the same landmark `awaitLoaded` just found - so this is only re-stated
+    // for a reader, not re-navigated.
     await screen.findByDisplayValue('A live session already saved');
     fireEvent.change(screen.getByLabelText(/^Title/i), {
       target: { value: 'A live session with a new title' }

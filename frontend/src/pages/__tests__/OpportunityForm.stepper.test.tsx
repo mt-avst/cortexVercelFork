@@ -116,7 +116,11 @@ const selectNativeSurvey = () => {
   selectType('survey', 'native');
 };
 
+// Title and Purpose live on the Basic Info step now, split out of the Study
+// type step (D1/D3 reshape) - so filling them means navigating there first via
+// the strip, which leaves Basic Info (step 2) the current step afterwards.
 const fillBasics = () => {
+  fireEvent.click(steps()[1]);
   typeInto(/^Title/i, 'A study of the export flow');
   typeInto(/Purpose/i, 'Find out where people give up on exporting');
 };
@@ -135,9 +139,23 @@ describe('the step strip reports progress, not just position', () => {
     // picks a type. That "no strip before a type" behaviour is pinned in
     // OpportunityForm.type-gate.test.tsx; here the concern is the numbering
     // once the strip is on screen.
-    // The D1/D3 spine: study, audience, experience, consent, review = five
-    // steps for a recorded study.
+    // The D1/D3 spine, split into Study type and Basic Info: study type, basic
+    // info, audience, experience, consent, review = six steps for a recorded
+    // study.
     selectType('unmoderated');
+    expect(steps().map((step) => step.textContent)).toEqual([
+      expect.stringContaining('Step 1 of 6'),
+      expect.stringContaining('Step 2 of 6'),
+      expect.stringContaining('Step 3 of 6'),
+      expect.stringContaining('Step 4 of 6'),
+      expect.stringContaining('Step 5 of 6'),
+      expect.stringContaining('Step 6 of 6'),
+    ]);
+
+    // An external poll is FIVE steps (D3): study type, basic info, audience,
+    // your link, review - no Consent step, its affirmation folds into the link
+    // (row 13).
+    selectType('poll');
     expect(steps().map((step) => step.textContent)).toEqual([
       expect.stringContaining('Step 1 of 5'),
       expect.stringContaining('Step 2 of 5'),
@@ -145,40 +163,32 @@ describe('the step strip reports progress, not just position', () => {
       expect.stringContaining('Step 4 of 5'),
       expect.stringContaining('Step 5 of 5'),
     ]);
-
-    // An external poll is FOUR steps (D3): study, audience, your link, review -
-    // no Consent step, its affirmation folds into the link (row 13).
-    selectType('poll');
-    expect(steps().map((step) => step.textContent)).toEqual([
-      expect.stringContaining('Step 1 of 4'),
-      expect.stringContaining('Step 2 of 4'),
-      expect.stringContaining('Step 3 of 4'),
-      expect.stringContaining('Step 4 of 4'),
-    ]);
   });
 
-  it('carries an external poll to a fourth Review step, with no Consent step', () => {
-    // D3: an external poll is [study, audience, your link, review] - four steps,
-    // no Consent step (row 13 folds its affirmation into the link). Review is
-    // the fourth step, and its backward control names the link before it.
+  it('carries an external poll to a fifth Review step, with no Consent step', () => {
+    // D3: an external poll is [study type, basic info, audience, your link,
+    // review] - five steps, no Consent step (row 13 folds its affirmation into
+    // the link). Review is the fifth step, and its backward control names the
+    // link before it.
     renderForm();
     selectType('poll');
 
     const beforeReview = steps();
-    expect(beforeReview).toHaveLength(4);
-    expect(beforeReview[1]).toHaveTextContent('Audience');
-    expect(beforeReview[2]).toHaveTextContent('Your link');
+    expect(beforeReview).toHaveLength(5);
+    expect(beforeReview[1]).toHaveTextContent('Basic Info');
+    expect(beforeReview[2]).toHaveTextContent('Audience');
+    expect(beforeReview[3]).toHaveTextContent('Your link');
     expect(beforeReview.some((step) => step.textContent?.includes('Consent'))).toBe(false);
 
-    fireEvent.click(beforeReview[1]); // Audience
+    fireEvent.click(beforeReview[2]); // Audience
     fireEvent.click(screen.getByRole('button', { name: 'Continue: Your link' }));
     fireEvent.click(screen.getByRole('button', { name: 'Continue: Review' }));
 
     const onReview = steps();
-    expect(onReview).toHaveLength(4);
-    expect(onReview[3]).toHaveTextContent('Step 4 of 4');
-    expect(onReview[3]).toHaveTextContent('Review');
-    expect(onReview[3]).toHaveAttribute('aria-current', 'step');
+    expect(onReview).toHaveLength(5);
+    expect(onReview[4]).toHaveTextContent('Step 5 of 5');
+    expect(onReview[4]).toHaveTextContent('Review');
+    expect(onReview[4]).toHaveAttribute('aria-current', 'step');
     expect(
       screen.getByRole('button', { name: 'Previous: Your link' })
     ).toBeInTheDocument();
@@ -188,19 +198,21 @@ describe('the step strip reports progress, not just position', () => {
     renderForm();
     selectType('unmoderated');
 
-    const [one, two, three, four, five] = steps();
+    const [one, two, three, four, five, six] = steps();
     expect(one).toHaveTextContent('Current step');
-    expect(two).toHaveTextContent('Audience');
+    expect(two).toHaveTextContent('Basic Info');
     expect(two).toHaveTextContent('Not started');
-    expect(three).toHaveTextContent('Task List');
+    expect(three).toHaveTextContent('Audience');
     expect(three).toHaveTextContent('Not started');
-    expect(four).toHaveTextContent('Consent');
+    expect(four).toHaveTextContent('Task List');
     expect(four).toHaveTextContent('Not started');
+    expect(five).toHaveTextContent('Consent');
+    expect(five).toHaveTextContent('Not started');
     // Review must read Not started rather than defaulting to another word,
     // because it is also the step that commits.
-    expect(five).toHaveTextContent('Review');
-    expect(five).toHaveTextContent('Not started');
-    // Not "Completed": nothing has been decided about steps 2 to 5, and the
+    expect(six).toHaveTextContent('Review');
+    expect(six).toHaveTextContent('Not started');
+    // Not "Completed": nothing has been decided about steps 2 to 6, and the
     // validator has nothing to object to on any of them yet.
     expect(screen.queryByText('Completed')).not.toBeInTheDocument();
   });
@@ -209,46 +221,53 @@ describe('the step strip reports progress, not just position', () => {
     renderForm();
     selectType('unmoderated');
 
-    // Straight past step 1 without a title. Reachable because the strip is
-    // clickable, which is also why this does NOT go through the Continue
-    // button that would have refused and reported it.
-    fireEvent.click(steps()[2]);
+    // A step reads Needs attention only once it has actually been VISITED -
+    // stood on and left - not merely skipped over, so Basic Info is visited
+    // first (leaving it with no title) and then walked past, straight to Task
+    // List. Reachable because the strip is clickable, which is also why this
+    // does NOT go through the Continue button that would have refused and
+    // reported it.
+    fireEvent.click(steps()[1]); // Basic Info, left with no title
+    fireEvent.click(steps()[3]); // Task List
 
-    expect(steps()[0]).toHaveTextContent('Needs attention');
-    expect(steps()[2]).toHaveTextContent('Current step');
+    expect(steps()[1]).toHaveTextContent('Needs attention');
+    expect(steps()[3]).toHaveTextContent('Current step');
 
-    fireEvent.click(steps()[0]);
+    fireEvent.click(steps()[1]);
     typeInto(/Title/i, 'A study of the export flow');
     typeInto(/Purpose/i, 'Find out where people give up on exporting');
 
-    // Still on step 1, so it reads Current; the point is that the flag is gone
-    // and nothing was saved to clear it.
-    expect(steps()[0]).toHaveTextContent('Current step');
-    expect(steps()[0]).not.toHaveTextContent('Needs attention');
+    // Still on Basic Info, so it reads Current; the point is that the flag is
+    // gone and nothing was saved to clear it.
+    expect(steps()[1]).toHaveTextContent('Current step');
+    expect(steps()[1]).not.toHaveTextContent('Needs attention');
 
-    fireEvent.click(steps()[1]);
-    expect(steps()[0]).toHaveTextContent('Completed');
+    fireEvent.click(steps()[2]);
+    expect(steps()[1]).toHaveTextContent('Completed');
   });
 
   it('does not lock a step behind an earlier one that needs attention', () => {
     renderForm();
     selectType('unmoderated');
 
-    fireEvent.click(steps()[3]);
+    fireEvent.click(steps()[1]); // Basic Info, left with no title
+    fireEvent.click(steps()[4]); // Consent
 
-    expect(steps()[0]).toHaveTextContent('Needs attention');
+    // Basic Info, not Study type, is the one left incomplete (no title yet).
+    expect(steps()[1]).toHaveTextContent('Needs attention');
     // Forward navigation is information, not a gate - the author is standing on
-    // a later step with the first one failing, and that is allowed.
-    expect(steps()[3]).toHaveTextContent('Current step');
+    // a later step with an earlier one failing, and that is allowed.
+    expect(steps()[4]).toHaveTextContent('Current step');
     expect(screen.getByRole('heading', { name: /Consent/i })).toBeInTheDocument();
   });
 
   it('marks the current step with aria-current and no other step', () => {
     renderForm();
     selectType('unmoderated');
-    fireEvent.click(steps()[1]);
+    fireEvent.click(steps()[2]); // Audience
 
     expect(steps().map((step) => step.getAttribute('aria-current'))).toEqual([
+      null,
       null,
       'step',
       null,
@@ -262,13 +281,16 @@ describe('the step strip reports progress, not just position', () => {
     selectType('unmoderated');
 
     const region = screen.getByRole('status');
-    fireEvent.click(steps()[2]);
-    expect(region).toHaveTextContent('Step 3 of 5: Task List. Current step.');
+    // Visit Basic Info and leave it with no title, so returning to it reads
+    // Needs attention rather than Not started.
+    fireEvent.click(steps()[1]);
+    fireEvent.click(steps()[3]);
+    expect(region).toHaveTextContent('Step 4 of 6: Task List. Current step.');
 
-    fireEvent.click(steps()[0]);
+    fireEvent.click(steps()[1]);
     // Announces the step it ARRIVED at, not the one it left, and reports the
     // state that step is actually in.
-    expect(region).toHaveTextContent('Step 1 of 5: The study. Needs attention.');
+    expect(region).toHaveTextContent('Step 2 of 6: Basic Info. Needs attention.');
   });
 
   it('treats an opportunity being edited as already walked, not as three untouched steps', async () => {
@@ -290,18 +312,21 @@ describe('the step strip reports progress, not just position', () => {
       </MemoryRouter>
     );
 
-    await screen.findByDisplayValue('An existing study');
+    // Study type - the landing step since D5 - carries no Title field any
+    // more (that split onto Basic Info), so the strip itself, gated on a type
+    // being set, is the anchor that data has loaded.
+    await screen.findByRole('navigation', { name: 'Form steps' });
 
     /*
      * WAIT FOR THE THING BEING ASSERTED, not for a neighbour of it.
      *
-     * This test used to stop at `findByDisplayValue` and then read the strip
-     * immediately, and it reddened `main` once: the title appearing means
-     * `setFormData` has run, and the effect that marks an edited opportunity's
-     * steps VISITED is a separate pass. On a loaded CI runner the assertion
-     * landed between the two and read "Not started", which is exactly what this
-     * test exists to catch - so the failure was indistinguishable from the real
-     * defect.
+     * This test used to stop at the title appearing and then read the strip
+     * immediately, and it reddened `main` once: the title (or here, the strip)
+     * appearing means `setFormData` has run, and the effect that marks an
+     * edited opportunity's steps VISITED is a separate pass. On a loaded CI
+     * runner the assertion landed between the two and read "Not started",
+     * which is exactly what this test exists to catch - so the failure was
+     * indistinguishable from the real defect.
      *
      * Waiting on the visited state makes the precondition the same fact the
      * assertions below are about. It cannot mask the real defect: if the effect
@@ -309,21 +334,24 @@ describe('the step strip reports progress, not just position', () => {
      */
     await waitFor(() => expect(steps()[1]).toHaveTextContent('Completed'));
 
-    // An edited external poll is FOUR steps (D3): study, audience, your link,
-    // review. Its content is on the server; calling steps 2 to 3 "Not started"
-    // would be false. Step 1 is the one being looked at, so it reads Current.
-    const [one, two, three, four] = steps();
-    expect(steps()).toHaveLength(4);
+    // An edited external poll is FIVE steps (D3): study type, basic info,
+    // audience, your link, review. Its content is on the server; calling any
+    // of steps 2 to 4 "Not started" would be false. Step 1 is the one being
+    // looked at, so it reads Current.
+    const [one, two, three, four, five] = steps();
+    expect(steps()).toHaveLength(5);
     expect(one).toHaveTextContent('Current step');
-    expect(two).toHaveTextContent('Audience');
+    expect(two).toHaveTextContent('Basic Info');
     expect(two).toHaveTextContent('Completed');
-    expect(three).toHaveTextContent('Your link');
+    expect(three).toHaveTextContent('Audience');
     expect(three).toHaveTextContent('Completed');
+    expect(four).toHaveTextContent('Your link');
+    expect(four).toHaveTextContent('Completed');
     // Review (audit row 15) is deliberately the ONE step this "already walked"
     // seeding excludes: it is the check-answers screen itself, so it starts
     // "Not started" and becomes visited the ordinary way, by being left.
-    expect(four).toHaveTextContent('Review');
-    expect(four).toHaveTextContent('Not started');
+    expect(five).toHaveTextContent('Review');
+    expect(five).toHaveTextContent('Not started');
   });
 });
 
@@ -339,31 +367,31 @@ describe('the strip reports steps other than the first', () => {
   it('completes a step whose id is not 1', () => {
     renderForm();
     selectType('unmoderated');
-    fillBasics();
+    fillBasics(); // lands on Basic Info (step 2)
 
-    // Step 2, then step 3 - so the step being marked Completed is one the
+    // Step 3, then step 4 - so the step being marked Completed is one the
     // visit tracker has to have recorded by its own identity rather than by a
     // hard-coded first step.
-    fireEvent.click(steps()[1]);
     fireEvent.click(steps()[2]);
+    fireEvent.click(steps()[3]);
 
-    expect(steps()[1]).toHaveTextContent('Completed');
+    expect(steps()[2]).toHaveTextContent('Completed');
     expect(steps()[0]).toHaveTextContent('Completed');
-    expect(steps()[3]).toHaveTextContent('Not started');
+    expect(steps()[4]).toHaveTextContent('Not started');
   });
 
   it('flags a LATER step, and only that step, from the live rules', () => {
     renderForm();
     selectType('unmoderated');
-    fillBasics();
+    fillBasics(); // lands on Basic Info (step 2)
 
-    fireEvent.click(steps()[2]);
+    fireEvent.click(steps()[3]); // Task List
     fireEvent.click(screen.getByRole('button', { name: /Add task/i }));
     // A task with no wording is invalid under the same rules a save uses, and
-    // it routes to step 3 - not step 1.
-    fireEvent.click(steps()[3]);
+    // it routes to step 4 - not step 1.
+    fireEvent.click(steps()[4]); // Consent
 
-    expect(steps()[2]).toHaveTextContent('Needs attention');
+    expect(steps()[3]).toHaveTextContent('Needs attention');
     expect(steps()[0]).not.toHaveTextContent('Needs attention');
     expect(steps()[1]).not.toHaveTextContent('Needs attention');
   });
@@ -371,14 +399,15 @@ describe('the strip reports steps other than the first', () => {
   it('flags a later step the author has never opened, from a refused save', () => {
     renderForm();
     selectType('unmoderated');
-    fillBasics();
+    fillBasics(); // lands on Basic Info (step 2)
 
-    // Straight from step 1 to Review - reached with the middle steps UNVISITED,
-    // which is the only state the reported-errors map is load-bearing for.
-    // Review is the step that carries the submit control AND the Status choice
-    // (#111), and the strip is clickable, so this jumps there directly. Review
-    // is the fifth step on a recorded study since the D1/D3 reshape.
-    fireEvent.click(steps()[4]);
+    // Straight from Basic Info to Review - reached with the middle steps
+    // UNVISITED, which is the only state the reported-errors map is
+    // load-bearing for. Review is the step that carries the submit control
+    // AND the Status choice (#111), and the strip is clickable, so this jumps
+    // there directly. Review is the sixth step on a recorded study since the
+    // D1/D3 reshape.
+    fireEvent.click(steps()[5]);
     // Review's Status control has no `<label htmlFor="status">` - only an
     // `<h3>Status</h3>` heading - so it is found by role, scoped to Review,
     // rather than by name.
@@ -387,8 +416,8 @@ describe('the strip reports steps other than the first', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: /Create study/i }));
 
-    // Publishing an unmoderated study with no tasks fails on step 3.
-    expect(steps()[2]).toHaveTextContent('Needs attention');
+    // Publishing an unmoderated study with no tasks fails on step 4.
+    expect(steps()[3]).toHaveTextContent('Needs attention');
     expect(steps()[0]).not.toHaveTextContent('Needs attention');
   });
 
@@ -414,10 +443,12 @@ describe('the strip reports steps other than the first', () => {
       </MemoryRouter>
     );
 
-    await screen.findByDisplayValue('A native survey');
+    // Study type - the landing step since D5 - carries no Title field any
+    // more, so the strip, gated on a type being set, is the load anchor.
+    await screen.findByRole('navigation', { name: 'Form steps' });
 
-    // Waited for, not read once. The title field appears on the first render
-    // after the opportunity resolves, but the step strip's completion state is
+    // Waited for, not read once. The strip appears on the first render after
+    // the opportunity resolves, but the step strip's completion state is
     // derived from form data that settles in a LATER commit - so reading the
     // strip immediately is a race that this machine wins and a loaded CI
     // runner loses. It turned main red the first time these two branches were
@@ -426,53 +457,53 @@ describe('the strip reports steps other than the first', () => {
     // This does not weaken the assertion: a regression that never marks
     // Consent complete times out here and fails exactly as it did before. The
     // rest are read after the wait, when the strip has settled.
-    await waitFor(() => expect(steps()[3]).toHaveTextContent('Completed'));
+    await waitFor(() => expect(steps()[4]).toHaveTextContent('Completed'));
 
     const rendered = steps();
-    expect(rendered).toHaveLength(5);
-    // Consent is step 4 on the native survey shape since the D1/D3 reshape
-    // (study, audience, questions, consent, review).
-    expect(rendered[3]).toHaveTextContent('Consent');
-    expect(rendered[3]).toHaveTextContent('Step 4 of 5');
-    expect(rendered[2]).toHaveTextContent('Completed');
+    expect(rendered).toHaveLength(6);
+    // Consent is step 5 on the native survey shape since the D1/D3 reshape
+    // (study type, basic info, audience, questions, consent, review).
+    expect(rendered[4]).toHaveTextContent('Consent');
+    expect(rendered[4]).toHaveTextContent('Step 5 of 6');
+    expect(rendered[3]).toHaveTextContent('Completed');
     // Review reads "Not started" rather than "Completed" (audit row 15): Review
     // is excluded from the "already walked" edit-mode seeding, so it is visited
     // the ordinary way, by actually being left.
-    expect(rendered[4]).toHaveTextContent('Step 5 of 5');
-    expect(rendered[4]).toHaveTextContent('Review');
-    expect(rendered[4]).toHaveTextContent('Not started');
+    expect(rendered[5]).toHaveTextContent('Step 6 of 6');
+    expect(rendered[5]).toHaveTextContent('Review');
+    expect(rendered[5]).toHaveTextContent('Not started');
   });
 
   it('does not carry one step 3 history over to a different step 3', () => {
     renderForm();
     selectType('unmoderated');
-    fillBasics();
+    fillBasics(); // lands on Basic Info (step 2)
 
-    fireEvent.click(steps()[1]);
-    fireEvent.click(steps()[2]);
-    fireEvent.click(steps()[0]);
-    expect(steps()[1]).toHaveTextContent('Completed');
+    fireEvent.click(steps()[2]); // Audience
+    fireEvent.click(steps()[3]); // Task List
+    fireEvent.click(steps()[0]); // Study type
     expect(steps()[2]).toHaveTextContent('Completed');
+    expect(steps()[3]).toHaveTextContent('Completed');
 
-    // Step 3 is now External Link, a step this author has never seen. Its id
-    // is still 3, which is exactly why history cannot be held by id.
+    // Step 4 is now External Link, a step this author has never seen. Its id
+    // is still 4, which is exactly why history cannot be held by id.
     selectType('poll');
 
-    // Four steps (D3) - an external poll has no Consent step.
-    expect(steps()).toHaveLength(4);
-    expect(steps()[2]).toHaveTextContent('Your link');
-    expect(steps()[2]).toHaveTextContent('Not started');
+    // Five steps (D3) - an external poll has no Consent step.
+    expect(steps()).toHaveLength(5);
+    expect(steps()[3]).toHaveTextContent('Your link');
+    expect(steps()[3]).toHaveTextContent('Not started');
 
     // And Audience, which IS the same step either side of the change, keeps
     // what it had. Forgetting everything on a type change would clear the flag
     // above too, and would look from that assertion alone like the fix working.
-    expect(steps()[1]).toHaveTextContent('Completed');
+    expect(steps()[2]).toHaveTextContent('Completed');
   });
 
   it('keeps the announcement quiet while the author types', () => {
     renderForm();
     selectType('unmoderated');
-    fireEvent.click(steps()[1]);
+    fireEvent.click(steps()[2]); // Audience
 
     // Scoped to the visually-hidden strip announcer: the Audience step also
     // carries the screener's own role="status" alert, so an unscoped query is
@@ -481,15 +512,19 @@ describe('the strip reports steps other than the first', () => {
       .getAllByRole('status')
       .find((el) => el.classList.contains('visually-hidden')) as HTMLElement;
     const announced = region.textContent;
-    expect(announced).toContain('Step 2 of 5');
+    expect(announced).toContain('Step 3 of 6');
 
-    // Typing flips step 1 from Needs attention to Completed, which re-renders
-    // the strip. The region must not re-announce: it reports step CHANGES.
-    fireEvent.click(steps()[0]);
-    const onStepOne = region.textContent;
-    fillBasics();
+    // Back onto Basic Info, which starts Needs attention with no title yet.
+    fireEvent.click(steps()[1]);
+    const onBasicInfo = region.textContent;
 
-    expect(region.textContent).toBe(onStepOne);
+    // Typing flips Basic Info from Needs attention to Completed-eligible,
+    // which re-renders the strip. The region must not re-announce: it reports
+    // step CHANGES, not field edits.
+    typeInto(/^Title/i, 'A study of the export flow');
+    typeInto(/Purpose/i, 'Find out where people give up on exporting');
+
+    expect(region.textContent).toBe(onBasicInfo);
   });
 
   it('keeps the announcement out of the visible page', () => {
@@ -513,30 +548,30 @@ describe('the strip reports steps other than the first', () => {
   it('does not strand a needs-attention flag on a step that has been replaced', () => {
     renderForm();
     selectNativeSurvey();
-    fillBasics();
+    fillBasics(); // lands on Basic Info (step 2)
 
-    fireEvent.click(steps()[2]);
+    fireEvent.click(steps()[3]); // Questions
     fireEvent.click(screen.getByRole('button', { name: /Add question/i }));
 
     // Through a REFUSED SAVE, so the error lands in the reported map and not
     // only in the live rules. The live rules re-evaluate against a form that
     // no longer holds any questions and clear themselves; the reported map
     // does not, and that is the half that strands. The submit control lives on
-    // Review (the fifth step on a native survey since the D1/D3 reshape),
+    // Review (the sixth step on a native survey since the D1/D3 reshape),
     // reached directly through the clickable strip.
-    fireEvent.click(steps()[4]);
+    fireEvent.click(steps()[5]);
     fireEvent.click(screen.getByRole('button', { name: /Create study/i }));
-    expect(steps()[2]).toHaveTextContent('Needs attention');
+    expect(steps()[3]).toHaveTextContent('Needs attention');
 
-    // Switching delivery mode discards the questions and replaces step 3 with
+    // Switching delivery mode discards the questions and replaces step 4 with
     // External Link, which is optional on a draft and shows no error. Left
     // uncleared, the flag is a dead end: the badge says fix this and there is
     // nothing on the step to fix.
     fireEvent.click(steps()[0]);
     selectType('survey', 'external');
 
-    expect(steps()[2]).toHaveTextContent('Your link');
-    expect(steps()[2]).not.toHaveTextContent('Needs attention');
+    expect(steps()[3]).toHaveTextContent('Your link');
+    expect(steps()[3]).not.toHaveTextContent('Needs attention');
   });
 });
 
@@ -545,21 +580,19 @@ describe('the two backward controls are named apart', () => {
     renderForm();
     selectType('unmoderated');
 
-    fireEvent.click(steps()[1]);
-    expect(
-      screen.getByRole('button', { name: 'Previous: The study' })
-    ).toBeInTheDocument();
-
+    // Neither Study type nor Basic Info carries a backward control of its
+    // own - the strip is the only way back to either - so the chain proper
+    // starts at Audience, whose previous is Basic Info.
     fireEvent.click(steps()[2]);
     expect(
-      screen.getByRole('button', { name: 'Previous: Audience' })
+      screen.getByRole('button', { name: 'Previous: Basic Info' })
     ).toBeInTheDocument();
 
     // Named from the step list rather than from a number written at the call
     // site: the Consent step's previous is the Task List for an unmoderated
     // study and the Questions step for a native survey, and neither call site
     // says so itself.
-    fireEvent.click(steps()[3]);
+    fireEvent.click(steps()[4]);
     expect(
       screen.getByRole('button', { name: 'Previous: Task List' })
     ).toBeInTheDocument();
@@ -572,12 +605,12 @@ describe('the two backward controls are named apart', () => {
     renderForm();
     selectNativeSurvey();
 
-    fireEvent.click(steps()[2]);
+    fireEvent.click(steps()[3]);
     expect(
       screen.getByRole('button', { name: 'Previous: Audience' })
     ).toBeInTheDocument();
 
-    fireEvent.click(steps()[3]);
+    fireEvent.click(steps()[4]);
     expect(
       screen.getByRole('button', { name: 'Previous: Questions' })
     ).toBeInTheDocument();
@@ -587,7 +620,7 @@ describe('the two backward controls are named apart', () => {
     renderForm();
     selectType('question');
 
-    fireEvent.click(steps()[2]);
+    fireEvent.click(steps()[3]);
     expect(
       screen.getByRole('button', { name: 'Previous: Audience' })
     ).toBeInTheDocument();
@@ -601,46 +634,47 @@ describe('the two backward controls are named apart', () => {
     renderForm();
     selectType('interview');
 
-    fireEvent.click(steps()[2]);
+    fireEvent.click(steps()[3]);
     fireEvent.click(screen.getByRole('button', { name: 'Previous: Audience' }));
 
-    expect(steps()[1]).toHaveAttribute('aria-current', 'step');
+    expect(steps()[2]).toHaveAttribute('aria-current', 'step');
   });
 
   it('actually goes to the step it names, on every path', () => {
     renderForm();
     selectType('unmoderated');
-    fireEvent.click(steps()[3]);
+    fireEvent.click(steps()[4]);
     fireEvent.click(screen.getByRole('button', { name: 'Previous: Task List' }));
-    expect(steps()[2]).toHaveAttribute('aria-current', 'step');
+    expect(steps()[3]).toHaveAttribute('aria-current', 'step');
 
     // And from a step whose previous is not the one before last, on the other
     // authoring path - the destination is as unpinned as the label was.
     fireEvent.click(steps()[0]);
     selectNativeSurvey();
-    fireEvent.click(steps()[2]);
-    fireEvent.click(screen.getByRole('button', { name: 'Previous: Audience' }));
-    expect(steps()[1]).toHaveAttribute('aria-current', 'step');
-
-    fireEvent.click(steps()[2]);
     fireEvent.click(steps()[3]);
-    fireEvent.click(screen.getByRole('button', { name: 'Previous: Questions' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Previous: Audience' }));
     expect(steps()[2]).toHaveAttribute('aria-current', 'step');
+
+    fireEvent.click(steps()[3]);
+    fireEvent.click(steps()[4]);
+    fireEvent.click(screen.getByRole('button', { name: 'Previous: Questions' }));
+    expect(steps()[3]).toHaveAttribute('aria-current', 'step');
   });
 
   it("names the step Review's own control returns to, and proves the chain is list-derived on two different paths", () => {
     // The backward chain must read the step list, not a number at the call site.
-    // Since the D1/D3 reshape the spine is study -> audience -> experience ->
-    // consent -> review, so Review's previous is Consent, and Consent's own
-    // previous is the EXPERIENCE body - Task List on the recorded path and
-    // Questions on the native survey path. That per-path difference is what a
-    // hard-coded chain could not reproduce, so the two shapes are walked back
-    // through Review -> Consent -> experience -> Audience.
+    // Since the D1/D3 reshape the spine is study type -> basic info -> audience
+    // -> experience -> consent -> review, so Review's previous is Consent, and
+    // Consent's own previous is the EXPERIENCE body - Task List on the
+    // recorded path and Questions on the native survey path. That per-path
+    // difference is what a hard-coded chain could not reproduce, so the two
+    // shapes are walked back through Review -> Consent -> experience ->
+    // Audience.
     renderForm();
     selectType('unmoderated');
-    fillBasics();
+    fillBasics(); // lands on Basic Info (step 2)
 
-    fireEvent.click(steps()[3]); // Consent
+    fireEvent.click(steps()[4]); // Consent
     fireEvent.click(screen.getByRole('button', { name: 'Continue: Review' }));
     expect(
       screen.getByRole('button', { name: 'Previous: Consent' })
@@ -661,7 +695,7 @@ describe('the two backward controls are named apart', () => {
     // hard-coded chain could not reproduce.
     fireEvent.click(steps()[0]);
     selectNativeSurvey();
-    fireEvent.click(steps()[3]); // Consent
+    fireEvent.click(steps()[4]); // Consent
     fireEvent.click(screen.getByRole('button', { name: 'Continue: Review' }));
     expect(
       screen.getByRole('button', { name: 'Previous: Consent' })
@@ -697,6 +731,9 @@ describe('exiting the form', () => {
 
   it('asks before discarding work, and stays put when the answer is no', () => {
     renderForm();
+    // Title lives on Basic Info now, reachable only once a type is chosen.
+    selectType('poll');
+    fireEvent.click(steps()[1]);
     typeInto(/Title/i, 'Half a study');
 
     fireEvent.click(screen.getByRole('button', { name: /Exit to dashboard/i }));
@@ -714,6 +751,8 @@ describe('exiting the form', () => {
 
   it('leaves when the answer is yes', () => {
     renderForm();
+    selectType('poll');
+    fireEvent.click(steps()[1]);
     typeInto(/Title/i, 'Half a study');
 
     fireEvent.click(screen.getByRole('button', { name: /Exit to dashboard/i }));
@@ -745,7 +784,9 @@ describe('exiting the form', () => {
         </Routes>
       </MemoryRouter>
     );
-    await screen.findByDisplayValue('An untouched study');
+    // Study type - the landing step since D5 - carries no Title field any
+    // more, so the strip is the load anchor.
+    await screen.findByRole('navigation', { name: 'Form steps' });
 
     fireEvent.click(screen.getByRole('button', { name: /Exit to dashboard/i }));
 
@@ -769,6 +810,10 @@ describe('exiting the form', () => {
     );
     await screen.findByText(/Failed to load study/i);
 
+    // No baseline means no type either, so Basic Info (where Title lives) is
+    // reached the ordinary way: choose a type, then walk to it.
+    selectType('poll');
+    fireEvent.click(steps()[1]);
     typeInto(/^Title/i, 'Typed over a form that never loaded');
     fireEvent.click(screen.getByRole('button', { name: /Exit to dashboard/i }));
 
@@ -807,6 +852,10 @@ describe('exiting the form', () => {
         </Routes>
       </MemoryRouter>
     );
+    // Study type - the landing step since D5 - carries no Title field any
+    // more, so the strip is the load anchor; Basic Info is where Title is.
+    await screen.findByRole('navigation', { name: 'Form steps' });
+    fireEvent.click(steps()[1]);
     await screen.findByDisplayValue('A study to be re-saved');
 
     typeInto(/^Title/i, 'A study to be re-saved, revised');
@@ -861,11 +910,13 @@ describe('exiting the form', () => {
         </Routes>
       </MemoryRouter>
     );
-    // D5: every shape, interview included, lands on Basic Information (step
-    // 1) now - this used to wait for the Session Management step instead,
-    // because that was where an interview opened. The title input is the
-    // change this helper actually needs to make, and it is on screen from
-    // the first render this way.
+    // D5: every shape, interview included, lands on Study type (step 1) now -
+    // this used to wait for the Session Management step instead, because that
+    // was where an interview opened. Study type carries no Title field any
+    // more (that split onto Basic Info), so the strip is the load anchor and
+    // Basic Info is where the change this helper needs is made.
+    await screen.findByRole('navigation', { name: 'Form steps' });
+    fireEvent.click(steps()[1]);
     await screen.findByDisplayValue('An interview about the export flow');
     typeInto(/^Title/i, 'An interview about the export flow, revised');
 
@@ -896,7 +947,7 @@ describe('exiting the form', () => {
     // pins that this same state is otherwise clean.
     await editAndSaveAnInterview();
 
-    fireEvent.click(steps()[2]); // Session Management
+    fireEvent.click(steps()[3]); // Session Management
     fireEvent.click(screen.getByRole('button', { name: /lay out a time slot/i }));
     fireEvent.click(screen.getByRole('button', { name: /Exit to dashboard/i }));
 
@@ -918,7 +969,7 @@ describe('exiting the form', () => {
   it('notices a change to authored content, not only to the fields on step 1', () => {
     renderForm();
     selectType('unmoderated');
-    fireEvent.click(steps()[2]);
+    fireEvent.click(steps()[3]); // Task List
     fireEvent.click(screen.getByRole('button', { name: /Add task/i }));
 
     fireEvent.click(screen.getByRole('button', { name: /Exit to dashboard/i }));
@@ -989,12 +1040,12 @@ describe('opening an opportunity that already exists', () => {
   // are the control: they always landed here, so this also proves the
   // landing is not accidentally sending everything to the WRONG fixed step.
   it.each(['interview', 'test', 'survey', 'poll', 'unmoderated'])(
-    'lands the author at the beginning (Basic Information) for a %s',
+    'lands the author at the beginning (Study type) for a %s',
     async (type) => {
       await openExisting(type, `opp-${type}-landing`);
 
       await waitFor(async () =>
-        expect(await standingOn()).toMatch(/The study/)
+        expect(await standingOn()).toMatch(/Study type/)
       );
     }
   );
@@ -1007,7 +1058,7 @@ describe('opening an opportunity that already exists', () => {
     async (type) => {
       await openExisting(type, `opp-${type}-landing`);
       await waitFor(async () =>
-        expect(await standingOn()).toMatch(/The study/)
+        expect(await standingOn()).toMatch(/Study type/)
       );
 
       fireEvent.click(screen.getByRole('button', { name: /Manage time slots/i }));
