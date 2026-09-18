@@ -14345,3 +14345,52 @@ body.theme-light .admin-study-status--draft {
     padding: 1rem 0.85rem 1.15rem;
   }
 }
+
+/* ============================================================
+   STUDY TYPE PICKER PODS
+   ============================================================
+   Selectable pods for the "Start a study" step (StudyTypePicker) and
+   its delivery toggle. The markup carries only `.study-type-card`
+   (plus the Bootstrap p-3/h-100/w-100/text-start utilities and, when
+   chosen, `.is-selected`) - every visual affordance lives here, so
+   before this rule the pods rendered as bare buttons with no surface,
+   no hover and no visible selected state. Theme-aware through the
+   *-current indirection tokens, so it holds in both light and dark
+   without a theme-scoped override. */
+.study-type-card {
+  display: block;
+  background: var(--surface-card-current);
+  border: 1px solid var(--border-subtle-current);
+  border-radius: var(--radius-card);
+  color: inherit;
+  cursor: pointer;
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.study-type-card:hover {
+  border-color: var(--border-strong-current);
+  box-shadow: var(--shadow-card-current);
+  transform: translateY(-1px);
+}
+
+.study-type-card:focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-outline-offset);
+}
+
+/* Selected: a committed 2px orange edge (1px border + 1px inset ring, so
+   the box does not resize on select) over a faint orange ground. The
+   choice then reads at a glance without depending on the label. A
+   selected pod holds still on hover - it is decided, it should not
+   wobble. */
+.study-type-card.is-selected,
+.study-type-card.is-selected:hover {
+  border-color: var(--brand-orange-500);
+  background: color-mix(in srgb, var(--brand-orange-500) 8%, var(--surface-card-current));
+  box-shadow: inset 0 0 0 1px var(--brand-orange-500);
+  transform: none;
+}

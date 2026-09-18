@@ -58,29 +58,18 @@ describe('FeedbackFooter', () => {
     expect(screen.getByLabelText('How we can improve Cortex')).toBeInTheDocument();
   });
 
-  // D10: 232px of permanent chrome asking a researcher for an opinion about
-  // the product while they are doing work in it (mav-wizard-shell) - and the
-  // study-setup header now carries its own "Feedback" item, so nothing is
-  // lost by hiding this one on these routes.
-  describe('on the study-setup pages (D10)', () => {
+  // The footer is now shown on the study-setup wizard too - reversing the D10
+  // hide - so setup work has an in-context feedback loop. The only route that
+  // still suppresses it is /feedback itself (covered above).
+  describe('on the study-setup pages', () => {
     it.each([
       '/admin/opportunities/new',
       '/admin/opportunities/new/preview',
       '/admin/opportunities/opp-1/edit',
       '/admin/opportunities/opp-1/edit/preview'
-    ])('renders nothing on %s', (pathname) => {
+    ])('renders on %s', (pathname) => {
       render(
         <MemoryRouter initialEntries={[pathname]}>
-          <FeedbackFooter />
-        </MemoryRouter>
-      );
-
-      expect(screen.queryByLabelText('How we can improve Cortex')).toBeNull();
-    });
-
-    it('still renders on the admin dashboard, which is not a setup route', () => {
-      render(
-        <MemoryRouter initialEntries={['/admin']}>
           <FeedbackFooter />
         </MemoryRouter>
       );
