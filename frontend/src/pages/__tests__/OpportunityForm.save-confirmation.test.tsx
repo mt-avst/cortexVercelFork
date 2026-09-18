@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -93,6 +93,20 @@ const walkToReview = () => {
  */
 const commitButton = () => document.querySelector('.step-actions__submit') as HTMLButtonElement;
 
+/**
+ * Title lives on the Basic Info step now, split out of the Study type
+ * landing step (D1/D3 reshape), so reaching it - to prove hydration, and to
+ * edit it - means walking the strip there first.
+ */
+const goToBasicInfo = async () => {
+  fireEvent.click(
+    within(await screen.findByRole('navigation', { name: 'Form steps' })).getAllByRole(
+      'button'
+    )[1]
+  );
+  return screen.findByDisplayValue('A poll the author already wrote');
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getSessions).mockResolvedValue([] as never);
@@ -110,7 +124,7 @@ describe('OpportunityForm - the Saved confirmation is pinned to the exact window
     );
 
     renderEdit();
-    await screen.findByDisplayValue('A poll the author already wrote');
+    await goToBasicInfo();
     fireEvent.change(screen.getByLabelText(/^Title/i), { target: { value: 'Renamed' } });
     walkToReview();
 
@@ -142,7 +156,7 @@ describe('OpportunityForm - the Saved confirmation is pinned to the exact window
     );
 
     renderEdit();
-    await screen.findByDisplayValue('A poll the author already wrote');
+    await goToBasicInfo();
     fireEvent.change(screen.getByLabelText(/^Title/i), { target: { value: 'Renamed' } });
     walkToReview();
 
@@ -172,7 +186,7 @@ describe('OpportunityForm - editing during the Saved window clears it immediatel
     );
 
     renderEdit();
-    await screen.findByDisplayValue('A poll the author already wrote');
+    await goToBasicInfo();
     fireEvent.change(screen.getByLabelText(/^Title/i), { target: { value: 'Renamed' } });
     walkToReview();
 
@@ -211,7 +225,7 @@ describe('OpportunityForm - editing during the Saved window clears it immediatel
     );
 
     renderEdit();
-    await screen.findByDisplayValue('A poll the author already wrote');
+    await goToBasicInfo();
     fireEvent.change(screen.getByLabelText(/^Title/i), { target: { value: 'Renamed' } });
     walkToReview();
 
@@ -248,7 +262,7 @@ describe('OpportunityForm - a save that fails never says Saved', () => {
     vi.mocked(updateOpportunity).mockRejectedValueOnce(new Error('500 from the server'));
 
     renderEdit();
-    await screen.findByDisplayValue('A poll the author already wrote');
+    await goToBasicInfo();
     fireEvent.change(screen.getByLabelText(/^Title/i), { target: { value: 'Renamed' } });
     walkToReview();
 
@@ -279,7 +293,7 @@ describe('OpportunityForm - a save that overlaps a later edit', () => {
     );
 
     renderEdit();
-    await screen.findByDisplayValue('A poll the author already wrote');
+    await goToBasicInfo();
     walkToReview();
 
     fireEvent.click(commitButton());

@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Routes } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -91,8 +91,15 @@ const renderEditForm = (opportunity: Record<string, unknown>) => {
   );
 };
 
+// Title and Purpose live on the Basic Info step now, split out of the Study
+// type step (D1/D3 reshape), so filling them means walking there first.
 const fillCreateThreshold = () => {
   chooseStudyType('survey');
+  fireEvent.click(
+    within(screen.getByRole('navigation', { name: 'Form steps' })).getAllByRole(
+      'button'
+    )[1]
+  );
   fireEvent.change(screen.getByLabelText(/^Title/i), {
     target: { value: 'Developer experience pulse' }
   });
@@ -134,7 +141,9 @@ describe('the header status region reserves a fixed height (row 27)', () => {
     // A published study: no autosave state, no Discard draft, since
     // autosave does not apply to it.
     renderEditForm(publishedOpportunity);
-    await screen.findByDisplayValue('Developer experience pulse');
+    // Study type - the landing step since D5 - carries no Title field any
+    // more, so the strip itself is the load anchor.
+    await screen.findByRole('navigation', { name: 'Form steps' });
 
     expect(screen.queryByTestId('autosave-state')).not.toBeInTheDocument();
     expect(screen.queryByText(/Discard draft/i)).not.toBeInTheDocument();

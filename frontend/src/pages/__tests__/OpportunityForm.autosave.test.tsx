@@ -165,9 +165,37 @@ const renderEditForm = (opportunity: Record<string, unknown> = draftOpportunity)
   );
 };
 
+/**
+ * Title and Purpose live on the Basic Info step now, split out of the Study
+ * type step (D1/D3 reshape), so reaching them means walking the strip there
+ * first - which needs a type chosen already, since the strip is gated on one.
+ */
+const goToBasicInfo = () => {
+  fireEvent.click(
+    within(screen.getByRole('navigation', { name: 'Form steps' })).getAllByRole(
+      'button'
+    )[1]
+  );
+};
+
+/**
+ * Loading anchor for an edit-mode render: Study type - the landing step
+ * since D5 - carries no Title field any more, so this walks to Basic Info
+ * and returns its hydrated Title field.
+ */
+const goToBasicInfoOnceLoaded = async () => {
+  fireEvent.click(
+    within(await screen.findByRole('navigation', { name: 'Form steps' })).getAllByRole(
+      'button'
+    )[1]
+  );
+  return screen.findByDisplayValue('Developer experience pulse');
+};
+
 /** Fill step one to the point the create schema would accept it. */
 const fillCreateThreshold = () => {
   chooseStudyType('survey');
+  goToBasicInfo();
   fireEvent.change(screen.getByLabelText(/^Title/i), {
     target: { value: 'Developer experience pulse' }
   });
@@ -234,7 +262,11 @@ describe('the create threshold gates the first write', () => {
    */
   it('sends nothing at all while the form is below the threshold', async () => {
     renderCreateForm();
-
+    // Title lives on Basic Info now, reachable only once a type is chosen -
+    // and a title this short, with no purpose at all, still leaves the create
+    // schema's threshold unmet either way.
+    chooseStudyType('survey');
+    goToBasicInfo();
     fireEvent.change(screen.getByLabelText(/^Title/i), { target: { value: 'Dev' } });
 
     await new Promise((resolve) => setTimeout(resolve, PAST_THE_DEBOUNCE));
@@ -243,7 +275,8 @@ describe('the create threshold gates the first write', () => {
 
   it('says why, rather than showing a save state that is not true', async () => {
     renderCreateForm();
-
+    chooseStudyType('survey');
+    goToBasicInfo();
     fireEvent.change(screen.getByLabelText(/^Title/i), { target: { value: 'Dev' } });
 
     await waitFor(() =>
@@ -334,7 +367,7 @@ describe('a sequence of autosaves', () => {
    */
   it('debounces the edit after a save, not just the first one', async () => {
     renderEditForm(draftOpportunity);
-    await screen.findByDisplayValue('Developer experience pulse');
+    await goToBasicInfoOnceLoaded();
 
     fireEvent.change(screen.getByLabelText(/^Title/i), {
       target: { value: 'First edit' }
@@ -598,7 +631,7 @@ describe('what an autosave refuses to do', () => {
    */
   it('leaves a published opportunity alone', async () => {
     renderEditForm(publishedOpportunity);
-    await screen.findByDisplayValue('Developer experience pulse');
+    await goToBasicInfoOnceLoaded();
 
     fireEvent.change(screen.getByLabelText(/^Title/i), {
       target: { value: 'Developer experience pulse v2' }
@@ -642,7 +675,7 @@ describe('what an autosave refuses to do', () => {
 
   it('shows no save state on a published opportunity, rather than a misleading one', async () => {
     renderEditForm(publishedOpportunity);
-    await screen.findByDisplayValue('Developer experience pulse');
+    await goToBasicInfoOnceLoaded();
 
     // CHANGE something first. Written without this it passed for the wrong
     // reason: an untouched form has nothing to report either way, so the
@@ -663,7 +696,7 @@ describe('what an autosave refuses to do', () => {
    */
   it('does autosave a draft, so the rule above is about status and not about editing', async () => {
     renderEditForm(draftOpportunity);
-    await screen.findByDisplayValue('Developer experience pulse');
+    await goToBasicInfoOnceLoaded();
 
     fireEvent.change(screen.getByLabelText(/^Title/i), {
       target: { value: 'Developer experience pulse v2' }
@@ -681,7 +714,7 @@ describe('what an autosave refuses to do', () => {
    */
   it('never carries a status on an update', async () => {
     renderEditForm(draftOpportunity);
-    await screen.findByDisplayValue('Developer experience pulse');
+    await goToBasicInfoOnceLoaded();
 
     fireEvent.change(screen.getByLabelText(/^Title/i), {
       target: { value: 'Developer experience pulse v2' }
@@ -721,7 +754,7 @@ describe('the concurrency precondition across a sequence of saves', () => {
     } as never);
 
     renderSurveyDraft();
-    await screen.findByDisplayValue('Developer experience pulse');
+    await goToBasicInfoOnceLoaded();
 
     fireEvent.change(screen.getByLabelText(/^Title/i), { target: { value: 'First edit' } });
     await waitFor(() => expect(updateOpportunity).toHaveBeenCalledTimes(1), {
@@ -762,7 +795,7 @@ describe('the concurrency precondition across a sequence of saves', () => {
     vi.mocked(updateOpportunity).mockResolvedValue({ id: 'opp-2' } as never);
 
     renderSurveyDraft();
-    await screen.findByDisplayValue('Developer experience pulse');
+    await goToBasicInfoOnceLoaded();
 
     fireEvent.change(screen.getByLabelText(/^Title/i), { target: { value: 'First edit' } });
     await waitFor(() => expect(updateOpportunity).toHaveBeenCalledTimes(1), {
@@ -856,7 +889,7 @@ describe('a deliberate save that overlaps an autosave', () => {
     vi.mocked(updateOpportunity).mockResolvedValue({ id: 'opp-2' } as never);
 
     renderSurveyDraft();
-    await screen.findByDisplayValue('Developer experience pulse');
+    await goToBasicInfoOnceLoaded();
 
     fireEvent.change(screen.getByLabelText(/^Title/i), { target: { value: 'First edit' } });
     await waitFor(() => expect(updateOpportunity).toHaveBeenCalledTimes(1), {
@@ -908,8 +941,15 @@ describe('the baseline a save measures "did this change" against', () => {
         <Routes>{opportunityFormRoutes(<OpportunityForm />)}</Routes>
       </MemoryRouter>
     );
-    await screen.findByDisplayValue('Developer experience pulse');
+    await goToBasicInfoOnceLoaded();
 
+    // The picker lives on the Study type step, not Basic Info - back there to
+    // change delivery, the same way an author would use the strip.
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'Form steps' })).getAllByRole(
+        'button'
+      )[0]
+    );
     chooseStudyType('poll', 'native');
     await waitFor(() => expect(updateOpportunity).toHaveBeenCalledTimes(1), {
       timeout: PAST_THE_DEBOUNCE
@@ -965,7 +1005,7 @@ describe('what an autosave will not do to somebody\'s answers', () => {
         <Routes>{opportunityFormRoutes(<OpportunityForm />)}</Routes>
       </MemoryRouter>
     );
-    await screen.findByDisplayValue('Developer experience pulse');
+    await goToBasicInfoOnceLoaded();
 
     // Reach the questions and remove the one that has answers.
     fireEvent.click(await screen.findByRole('button', { name: /Questions/i }));
@@ -995,7 +1035,7 @@ describe('what an autosave will not do to somebody\'s answers', () => {
    */
   it('holds while a question is still half-typed, and says so rather than failing', async () => {
     renderSurveyDraft();
-    await screen.findByDisplayValue('Developer experience pulse');
+    await goToBasicInfoOnceLoaded();
 
     fireEvent.click(await screen.findByRole('button', { name: /Questions/i }));
     await screen.findByRole('button', { name: 'Remove question 1' });
@@ -1035,7 +1075,7 @@ describe('a conflict', () => {
     });
 
     renderSurveyDraft();
-    await screen.findByDisplayValue('Developer experience pulse');
+    await goToBasicInfoOnceLoaded();
 
     fireEvent.change(screen.getByLabelText(/^Title/i), { target: { value: 'First edit' } });
     await waitFor(() => expect(updateOpportunity).toHaveBeenCalled(), {
@@ -1072,7 +1112,7 @@ describe('a conflict', () => {
     });
 
     renderEditForm(draftOpportunity);
-    await screen.findByDisplayValue('Developer experience pulse');
+    await goToBasicInfoOnceLoaded();
 
     fireEvent.change(screen.getByLabelText(/^Title/i), {
       target: { value: 'Developer experience pulse v2' }
@@ -1125,7 +1165,7 @@ describe('leaving the form', () => {
    */
   it('still warns about a status the timer is not allowed to send', async () => {
     renderEditForm(draftOpportunity);
-    await screen.findByDisplayValue('Developer experience pulse');
+    await goToBasicInfoOnceLoaded();
 
     setStatus('published');
 
@@ -1145,7 +1185,7 @@ describe('leaving the form', () => {
    */
   it('does not loop trying to save a status it will never carry', async () => {
     renderEditForm(draftOpportunity);
-    await screen.findByDisplayValue('Developer experience pulse');
+    await goToBasicInfoOnceLoaded();
 
     setStatus('published');
 
@@ -1156,7 +1196,7 @@ describe('leaving the form', () => {
 
   it('does not claim unsaved work once the timer has saved it', async () => {
     renderEditForm(draftOpportunity);
-    await screen.findByDisplayValue('Developer experience pulse');
+    await goToBasicInfoOnceLoaded();
 
     fireEvent.change(screen.getByLabelText(/^Title/i), {
       target: { value: 'Saved by the timer' }
@@ -1181,7 +1221,7 @@ describe('leaving the form', () => {
     // for confirmation that the specific race conditions this file guards
     // are still reachable through the controls that remain.
     renderEditForm(draftOpportunity);
-    await screen.findByDisplayValue('Developer experience pulse');
+    await goToBasicInfoOnceLoaded();
 
     expect(screen.queryByRole('button', { name: /Save and exit/i })).not.toBeInTheDocument();
   });
@@ -1193,7 +1233,7 @@ describe('leaving the form', () => {
    */
   it('discards a draft only after confirming it', async () => {
     renderEditForm(draftOpportunity);
-    await screen.findByDisplayValue('Developer experience pulse');
+    await goToBasicInfoOnceLoaded();
 
     fireEvent.click(screen.getByRole('button', { name: /Discard draft/i }));
     expect(deleteOpportunity).not.toHaveBeenCalled();

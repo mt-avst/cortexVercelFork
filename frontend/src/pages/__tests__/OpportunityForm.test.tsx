@@ -425,6 +425,13 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
   };
 
   const fillMinimalStudy = async () => {
+    // Title and Purpose live on Basic Info now, split out of the Study type
+    // step (D1/D3 reshape), so filling them means walking there first.
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'Form steps' })).getAllByRole(
+        'button'
+      )[1]
+    );
     fireEvent.change(screen.getByLabelText(/^Title/i), {
       target: { value: 'Checkout flow walkthrough' }
     });
@@ -608,6 +615,11 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     renderForm();
     selectType('unmoderated');
 
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'Form steps' })).getAllByRole(
+        'button'
+      )[1]
+    );
     fireEvent.change(screen.getByLabelText(/^Title/i), {
       target: { value: 'Checkout flow walkthrough' }
     });
@@ -656,6 +668,11 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     renderForm();
     selectType('unmoderated');
 
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'Form steps' })).getAllByRole(
+        'button'
+      )[1]
+    );
     fireEvent.change(screen.getByLabelText(/^Title/i), {
       target: { value: 'Checkout flow walkthrough' }
     });
@@ -714,6 +731,11 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     renderForm();
     selectType('unmoderated');
 
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'Form steps' })).getAllByRole(
+        'button'
+      )[1]
+    );
     fireEvent.change(screen.getByLabelText(/^Title/i), {
       target: { value: 'Checkout flow walkthrough' }
     });
@@ -817,6 +839,13 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     renderForm();
     selectType('unmoderated');
 
+    // Title and Purpose live on Basic Info now, split out of the Study type
+    // step (D1/D3 reshape).
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'Form steps' })).getAllByRole(
+        'button'
+      )[1]
+    );
     fireEvent.change(screen.getByLabelText(/^Title/i), {
       target: { value: 'Checkout flow walkthrough' }
     });
@@ -909,6 +938,13 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     renderForm();
     selectType('unmoderated');
 
+    // Title and Purpose live on Basic Info now, split out of the Study type
+    // step (D1/D3 reshape).
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'Form steps' })).getAllByRole(
+        'button'
+      )[1]
+    );
     fireEvent.change(screen.getByLabelText(/^Title/i), {
       target: { value: 'Checkout flow walkthrough' }
     });
@@ -946,6 +982,13 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     renderForm();
     selectType('unmoderated');
 
+    // Title and Purpose live on Basic Info now, split out of the Study type
+    // step (D1/D3 reshape).
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'Form steps' })).getAllByRole(
+        'button'
+      )[1]
+    );
     fireEvent.change(screen.getByLabelText(/^Title/i), {
       target: { value: 'Checkout flow walkthrough' }
     });
@@ -985,6 +1028,13 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     );
     renderForm();
     selectType('unmoderated');
+    // Title and Purpose live on Basic Info now, split out of the Study type
+    // step (D1/D3 reshape).
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'Form steps' })).getAllByRole(
+        'button'
+      )[1]
+    );
     fireEvent.change(screen.getByLabelText(/^Title/i), { target: { value: 'Checkout flow walkthrough' } });
     fireEvent.change(screen.getByLabelText(/purpose/i), { target: { value: 'Find out where people stall in the checkout flow' } });
 
@@ -1207,7 +1257,9 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       firsthand_study_id: 'study_created_on_save'
     } as never);
 
-    fireEvent.click(screen.getByRole('button', { name: /The study/i }));
+    // Title lives on Basic Info now, split out of the Study type step
+    // (D1/D3 reshape).
+    fireEvent.click(screen.getByRole('button', { name: /Basic Info/i }));
     fireEvent.change(await screen.findByLabelText(/^Title/i), {
       target: { value: 'Draft saved early, now renamed' }
     });
@@ -1365,6 +1417,13 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       renderForm();
       selectType('unmoderated');
 
+      // Title and Purpose live on Basic Info now, split out of the Study type
+      // step (D1/D3 reshape).
+      fireEvent.click(
+        within(screen.getByRole('navigation', { name: 'Form steps' })).getAllByRole(
+          'button'
+        )[1]
+      );
       fireEvent.change(screen.getByLabelText(/^Title/i), {
         target: { value: 'Checkout flow walkthrough' }
       });
@@ -1379,8 +1438,9 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       fireEvent.click(await screen.findByRole('button', { name: /^Start from this Demo Study$/ }));
       await screen.findByText(/Copied from/i);
 
-      // The switch itself.
-      fireEvent.click(screen.getByRole('button', { name: /The study/i }));
+      // The switch itself. The picker lives on the Study type step, not
+      // Basic Info.
+      fireEvent.click(screen.getByRole('button', { name: /Study type/i }));
       selectType('survey', 'native');
 
       fireEvent.click(screen.getByRole('button', { name: /Questions/i }));
@@ -1413,6 +1473,13 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       renderForm();
       selectType('survey', 'native');
 
+      // Title and Purpose live on Basic Info now, split out of the Study type
+      // step (D1/D3 reshape).
+      fireEvent.click(
+        within(screen.getByRole('navigation', { name: 'Form steps' })).getAllByRole(
+          'button'
+        )[1]
+      );
       fireEvent.change(screen.getByLabelText(/^Title/i), {
         target: { value: 'Developer experience pulse' }
       });
@@ -1429,7 +1496,8 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       fireEvent.click(await screen.findByRole('button', { name: /^Start from this Demo Survey$/ }));
       await screen.findByText(/Copied from/i);
 
-      fireEvent.click(screen.getByRole('button', { name: /The study/i }));
+      // The picker lives on the Study type step, not Basic Info.
+      fireEvent.click(screen.getByRole('button', { name: /Study type/i }));
       selectType('unmoderated');
 
       fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
@@ -1470,7 +1538,8 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       fireEvent.click(await screen.findByRole('button', { name: /^Start from this Demo Study$/ }));
       await screen.findByText(/Copied from/i);
 
-      fireEvent.click(screen.getByRole('button', { name: /The study/i }));
+      // The picker lives on the Study type step, not Basic Info.
+      fireEvent.click(screen.getByRole('button', { name: /Study type/i }));
       selectType('question');
       selectType('unmoderated');
 
@@ -1596,6 +1665,13 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     renderForm();
     selectType('unmoderated');
 
+    // Title and Purpose live on Basic Info now, split out of the Study type
+    // step (D1/D3 reshape).
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'Form steps' })).getAllByRole(
+        'button'
+      )[1]
+    );
     fireEvent.change(screen.getByLabelText(/^Title/i), {
       target: { value: 'Checkout flow walkthrough' }
     });
@@ -1633,6 +1709,13 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     renderForm();
     selectType('unmoderated');
 
+    // Title and Purpose live on Basic Info now, split out of the Study type
+    // step (D1/D3 reshape).
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'Form steps' })).getAllByRole(
+        'button'
+      )[1]
+    );
     fireEvent.change(screen.getByLabelText(/^Title/i), {
       target: { value: 'Checkout flow walkthrough' }
     });
@@ -1681,41 +1764,41 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
 
 describe('locateField', () => {
   it('puts each error key on the tab that actually renders it', () => {
-    expect(locateField('title').tab).toBe(1);
+    expect(locateField('title').tab).toBe(2);
     // Audience fields: Participant Type and its criteria live on the Audience
-    // step (tab 2 since the D1/D3 reshape).
-    expect(locateField('participant_type_required').tab).toBe(2);
-    expect(locateField('participant_type_specific_details').tab).toBe(2);
+    // step (tab 3 since the Study type / Basic Info split).
+    expect(locateField('participant_type_required').tab).toBe(3);
+    expect(locateField('participant_type_specific_details').tab).toBe(3);
     // Session fields (D6): Meeting Location and Default Duration are on the
-    // experience step (tab 3) for test/interview.
-    expect(locateField('meeting_location_optional').tab).toBe(3);
-    expect(locateField('default_duration_minutes').tab).toBe(3);
-    expect(locateField('external_link_optional').tab).toBe(3);
-    // Consent is its own step at tab 4 since the D1/D3 reshape (native and
-    // recorded authoring paths). Asserted for BOTH keys - the recorded and
-    // survey consent fields are a twin pair and pinning one has twice let the
-    // other drift.
-    expect(locateField('inline_study_consent_text').tab).toBe(4);
-    expect(locateField('inline_survey_consent_text').tab).toBe(4);
-    // The screener lives on the Audience step (tab 2). Both its top-level keys,
-    // and a per-question key routed by the regex branch, land there.
-    expect(locateField('screener_questions').tab).toBe(2);
-    expect(locateField('screener_message').tab).toBe(2);
-    expect(locateField('screener_questions.0.options.1.label').tab).toBe(2);
-    // Still step 3, and asserted here because "the consent field moved" and
+    // experience step (tab 4) for test/interview.
+    expect(locateField('meeting_location_optional').tab).toBe(4);
+    expect(locateField('default_duration_minutes').tab).toBe(4);
+    expect(locateField('external_link_optional').tab).toBe(4);
+    // Consent is its own step at tab 5 since the split (native and recorded
+    // authoring paths). Asserted for BOTH keys - the recorded and survey
+    // consent fields are a twin pair and pinning one has twice let the other
+    // drift.
+    expect(locateField('inline_study_consent_text').tab).toBe(5);
+    expect(locateField('inline_survey_consent_text').tab).toBe(5);
+    // The screener lives on the Audience step (tab 3). Both its top-level
+    // keys, and a per-question key routed by the regex branch, land there.
+    expect(locateField('screener_questions').tab).toBe(3);
+    expect(locateField('screener_message').tab).toBe(3);
+    expect(locateField('screener_questions.0.options.1.label').tab).toBe(3);
+    // Still step 4, and asserted here because "the consent field moved" and
     // "everything on that step moved" are different changes: the content the
     // consent is about stayed where it was.
-    expect(locateField('inline_study_steps').tab).toBe(3);
-    expect(locateField('inline_survey_questions').tab).toBe(3);
+    expect(locateField('inline_study_steps').tab).toBe(4);
+    expect(locateField('inline_survey_questions').tab).toBe(4);
   });
 
   it('routes a per-task key to the step that renders the task list', () => {
     // No control id: the id of a task's prompt box is built from its client id,
     // which only the component holds, so these resolve to a step here and get
     // their control from `controlForError`.
-    expect(locateField('inline_study_steps.0.prompt')).toEqual({ tab: 3 });
-    expect(locateField('inline_study_steps.2.options')).toEqual({ tab: 3 });
-    expect(locateField('inline_survey_questions.4.config')).toEqual({ tab: 3 });
+    expect(locateField('inline_study_steps.0.prompt')).toEqual({ tab: 4 });
+    expect(locateField('inline_study_steps.2.options')).toEqual({ tab: 4 });
+    expect(locateField('inline_survey_questions.4.config')).toEqual({ tab: 4 });
   });
 
   it('falls back to the first step for a key it does not know', () => {
@@ -1749,8 +1832,8 @@ describe('locateField', () => {
 
 describe('firstStepHoldingError', () => {
   it('opens the earliest step holding a problem', () => {
-    // Earliest, not first-inserted: the object below lists the step-4 error
-    // first, and sending the author to step 4 would leave the title untouched.
+    // Earliest, not first-inserted: the object below lists the step-5 error
+    // first, and sending the author to step 5 would leave the title untouched.
     expect(
       firstStepHoldingError(
         {
@@ -1759,7 +1842,7 @@ describe('firstStepHoldingError', () => {
         },
         locateField
       )
-    ).toBe(1);
+    ).toBe(2);
   });
 
   it('holds the current step when there is nothing to report', () => {
@@ -1820,15 +1903,10 @@ describe('OpportunityForm - a refused action always says so', () => {
   it('refuses Continue with no type instead of no-oping, and marks the type field', async () => {
     // Type is the choice that decides the shape, so the form refuses to advance
     // without it. The strip is hidden until a type is chosen (WZ-18), so this
-    // refusal comes from Basic Information's own Continue rather than from
-    // clicking a later tile. Everything else filled, the sole problem is `type`.
+    // refusal comes from the Study type step's own Continue, before Basic
+    // Info - where Title and Purpose live now - is ever reached. There is
+    // nothing else to fill: `type` is the sole field this step holds.
     renderForm();
-    fireEvent.change(screen.getByLabelText(/^Title/i), {
-      target: { value: 'A perfectly serviceable title' },
-    });
-    fireEvent.change(screen.getByLabelText(/purpose/i), {
-      target: { value: 'Find out where people stall in the checkout flow' },
-    });
 
     fireEvent.click(screen.getByRole('button', { name: /^Continue/i }));
 
@@ -1852,6 +1930,13 @@ describe('OpportunityForm - a refused action always says so', () => {
     renderForm();
     selectType('unmoderated');
 
+    // Title and Purpose live on Basic Info now, split out of the Study type
+    // step (D1/D3 reshape).
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'Form steps' })).getAllByRole(
+        'button'
+      )[1]
+    );
     fireEvent.change(screen.getByLabelText(/purpose/i), {
       target: { value: 'Find out where people stall in the checkout flow' },
     });
@@ -1880,6 +1965,13 @@ describe('OpportunityForm - a refused action always says so', () => {
     renderForm();
     selectType('unmoderated');
 
+    // Title and Purpose live on Basic Info now, split out of the Study type
+    // step (D1/D3 reshape).
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'Form steps' })).getAllByRole(
+        'button'
+      )[1]
+    );
     fireEvent.change(screen.getByLabelText(/^Title/i), {
       target: { value: 'Checkout flow walkthrough' },
     });
@@ -1932,15 +2024,9 @@ describe('OpportunityForm - a refused action always says so', () => {
     // went on naming it. Derived now, so it empties itself.
     const { container } = renderForm();
 
-    // Refuse on the missing type from Basic Information's own Continue (the
-    // strip is hidden until a type is chosen - WZ-18). Title and purpose filled,
-    // so the sole refusal named is `type`.
-    fireEvent.change(screen.getByLabelText(/^Title/i), {
-      target: { value: 'A perfectly serviceable title' },
-    });
-    fireEvent.change(screen.getByLabelText(/purpose/i), {
-      target: { value: 'Find out where people stall in the checkout flow' },
-    });
+    // Refuse on the missing type from the Study type step's own Continue (the
+    // strip is hidden until a type is chosen - WZ-18). Nothing else to fill:
+    // `type` is the sole field this step holds, so it is the sole refusal.
     fireEvent.click(screen.getByRole('button', { name: /^Continue/i }));
     expect(summarisedErrorKeys()).toEqual(['type']);
 
@@ -1962,6 +2048,13 @@ describe('OpportunityForm - a refused action always says so', () => {
     renderForm();
     selectType('unmoderated');
 
+    // Title and Purpose live on Basic Info now, split out of the Study type
+    // step (D1/D3 reshape).
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'Form steps' })).getAllByRole(
+        'button'
+      )[1]
+    );
     fireEvent.change(screen.getByLabelText(/^Title/i), {
       target: { value: 'Checkout flow walkthrough' },
     });
@@ -2023,8 +2116,7 @@ describe('OpportunityForm - a refused action always says so', () => {
     // Default Duration lives on the Session Management step now (D6), so it is
     // cleared there. The step's own save controls live inside AdminSessionManager
     // (mocked out here), so the edit is committed from a step that carries the
-    // Save Changes shortcut - Basic Information - which still runs the full
-    // collector.
+    // Save Changes shortcut - Study type - which still runs the full collector.
     fireEvent.click(
       within(await screen.findByRole('navigation', { name: 'Form steps' }))
         .getByRole('button', { name: /Session Management/i })
@@ -2035,7 +2127,7 @@ describe('OpportunityForm - a refused action always says so', () => {
 
     fireEvent.click(
       within(screen.getByRole('navigation', { name: 'Form steps' }))
-        .getByRole('button', { name: /The study/i })
+        .getByRole('button', { name: /Study type/i })
     );
     fireEvent.click(await screen.findByRole('button', { name: /Save Changes/i }));
 

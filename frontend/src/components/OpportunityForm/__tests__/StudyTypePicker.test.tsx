@@ -17,11 +17,13 @@ vi.mock('../../../api/client', async () => {
 });
 
 /*
- * D2 - the study-type picker. Nine cards replace the old "Research Study Type"
- * select and the "Where participants answer" delivery radios. Each card commits
- * an EXISTING (type, delivery_mode) pair - no enum is invented or renamed - so
- * getTabsForType keeps deciding the step set. Row 7: a published study's type is
- * read-only behind an explicit "Change study type" control.
+ * D2/reshape - the study-type picker. Six pods (one per `type`), grouped under
+ * two scheduling eyebrows ("Live studies" / "Async studies"), replace the old
+ * nine-card grid; a separate delivery toggle ("In Cortex" / "In an external
+ * tool") appears only once an answer-based type is picked. Each pod or toggle
+ * click commits an EXISTING (type, delivery_mode) pair - no enum is invented or
+ * renamed - so getTabsForType keeps deciding the step set. Row 7: a published
+ * study's type is read-only behind an explicit "Change study type" control.
  */
 
 const NATIVE_COPY =
@@ -43,74 +45,98 @@ const renderPicker = (props: Partial<React.ComponentProps<typeof StudyTypePicker
   return { onSelect };
 };
 
-describe('StudyTypePicker - the nine cards and their enum mapping', () => {
-  // The card -> (type, delivery) contract, pinned as literals so a silent
-  // remap fails by name.
-  const CARDS: Array<[string, string, 'native' | 'external']> = [
-    ['Interview', 'interview', 'external'],
-    ['Live session', 'test', 'external'],
-    ['Recorded session', 'unmoderated', 'external'],
-    ['Quick poll, in Cortex', 'poll', 'native'],
-    ['Quick poll, in an external tool', 'poll', 'external'],
-    ['One question, in Cortex', 'question', 'native'],
-    ['One question, in an external tool', 'question', 'external'],
-    ['Survey, in Cortex', 'survey', 'native'],
-    ['Survey, in an external tool', 'survey', 'external']
+describe('StudyTypePicker - the six pods and their enum mapping', () => {
+  // The pod -> `type` contract, pinned as literals so a silent remap fails by
+  // name. Every pod carries the SAME external default on first pick (D2's
+  // `deliveryForPod`), which is what makes clicking a pod alone always land on
+  // the system default rather than whatever the last answer-based pick left
+  // behind.
+  const PODS: Array<[string, string]> = [
+    ['Interview', 'interview'],
+    ['Live session', 'test'],
+    ['Recorded session', 'unmoderated'],
+    ['Quick poll', 'poll'],
+    ['One question', 'question'],
+    ['Survey', 'survey']
   ];
 
-  it('renders exactly nine choosable cards', () => {
+  it('renders exactly six choosable pods', () => {
     renderPicker();
-    expect(screen.getAllByRole('radio')).toHaveLength(9);
+    expect(screen.getAllByRole('radio')).toHaveLength(6);
   });
 
-  it.each(CARDS)(
-    'the "%s" card selects type=%s delivery=%s',
-    (name, type, delivery) => {
-      const { onSelect } = renderPicker();
-      fireEvent.click(screen.getByRole('radio', { name }));
-      expect(onSelect).toHaveBeenCalledTimes(1);
-      expect(onSelect).toHaveBeenCalledWith(type, delivery);
-    }
-  );
+  it.each(PODS)('the "%s" pod selects type=%s, carrying the external default', (name, type) => {
+    const { onSelect } = renderPicker();
+    fireEvent.click(screen.getByRole('radio', { name }));
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onSelect).toHaveBeenCalledWith(type, 'external');
+  });
 
-  it('groups the cards into interactive sessions and answer-based', () => {
+  it('groups the pods into Live studies and Async studies', () => {
     renderPicker();
     expect(
-      screen.getByRole('heading', { name: /Interactive sessions/i })
+      screen.getByRole('heading', { name: /Live studies/i })
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('heading', { name: /Answer-based/i })
+      screen.getByRole('heading', { name: /Async studies/i })
     ).toBeInTheDocument();
   });
 
-  it('carries the verbatim delivery copy on the answer-based cards', () => {
-    renderPicker();
-    // Native copy appears on the three "in Cortex" cards; external on the three
-    // "in an external tool" cards.
-    expect(screen.getAllByText(NATIVE_COPY)).toHaveLength(3);
-    expect(screen.getAllByText(EXTERNAL_COPY)).toHaveLength(3);
-  });
-
-  it('marks the chosen card, and only it, as checked', () => {
+  it('marks the chosen pod, and only it, as checked', () => {
     renderPicker({ type: 'survey', deliveryMode: 'native' });
     expect(
-      screen.getByRole('radio', { name: 'Survey, in Cortex' })
+      screen.getByRole('radio', { name: 'Survey' })
     ).toHaveAttribute('aria-checked', 'true');
-    expect(
-      screen.getByRole('radio', { name: 'Survey, in an external tool' })
-    ).toHaveAttribute('aria-checked', 'false');
     expect(
       screen.getByRole('radio', { name: 'Live session' })
     ).toHaveAttribute('aria-checked', 'false');
   });
 
-  it('checks an interactive card on type alone, ignoring delivery mode', () => {
-    // interview/test/unmoderated have one card each - delivery is not a choice
+  it('checks an interactive pod on type alone, ignoring delivery mode', () => {
+    // interview/test/unmoderated have one pod each - delivery is not a choice
     // they carry, so a stale delivery_mode must not leave them unchecked.
     renderPicker({ type: 'test', deliveryMode: 'native' });
     expect(
       screen.getByRole('radio', { name: 'Live session' })
     ).toHaveAttribute('aria-checked', 'true');
+  });
+});
+
+describe('StudyTypePicker - the delivery toggle', () => {
+  it('does not render before any type is chosen', () => {
+    renderPicker({ type: '' });
+    expect(
+      screen.queryByRole('radiogroup', { name: 'Where participants answer' })
+    ).toBeNull();
+  });
+
+  it('does not render for an interactive type, which carries no delivery choice', () => {
+    renderPicker({ type: 'test' });
+    expect(
+      screen.queryByRole('radiogroup', { name: 'Where participants answer' })
+    ).toBeNull();
+  });
+
+  it('carries the verbatim delivery copy once an answer-based type is picked', () => {
+    renderPicker({ type: 'survey' });
+    expect(screen.getByText(NATIVE_COPY)).toBeInTheDocument();
+    expect(screen.getByText(EXTERNAL_COPY)).toBeInTheDocument();
+  });
+
+  it('selects native delivery without changing the type', () => {
+    const { onSelect } = renderPicker({ type: 'poll', deliveryMode: 'external' });
+    fireEvent.click(screen.getByRole('radio', { name: 'In Cortex' }));
+    expect(onSelect).toHaveBeenCalledWith('poll', 'native');
+  });
+
+  it('marks the chosen delivery, and only it, as checked', () => {
+    renderPicker({ type: 'poll', deliveryMode: 'native' });
+    expect(
+      screen.getByRole('radio', { name: 'In Cortex' })
+    ).toHaveAttribute('aria-checked', 'true');
+    expect(
+      screen.getByRole('radio', { name: 'In an external tool' })
+    ).toHaveAttribute('aria-checked', 'false');
   });
 });
 
@@ -176,17 +202,20 @@ describe('StudyTypePicker - row 7: a published study locks its type', () => {
     expect(screen.getByText(/detaches/i)).toBeInTheDocument();
   });
 
-  it('reveals the cards, with a warning, once the author chooses to change', () => {
+  it('reveals the pods, with a warning, once the author chooses to change', () => {
     renderPicker({ type: 'survey', deliveryMode: 'native', isPublished: true });
     fireEvent.click(screen.getByRole('button', { name: /Change study type/i }));
 
-    expect(screen.getAllByRole('radio')).toHaveLength(9);
+    // Six pods, plus the delivery toggle's two radios: survey is answer-based
+    // and its delivery (native) survives the unlock, so the toggle renders too.
+    expect(screen.getAllByRole('radio')).toHaveLength(8);
     expect(screen.getByRole('alert')).toHaveTextContent(/detaches/i);
   });
 
   it('picks freely when the study is not published', () => {
     renderPicker({ type: '', isPublished: false });
-    expect(screen.getAllByRole('radio')).toHaveLength(9);
+    // No type chosen yet, so it is the six pods alone - no delivery toggle.
+    expect(screen.getAllByRole('radio')).toHaveLength(6);
     expect(
       screen.queryByRole('button', { name: /Change study type/i })
     ).toBeNull();

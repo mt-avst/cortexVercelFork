@@ -22,9 +22,9 @@ const completeInput = (
   overrides: Partial<ReviewSummaryInput> = {}
 ): ReviewSummaryInput => ({
   steps: [
-    { id: 1, key: 'basics', title: 'Basic Information' },
-    { id: 2, key: 'content', title: 'Content Details' },
-    { id: 5, key: 'review', title: 'Review' }
+    { id: 1, key: 'basics', title: 'Study type' },
+    { id: 2, key: 'basicInfo', title: 'Basic Info' },
+    { id: 6, key: 'review', title: 'Review' }
   ],
   type: 'test',
   title: 'Onboarding walkthrough',
@@ -150,15 +150,33 @@ describe('buildReviewSummary', () => {
   });
 
   describe('basics section', () => {
-    // The title and type now live in the header, not as rows here (WZ-17). A
-    // duplicate row would undo the promotion, so the section must NOT carry
-    // them - and the Purpose row that follows them is left where it was.
-    it('no longer carries Title or Research Study Type rows (WZ-17 promoted them to the header)', () => {
+    // The title now lives in the header, not as a row here (WZ-17), and the
+    // step split moved Purpose/Description/Product off basics entirely onto
+    // their own Basic Info step - so basics carries exactly one row: the
+    // Study type itself, which is the one thing this step is for now that
+    // it is no longer also the naming step.
+    it('carries only the Study type row (WZ-17 promoted Title to the header; the split moved Purpose/Description/Product to Basic Info)', () => {
       const basics = findSection(buildReviewSummary(completeInput()), 'basics');
       expect(findItem(basics, 'Title')).toBeUndefined();
       expect(findItem(basics, 'Research Study Type')).toBeUndefined();
-      // Purpose stays, so the section is not left empty on the shortest shape.
-      expect(findItem(basics, 'Purpose')).toBeDefined();
+      expect(findItem(basics, 'Purpose')).toBeUndefined();
+      expect(basics?.items).toHaveLength(1);
+    });
+
+    it('names the Study type value from the participant-facing label, and flags an unchosen type as missing', () => {
+      const chosen = findItem(
+        findSection(buildReviewSummary(completeInput({ type: 'test' })), 'basics'),
+        'Study type'
+      );
+      expect(chosen?.value).toBe('Live session');
+      expect(chosen?.missing).toBeFalsy();
+
+      const unchosen = findItem(
+        findSection(buildReviewSummary(completeInput({ type: '' })), 'basics'),
+        'Study type'
+      );
+      expect(unchosen?.value).toBe('Not chosen');
+      expect(unchosen?.missing).toBe(true);
     });
 
     /*
@@ -308,13 +326,20 @@ describe('buildReviewSummary', () => {
     });
   });
 
-  describe('advert copy on the basics section (D6)', () => {
-    // Description and Product moved to Basic Information, beside Title and
-    // Purpose (D6). completeInput's default steps carry a basics section.
+  describe('advert copy on the basicInfo section', () => {
+    // Purpose, Description and Product live on their own Basic Info step, the
+    // step split out of the old merged basics step. Title leads the header
+    // (WZ-17) and is not repeated here. completeInput's default steps carry a
+    // basicInfo section.
+    it('carries Purpose, so the section is not left empty on the shortest shape', () => {
+      const basicInfo = findSection(buildReviewSummary(completeInput()), 'basicInfo');
+      expect(findItem(basicInfo, 'Purpose')).toBeDefined();
+    });
+
     it('marks an empty description as missing', () => {
       const section = findSection(
         buildReviewSummary(completeInput({ description: '' })),
-        'basics'
+        'basicInfo'
       );
       const item = findItem(section, 'Description');
       expect(item?.missing).toBe(true);
@@ -331,11 +356,11 @@ describe('buildReviewSummary', () => {
     it('includes Product only when it is non-empty', () => {
       const withProduct = findSection(
         buildReviewSummary(completeInput({ product: 'Confluence' })),
-        'basics'
+        'basicInfo'
       );
       const withoutProduct = findSection(
         buildReviewSummary(completeInput({ product: '' })),
-        'basics'
+        'basicInfo'
       );
       expect(findItem(withProduct, 'Product')?.value).toBe('Confluence');
       expect(findItem(withoutProduct, 'Product')).toBeUndefined();

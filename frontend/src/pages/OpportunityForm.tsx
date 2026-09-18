@@ -101,7 +101,7 @@ import {
 import type { FirstHandStudyWithSteps } from '../api/firsthand-studies';
 import { logger } from '../utils/logger';
 import AdminSessionManager from '../components/AdminSessionManager';
-import { AudienceFields, BasicInfoTab, ConsentStep, ErrorSummary, ExternalLinkTab, FieldError, FirstHandStudyTab, ReviewStep, ScreenerStep, StepActions, StepNav, SurveyQuestionsTab } from '../components/OpportunityForm';
+import { AudienceFields, BasicInfoTab, ConsentStep, ErrorSummary, ExternalLinkTab, FieldError, FirstHandStudyTab, ReviewStep, ScreenerStep, StepActions, StepNav, StudyTypePicker, SurveyQuestionsTab } from '../components/OpportunityForm';
 import ConfirmationModal from '../components/ConfirmationModal';
 import { RATING_SCALE_BOUNDS } from '@shared/firsthand/contract';
 import {
@@ -217,7 +217,7 @@ export const clearTypeConditionalErrors = (
 /**
  * Which step renders each validation error, and which control on it.
  *
- * The form spans three to five steps depending on the type, and the save
+ * The form spans three to six steps depending on the type, and the save
  * controls only exist on the last one, so a refused save is almost always
  * about a field that is not on screen: opening its step and landing on the
  * control is the whole point.
@@ -235,7 +235,9 @@ export const clearTypeConditionalErrors = (
  */
 export const FIELD_LOCATIONS: Record<string, { tab: number; control?: string }> = {
   type: { tab: 1, control: 'type' },
-  title: { tab: 1, control: 'title' },
+  // Title and Purpose are the study's advert copy, on the Basic Info step (tab 2
+  // since Study type and Basic Info split apart), not the Study type step.
+  title: { tab: 2, control: 'title' },
   // `status` has no entry, deliberately: it is a closed two-option select and
   // no validator in this file ever assigns `errors.status` or
   // `fieldErrors.status`, so it is a field that can never fail - the
@@ -244,67 +246,66 @@ export const FIELD_LOCATIONS: Record<string, { tab: number; control?: string }> 
   // setting it, it must be routed to `REVIEW_STEP_ID`, not tab 1, since that
   // is where the control now lives.
   // Meeting Location and Default Duration are delivery facts about a session, so
-  // they live on the Session Management step (tab 3 for test/interview) with the
-  // slots, not on Basic Information (D6).
-  meeting_location_optional: { tab: 3, control: 'meeting_location_optional' },
-  purpose_one_liner: { tab: 1, control: 'purpose_one_liner' },
-  default_duration_minutes: { tab: 3, control: 'default_duration_minutes' },
+  // they live on the Session Management step (tab 4 for test/interview) with the
+  // slots, not on Basic Info (D6).
+  meeting_location_optional: { tab: 4, control: 'meeting_location_optional' },
+  purpose_one_liner: { tab: 2, control: 'purpose_one_liner' },
+  default_duration_minutes: { tab: 4, control: 'default_duration_minutes' },
   // Participant Type and its criteria are audience decisions, so they live with
-  // the eligibility gate on the Audience step (tab 2 since the D1/D3 reshape),
-  // not on Content & Details (D6).
-  participant_type_required: { tab: 2, control: 'participant_type_required' },
+  // the eligibility gate on the Audience step (tab 3 since the Study type / Basic
+  // Info split), not on the experience step (D6).
+  participant_type_required: { tab: 3, control: 'participant_type_required' },
   participant_type_specific_details: {
-    tab: 2,
+    tab: 3,
     control: 'participant_type_specific_details'
   },
-  external_link_optional: { tab: 3, control: 'external_link_optional' },
+  external_link_optional: { tab: 4, control: 'external_link_optional' },
   // Set on neither authoring surface any more - copy mode sends `inline_*` and
   // never this id. It survives for the one state that still carries it: a
   // linked study this author may not change here, which is saved by id. No
   // control: the read-only rendering of that study is an `<ol>` with no id and
   // nothing on the step is editable, so there is nothing to focus.
-  firsthand_study_id: { tab: 3 },
-  inline_study_target_url: { tab: 3, control: 'inline_study_target_url' },
+  firsthand_study_id: { tab: 4 },
+  inline_study_target_url: { tab: 4, control: 'inline_study_target_url' },
   inline_study_duration_minutes: {
-    tab: 3,
+    tab: 4,
     control: 'inline_study_duration_minutes'
   },
   // The step HEADING carries this id and `tabIndex={-1}`, not a form control:
   // "add at least one task" is about the list, and the list may be empty, so
   // there is no input to land on.
-  inline_study_steps: { tab: 3, control: 'inline_study_steps' },
-  // The screener step (MR2) took id 4, so Consent moved to step 5 on every
-  // authoring path, and there is no other kind of opportunity that can produce
-  // this error: only an unmoderated study carries a task list, and only an
-  // unmoderated study has a Consent step. Same for its survey twin below. A type
-  // with no study never sets either key - clearTypeConditionalErrors deletes
-  // them on a type change - so a fixed 5 is unambiguous here in a way it would
-  // not be for a field two shapes share.
+  inline_study_steps: { tab: 4, control: 'inline_study_steps' },
+  // Consent sits at step 5 on every authoring path that has it, and there is no
+  // other kind of opportunity that can produce this error: only an unmoderated
+  // study carries a task list, and only an unmoderated study has a Consent step.
+  // Same for its survey twin below. A type with no study never sets either key -
+  // clearTypeConditionalErrors deletes them on a type change - so a fixed 5 is
+  // unambiguous here in a way it would not be for a field two shapes share.
   //
   // The HEADING again, and for a sharper reason: consent is locked to the
   // approved wording by default, and while it is locked the textarea carrying
   // the field id is not rendered at all. C3 found this by driving the form.
-  inline_study_consent_text: { tab: 4, control: 'inline_study_consent_text-heading' },
-  inline_survey_questions: { tab: 3, control: 'inline_survey_questions' },
+  inline_study_consent_text: { tab: 5, control: 'inline_study_consent_text-heading' },
+  inline_survey_questions: { tab: 4, control: 'inline_survey_questions' },
   inline_survey_duration_minutes: {
-    tab: 3,
+    tab: 4,
     control: 'inline_survey_duration_minutes'
   },
-  inline_survey_consent_text: { tab: 4, control: 'inline_survey_consent_text-heading' },
-  moderated_consent_text: { tab: 4, control: 'moderated_consent_text-heading' },
-  // The screener lives on the Audience step (tab 2 since the D1/D3 reshape). The
-  // top-level key carries the "needs a question" / "needs a screen-out answer"
-  // refusals and lands on the step heading (an id + tabIndex={-1}, like the
-  // consent and sessions headings). Per-question keys
-  // (`screener_questions.<i>.*`) are routed to tab 2 by `locateField` below and
+  inline_survey_consent_text: { tab: 5, control: 'inline_survey_consent_text-heading' },
+  moderated_consent_text: { tab: 5, control: 'moderated_consent_text-heading' },
+  // The screener lives on the Audience step (tab 3 since the Study type / Basic
+  // Info split). The top-level key carries the "needs a question" / "needs a
+  // screen-out answer" refusals and lands on the step heading (an id +
+  // tabIndex={-1}, like the consent and sessions headings). Per-question keys
+  // (`screener_questions.<i>.*`) are routed to tab 3 by `locateField` below and
   // open the step without a per-control caret, the same smaller promise the
   // task and survey lists keep.
-  screener_questions: { tab: 2, control: 'screener_questions-heading' },
-  screener_message: { tab: 2, control: 'screener_message' },
-  // Audit row 15: the Session Management step (tab 3 for test/interview). Like
+  screener_questions: { tab: 3, control: 'screener_questions-heading' },
+  screener_message: { tab: 3, control: 'screener_message' },
+  // Audit row 15: the Session Management step (tab 4 for test/interview). Like
   // `inline_study_steps`, the slots are a list with no single input to land on,
   // so the summary link lands on the step HEADING (id + tabIndex={-1}).
-  sessions: { tab: 3, control: 'sessions-heading' }
+  sessions: { tab: 4, control: 'sessions-heading' }
 };
 
 /**
@@ -313,7 +314,7 @@ export const FIELD_LOCATIONS: Record<string, { tab: number; control?: string }> 
  * Switching a poll or survey between "in Cortex" and "in an external tool"
  * replaces its third step just as completely as changing the type does, and
  * discards the content of the surface being left - but nothing cleared the
- * errors that content had produced. They stayed in the map, pointing at tab 3,
+ * errors that content had produced. They stayed in the map, pointing at tab 4,
  * which is now a different step.
  *
  * Before the stepper that was invisible unless a save was attempted. With a
@@ -397,19 +398,19 @@ export const clearParticipantConditionalErrors = (
  */
 export const locateField = (key: string): { tab: number; control?: string } => {
   if (/^inline_study_steps\.\d+\./.test(key)) {
-    return { tab: 3 };
+    return { tab: 4 };
   }
 
   if (/^inline_survey_questions\.\d+\./.test(key)) {
-    return { tab: 3 };
+    return { tab: 4 };
   }
 
   // Per-question and per-answer screener errors all live on the Audience step.
   // Routed here rather than by a FIELD_LOCATIONS entry per index, the same way
-  // the two lists above are, and to tab 2 - where getTabsForType puts the
+  // the two lists above are, and to tab 3 - where getTabsForType puts the
   // Audience step (screener gate) on every shape that has one.
   if (/^screener_questions\.\d+\./.test(key)) {
-    return { tab: 2 };
+    return { tab: 3 };
   }
   // `Object.hasOwn` would read better but needs the es2022 lib, and widening
   // the compiler target for one call is not a trade worth making.
@@ -452,12 +453,14 @@ export const parseIndexedErrorKey = (
  * from `type` and `deliveryMode` themselves, in predicates that had to agree
  * with this function and could silently stop agreeing with it.
  */
-// The step KEYS are internal wiring and deliberately unchanged by the D1/D3
-// reshape, to bound the diff: `basics` renders "The study" and `screener`
-// renders "Audience". The user-facing spine (titles, order, count) is the D1
-// spine; `content` is gone (D6 emptied it, 2c collapses it).
+// The step KEYS are internal wiring and deliberately conservative: `basics`
+// renders "Study type" and `screener` renders "Audience", the keys kept from
+// the D1/D3 reshape to bound the diff even though the titles moved. `basicInfo`
+// is the one new key, for the Basic Info step split out of the old merged
+// "The study" step; `content` is gone (D6 emptied it, 2c collapsed it).
 export type StepKey =
   | 'basics'
+  | 'basicInfo'
   | 'questions'
   | 'externalLink'
   | 'taskList'
@@ -482,15 +485,16 @@ export interface FormStep {
  * all until the tests did - a justification for an export that no reader had
  * is the kind of nearly-right premise this plan keeps paying for.
  *
- * 5 since the D1/D3 reshape. The spine is: The study (1), Audience (2), the
- * participant's experience (3), Consent (4, native/recorded/moderated only),
- * Review (5). A native/recorded/moderated shape is five steps; an external
- * shape is four (no Consent step - its affirmation folds into the link step,
- * row 13), so it carries ids 1, 2, 3, 5 with a gap at 4. The no-type shape is
- * two (The study, Review). A FIXED id, not "one past the end", so Review can
- * never collide with the type-specific experience step at id 3.
+ * 6 since Study type and Basic Info split into their own steps. The spine is:
+ * Study type (1), Basic Info (2), Audience (3), the participant's experience
+ * (4), Consent (5, native/recorded/moderated only), Review (6). A
+ * native/recorded/moderated shape is six steps; an external shape is five (no
+ * Consent step - its affirmation folds into the link step, row 13), so it
+ * carries ids 1, 2, 3, 4, 6 with a gap at 5. The no-type shape is three (Study
+ * type, Basic Info, Review). A FIXED id, not "one past the end", so Review can
+ * never collide with the type-specific experience step at id 4.
  */
-export const REVIEW_STEP_ID = 5;
+export const REVIEW_STEP_ID = 6;
 
 /**
  * Where to send an author standing on a step the current shape does not have.
@@ -506,7 +510,7 @@ export const REVIEW_STEP_ID = 5;
  * the same way and are recorded as untested; this one need not join them.
  *
  * Returns the nearest EARLIER step rather than the first one: the author was
- * working forwards, and sending them back to Basic Information from step 4
+ * working forwards, and sending them back to Study type from step 4
  * discards their place for no reason. Falls back to the first step only when
  * there is nothing earlier, which for a list that always contains step 1 means
  * only when `activeStepId` is 1 or lower.
@@ -526,11 +530,14 @@ export const getTabsForType = (
   type: string,
   deliveryMode: 'native' | 'external' = 'external'
 ): FormStep[] => {
-  // Step 1, "The study": the picker and the study's advert copy (Title,
-  // Purpose, Description, Product). It merges the old Basic Information and the
-  // emptied Content & Details step (D1/D6). Internal key kept as `basics`.
+  // Step 1, "Study type": the picker alone. Internal key kept as `basics`.
+  // Step 2, "Basic Info": the study's advert copy - Title, Purpose, Description,
+  // Product. Split out of the old merged "The study" step so the type choice and
+  // the naming are two decisions, two steps. Both are on every shape, including
+  // the no-type shape, so a draft can be named before a type is chosen.
   const tabs: FormStep[] = [
-    { id: 1, key: 'basics', title: 'The study', description: 'What the study is' }
+    { id: 1, key: 'basics', title: 'Study type', description: 'What kind of study' },
+    { id: 2, key: 'basicInfo', title: 'Basic Info', description: 'Title, purpose and details' }
   ];
 
   // The participant's experience: ONE step, whose body is chosen by type
@@ -543,18 +550,18 @@ export const getTabsForType = (
     experience =
       deliveryMode === 'native'
         ? {
-            id: 3,
+            id: 4,
             key: 'questions',
             // Singular for the type whose whole promise is that there is one.
             title: type === 'question' ? 'Question' : 'Questions',
             description: 'What the participant is asked'
           }
-        : { id: 3, key: 'externalLink', title: 'Your link', description: 'The external tool participants go to' };
+        : { id: 4, key: 'externalLink', title: 'Your link', description: 'The external tool participants go to' };
   } else if (type === 'unmoderated') {
-    experience = { id: 3, key: 'taskList', title: 'Task List', description: 'What the participant does' };
+    experience = { id: 4, key: 'taskList', title: 'Task List', description: 'What the participant does' };
   } else if (type === 'test' || type === 'interview') {
     experience = {
-      id: 3,
+      id: 4,
       key: 'sessions',
       title: 'Session Management',
       description: 'Create time slots'
@@ -562,33 +569,33 @@ export const getTabsForType = (
   }
 
   // A shape reaches a participant exactly when it has an experience body. Those
-  // shapes carry the rest of the spine; the no-type shape is just The study and
-  // Review.
+  // shapes carry the rest of the spine; the no-type shape is just Study type,
+  // Basic Info and Review.
   if (experience) {
     const isExternalHandoff = experience.key === 'externalLink';
 
-    // Step 2, "Audience": who can take part - Participant Type, Roles or skills
+    // Step 3, "Audience": who can take part - Participant Type, Roles or skills
     // wanted, the Study Period recruitment window (D6) and the screener gate.
     // It comes BEFORE the experience body (D1): who the study is for is decided
     // before what they are asked to do. Internal key kept as `screener`.
     tabs.push({
-      id: 2,
+      id: 3,
       key: 'screener',
       title: 'Audience',
       description: 'Who can take part'
     });
 
-    // Step 3, the type-specific experience body.
+    // Step 4, the type-specific experience body.
     tabs.push(experience);
 
-    // Step 4, Consent - on the shapes Cortex governs consent for: native
+    // Step 5, Consent - on the shapes Cortex governs consent for: native
     // (questions), recorded (taskList) and the moderated pair (sessions). A pure
     // hand-off has no Consent step (D1/row 13): the tool on the far side of the
     // link collects consent, and the author's affirmation that it is in place is
     // a section of the link step, not a step of its own.
     if (!isExternalHandoff) {
       tabs.push({
-        id: 4,
+        id: 5,
         key: 'consent',
         title: 'Consent',
         description: 'What the participant agrees to'
@@ -596,10 +603,10 @@ export const getTabsForType = (
     }
   }
 
-  // Review is last on every shape, at a FIXED id past the experience step's 3 so
+  // Review is last on every shape, at a FIXED id past the experience step's 4 so
   // it can never collide with it (the collision that once read "External Link:
   // Completed" for a step nobody had opened). An external shape leaves a gap at
-  // id 4 - it has no Consent step - and Review still sits at 5.
+  // id 5 - it has no Consent step - and Review still sits at 6.
   tabs.push({
     id: REVIEW_STEP_ID,
     key: 'review',
@@ -1630,12 +1637,12 @@ const OpportunityForm: React.FC = () => {
        *
        * Landing on step 1 unconditionally means every shape opens the same
        * way, and it happens to remove a batching hazard the old code carried:
-       * `shape.find(...).id` could be 3 on a shape the type had not resolved
-       * to yet (`getTabsForType` defaults to `[1, 2, 5]` before a type is
-       * chosen, so id 3 was not even a member), which only worked because
+       * `shape.find(...).id` could be 4 on a shape the type had not resolved
+       * to yet (`getTabsForType` defaults to `[1, 2, 6]` before a type is
+       * chosen, so id 4 was not even a member), which only worked because
        * `setFormData` below commits in the same batch. Landing on `shape[0]`
        * needs no such guarantee: id 1 is the first step of every shape,
-       * including `[1, 2, 5]`, so this stays correct even if a future edit
+       * including `[1, 2, 6]`, so this stays correct even if a future edit
        * puts a task boundary between the two calls.
        *
        * A moderated author who DOES want the sessions step first is one click
@@ -4864,12 +4871,13 @@ const OpportunityForm: React.FC = () => {
     setSuccessMessage('');
     const step = firstStepHoldingError(errors, locateField);
     // Only to a step this shape actually HAS. FIELD_LOCATIONS is a static map
-    // over every field in the form, so it names step 4 for consent - and the
-    // no-type shape (basics, content, Review) has no step 4 at all. Since WZ-18
-    // every TYPED shape is five steps, so a hand-off does now carry a step 4 -
-    // but its Consent step is a confirmation with no editable field, so
-    // FIELD_LOCATIONS maps no error to it and `firstStepHoldingError` never
-    // returns 4 for it. Setting a step this shape lacks would render no body at
+    // over every field in the form, so it names step 5 for consent - and the
+    // no-type shape (Study type, Basic Info, Review) has no step 5 at all. Since
+    // WZ-18 every TYPED shape carries an experience step 4, and a hand-off leaves
+    // a gap at 5 - its Consent affirmation folds into the link step, with no
+    // editable field, so FIELD_LOCATIONS maps no error to it and
+    // `firstStepHoldingError` never returns 5 for it. Setting a step this shape
+    // lacks would render no body at
     // all, because the render guards key off `currentStep`, which `tabs.find`
     // returns undefined for: the author would be told to fix a field and shown a
     // blank page. The guard is what keeps that from happening.
@@ -5506,15 +5514,15 @@ const OpportunityForm: React.FC = () => {
                 {/* Tab Navigation */}
                 {/*
                   The strip is hidden until a type is chosen (WZ-18). Before a
-                  type the shape is [1, 2, 5] - three steps - and choosing a
-                  type grows it to four or five, so an author watching the strip
+                  type the shape is [1, 2, 6] - three steps - and choosing a
+                  type grows it to five or six, so an author watching the strip
                   saw the count jump as their first act on the form. Gating the
                   strip on `formData.type` means it appears once, at its now-
                   fixed count, rather than announcing a total it is about to
-                  revise. The Basic Information body below still holds the type
-                  selector and its Continue control, so nothing about choosing a
-                  type moves. An existing study always has a type, so an edit
-                  shows the strip from first render.
+                  revise. The Study type body below still holds the type picker
+                  and its Continue control, so nothing about choosing a type
+                  moves. An existing study always has a type, so an edit shows
+                  the strip from first render.
                 */}
                 {formData.type && (
                   <div className="border-bottom">
@@ -5524,7 +5532,7 @@ const OpportunityForm: React.FC = () => {
                       statusOf={statusOfStep}
                       /* Backward AND forward navigation both stay free. A step
                          reporting Needs attention is information, not a lock:
-                         refusing to let an author look at step 4 because step 1
+                         refusing to let an author look at step 4 because step 2
                          is short of a purpose is how a form loses work. */
                       onSelect={setActiveTab}
                     />
@@ -5543,14 +5551,18 @@ const OpportunityForm: React.FC = () => {
 
                 {/* Tab Content */}
                 <div className="tab-content p-4">
-                  {/* Basic Information Tab */}
+                  {/* Study type step */}
                   {currentStep?.key === 'basics' && (
                     <>
-                      <BasicInfoTab
-                        formData={formData}
-                        validationErrors={validationErrors}
-                        handleInputChange={handleInputChange}
-                        handleBlur={handleBlur}
+                      <StudyTypePicker
+                        type={formData.type}
+                        deliveryMode={formData.delivery_mode ?? 'external'}
+                        onSelect={(nextType, nextDelivery) => {
+                          handleInputChange('type', nextType);
+                          handleInputChange('delivery_mode', nextDelivery);
+                        }}
+                        isPublished={formData.status === 'published'}
+                        validationError={validationErrors.type}
                         // D13, W9: new-study route only, per the spec's own
                         // "Edit route" open decision - redrafting a SAVED
                         // opportunity is a different interaction with its own
@@ -5571,17 +5583,40 @@ const OpportunityForm: React.FC = () => {
                         /*
                           The one place a forward control does NOT name its
                           destination, and the exception is the point. With no
-                          type chosen the step list is [The study, Review], so
-                          the next step BY POSITION is Review - but the handler
-                          below refuses that move and sends the author to the
-                          type field instead. A label reading "Continue: Review"
-                          would promise a step it does not go to, so the honest
-                          label names nothing until a type is chosen. (Before the
-                          D1/D3 reshape this guard sat on the old Content step,
-                          which is where a no-type author used to stand; it now
-                          lives here, on The study.)
+                          type chosen the step list is [Study type, Basic Info,
+                          Review], so the next step BY POSITION is Basic Info -
+                          but the handler below refuses that move and sends the
+                          author to the type field instead. A label reading
+                          "Continue: Basic Info" would promise a step it does not
+                          go to, so the honest label names nothing until a type is
+                          chosen. The type field lives on this step, so the guard
+                          stays here.
                         */
                         nextLabel={formData.type ? continueControl.nextLabel : 'Continue'}
+                        onNext={() => continueFromStep(continueControl.onNext)}
+                      />
+                      )}
+                    </>
+                  )}
+
+                  {currentStep?.key === 'basicInfo' && (
+                    <>
+                      <BasicInfoTab
+                        formData={formData}
+                        validationErrors={validationErrors}
+                        handleInputChange={handleInputChange}
+                        handleBlur={handleBlur}
+                      />
+
+                      {continueControl && (
+                      <StepActions
+                        isEdit={isEdit}
+                        onSaveAndExit={handleSaveAndExit}
+                        saving={saving}
+                        disabled={saveControlsDisabled}
+                        justSaved={Boolean(successMessage)}
+                        onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
+                        {...continueControl}
                         onNext={() => continueFromStep(continueControl.onNext)}
                       />
                       )}
@@ -5767,7 +5802,7 @@ const OpportunityForm: React.FC = () => {
                         contentStepTitle={
                           authoringKind === 'survey' ? 'Questions' : 'Task List'
                         }
-                        onGoToContent={() => setActiveTab(3)}
+                        onGoToContent={() => setActiveTab(4)}
                         onChange={(selection) => {
                           const prefix =
                             authoringKind === 'survey' ? 'inline_survey' : 'inline_study';
@@ -5824,7 +5859,7 @@ const OpportunityForm: React.FC = () => {
                         contentUnavailable={false}
                         awaitingContent={false}
                         contentStepTitle="Session Management"
-                        onGoToContent={() => setActiveTab(3)}
+                        onGoToContent={() => setActiveTab(4)}
                         onChange={(selection) => {
                           handleInputChange('moderated_consent_text', selection.text);
                           handleInputChange(

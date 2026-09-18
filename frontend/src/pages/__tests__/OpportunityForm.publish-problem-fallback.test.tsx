@@ -92,7 +92,9 @@ describe('a publish problem that cannot be resolved to a step still counts (fail
       can_edit: true
     } as never);
     renderEdit();
-    await screen.findByDisplayValue('A poll with an unresolvable publish problem');
+    // Study type - the landing step since D5 - carries no Title field any
+    // more, so the strip itself is the load anchor.
+    await screen.findByRole('navigation', { name: 'Form steps' });
     walkToReview();
 
     // The checklist still renders - via the tabs[0] fallback - rather than

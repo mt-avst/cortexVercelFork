@@ -84,6 +84,19 @@ const advanceToReview = () => {
 };
 
 /**
+ * Title lives on the Basic Info step now, split out of the Study type
+ * landing step (D1/D3 reshape) - so reaching it, to read its hydrated value,
+ * means walking the strip there first.
+ */
+const goToBasicInfo = async () => {
+  fireEvent.click(
+    within(await screen.findByRole('navigation', { name: 'Form steps' })).getAllByRole(
+      'button'
+    )[1]
+  );
+};
+
+/**
  * Review's Status control (#111) has no `<label htmlFor="status">` - it sits
  * under an `<h3>Status</h3>` heading instead, unlike its old Basic
  * Information home, which did have one (see `git show 1b744f5 --
@@ -138,6 +151,7 @@ describe('OpportunityForm edit-mode hydration gate', () => {
     vi.mocked(getOpportunity).mockResolvedValue(OPPORTUNITY as never);
 
     renderEdit();
+    await goToBasicInfo();
 
     // The title is the proof that what renders is hydrated, not empty.
     const title = (await screen.findByLabelText(/title/i)) as HTMLInputElement;
@@ -156,6 +170,7 @@ describe('OpportunityForm edit-mode hydration gate', () => {
     vi.mocked(getOpportunity).mockResolvedValue(OPPORTUNITY as never);
 
     renderEdit();
+    await goToBasicInfo();
 
     // Status (#111) now lives on Review, not Basic Information - reach it
     // before choosing one.
