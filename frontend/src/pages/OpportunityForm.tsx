@@ -143,7 +143,7 @@ import { getAdminTypeLabel, getDisplayStatus } from '../utils/adminDashboard';
 import { formatClockTime } from '../utils/datetime';
 
 import { CreateOpportunityRequest, UpdateOpportunityRequest, Opportunity, Session, Screener, ScreenerQuestion } from '../api/types';
-import { TrendingUp, UserCircle, AlertTriangle, CheckCircle, LogOut, Calendar } from 'lucide-react';
+import { TrendingUp, AlertTriangle, CheckCircle, LogOut, Calendar } from 'lucide-react';
 
 /**
  * Unmoderated studies run with logged-in Cortex users, so an external
@@ -5210,24 +5210,6 @@ const OpportunityForm: React.FC = () => {
                       Manage time slots
                     </button>
                   )}
-                  {/* D10: the feedback footer used to sit under every setup
-                      page - 232px of permanent chrome asking a researcher for
-                      an opinion about the product while they are doing work
-                      in it (mav-wizard-shell). `FeedbackFooter` now hides
-                      itself on these routes; this is where feedback lives
-                      instead. Routed through `requestExit` like every other
-                      control that leaves this form with something to lose. */}
-                  <button
-                    type="button"
-                    className="btn btn-link btn-sm p-0 text-body-secondary"
-                    onClick={() => requestExit('/feedback')}
-                  >
-                    Feedback
-                  </button>
-                  <div className="form-user-info form-user-info-text">
-                    <UserCircle size={16} className="me-1" />
-                    {user?.name || 'Unknown User'}
-                  </div>
                 </div>
               </div>
             </div>
