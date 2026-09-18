@@ -57,7 +57,7 @@ The API refuses a mismatched pairing at the boundary rather than only in the pic
 The gap this document originally named as its largest was closed in five merges (!311-!315), all landed 2026-08-28/29.
 The session still runs on a call - the meeting link is `meeting_location_optional`, rendered as "Join via Google Meet / Zoom / Teams" in `frontend/src/pages/MyBookings.tsx:163` - but everything around it now lands in Cortex:
 
-- **Consent authoring on the opportunity.** Both moderated types get a Consent step by type in `getTabsForType` (`frontend/src/pages/OpportunityForm.tsx:453`), anchored to the opportunity because there is no study row to hang it on.
+- **Consent authoring on the opportunity.** Both moderated types get a Consent step by type in `getTabsForType` (`frontend/src/pages/OpportunityForm.tsx:529`), anchored to the opportunity because there is no study row to hang it on.
   The API refuses `consent_*` columns on every other type, at all six write surfaces - four through a single gate (`resolveModeratedConsentWrite`, `backend/src/routes/opportunities.ts:309`), while the two duplicate branches copy the already-resolved trio verbatim from a source that passed it.
 - **Acceptance recorded at booking.** The participant accepts the wording they were shown - the client echoes it back and the server refuses a mismatch - and the booking stores the acceptance timestamp (`NOW()` in SQL, same clock as `created_at`) plus the wording itself as `consent_text_snapshot`, so what was agreed to can be reproduced, not merely detected.
 - **Artefact ingest.** Recordings and transcripts upload against the booking via presign, direct S3 PUT and finalize (`backend/src/routes/booking-artifacts.ts`).
