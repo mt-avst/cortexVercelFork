@@ -9,7 +9,7 @@ import { SURVEY_CONSENT_TEMPLATE } from '@shared/firsthand/consent-templates';
 import { createOpportunity, getFirstHandStudies, getOpportunity, updateOpportunity } from '../../api/client';
 import { getFirstHandStudy } from '../../api/firsthand-studies';
 import { inlineErrorText, summarisedErrorKeys } from './helpers/error-summary';
-import { studyTypeCard } from './helpers/study-type-picker';
+import { chooseStudyType } from './helpers/study-type-picker';
 
 /**
  * The shape of an identity minted for a question that has never been saved.
@@ -154,22 +154,25 @@ const submitFromLastStep = async (
 };
 
 describe('getTabsForType', () => {
-  // The D1/D3 spine: The study, Audience, the experience body, Consent (native/
-  // recorded/moderated only), Review. External shapes are four steps - no
-  // Consent step, its affirmation folds into the link (row 13). The whole-array
-  // equality catches a missing or misplaced step, which `toContain` cannot.
-  it('gives an externally delivered survey four steps, its experience the link', () => {
+  // The D1/D3 spine, split into Study type and Basic Info: Study type, Basic
+  // Info, Audience, the experience body, Consent (native/recorded/moderated
+  // only), Review. External shapes are five steps - no Consent step, its
+  // affirmation folds into the link (row 13). The whole-array equality
+  // catches a missing or misplaced step, which `toContain` cannot.
+  it('gives an externally delivered survey five steps, its experience the link', () => {
     expect(getTabsForType('survey', 'external').map((tab) => tab.title)).toEqual([
-      'The study',
+      'Study type',
+      'Basic Info',
       'Audience',
       'Your link',
       'Review'
     ]);
   });
 
-  it('gives a native survey five steps, its experience Questions and a Consent step', () => {
+  it('gives a native survey six steps, its experience Questions and a Consent step', () => {
     expect(getTabsForType('survey', 'native').map((tab) => tab.title)).toEqual([
-      'The study',
+      'Study type',
+      'Basic Info',
       'Audience',
       'Questions',
       'Consent',
@@ -179,7 +182,8 @@ describe('getTabsForType', () => {
 
   it('gives a recorded study a consent step, last before Review', () => {
     expect(getTabsForType('unmoderated').map((tab) => tab.title)).toEqual([
-      'The study',
+      'Study type',
+      'Basic Info',
       'Audience',
       'Task List',
       'Consent',
@@ -191,7 +195,8 @@ describe('getTabsForType', () => {
     'gives %s a consent step, because Cortex stores what it agrees to keep (#79)',
     (type) => {
       expect(getTabsForType(type).map((tab) => tab.title)).toEqual([
-        'The study',
+        'Study type',
+        'Basic Info',
         'Audience',
         'Session Management',
         'Consent',
@@ -206,7 +211,8 @@ describe('getTabsForType', () => {
 
   it('keeps the link experience when a question hands off, which is every existing one', () => {
     expect(getTabsForType('question', 'external').map((tab) => tab.title)).toEqual([
-      'The study',
+      'Study type',
+      'Basic Info',
       'Audience',
       'Your link',
       'Review'
@@ -215,7 +221,8 @@ describe('getTabsForType', () => {
 
   it('offers the question tab, and a consent step, when a question runs in Cortex', () => {
     expect(getTabsForType('question', 'native').map((tab) => tab.title)).toEqual([
-      'The study',
+      'Study type',
+      'Basic Info',
       'Audience',
       // Singular. The type's whole promise is that there is one.
       'Question',
@@ -247,7 +254,12 @@ describe("the hand-off folds consent into the link step, with no Consent step (r
   const openExternalPollLink = async (
     user: ReturnType<typeof userEvent.setup>
   ) => {
-    await user.click(studyTypeCard('poll', 'external'));
+    chooseStudyType('poll', 'external');
+    await user.click(
+      within(screen.getByRole('navigation', { name: 'Form steps' })).getAllByRole(
+        'button'
+      )[1]
+    );
     await user.type(screen.getByLabelText(/^Title/i), 'How was the export flow');
     await user.type(
       screen.getByLabelText(/^Purpose/i),
@@ -309,7 +321,12 @@ describe("the hand-off folds consent into the link step, with no Consent step (r
 
 describe('authoring a native survey', () => {
   const fillBasics = async (user: ReturnType<typeof userEvent.setup>) => {
-    await user.click(studyTypeCard('survey', 'native'));
+    chooseStudyType('survey', 'native');
+    await user.click(
+      within(screen.getByRole('navigation', { name: 'Form steps' })).getAllByRole(
+        'button'
+      )[1]
+    );
     await user.type(screen.getByLabelText(/^Title/i), 'Developer experience pulse');
     await user.type(
       screen.getByLabelText(/^Purpose/i),
@@ -318,10 +335,9 @@ describe('authoring a native survey', () => {
   };
 
   it('does not offer the delivery choice for a type that has no external mode', async () => {
-    const user = userEvent.setup();
     renderForm();
 
-    await user.click(studyTypeCard('unmoderated'));
+    chooseStudyType('unmoderated');
 
     // A recorded study is one card with no delivery variant - there is no
     // "in an external tool" alternative to pick.
@@ -346,7 +362,12 @@ describe('authoring a native survey', () => {
     const fillQuestionBasics = async (
       user: ReturnType<typeof userEvent.setup>
     ) => {
-      await user.click(studyTypeCard('question', 'native'));
+      chooseStudyType('question', 'native');
+      await user.click(
+        within(screen.getByRole('navigation', { name: 'Form steps' })).getAllByRole(
+          'button'
+        )[1]
+      );
       await user.type(screen.getByLabelText(/^Title/i), 'One thing');
       await user.type(
         screen.getByLabelText(/^Purpose/i),
@@ -357,13 +378,15 @@ describe('authoring a native survey', () => {
     it('offers the delivery choice, which it never used to have', async () => {
       renderForm();
 
-      // A one-question study now has two cards - in Cortex and in an external
-      // tool - which is the delivery choice it never used to carry.
+      // One "One question" pod, plus the delivery toggle it reveals once
+      // picked - "In Cortex" and "In an external tool" - which is the
+      // delivery choice it never used to carry.
+      chooseStudyType('question');
       expect(
-        screen.getByRole('radio', { name: 'One question, in Cortex' })
+        screen.getByRole('radio', { name: 'In Cortex' })
       ).toBeInTheDocument();
       expect(
-        screen.getByRole('radio', { name: 'One question, in an external tool' })
+        screen.getByRole('radio', { name: 'In an external tool' })
       ).toBeInTheDocument();
     });
 
@@ -436,15 +459,14 @@ describe('authoring a native survey', () => {
   });
 
   it('swaps the third tab when the author chooses to run it in Cortex', async () => {
-    const user = userEvent.setup();
     renderForm();
 
     // The external card first: the third step is Your link.
-    await user.click(studyTypeCard('survey', 'external'));
+    chooseStudyType('survey', 'external');
     expect(screen.getByText('Your link')).toBeInTheDocument();
 
     // Choosing the in-Cortex card swaps it for Questions.
-    await user.click(studyTypeCard('survey', 'native'));
+    chooseStudyType('survey', 'native');
     await waitFor(() => expect(screen.getByText('Questions')).toBeInTheDocument());
     expect(screen.queryByText('Your link')).toBeNull();
   });
@@ -919,8 +941,8 @@ describe('authoring a native survey', () => {
     // their mind.
     await user.click(screen.getByRole('button', { name: /^Add question$/i }));
 
-    await user.click(screen.getByRole('button', { name: /The study/i }));
-    await user.click(studyTypeCard('survey', 'external'));
+    await user.click(screen.getByRole('button', { name: /Study type/i }));
+    chooseStudyType('survey', 'external');
     await user.click(screen.getByRole('button', { name: /Your link/i }));
     await user.type(
       screen.getByLabelText(/External Link/i),
@@ -973,6 +995,13 @@ describe('authoring a native survey', () => {
       </MemoryRouter>
     );
 
+    // Title lives on Basic Info now, split out of the Study type landing
+    // step (D1/D3 reshape).
+    await user.click(
+      within(await screen.findByRole('navigation', { name: 'Form steps' })).getAllByRole(
+        'button'
+      )[1]
+    );
     const title = await screen.findByDisplayValue('Developer experience pulse');
     await user.type(title, ' 2026');
 
@@ -1017,7 +1046,9 @@ describe('authoring a native survey', () => {
       </MemoryRouter>
     );
 
-    await screen.findByDisplayValue('Developer experience pulse');
+    // Study type - the landing step since D5 - carries no Title field any
+    // more, so the strip itself is the load anchor.
+    await screen.findByRole('navigation', { name: 'Form steps' });
 
     await user.click(screen.getByRole('button', { name: /Questions/i }));
     await user.click(screen.getByRole('button', { name: /^Add question$/i }));
@@ -1028,7 +1059,7 @@ describe('authoring a native survey', () => {
     await user.selectOptions(screen.getByLabelText(/^Type$/i), 'rating');
     await user.clear(screen.getByLabelText(/Points on the scale/i));
 
-    await user.click(screen.getByRole('button', { name: /The study/i }));
+    await user.click(screen.getByRole('button', { name: /Study type/i }));
     await user.click(screen.getByRole('button', { name: /Save Changes/i }));
 
     expect(updateOpportunity).not.toHaveBeenCalled();
@@ -1058,8 +1089,8 @@ describe('authoring a native survey', () => {
       'How easy was that?'
     );
 
-    await user.click(screen.getByRole('button', { name: /The study/i }));
-    await user.click(studyTypeCard('survey', 'external'));
+    await user.click(screen.getByRole('button', { name: /Study type/i }));
+    chooseStudyType('survey', 'external');
 
     await user.click(screen.getByRole('button', { name: /Your link/i }));
     await user.type(
@@ -1098,7 +1129,14 @@ describe('starting a survey from an existing set of questions', () => {
    * below against this surface's own wording, ids and payload key.
    */
   const fillNativeSurvey = async (user: ReturnType<typeof userEvent.setup>) => {
-    await user.click(studyTypeCard('survey', 'native'));
+    chooseStudyType('survey', 'native');
+    // Title and Purpose live on Basic Info now, split out of the Study type
+    // step (D1/D3 reshape).
+    await user.click(
+      within(screen.getByRole('navigation', { name: 'Form steps' })).getAllByRole(
+        'button'
+      )[1]
+    );
     await user.type(screen.getByLabelText(/^Title/i), 'Developer experience pulse');
     await user.type(
       screen.getByLabelText(/^Purpose/i),
@@ -1437,7 +1475,9 @@ describe('starting a survey from an existing set of questions', () => {
       </MemoryRouter>
     );
 
-    await screen.findByDisplayValue('Draft saved early');
+    // Study type - the landing step since D5 - carries no Title field any
+    // more, so the strip itself is the load anchor.
+    await screen.findByRole('navigation', { name: 'Form steps' });
     await user.click(screen.getByRole('button', { name: /Questions/i }));
     expect(
       await screen.findByRole('radio', { name: /Create questions for this study/i })
@@ -1451,7 +1491,7 @@ describe('starting a survey from an existing set of questions', () => {
     );
     await screen.findByText(/Copied from/i);
 
-    await user.click(screen.getByRole('button', { name: /The study/i }));
+    await user.click(screen.getByRole('button', { name: /Study type/i }));
     expect(await screen.findByRole('button', { name: /Save Changes/i })).toBeInTheDocument();
   });
 
@@ -1696,7 +1736,9 @@ describe('the forward control on the Questions tab', () => {
       </MemoryRouter>
     );
 
-    await screen.findByDisplayValue('Developer experience pulse');
+    // Study type - the landing step since D5 - carries no Title field any
+    // more, so the strip itself is the load anchor.
+    await screen.findByRole('navigation', { name: 'Form steps' });
     await user.click(screen.getByRole('button', { name: /Questions/i }));
   };
 

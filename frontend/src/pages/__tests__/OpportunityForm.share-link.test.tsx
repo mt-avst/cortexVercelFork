@@ -122,6 +122,13 @@ describe('OpportunityForm - the share link OpportunityForm computes for Review (
   it('is null before the opportunity has ever been saved', () => {
     renderCreate();
     chooseStudyType('poll');
+    // Title and Purpose live on Basic Info now, split out of the Study type
+    // step (D1/D3 reshape).
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'Form steps' })).getAllByRole(
+        'button'
+      )[1]
+    );
     fireEvent.change(screen.getByLabelText(/^Title/i), {
       target: { value: 'A study with a long enough title' }
     });
@@ -137,7 +144,9 @@ describe('OpportunityForm - the share link OpportunityForm computes for Review (
   it('carries the route id once the opportunity exists (edit mode)', async () => {
     vi.mocked(getOpportunity).mockResolvedValue(OPPORTUNITY() as never);
     renderEdit();
-    await screen.findByDisplayValue('A poll the author already wrote');
+    // Study type - the landing step since D5 - carries no Title field any
+    // more, so the strip itself is the load anchor.
+    await screen.findByRole('navigation', { name: 'Form steps' });
     walkToReview();
 
     // Draft, so the hint renders rather than the live link - but the block
@@ -151,7 +160,9 @@ describe('OpportunityForm - the share link OpportunityForm computes for Review (
       OPPORTUNITY({ status: 'published' }) as never
     );
     renderEdit();
-    await screen.findByDisplayValue('A poll the author already wrote');
+    // Study type - the landing step since D5 - carries no Title field any
+    // more, so the strip itself is the load anchor.
+    await screen.findByRole('navigation', { name: 'Form steps' });
     walkToReview();
 
     expect(
@@ -166,9 +177,9 @@ describe('OpportunityForm - the share link OpportunityForm computes for Review (
       );
       vi.mocked(getSessions).mockResolvedValue([] as never);
       renderEdit();
-      // D5: every shape, test and interview included, now lands on Basic
-      // Information (step 1).
-      await screen.findByDisplayValue('A poll the author already wrote');
+      // Study type - the landing step since D5 - carries no Title field any
+      // more, so the strip itself is the load anchor.
+      await screen.findByRole('navigation', { name: 'Form steps' });
       // Straight to Review via the strip: this published test has no slot, so
       // the Session Management step's Continue now (correctly) refuses to
       // advance past that gate - reaching Review is what this test needs, not a
@@ -203,8 +214,9 @@ describe('OpportunityForm - the share link OpportunityForm computes for Review (
         }
       ] as never);
       renderEdit();
-      // D5: lands on Basic Information now, same as every other shape.
-      await screen.findByDisplayValue('A poll the author already wrote');
+      // Study type - the landing step since D5 - carries no Title field any
+      // more, so the strip itself is the load anchor.
+      await screen.findByRole('navigation', { name: 'Form steps' });
       walkToReview();
 
       expect(screen.queryByText(/Participants cannot start this yet/i)).not.toBeInTheDocument();
@@ -229,8 +241,9 @@ describe('OpportunityForm - the share link OpportunityForm computes for Review (
         }
       ] as never);
       renderEdit();
-      // D5: lands on Basic Information now, same as every other shape.
-      await screen.findByDisplayValue('A poll the author already wrote');
+      // Study type - the landing step since D5 - carries no Title field any
+      // more, so the strip itself is the load anchor.
+      await screen.findByRole('navigation', { name: 'Form steps' });
       walkToReview();
 
       expect(screen.queryByText(/Participants cannot start this yet/i)).not.toBeInTheDocument();
@@ -253,7 +266,9 @@ describe('OpportunityForm - the share link OpportunityForm computes for Review (
       );
       vi.mocked(getSessions).mockResolvedValue([] as never);
       renderEdit();
-      await screen.findByDisplayValue('A poll the author already wrote');
+      // Study type - the landing step since D5 - carries no Title field any
+      // more, so the strip itself is the load anchor.
+      await screen.findByRole('navigation', { name: 'Form steps' });
       walkToReview();
 
       expect(screen.getByText(/Participants cannot start this yet/i)).toBeInTheDocument();
@@ -268,7 +283,9 @@ describe('OpportunityForm - the share link OpportunityForm computes for Review (
       );
       vi.mocked(getSessions).mockResolvedValue([] as never);
       renderEdit();
-      await screen.findByDisplayValue('A poll the author already wrote');
+      // Study type - the landing step since D5 - carries no Title field any
+      // more, so the strip itself is the load anchor.
+      await screen.findByRole('navigation', { name: 'Form steps' });
       walkToReview();
 
       expect(screen.queryByText(/Participants cannot start this yet/i)).not.toBeInTheDocument();

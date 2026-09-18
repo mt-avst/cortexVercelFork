@@ -80,7 +80,9 @@ afterEach(() => {
 describe('signage for the two save models', () => {
   it('tells a draft author that changes save automatically', async () => {
     renderEditForm(draftOpportunity);
-    await screen.findByDisplayValue('Developer experience pulse');
+    // Study type - the landing step since D5 - carries no Title field any
+    // more, so the strip itself is the load anchor.
+    await screen.findByRole('navigation', { name: 'Form steps' });
 
     expect(screen.getByTestId('save-model-note')).toHaveTextContent(
       /save automatically/i
@@ -92,7 +94,9 @@ describe('signage for the two save models', () => {
 
   it('tells a published-study author that changes are not saved automatically', async () => {
     renderEditForm(publishedOpportunity);
-    await screen.findByDisplayValue('Developer experience pulse');
+    // Study type - the landing step since D5 - carries no Title field any
+    // more, so the strip itself is the load anchor.
+    await screen.findByRole('navigation', { name: 'Form steps' });
 
     expect(screen.getByTestId('save-model-note')).toHaveTextContent(
       /not saved automatically/i
