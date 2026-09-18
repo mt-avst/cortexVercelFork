@@ -83,6 +83,17 @@ serial before. Poll to match the job's known duration rather than
 sleeping on a fixed long timer - ten minutes of dead air past a green result is the
 recorded cost of guessing. Prefer merging with auto-merge armed so nobody watches at all.
 
+The canary runs on the MR pipeline and the merge-train pipeline (both
+`merge_request_event`), **not** on the post-merge `main` pipeline anymore
+(dropped 2026-09-18). The train grades the full manifest against the real merge
+result just before it lands, so the old `$PROD_REF` run re-graded an identical
+tree - and it sat on the deploy critical path: measured on !476, semantic-release
+and the deploy waited ~10 min for the canary on main, every deploy, and it never
+guarded a merge because it ran after the merge. This leans on merge trains being
+ON; if trains are ever disabled, restore the `$PROD_REF` rule in `.gitlab-ci.yml`
+(an MR pipeline alone can go stale against an advanced main). Keep this paragraph
+and that job's `rules:` in step.
+
 Never scope the canary below the full manifest: a filtered run is structurally blind to a
 pre-existing entry the same diff broke (that reddened main once already). The path gate
 above is job-level and all-or-nothing, which is the only safe shape.
