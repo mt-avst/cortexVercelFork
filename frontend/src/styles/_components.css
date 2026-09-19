@@ -5965,6 +5965,13 @@ body.theme-light .study-summary-line {
   color: #6B7280;
 }
 
+/* The active keyword echoed in the count line: lifted from muted to the primary
+   ink so the term the list is filtered on reads clearly. */
+.study-summary-line__term {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
 /* AdaptaBits Page Title */
 .adaptabits-page-title {
   color: var(--brand-headline);
@@ -13396,6 +13403,67 @@ body.theme-dark {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+/* Keyword search (phase 3), the first row of the control cluster. A magnifier
+   on the left, a clear button on the right when there is text. Sits above the
+   Filter header so search and facets read as one card. */
+.study-facets__search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.study-facets__search-icon {
+  position: absolute;
+  left: 13px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.study-facets__search-input {
+  width: 100%;
+  font-family: inherit;
+  font-size: var(--font-size-small);
+  color: var(--text-primary);
+  background: var(--surface-page-current, transparent);
+  border: 1px solid var(--border-card);
+  border-radius: 10px;
+  padding: 10px 38px 10px 40px;
+}
+
+.study-facets__search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.study-facets__search-input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--brand-orange-500) 45%, var(--border-card));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-orange-500) 14%, transparent);
+}
+
+.study-facets__search-clear {
+  position: absolute;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  line-height: 0;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.study-facets__search-clear:hover {
+  color: var(--text-primary);
+}
+
+.study-facets__search-clear:focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-outline-offset);
 }
 
 .study-facets__header {
