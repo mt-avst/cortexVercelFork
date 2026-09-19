@@ -277,30 +277,4 @@ describe('OpportunityRow', () => {
     const meta = screen.getByTestId('opportunity-row-meta');
     expect(within(meta).queryByText(/\+\d/)).toBeNull();
   });
-
-  describe('the "Matches you" pill', () => {
-    const renderRowMatch = (o: Opportunity, matchesProfile: boolean) =>
-      render(
-        <MemoryRouter>
-          <OpportunityRow opportunity={o} matchesProfile={matchesProfile} />
-        </MemoryRouter>
-      );
-
-    it('shows a text "Matches you" pill when the row matches the viewer', () => {
-      renderRowMatch(opp({ target_roles: ['Product Manager'] }), true);
-      // Text, not colour alone, so a screen reader states the fit.
-      expect(screen.getByText('Matches you')).toBeVisible();
-      expect(screen.getByTestId('opportunity-row-match')).toBeInTheDocument();
-    });
-
-    it('shows no pill when the row does not match', () => {
-      renderRowMatch(opp({ target_roles: ['Product Manager'] }), false);
-      expect(screen.queryByText('Matches you')).toBeNull();
-    });
-
-    it('defaults to no pill when matchesProfile is not passed', () => {
-      renderRow(opp({ target_roles: ['Product Manager'] }));
-      expect(screen.queryByText('Matches you')).toBeNull();
-    });
-  });
 });

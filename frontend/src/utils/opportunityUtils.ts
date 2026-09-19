@@ -307,17 +307,13 @@ export const sortByClosingSoonest = <T extends Opportunity>(opportunities: T[]):
 };
 
 /**
- * ROLE/SKILLS MATCHING - browse discovery, advisory only.
- *
- * A study "matches" a viewer when the study's advertised audience
- * (`target_roles`) and the viewer's active role set share at least one entry,
- * compared case-insensitively and after trimming, so "Jira admin" matches
- * "jira admin". This DESCRIBES fit; it never gates - matching changes highlight
- * and sort order only, never visibility, and it is independent of the screener
- * and participant_type gates (a matched study can still screen you out).
- *
- * Both sides use the one shared vocabulary (shared/target-roles.ts), which is
- * what keeps this a plain intersection rather than a fuzzy compare.
+ * ROLE/SKILLS INTERSECTION - a case-insensitive, trimmed set intersection over
+ * the shared roles vocabulary (shared/target-roles.ts), so "Jira admin" matches
+ * "jira admin". It backs the browse ROLES FACET below (does a study's advertised
+ * audience intersect the roles the viewer filtered on). It describes fit; it
+ * never gates - it changes which studies a facet selection narrows to, never
+ * whether a study is bookable, and it is independent of the screener and
+ * participant_type gates.
  */
 export const rolesIntersect = (
   a: readonly string[] | null | undefined,
@@ -329,40 +325,6 @@ export const rolesIntersect = (
   const lowerA = new Set(a.map((role) => role.trim().toLowerCase()));
   return b.some((role) => lowerA.has(role.trim().toLowerCase()));
 };
-
-/**
- * The role set that drives match highlighting, with the precedence pinned in one
- * place so the transient override can never accidentally persist:
- *
- *   1. the transient "browse as..." override (client state, resets on reload), else
- *   2. the saved profile (`user.profile_roles`), else
- *   3. none - no matching, the browse list still works fully.
- *
- * Kept pure and separate from any PATCH so a test can prove browse-as only feeds
- * matching and never writes.
- */
-export const resolveActiveMatchRoles = (
-  browseAs: readonly string[] | null | undefined,
-  profileRoles: readonly string[] | null | undefined
-): string[] => {
-  if (browseAs && browseAs.length > 0) {
-    return [...browseAs];
-  }
-  if (profileRoles && profileRoles.length > 0) {
-    return [...profileRoles];
-  }
-  return [];
-};
-
-/**
- * Does this study's advertised audience intersect the active role set? A thin
- * wrapper over `rolesIntersect` so the row, the sort and the "For you" partition
- * all ask the question the same way.
- */
-export const opportunityMatchesRoles = (
-  opportunity: Pick<Opportunity, 'target_roles'>,
-  activeRoles: readonly string[]
-): boolean => rolesIntersect(opportunity.target_roles, activeRoles);
 
 /**
  * BROWSE FACETS (phase 2) - client-side narrowing of the already-loaded
@@ -517,13 +479,12 @@ export interface FacetOptions {
 
 /**
  * The facet options actually PRESENT across the loaded studies, so a participant
- * is never offered a value that matches nothing. Roles keep the viewer's own
- * profile roles first (then the rest, case-insensitively de-duplicated); types,
- * deliveries and time buckets come out in a stable canonical order.
+ * is never offered a value that matches nothing. Roles come out in first-seen
+ * order across the studies (case-insensitively de-duplicated); types, deliveries
+ * and time buckets come out in a stable canonical order.
  */
 export const deriveFacetOptions = (
-  opportunities: readonly Opportunity[],
-  profileRoles: readonly string[] = []
+  opportunities: readonly Opportunity[]
 ): FacetOptions => {
   const roleFirstSpelling = new Map<string, string>();
   const presentTypes = new Set<string>();
@@ -537,22 +498,10 @@ export const deriveFacetOptions = (
     }
   };
 
-  // Viewer's own profile roles first, but only the ones some study advertises.
-  const advertised = new Set<string>();
   for (const opp of opportunities) {
     presentTypes.add(baseTypeOf(opp.type));
     presentDeliveries.add(getStudyDelivery(opp));
     presentBuckets.add(getStudyTimeBucket(opp));
-    for (const role of opp.target_roles ?? []) {
-      advertised.add(role.trim().toLowerCase());
-    }
-  }
-  for (const role of profileRoles) {
-    if (advertised.has(role.trim().toLowerCase())) {
-      addRole(role);
-    }
-  }
-  for (const opp of opportunities) {
     for (const role of opp.target_roles ?? []) {
       addRole(role);
     }
