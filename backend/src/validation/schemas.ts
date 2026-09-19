@@ -69,23 +69,6 @@ export const TARGET_ROLES_MATCHES_SHARED_CONTRACT: MutuallyAssignable<
   NonNullable<Opportunity['target_roles']>
 > = true;
 
-/**
- * The body of PATCH /api/me/profile - the caller updating their OWN roles/skills
- * profile. It reuses `targetRolesSchema` verbatim (same trim/caps/dedupe and the
- * same curated vocabulary) so the profile and an opportunity's target_roles are
- * one vocabulary, which is what makes matching a straight intersection. `null`
- * (or an empty list, which the store collapses to null) clears the profile.
- * `.strict()` so an unexpected field is a 400, not silently ignored - this route
- * writes only the caller's own row and should accept only the one field.
- */
-export const profileUpdateSchema = z
-  .object({
-    profile_roles: targetRolesSchema.nullable(),
-  })
-  .strict();
-
-export type ProfileUpdateInput = z.infer<typeof profileUpdateSchema>;
-
 // Trimmed BEFORE the length checks, not after.
 //
 // The handlers already store `title.trim()`, so validating the untrimmed value
