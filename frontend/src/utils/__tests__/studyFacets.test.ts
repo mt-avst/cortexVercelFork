@@ -134,16 +134,15 @@ describe('opportunityPassesFacets', () => {
 });
 
 describe('deriveFacetOptions', () => {
-  it('offers only values present, with the viewer profile roles first', () => {
+  it('offers only values present, roles in first-seen order across studies', () => {
     const list = [
       opp({ type: 'test', default_duration_minutes: 30, target_roles: ['Designer', 'Product Manager'] }),
       opp({ type: 'survey', delivery_mode: 'external', target_roles: ['QA Engineer'] }),
     ];
-    const options = deriveFacetOptions(list, ['Product Manager']);
+    const options = deriveFacetOptions(list);
 
-    // Profile role surfaced first, then the rest in first-seen order.
-    expect(options.roles[0]).toBe('Product Manager');
-    expect(options.roles).toEqual(expect.arrayContaining(['Designer', 'QA Engineer']));
+    // First-seen order across the loaded studies.
+    expect(options.roles).toEqual(['Designer', 'Product Manager', 'QA Engineer']);
     // Types in canonical order, only those present.
     expect(options.types).toEqual(['test', 'survey']);
     expect(options.deliveries).toEqual(expect.arrayContaining(['in_app', 'external']));
@@ -151,11 +150,13 @@ describe('deriveFacetOptions', () => {
     expect(options.timeBuckets).toContain('unspecified'); // the external survey
   });
 
-  it('does not surface a profile role that no study advertises', () => {
-    const list = [opp({ target_roles: ['Designer'] })];
-    const options = deriveFacetOptions(list, ['Marketer']);
-    expect(options.roles).not.toContain('Marketer');
-    expect(options.roles).toEqual(['Designer']);
+  it('de-duplicates roles case-insensitively, keeping the first spelling', () => {
+    const list = [
+      opp({ target_roles: ['Jira admin'] }),
+      opp({ target_roles: ['  JIRA ADMIN  ', 'Designer'] }),
+    ];
+    const options = deriveFacetOptions(list);
+    expect(options.roles).toEqual(['Jira admin', 'Designer']);
   });
 });
 
