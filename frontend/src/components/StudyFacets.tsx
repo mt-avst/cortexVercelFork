@@ -1,5 +1,5 @@
 import React from 'react';
-import { SlidersHorizontal, X, type LucideIcon } from 'lucide-react';
+import { Search, SlidersHorizontal, X, type LucideIcon } from 'lucide-react';
 
 import {
   getParticipantFacingType,
@@ -21,6 +21,15 @@ interface StudyFacetsProps {
   selection: StudyFacetSelection;
   /** Called with the next selection on any toggle or clear. */
   onChange: (next: StudyFacetSelection) => void;
+  /**
+   * The keyword search box. When `onQueryChange` is passed, the search input
+   * renders at the top of the control card (title + purpose search); the panel
+   * then shows even with no facet options, since search is always available.
+   * Omitted, the panel is facets-only and hides when there is nothing to offer,
+   * exactly as before.
+   */
+  query?: string;
+  onQueryChange?: (next: string) => void;
 }
 
 const toggle = <T,>(list: readonly T[], value: T): T[] =>
@@ -88,7 +97,13 @@ function FacetGroup<T extends string>({
  * never match nothing. The type axis replaces the old single-select chip row
  * with a multi-select.
  */
-const StudyFacets: React.FC<StudyFacetsProps> = ({ options, selection, onChange }) => {
+const StudyFacets: React.FC<StudyFacetsProps> = ({
+  options,
+  selection,
+  onChange,
+  query,
+  onQueryChange,
+}) => {
   const activeCount = facetSelectionCount(selection);
   const hasAnyOption =
     options.roles.length > 0 ||
@@ -96,29 +111,69 @@ const StudyFacets: React.FC<StudyFacetsProps> = ({ options, selection, onChange 
     options.deliveries.length > 0 ||
     options.timeBuckets.length > 0;
 
-  if (!hasAnyOption) {
+  const searchValue = query ?? '';
+  const hasSearch = onQueryChange !== undefined;
+  const hasSearchText = searchValue.trim() !== '';
+
+  // Facets-only and nothing to offer: hide, as before. With search wired, the
+  // card always shows - search is available even when no facet chip is.
+  if (!hasAnyOption && !hasSearch) {
     return null;
   }
 
+  // Clear-all wipes BOTH the facet selection and the search box, matching the
+  // single "Clear search and filters" affordance on the no-match empty state.
+  const showClearAll = activeCount > 0 || hasSearchText;
+  const clearAll = () => {
+    onChange(EMPTY_FACET_SELECTION);
+    onQueryChange?.('');
+  };
+
   return (
     <section className="study-facets" aria-label="Filter studies">
-      <div className="study-facets__header">
-        <span className="study-facets__title">
-          <SlidersHorizontal size={15} aria-hidden="true" />
-          Filter
-          {activeCount > 0 && <span className="study-facets__count"> · {activeCount}</span>}
-        </span>
-        {activeCount > 0 && (
-          <button
-            type="button"
-            className="btn btn-link study-facets__clear"
-            onClick={() => onChange(EMPTY_FACET_SELECTION)}
-          >
-            <X size={14} aria-hidden="true" />
-            Clear all
-          </button>
-        )}
-      </div>
+      {hasSearch && (
+        <div className="study-facets__search">
+          <Search size={16} aria-hidden="true" className="study-facets__search-icon" />
+          <input
+            type="text"
+            className="study-facets__search-input"
+            placeholder="Search studies by title or purpose"
+            value={searchValue}
+            onChange={(event) => onQueryChange?.(event.target.value)}
+            aria-label="Search studies"
+          />
+          {hasSearchText && (
+            <button
+              type="button"
+              className="study-facets__search-clear"
+              aria-label="Clear search"
+              onClick={() => onQueryChange?.('')}
+            >
+              <X size={16} aria-hidden="true" />
+            </button>
+          )}
+        </div>
+      )}
+
+      {hasAnyOption && (
+        <div className="study-facets__header">
+          <span className="study-facets__title">
+            <SlidersHorizontal size={15} aria-hidden="true" />
+            Filter
+            {activeCount > 0 && <span className="study-facets__count"> · {activeCount}</span>}
+          </span>
+          {showClearAll && (
+            <button
+              type="button"
+              className="btn btn-link study-facets__clear"
+              onClick={clearAll}
+            >
+              <X size={14} aria-hidden="true" />
+              Clear all
+            </button>
+          )}
+        </div>
+      )}
 
       <FacetGroup
         label="Type"

@@ -4,6 +4,7 @@ import {
   deriveFacetOptions,
   getStudyDelivery,
   getStudyTimeBucket,
+  opportunityMatchesQuery,
   opportunityPassesFacets,
   PUBLISHED_LIST_CAP,
   EMPTY_FACET_SELECTION,
@@ -157,6 +158,40 @@ describe('deriveFacetOptions', () => {
     ];
     const options = deriveFacetOptions(list);
     expect(options.roles).toEqual(['Jira admin', 'Designer']);
+  });
+});
+
+describe('opportunityMatchesQuery (keyword search)', () => {
+  it('matches on the title, case-insensitively', () => {
+    expect(opportunityMatchesQuery(opp({ title: 'Checkout flow walkthrough' }), 'CHECKOUT')).toBe(true);
+  });
+
+  it('matches on the purpose one-liner', () => {
+    expect(
+      opportunityMatchesQuery(opp({ title: 'X', purpose_one_liner: 'Where people stall before payment' }), 'payment')
+    ).toBe(true);
+  });
+
+  it('does not match when the term is in neither title nor purpose', () => {
+    expect(opportunityMatchesQuery(opp({ title: 'Onboarding', purpose_one_liner: 'tone' }), 'checkout')).toBe(false);
+  });
+
+  it('a blank or whitespace-only query matches everything (imposes no constraint)', () => {
+    expect(opportunityMatchesQuery(opp({ title: 'anything' }), '')).toBe(true);
+    expect(opportunityMatchesQuery(opp({ title: 'anything' }), '   ')).toBe(true);
+  });
+
+  it('trims the query before matching', () => {
+    expect(opportunityMatchesQuery(opp({ title: 'Poll on onboarding' }), '  onboarding  ')).toBe(true);
+  });
+
+  it('tolerates a missing purpose one-liner', () => {
+    expect(
+      opportunityMatchesQuery(opp({ title: 'Survey', purpose_one_liner: undefined }), 'survey')
+    ).toBe(true);
+    expect(
+      opportunityMatchesQuery(opp({ title: 'Survey', purpose_one_liner: undefined }), 'nope')
+    ).toBe(false);
   });
 });
 
