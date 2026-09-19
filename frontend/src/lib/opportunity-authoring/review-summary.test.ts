@@ -123,7 +123,7 @@ describe('buildReviewSummary', () => {
     it.each([
       ['test', 'Live session'],
       ['interview', 'Interview'],
-      ['poll', 'Quick poll'],
+      ['poll', 'Poll'],
       ['survey', 'Survey'],
       ['question', 'One question'],
       ['unmoderated', 'Recorded session']
