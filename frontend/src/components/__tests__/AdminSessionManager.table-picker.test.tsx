@@ -121,6 +121,19 @@ describe('AdminSessionManager - Table view is the slot picker', () => {
     expect(freeChips[0]).toHaveAttribute('aria-pressed', 'false');
   });
 
+  it('shows the start time only on the chip, keeping the full range in its accessible name', async () => {
+    renderPicker();
+
+    const chip = (await screen.findAllByRole('button', { name: /available time slot/i }))[0];
+    // Visible label is the start time alone - the duration is constant across
+    // the view, so a repeated "- HH:MM" earns no width. A regression that put
+    // the range back in the visible text fails here by name.
+    expect(chip.textContent?.trim()).toMatch(/^\d{2}:\d{2}$/);
+    expect(chip.textContent).not.toContain(' - ');
+    // The range is not lost: the accessible name still spans start to end.
+    expect(chip).toHaveAccessibleName(/\d{2}:\d{2} to \d{2}:\d{2}/);
+  });
+
   it('selects a slot on click, from the table, without switching to the calendar', async () => {
     renderPicker();
 
@@ -183,7 +196,9 @@ describe('AdminSessionManager - Table view is the slot picker', () => {
     // The 10:00 slot is now an existing session. It appears in the picker, but
     // NOT as a togglable button whose click would delete it - removal lives in
     // the list beneath, which carries the booked-count guard.
-    const chip = await screen.findByText('10:00 - 10:30');
+    // Chips show the START time only now; the full range stays in the aria
+    // name and tooltip (asserted below and in the sibling test).
+    const chip = await screen.findByText('10:00');
     expect(chip.closest('button')).toBeNull();
     // and it is not offered as a pickable "available" slot either.
     expect(
@@ -198,7 +213,7 @@ describe('AdminSessionManager - Table view is the slot picker', () => {
     // uses, which is stable under a loaded CI runner - then assert synchronously.
     // (A `findByRole('img', ...)` here raced the sessions-sync effect under load
     // and timed out at its default 1s; the text wait does not.)
-    const label = await screen.findByText('10:00 - 10:30');
+    const label = await screen.findByText('10:00');
     const chip = label.closest('[role="img"]');
 
     // A bare <span aria-label=...> is the anti-pattern V-6 removes: a generic
