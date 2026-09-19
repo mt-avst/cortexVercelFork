@@ -245,7 +245,7 @@ describe('getAdminTypeLabel', () => {
 
   it('leaves every other type at its canonical participant-facing name', () => {
     expect(getAdminTypeLabel('interview')).toBe('Interview');
-    expect(getAdminTypeLabel('poll')).toBe('Quick poll');
+    expect(getAdminTypeLabel('poll')).toBe('Poll');
     expect(getAdminTypeLabel('survey')).toBe('Survey');
     expect(getAdminTypeLabel('question')).toBe('One question');
   });

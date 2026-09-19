@@ -55,7 +55,7 @@ describe('StudyTypePicker - the six pods and their enum mapping', () => {
     ['Interview', 'interview'],
     ['Live session', 'test'],
     ['Recorded session', 'unmoderated'],
-    ['Quick poll', 'poll'],
+    ['Poll', 'poll'],
     ['One question', 'question'],
     ['Survey', 'survey']
   ];

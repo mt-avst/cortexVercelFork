@@ -81,7 +81,7 @@ describe('MyBookings completed studies grouping', () => {
 
     const pollCard = within(section).getByText('Quick reaction poll').closest('.booking-card') as HTMLElement;
     expect(within(pollCard).getAllByText('Quick reaction poll')).toHaveLength(1);
-    expect(within(pollCard).getByText('Quick poll')).toBeVisible();
+    expect(within(pollCard).getByText('Poll')).toBeVisible();
     // Latest status wins: session_completed, not session_started - even
     // though the started row for this same session is ALSO in the list.
     expect(within(pollCard).getByText('Completed')).toBeVisible();

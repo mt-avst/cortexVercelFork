@@ -28,7 +28,7 @@ describe('getParticipantFacingType', () => {
     ['unmoderated', 'Recorded session'],
     ['test', 'Live session'],
     ['interview', 'Interview'],
-    ['poll', 'Quick poll'],
+    ['poll', 'Poll'],
     ['survey', 'Survey'],
     ['question', 'One question'],
   ])('renders %s as %s', (type, expected) => {

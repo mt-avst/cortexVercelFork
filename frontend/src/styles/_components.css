@@ -7028,6 +7028,21 @@ body.theme-light .atmospheric-orb-secondary {
   outline-offset: var(--focus-outline-offset);
 }
 
+/* Study-type chips (browse Type facet): carry the per-type identity glyph and
+   colour so a chip matches the row it filters to. One rule for all six types,
+   driven by --study-type-color (set inline from getStudyTypeAccentVar), rather
+   than a per-type modifier class. The active fill lives in the study-facets
+   block below, where it can outrank the generic `.study-facets .filter-chip
+   .is-active` accent fill (same specificity, later source). */
+.filter-chip--typed {
+  gap: 7px;
+}
+
+.filter-chip--typed svg {
+  flex-shrink: 0;
+  color: var(--study-type-color);
+}
+
 /* ----------------------------------------
    "All" Chip - Neutral styling
    ---------------------------------------- */
@@ -13293,12 +13308,22 @@ body.theme-dark {
 /* Small caps carries the taxonomy so a coloured pill does not have to. Six
    pastel badges at equal weight ranked nothing and added six colours. */
 .opportunity-row__kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 0.65rem;
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--opportunity-row-kind);
+  /* Per-type identity colour (the shared six-colour system), set inline as
+     --study-type-color; falls back to the plain kicker colour for an
+     unrecognised type. The glyph inherits it via currentColor. */
+  color: var(--study-type-color, var(--opportunity-row-kind));
   margin: 0 0 6px;
+}
+
+.opportunity-row__kind-glyph {
+  flex-shrink: 0;
 }
 
 .opportunity-row__status {
@@ -13429,13 +13454,25 @@ body.theme-dark {
   gap: 8px;
 }
 
-/* Facet chips carry no per-type colour (that taxonomy lives on the rows), so the
-   base .filter-chip has no un-modified active state. Give the selected facet a
-   clear, AA-safe filled state via the accent token. */
+/* The plain facet axes (roles, where, time) carry no per-type colour, so their
+   selected chip gets a clear, AA-safe filled state via the accent token. */
 .study-facets .filter-chip.is-active {
   background: var(--accent-fill-text-safe);
   border-color: var(--accent-fill-text-safe);
   color: #fff;
+  font-weight: 600;
+}
+
+/* The Type axis DOES carry the per-type colour, so its selected chip fills with
+   a tint of that colour under the colour's own text, not the generic accent -
+   matching the row it filters to. Placed here, after the generic rule above and
+   at equal specificity, so it wins; color-mix over the token keeps it off any
+   literal colour and never puts white on an identity fill (accent-fill policy). */
+.study-facets .filter-chip--typed.is-active {
+  background: color-mix(in srgb, var(--study-type-color) 12%, transparent);
+  border-color: var(--study-type-color);
+  color: var(--study-type-color);
+  box-shadow: 0 0 0 1px var(--study-type-color);
   font-weight: 600;
 }
 
@@ -14215,6 +14252,23 @@ body.theme-light .admin-study-status--draft {
 .study-type-card:focus-visible {
   outline: var(--focus-outline);
   outline-offset: var(--focus-outline-offset);
+}
+
+/* The per-type identity glyph on a pod: a tinted rounded square with the type
+   colour, the same six-colour system as the browse chips and row kicker. Set
+   via --study-type-color inline; the tint is a color-mix over the token, so no
+   literal colour and no white-on-identity fill. Selection stays brand-orange
+   (the pod's ring) - this is identity, not selection. */
+.study-type-card__glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  margin-bottom: 10px;
+  color: var(--study-type-color, var(--text-muted));
+  background: color-mix(in srgb, var(--study-type-color, var(--text-muted)) 12%, transparent);
 }
 
 /* Selected: a committed 2px orange edge (1px border + 1px inset ring, so
