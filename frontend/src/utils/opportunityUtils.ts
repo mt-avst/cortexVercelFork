@@ -516,6 +516,25 @@ export const deriveFacetOptions = (
   };
 };
 
+/**
+ * BROWSE KEYWORD SEARCH - a case-insensitive substring match over the study's
+ * title and purpose one-liner (Decision: those two fields only). A blank or
+ * whitespace-only query matches everything, so the caller can pass the raw
+ * query and let an empty box impose no constraint - exactly like an empty facet
+ * axis. Client-side over the already-loaded set, ANDed with the facet selection.
+ */
+export const opportunityMatchesQuery = (
+  opportunity: Pick<Opportunity, 'title' | 'purpose_one_liner'>,
+  query: string
+): boolean => {
+  const needle = query.trim().toLowerCase();
+  if (needle === '') {
+    return true;
+  }
+  const haystack = `${opportunity.title ?? ''}\n${opportunity.purpose_one_liner ?? ''}`.toLowerCase();
+  return haystack.includes(needle);
+};
+
 /** AND across axes, OR within each axis; an empty axis imposes no constraint. */
 export const opportunityPassesFacets = (
   opportunity: Pick<Opportunity, 'type' | 'default_duration_minutes' | 'delivery_mode' | 'target_roles'>,

@@ -9,10 +9,12 @@ import {
   EMPTY_FACET_SELECTION,
   facetSelectionCount,
   filterOpportunitiesForPresentationListing,
+  opportunityMatchesQuery,
   opportunityPassesFacets,
   sortByClosingSoonest,
   type StudyFacetSelection,
 } from '../utils/opportunityUtils';
+import { useDebounce } from '../hooks/useDebounce';
 import { logger } from '../utils/logger';
 import Landing from './Landing';
 import ErrorState from '../components/ErrorState';
@@ -35,6 +37,12 @@ const Home: React.FC = memo(() => {
   // Multi-select facets (phase 2): every axis narrows the already-loaded set.
   // Empty selection = the full list, exactly as before facets existed.
   const [facetSelection, setFacetSelection] = useState<StudyFacetSelection>(EMPTY_FACET_SELECTION);
+
+  // Keyword search over title + purpose. The input is controlled on the raw
+  // value (responsive typing); the list re-filters on the debounced value, so a
+  // burst of keystrokes collapses to one pass over the loaded set.
+  const [searchInput, setSearchInput] = useState('');
+  const debouncedQuery = useDebounce(searchInput, 200);
 
   const { user } = useAuth();
 
@@ -153,21 +161,32 @@ const Home: React.FC = memo(() => {
   );
 
   const activeFacetCount = facetSelectionCount(facetSelection);
+  const trimmedQuery = debouncedQuery.trim();
 
-  // Memoized filtered and sorted opportunities. Facets narrow the already-loaded
-  // set (AND across axes, OR within); an empty selection is the full list.
+  // Memoized filtered and sorted opportunities. The keyword search and the
+  // facets both narrow the already-loaded set and are ANDed together (an empty
+  // search or an empty axis imposes no constraint), so the list is exactly the
+  // studies that match the query and pass every active facet axis.
   const filteredOpportunities = useMemo(() => {
-    const narrowed =
-      activeFacetCount === 0
-        ? safeOpportunities
-        : safeOpportunities.filter((opp) => opportunityPassesFacets(opp, facetSelection));
+    const narrowed = safeOpportunities.filter(
+      (opp) =>
+        (activeFacetCount === 0 || opportunityPassesFacets(opp, facetSelection)) &&
+        opportunityMatchesQuery(opp, trimmedQuery)
+    );
 
     // Closing soonest first. The list used to sort tests to the top and put the
     // study with "4 days left" twelfth, so it rendered urgency and then sorted
     // against it. The bento arrangement that followed - interleaving
     // double-width rows into a three-column grid - went with the grid.
     return sortByClosingSoonest(narrowed);
-  }, [safeOpportunities, facetSelection, activeFacetCount]);
+  }, [safeOpportunities, facetSelection, activeFacetCount, trimmedQuery]);
+
+  // Clear both the facet selection and the search box in one action - the
+  // no-match empty state and the panel's "Clear all" both use it.
+  const clearAllFilters = useCallback(() => {
+    setFacetSelection(EMPTY_FACET_SELECTION);
+    setSearchInput('');
+  }, []);
 
   // No cap notice: the list endpoint returns 413 above PUBLISHED_LIST_CAP rather
   // than a truncated page, so any list that renders is the whole published set and
@@ -214,23 +233,36 @@ const Home: React.FC = memo(() => {
                 </p>
               </div>
 
-              {/* Study summary and facet panel */}
+              {/* Search + facet cluster, then the count line beneath it. The
+                  search input reflects typing immediately; the list re-filters
+                  on the debounced value. */}
               {!loading && !error && opportunities.length > 0 && (
                 <>
-                  {/* Counts what is on screen; names the active filter count so a
-                      narrowed list never reads as the whole set. */}
-                  <p className="study-summary-line">
-                    {filteredOpportunities.length} active{' '}
-                    {filteredOpportunities.length === 1 ? 'study' : 'studies'}
-                    {activeFacetCount > 0 &&
-                      ` · ${activeFacetCount} ${activeFacetCount === 1 ? 'filter' : 'filters'}`}
-                  </p>
-
                   <StudyFacets
                     options={facetOptions}
                     selection={facetSelection}
                     onChange={setFacetSelection}
+                    query={searchInput}
+                    onQueryChange={setSearchInput}
                   />
+
+                  {/* Counts what is on screen; names the active search term and
+                      filter count so a narrowed list never reads as the whole set.
+                      aria-live so a screen-reader user hears the new count as a
+                      search or filter narrows the list. */}
+                  <p className="study-summary-line" aria-live="polite" aria-atomic="true">
+                    {filteredOpportunities.length} active{' '}
+                    {filteredOpportunities.length === 1 ? 'study' : 'studies'}
+                    {trimmedQuery !== '' && (
+                      <>
+                        {' '}
+                        · matching{' '}
+                        <span className="study-summary-line__term">“{trimmedQuery}”</span>
+                      </>
+                    )}
+                    {activeFacetCount > 0 &&
+                      ` · ${activeFacetCount} ${activeFacetCount === 1 ? 'filter' : 'filters'}`}
+                  </p>
                 </>
               )}
               
@@ -259,12 +291,13 @@ const Home: React.FC = memo(() => {
                 <div className="empty-state">
                   <Filter size={48} className="empty-state-icon" />
                   <h4 className="empty-state-title">No studies found</h4>
-                  <p className="mb-2">No studies match your filters.</p>
-                  <button
-                    className="btn btn-outline-primary mt-3"
-                    onClick={() => setFacetSelection(EMPTY_FACET_SELECTION)}
-                  >
-                    Clear filters
+                  <p className="mb-2">
+                    {trimmedQuery !== ''
+                      ? `Nothing matches “${trimmedQuery}”${activeFacetCount > 0 ? ' with the filters you’ve set' : ''}.`
+                      : 'No studies match your filters.'}
+                  </p>
+                  <button className="btn btn-outline-primary mt-3" onClick={clearAllFilters}>
+                    {trimmedQuery !== '' ? 'Clear search and filters' : 'Clear filters'}
                   </button>
                 </div>
               )}
