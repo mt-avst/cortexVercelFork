@@ -140,7 +140,7 @@ export const getParticipantFacingType = (type: string | null | undefined): strin
     case 'unmoderated': return 'Recorded session';
     case 'test': return 'Live session';
     case 'interview': return 'Interview';
-    case 'poll': return 'Quick poll';
+    case 'poll': return 'Poll';
     case 'survey': return 'Survey';
     case 'question': return 'One question';
     // Neutral rather than the raw value: an unrecognised type reaching a

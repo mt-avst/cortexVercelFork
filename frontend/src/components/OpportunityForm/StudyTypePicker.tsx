@@ -3,6 +3,8 @@ import { QUESTION_CARRYING_TYPES } from '@shared/firsthand/delivery';
 import FieldError from './FieldError';
 import DescribeIt from './DescribeIt';
 import type { DraftedOpportunity } from '../../api/client';
+import { getParticipantFacingType } from '../../utils/opportunityUtils';
+import { getStudyTypeGlyph, getStudyTypeAccentVar } from '../../utils/studyTypeIcons';
 
 type DeliveryMode = 'native' | 'external';
 
@@ -44,7 +46,6 @@ const EXTERNAL_COPY =
 interface Pod {
   /** Existing `type` enum value - never a new or renamed one. */
   type: string;
-  title: string;
   /** The type gloss, the same words the old cards carried after the title. */
   typeDesc: string;
 }
@@ -62,13 +63,17 @@ interface Group {
  * time. Delivery (`native`/`external`) is NOT a pod any more - it is the toggle
  * below, shown only for the answer-based types that carry the choice.
  */
+// A pod's TITLE is not stored here: it comes from getParticipantFacingType so
+// the picker, the browse row and the filter chips cannot drift onto different
+// names for one type (the StudyTypePicker.type-names test pins that). Only the
+// scheduling grouping and the type gloss are local.
 const GROUPS: Group[] = [
   {
     label: 'Live studies',
     sub: 'You specify calendar slots, participants self book',
     pods: [
-      { type: 'interview', title: 'Interview', typeDesc: 'Research interview session' },
-      { type: 'test', title: 'Live session', typeDesc: 'Usability test you moderate' }
+      { type: 'interview', typeDesc: 'Research interview session' },
+      { type: 'test', typeDesc: 'Usability test you moderate' }
     ]
   },
   {
@@ -77,12 +82,11 @@ const GROUPS: Group[] = [
     pods: [
       {
         type: 'unmoderated',
-        title: 'Recorded session',
         typeDesc: 'Remote unmoderated user test, recorded in the browser'
       },
-      { type: 'poll', title: 'Quick poll', typeDesc: 'Quick opinion gathering' },
-      { type: 'question', title: 'One question', typeDesc: 'Single question session' },
-      { type: 'survey', title: 'Survey', typeDesc: 'Detailed feedback collection' }
+      { type: 'poll', typeDesc: 'Quick opinion gathering' },
+      { type: 'question', typeDesc: 'Single question session' },
+      { type: 'survey', typeDesc: 'Detailed feedback collection' }
     ]
   }
 ];
@@ -137,7 +141,7 @@ const StudyTypePicker: React.FC<StudyTypePickerProps> = ({
         </h2>
         <p className="mb-3 section-description" style={{ fontSize: '0.95rem' }}>
           {current
-            ? `${current.title}${deliveryLabel ? ` - ${deliveryLabel}` : ''}`
+            ? `${getParticipantFacingType(current.type)}${deliveryLabel ? ` - ${deliveryLabel}` : ''}`
             : 'Not set'}
         </p>
         <p className="form-text mb-2" style={{ fontSize: '0.875rem' }}>
@@ -200,18 +204,29 @@ const StudyTypePicker: React.FC<StudyTypePickerProps> = ({
             <div className="row g-2">
               {group.pods.map((pod) => {
                 const selected = pod.type === type;
+                const podTitle = getParticipantFacingType(pod.type);
+                const PodGlyph = getStudyTypeGlyph(pod.type);
+                const podAccent = getStudyTypeAccentVar(pod.type);
                 return (
                   <div className="col-md-4" key={pod.type}>
                     <button
                       type="button"
                       role="radio"
                       aria-checked={selected}
-                      aria-label={pod.title}
+                      aria-label={podTitle}
                       className={`study-type-card w-100 text-start h-100 p-3 ${selected ? 'is-selected' : ''}`}
                       onClick={() => onSelect(pod.type, deliveryForPod(pod.type, deliveryMode))}
                     >
+                      {PodGlyph && (
+                        <span
+                          className="study-type-card__glyph"
+                          style={podAccent ? ({ '--study-type-color': podAccent } as React.CSSProperties) : undefined}
+                        >
+                          <PodGlyph size={16} aria-hidden={true} />
+                        </span>
+                      )}
                       <span className="d-block" style={{ fontSize: '1rem', fontWeight: '600' }}>
-                        {pod.title}
+                        {podTitle}
                       </span>
                       <span className="d-block form-text" style={{ fontSize: '0.8rem' }}>
                         {pod.typeDesc}

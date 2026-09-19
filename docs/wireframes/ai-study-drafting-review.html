@@ -276,7 +276,7 @@
   const escapeHtml=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
   /* Labels copied from the real form and shared constants. */
-  const TYPE_LABEL={interview:'Interview',poll:'Quick poll',question:'One question',survey:'Survey',test:'Live session',unmoderated:'Recorded session'};
+  const TYPE_LABEL={interview:'Interview',poll:'Poll',question:'One question',survey:'Survey',test:'Live session',unmoderated:'Recorded session'};
   const PT_LABEL={any:'Anyone',internal:'Internal employees only',external:'External users only',specific:'Specific criteria'};
   const CONSENT_KIND={unmoderated:'recorded',poll:'survey',survey:'survey',question:'survey',test:'moderated',interview:'moderated'};
   const QUESTION_CARRYING=new Set(['poll','survey','question']);

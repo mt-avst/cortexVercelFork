@@ -13,7 +13,7 @@ import { closeListeningServers, listening } from "../../__tests__/helpers/listen
  * feeding Lane B).
  *
  * My-bookings "Completed studies" renders one card per session and needs to
- * name the study format ("Quick poll", "Live session", ...). Today the payload
+ * name the study format ("Poll", "Live session", ...). Today the payload
  * omits `type`, so the participant page hard-codes `unmoderated` for every
  * event. Lane B reads a real `type`; this route must supply it.
  *

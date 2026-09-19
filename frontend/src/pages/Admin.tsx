@@ -699,7 +699,7 @@ const Admin: React.FC = () => {
                         <option value="test">Live session</option>
                         <option value="interview">Interview</option>
                         <option value="unmoderated">Recorded session</option>
-                        <option value="poll">Quick poll</option>
+                        <option value="poll">Poll</option>
                         <option value="survey">Survey</option>
                         <option value="question">One question</option>
                       </select>

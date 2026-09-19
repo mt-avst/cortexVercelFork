@@ -53,7 +53,7 @@ A direct link to a specific study will open without signing in, but you'll need 
 
 - The home page shows all available opportunities
 - Each opportunity card shows:
-  - **Type**: Live session, Recorded session, Quick poll, Survey, Interview or One question
+  - **Type**: Live session, Recorded session, Poll, Survey, Interview or One question
   - **Title**: Name of the opportunity
   - **Purpose**: Brief description
   - **Available Sessions**: Number of remaining slots, on the types you book. Recorded sessions, polls and surveys show roughly how long they take instead
@@ -65,7 +65,7 @@ A direct link to a specific study will open without signing in, but you'll need 
   - Live session
   - Recorded session
   - Survey
-  - Quick poll
+  - Poll
   - Interview
   - One question
 
