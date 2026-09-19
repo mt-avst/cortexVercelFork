@@ -94,7 +94,7 @@ The first step is picking the one study type. The picker shows six as cards, gro
 **Async studies** - the participant runs it in their own time:
 
 - 🖥️ **Recorded session**: Remote unmoderated user test, recorded in the browser. See [Recorded Sessions](#recorded-sessions)
-- 📊 **Quick poll**: Quick opinion gathering
+- 📊 **Poll**: Quick opinion gathering
 - ❓ **One question**: Single question
 - 📋 **Survey**: Detailed feedback collection
 

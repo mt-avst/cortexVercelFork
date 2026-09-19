@@ -20,7 +20,7 @@ const TYPE_TITLE: Record<string, string> = {
   interview: 'Interview',
   test: 'Live session',
   unmoderated: 'Recorded session',
-  poll: 'Quick poll',
+  poll: 'Poll',
   question: 'One question',
   survey: 'Survey'
 };

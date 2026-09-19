@@ -10,6 +10,7 @@ import {
   getParticipantFacingType,
   getTimeRemainingUntil,
 } from '../utils/opportunityUtils';
+import { getStudyTypeGlyph, getStudyTypeAccentVar } from '../utils/studyTypeIcons';
 
 type OpportunityRowProps = {
   opportunity: Opportunity;
@@ -89,6 +90,13 @@ export function OpportunityRow({ opportunity, role }: OpportunityRowProps) {
   // disagree with what the row tells the reader two lines up.
   const hasEnded = remaining.urgency === 'ended';
 
+  // The per-type identity glyph + colour (the shared six-colour system), so the
+  // study type is scannable down the list. aria-hidden: the type is already
+  // announced as the kicker's text, so the icon is decoration. An unrecognised
+  // type yields neither, and the kicker falls back to its plain colour.
+  const TypeGlyph = getStudyTypeGlyph(opportunity.type);
+  const typeAccent = getStudyTypeAccentVar(opportunity.type);
+
   return (
     <li className="opportunity-row">
       {/* No aria-label. An explicit label REPLACES the link's content as its
@@ -97,7 +105,11 @@ export function OpportunityRow({ opportunity, role }: OpportunityRowProps) {
           content instead, which reads: kind, title, purpose, meta, action. */}
       <Link to={`/opportunities/${opportunity.id}`} className="opportunity-row__link">
         <div className="opportunity-row__body">
-          <p className="opportunity-row__kind">
+          <p
+            className="opportunity-row__kind"
+            style={typeAccent ? ({ '--study-type-color': typeAccent } as React.CSSProperties) : undefined}
+          >
+            {TypeGlyph && <TypeGlyph size={13} aria-hidden="true" className="opportunity-row__kind-glyph" />}
             {getParticipantFacingType(opportunity.type)}
             {isAdmin && (
               <span className="opportunity-row__status"> · {opportunity.status}</span>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { SlidersHorizontal, X } from 'lucide-react';
+import { SlidersHorizontal, X, type LucideIcon } from 'lucide-react';
 
 import {
   getParticipantFacingType,
@@ -12,6 +12,7 @@ import {
   type StudyDelivery,
   type StudyTimeBucket,
 } from '../utils/opportunityUtils';
+import { getStudyTypeGlyph, getStudyTypeAccentVar } from '../utils/studyTypeIcons';
 
 interface StudyFacetsProps {
   /** The values actually present across the loaded studies. */
@@ -31,9 +32,25 @@ interface FacetGroupProps<T extends string> {
   selected: readonly T[];
   labelFor: (value: T) => string;
   onToggle: (value: T) => void;
+  /**
+   * Optional per-value identity glyph + colour (the Type axis only). The glyph
+   * is decorative (aria-hidden) - the chip's accessible name stays its label -
+   * and the colour rides on `--study-type-color`, which the stylesheet turns
+   * into the active fill/border. Absent for the plain axes (roles, where, time).
+   */
+  accentFor?: (value: T) => string | null;
+  glyphFor?: (value: T) => LucideIcon | null;
 }
 
-function FacetGroup<T extends string>({ label, values, selected, labelFor, onToggle }: FacetGroupProps<T>) {
+function FacetGroup<T extends string>({
+  label,
+  values,
+  selected,
+  labelFor,
+  onToggle,
+  accentFor,
+  glyphFor,
+}: FacetGroupProps<T>) {
   if (values.length === 0) {
     return null;
   }
@@ -43,14 +60,18 @@ function FacetGroup<T extends string>({ label, values, selected, labelFor, onTog
       <div className="study-facets__chips">
         {values.map((value) => {
           const isActive = selected.includes(value);
+          const accent = accentFor?.(value) ?? null;
+          const Glyph = glyphFor?.(value) ?? null;
           return (
             <button
               key={value}
               type="button"
-              className={`filter-chip${isActive ? ' is-active' : ''}`}
+              className={`filter-chip${accent ? ' filter-chip--typed' : ''}${isActive ? ' is-active' : ''}`}
+              style={accent ? ({ '--study-type-color': accent } as React.CSSProperties) : undefined}
               aria-pressed={isActive}
               onClick={() => onToggle(value)}
             >
+              {Glyph && <Glyph size={14} aria-hidden={true} />}
               {labelFor(value)}
             </button>
           );
@@ -104,6 +125,8 @@ const StudyFacets: React.FC<StudyFacetsProps> = ({ options, selection, onChange 
         values={options.types}
         selected={selection.types}
         labelFor={(t) => getParticipantFacingType(t)}
+        accentFor={(t) => getStudyTypeAccentVar(t)}
+        glyphFor={(t) => getStudyTypeGlyph(t)}
         onToggle={(t) => onChange({ ...selection, types: toggle(selection.types, t) })}
       />
 
