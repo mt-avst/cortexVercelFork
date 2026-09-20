@@ -268,7 +268,7 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid var(--cortex-border, rgba(255,255,255,0.08))' }}>
+              <tr style={{ borderBottom: '1px solid var(--border-subtle-current)' }}>
                 <th
                   style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}
                   scope="col"
@@ -310,7 +310,7 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
                 return (
                   <React.Fragment key={booking.id}>
                   <tr
-                    style={{ borderBottom: artifactsExpanded ? 'none' : '1px solid var(--cortex-border, rgba(255,255,255,0.04))', verticalAlign: 'top' }}
+                    style={{ borderBottom: artifactsExpanded ? 'none' : '1px solid var(--border-subtle-current)', verticalAlign: 'top' }}
                   >
                     <td style={{ padding: '10px 12px' }}>
                       <span style={{ fontWeight: 500 }}>{participantLabel}</span>
@@ -360,11 +360,11 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
                           {saving ? 'Saving...' : 'Save note'}
                         </button>
                         {overBy > 0 ? (
-                          <span role="alert" style={{ fontSize: '0.75rem', color: 'var(--bs-danger, #dc3545)' }}>
+                          <span role="alert" style={{ fontSize: '0.75rem', color: 'var(--status-danger-text)' }}>
                             {overBy} characters over the {MAX_NOTES_CHARS} limit
                           </span>
                         ) : saveErrors[booking.id] ? (
-                          <span role="alert" style={{ fontSize: '0.75rem', color: 'var(--bs-danger, #dc3545)' }}>
+                          <span role="alert" style={{ fontSize: '0.75rem', color: 'var(--status-danger-text)' }}>
                             {saveErrors[booking.id]}
                           </span>
                         ) : dirty ? (
@@ -401,7 +401,7 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
                     </td>
                   </tr>
                   {artifactsExpanded && (
-                    <tr style={{ borderBottom: '1px solid var(--cortex-border, rgba(255,255,255,0.04))' }}>
+                    <tr style={{ borderBottom: '1px solid var(--border-subtle-current)' }}>
                       <td colSpan={5} style={{ padding: '0 12px 10px' }}>
                         <div id={`booking-artifacts-${booking.id}`}>
                           <BookingArtifactsSection booking={booking} controller={artifacts} />
