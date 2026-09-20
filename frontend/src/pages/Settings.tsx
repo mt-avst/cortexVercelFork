@@ -5,7 +5,7 @@ import { getNotificationPreferences, updateNotificationPreferences, Notification
 import { logger } from '../utils/logger';
 import AdminManagement from '../components/AdminManagement';
 import { Card, CardHeader, CardBody, Alert, Spinner } from '../components/ui';
-import { ArrowLeft, UserCog, Bell, UserCircle, AlertTriangle, CheckCircle, MailCheck, MailX } from 'lucide-react';
+import { ArrowLeft, UserCog, Bell, AlertTriangle, CheckCircle, MailCheck, MailX } from 'lucide-react';
 
 const Settings: React.FC = () => {
   const { user, loading, initialAuthCheck } = useAuth();

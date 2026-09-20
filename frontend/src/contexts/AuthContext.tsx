@@ -66,8 +66,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       logger.log('AuthProvider: Fetching user data...', { isInitialCheck });
       
       // Set flag to prevent automatic redirects during initial auth check
-      if (isInitialCheck && (window as any).__setInitialAuthCheck) {
-        (window as any).__setInitialAuthCheck(true);
+      if (isInitialCheck && window.__setInitialAuthCheck) {
+        window.__setInitialAuthCheck(true);
       }
       
       logger.log('AuthProvider: Making API call to:', `${getApiBaseUrl()}/api/me`);
@@ -118,9 +118,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setLoading(false);
       
       // Clear the initial auth check flag after auth check completes
-      if (isInitialCheck && (window as any).__setInitialAuthCheck) {
+      if (isInitialCheck && window.__setInitialAuthCheck) {
         setTimeout(() => {
-          (window as any).__setInitialAuthCheck(false);
+          window.__setInitialAuthCheck?.(false);
         }, 100);
       }
       
