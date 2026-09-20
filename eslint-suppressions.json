@@ -218,19 +218,6 @@
       "count": 1
     }
   },
-  "frontend/src/utils/__tests__/errorHandler.test.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 10
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 4
-    }
-  },
-  "frontend/src/utils/errorHandler.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 10
-    }
-  },
   "frontend/src/utils/logger.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
