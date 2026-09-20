@@ -15,9 +15,7 @@ import {
   applyRuntimeMutationToSession,
   buildRuntimeAttemptSessionId,
   cloneRuntimeSession,
-  createRuntimeSessionAttempt,
   createRuntimeSessionRecord,
-  findRuntimeSessionAttempts,
   pushInternalEvent,
   resolveSessionSortTimestamp
 } from "./runtime-session-model";
@@ -26,14 +24,6 @@ import {
   storeTranscriptArtifact
 } from "./object-storage";
 import { withRuntimeDatabaseClient } from "./runtime-database";
-import {
-  computeNextAttemptAtMs,
-  createEmptyCallbackDeliverySummary,
-  deliverSignedCallback,
-  CALLBACK_DELIVERY_MAX_ATTEMPTS
-} from "./callback-delivery";
-import type { EnqueueCallbackDeliveryInput } from "./callback-delivery";
-import { getIntegrationSharedSecret } from "./integration-auth";
 import { buildPrototypeTranscript } from "./transcript-generator";
 
 type RuntimeSessionRow = {
@@ -1685,133 +1675,4 @@ function normalizeTranscriptProcessingLimit(limit: number) {
   }
 
   return Math.min(10, Math.floor(limit));
-}
-
-type CallbackOutboxRow = {
-  delivery_id: string;
-  callback_url: string;
-  body: string;
-  attempts: number;
-};
-
-export async function enqueueCallbackDelivery(
-  input: EnqueueCallbackDeliveryInput
-) {
-  const attempts = input.attempts ?? 1;
-  const nextAttemptAt =
-    input.nextAttemptAt ??
-    new Date(computeNextAttemptAtMs(attempts, Date.now())).toISOString();
-
-  return withRuntimeDatabaseClient(async (client) => {
-    await client.query(
-      `
-        INSERT INTO callback_outbox
-          (callback_url, body, event, logical_session_id, attempts, next_attempt_at, last_error)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-      `,
-      [
-        input.callbackUrl,
-        input.body,
-        input.event,
-        input.logicalSessionId,
-        attempts,
-        nextAttemptAt,
-        input.lastError ?? null
-      ]
-    );
-  });
-}
-
-export async function processDueCallbackDeliveries(limit: number) {
-  const summary = createEmptyCallbackDeliverySummary();
-  const secret = getIntegrationSharedSecret();
-
-  if (!secret) {
-    return summary;
-  }
-
-  const safeLimit = Math.min(100, Math.max(1, Math.floor(limit)));
-
-  // Claim due rows by pushing next_attempt_at forward as a lease, so a
-  // crashed run cannot strand them and concurrent runs skip them.
-  const claimed = await withRuntimeDatabaseClient(async (client) => {
-    const result = await client.query<CallbackOutboxRow>(
-      `
-        UPDATE callback_outbox
-        SET next_attempt_at = NOW() + INTERVAL '5 minutes'
-        WHERE delivery_id IN (
-          SELECT delivery_id
-          FROM callback_outbox
-          WHERE delivered_at IS NULL
-            AND abandoned_at IS NULL
-            AND next_attempt_at <= NOW()
-          ORDER BY next_attempt_at ASC
-          LIMIT $1
-          FOR UPDATE SKIP LOCKED
-        )
-        RETURNING delivery_id, callback_url, body, attempts
-      `,
-      [safeLimit]
-    );
-
-    return result.rows;
-  });
-
-  if (claimed.length === 0) {
-    return summary;
-  }
-
-  for (const row of claimed) {
-    const attempts = row.attempts + 1;
-    const result = await deliverSignedCallback({
-      body: row.body,
-      callbackUrl: row.callback_url,
-      secret
-    });
-
-    summary.processed += 1;
-
-    if (result.ok) {
-      summary.delivered += 1;
-      await withRuntimeDatabaseClient(async (client) => {
-        await client.query(
-          `
-            UPDATE callback_outbox
-            SET attempts = $2, delivered_at = NOW(), last_error = NULL
-            WHERE delivery_id = $1
-          `,
-          [row.delivery_id, attempts]
-        );
-      });
-    } else if (attempts >= CALLBACK_DELIVERY_MAX_ATTEMPTS) {
-      summary.abandoned += 1;
-      await withRuntimeDatabaseClient(async (client) => {
-        await client.query(
-          `
-            UPDATE callback_outbox
-            SET attempts = $2, abandoned_at = NOW(), last_error = $3
-            WHERE delivery_id = $1
-          `,
-          [row.delivery_id, attempts, result.error]
-        );
-      });
-    } else {
-      summary.rescheduled += 1;
-      const nextAttemptAt = new Date(
-        computeNextAttemptAtMs(attempts, Date.now())
-      ).toISOString();
-      await withRuntimeDatabaseClient(async (client) => {
-        await client.query(
-          `
-            UPDATE callback_outbox
-            SET attempts = $2, next_attempt_at = $3, last_error = $4
-            WHERE delivery_id = $1
-          `,
-          [row.delivery_id, attempts, nextAttemptAt, result.error]
-        );
-      });
-    }
-  }
-
-  return summary;
 }
