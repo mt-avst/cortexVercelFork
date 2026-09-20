@@ -2449,5 +2449,16 @@
     "spec": "src/routes/__tests__/screener-enforcement-postgres.test.ts",
     "test": "refuses to mint a native survey session when the participant has no verdict",
     "needsDatabase": true
+  },
+  {
+    "id": "session-management-slot-counter-excludes-allocated-cells",
+    "why": "cto/AdaptaLabs#135: drawnSlots and tableSlotCount used to exclude only a calendar-conflict cell, so a researcher on the Calendar or Table view could see an inflated \"N slots available\" that counted a cell overlapped by a session for another study - one no click could turn into a new session. isAllocated is the one exclusion inside isSlotPickable a full component render structurally cannot reach (protectedSlotKeys injects every session's own exact time as a slot pruneOverlaps prefers, so any generated cell this branch would flag is the one pruning already dropped in favour of it) - a code-reviewer gate proved this by removing the line and watching the whole 17-file, 116-test AdminSessionManager suite stay green, including a full-render test that CLAIMED to isolate it. The named test calls isSlotPickable directly, bypassing that pipeline, which is the only way this line is provably exercised.",
+    "file": "frontend/src/components/AdminSessionManager.tsx",
+    "anchor": "  if (isAllocated) return false;",
+    "mutation": "  if (false) return false;",
+    "runner": "vitest",
+    "project": "frontend",
+    "spec": "src/components/__tests__/AdminSessionManager.slot-counter-pickability.test.tsx",
+    "test": "excludes a slot overlapped by another session at a non-exact boundary, and nothing else"
   }
 ]
