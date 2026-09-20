@@ -877,7 +877,7 @@ const Admin: React.FC = () => {
                                 </div>
                               </td>
                               <td className="col-type" data-label="Type">
-                                <span className={`${getTypeBadgeClass(opportunity.type)} badge--${opportunity.type}`}>
+                                <span className={`admin-pill ${getTypeBadgeClass(opportunity.type)} badge--${opportunity.type}`}>
                                   {TypeGlyph && (
                                     <Icon icon={TypeGlyph} size={14} aria-hidden="true" className="lozenge__glyph" />
                                   )}
@@ -899,7 +899,7 @@ const Admin: React.FC = () => {
                                   from these fields alone (a native survey or
                                   unmoderated study with no content).
                                 */}
-                                <span className={`admin-study-status admin-study-status--${opportunity.status}`}>
+                                <span className={`admin-pill admin-study-status admin-study-status--${opportunity.status}`}>
                                   {isPublishedButNotWorking(opportunity.status, {
                                     type: opportunity.type,
                                     deliveryMode: opportunity.delivery_mode,
@@ -912,7 +912,7 @@ const Admin: React.FC = () => {
                                     : getDisplayStatus(opportunity.status)}
                                 </span>
                                 {opportunity.status === 'closed' && (
-                                  <span className="badge bg-dark ms-1">Auto-closed</span>
+                                  <span className="admin-pill admin-pill--auto-closed">Auto-closed</span>
                                 )}
                               </td>
                               {/* Recruitment: booked / capacity across the study's sessions, with
