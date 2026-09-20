@@ -2948,46 +2948,6 @@ body.admin-page .header .container {
   }
 }
 
-/* ============================================================
-   ADMIN DASHBOARD - STATUS BADGES
-   ============================================================ */
-
-.admin-dashboard .badge.status-published,
-.admin-dashboard .badge.status-draft,
-.admin-dashboard .badge.status-closed {
-  border-radius: var(--tag-radius);
-  padding: 0.4rem 0.75rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: filter var(--transition-card);
-  white-space: nowrap;
-  line-height: 1.2;
-  min-width: fit-content;
-  box-sizing: border-box;
-}
-
-.admin-dashboard .badge.status-published {
-  background-color: #28a745;
-}
-
-.admin-dashboard .badge.status-draft {
-  background-color: #ffc107;
-  color: #000000;
-}
-
-.admin-dashboard .badge.status-closed {
-  background-color: #6c757d;
-}
-
-.admin-dashboard .badge.status-published:hover,
-.admin-dashboard .badge.status-draft:hover,
-.admin-dashboard .badge.status-closed:hover {
-  filter: brightness(103%);
-}
-
 /* Type badges (lozenge) - base styles, overridden by col-type specific rules */
 .admin-dashboard table tbody td .lozenge,
 .admin-dashboard table tbody td span.lozenge {
