@@ -244,20 +244,22 @@ describe('Submit Research Request', () => {
  * ADAPTABITS IS OFFERED TO EVERY SIGNED-IN USER.
  *
  * MEASURED BEFORE THE CHANGE, with the old `user.role === 'employee'` gate
- * nested inside a `user.role !== 'superadmin'` branch - the link rendered for
- * exactly ONE of these five roles, `employee`, and for nobody at all in
- * practice: CORTEX_BETA_ALL_ADMIN lifts every signed-in adaptavist.com
- * employee to `researcher_admin`, so during the beta no session holds
- * `employee` and the entry was unreachable through the UI.
+ * nested inside a `user.role !== 'superadmin'` branch: the link rendered for
+ * `employee` only. Reinstating that gate fails four of the arms below by name.
  *
- * THE ROLES ARE WRITTEN OUT AS LITERALS rather than derived from a role union,
- * because the point of this arm is that the link no longer consults the role at
- * all. An expectation derived from whatever the code checks would agree with
- * any gate, including the one this replaces.
+ * WHO THAT ACTUALLY EXCLUDED. An earlier draft of this docblock said nobody
+ * held `employee` during the beta. That is false. CORTEX_BETA_ALL_ADMIN is
+ * bounded to an email-domain allow-list, so external testers are never lifted,
+ * keep the `employee` column default and have been seeing this link all along.
+ * The population that gains it is lifted internal staff and superadmins.
  *
- * The signed-out arm is the control. Without it, a change that rendered the
- * link unconditionally - outside the `if (!user) return []` guard - would
- * satisfy every other arm here perfectly.
+ * THE ROLES ARE LITERALS rather than derived from the role union, because the
+ * point is that the link no longer consults the role at all - an expectation
+ * derived from whatever the code checks would agree with any gate, including
+ * the one this replaces. They are the three roles the union and the database
+ * CHECK actually permit; an earlier draft also parametrised `participant` and
+ * `user`, which are not roles in this system, so those arms covered states
+ * that cannot occur.
  */
 describe('AdaptaBits link', () => {
   const renderFor = (role: string | null) => {
@@ -297,7 +299,7 @@ describe('AdaptaBits link', () => {
     return within(menu);
   };
 
-  it.each(['employee', 'researcher_admin', 'superadmin', 'participant', 'user'])(
+  it.each(['employee', 'researcher_admin', 'superadmin'])(
     'offers AdaptaBits to a %s',
     (role) => {
       const { container } = renderFor(role);
@@ -320,11 +322,63 @@ describe('AdaptaBits link', () => {
     }
   );
 
-  it('offers nothing to a signed-out visitor, who has no profile menu at all', () => {
-    const { queryByRole } = renderFor(null);
+  /**
+   * THE REAL SIGNED-OUT PROPERTY, and why the obvious control is worthless.
+   *
+   * An earlier version asserted only that no AdaptaBits link is in the document
+   * for a signed-out visitor, with a docblock claiming that would catch a change
+   * rendering the link outside the `if (!user) return []` guard. MUTATION
+   * REFUTED THAT: moving the `items.push` above the guard passed 29/29, and so
+   * did that plus removing the JSX-level `user ?` gate on the desktop toolbar.
+   * Both dropdowns call `profileMenuItems()` only inside a `user ?` branch, and
+   * Dropdown renders children only once opened - so an arm that never opens a
+   * menu cannot observe `profileMenuItems` under ANY mutation to it. It was a
+   * true assertion that could not fail for the reason it claimed.
+   *
+   * The property that IS real and IS checkable: a signed-out visitor gets no
+   * profile trigger at all, so there is no menu to open. That is asserted here
+   * by name, alongside the absence of the link.
+   */
+  it('gives a signed-out visitor no profile trigger, so there is no menu to open', () => {
+    const { container, queryByRole } = renderFor(null);
 
+    expect(
+      queryByRole('button', { name: 'User profile menu' })
+    ).not.toBeInTheDocument();
+    expect(container.querySelector('.dropdown-menu')).toBeNull();
     expect(queryByRole('link', { name: /AdaptaBits/i })).not.toBeInTheDocument();
   });
+
+  /**
+   * THE DIVIDER BUG THIS CHANGE FIRST INTRODUCED AND THEN FIXED.
+   *
+   * Pushing `div-after-adaptabits` unconditionally put it directly against
+   * `div-before-feedback` for a superadmin, who has no `request-admin` item
+   * between them - two adjacent separators in the rendered menu. Measured on
+   * the first draft: superadmin showed an adjacent pair at positions 4 and 5.
+   */
+  it.each(['employee', 'researcher_admin', 'superadmin'])(
+    'renders no doubled or leading separator in a %s menu',
+    (role) => {
+      const { container } = renderFor(role);
+      const desktop = container.querySelector(
+        '.header-actions--desktop'
+      ) as HTMLElement;
+      fireEvent.click(
+        within(desktop).getByRole('button', { name: 'User profile menu' })
+      );
+      const menu = desktop.querySelector('.dropdown-menu') as HTMLElement;
+
+      const children = Array.from(menu.children);
+      const isDivider = (el: Element) => el.classList.contains('dropdown-divider');
+
+      expect(children.findIndex(isDivider)).not.toBe(0);
+      const adjacent = children.filter(
+        (el, i) => i > 0 && isDivider(el) && isDivider(children[i - 1])
+      );
+      expect(adjacent).toHaveLength(0);
+    }
+  );
 });
 
 /**
