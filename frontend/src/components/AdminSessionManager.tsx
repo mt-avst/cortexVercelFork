@@ -450,7 +450,7 @@ const slotConflictsWithEvents = (
  * `AdminSessionManager.out-of-range-sessions` suites are what would notice a
  * drift.
  */
-const isSlotPickable = (
+export const isSlotPickable = (
   slot: { start: string; end: string },
   events: ReadonlyArray<{ start: string; end: string }>,
   sessions: ReadonlyArray<{ start_time: string; end_time: string }>,
@@ -489,6 +489,20 @@ const isSlotPickable = (
 
   // A session belonging to another study that overlaps this slot without
   // being it - excludes exact matches, which are handled above as sessions.
+  //
+  // UNREACHABLE from `drawnSlots`/`tableSlotCount`/`actionable` as things
+  // stand: `protectedSlotKeys` (built from this same `sessions` array)
+  // injects every session's own exact time as a slot `pruneOverlaps` prefers,
+  // and by the identical overlap test used here, ANY generated slot this
+  // branch would flag is one `pruneOverlaps` has already dropped in favour of
+  // that exact-match slot - which then hits the `isExistingSession` check
+  // above instead. Kept for `isSlotPickable` callers that do NOT run their
+  // input through that pruning (a direct unit test is the only place this
+  // branch is provably exercised today; see
+  // `AdminSessionManager.slot-counter-pickability.test.tsx`), and because
+  // `describeSlot`'s own separate `isSlotAllocated` copy inside
+  // `CalendarView` has the same reachability question and is out of scope
+  // here (cto/AdaptaLabs#135 is the two counters, not that audit).
   const isAllocated = sessions.some(session => {
     const sessionStart = new Date(session.start_time);
     const sessionEnd = new Date(session.end_time);

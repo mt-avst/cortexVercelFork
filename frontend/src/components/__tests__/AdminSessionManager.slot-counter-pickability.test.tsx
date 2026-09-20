@@ -3,7 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import AdminSessionManager from '../AdminSessionManager';
+import AdminSessionManager, { isSlotPickable } from '../AdminSessionManager';
 import { getAvailability, getMyCalendarEvents } from '../../api/client';
 
 /**
@@ -25,6 +25,16 @@ import { getAvailability, getMyCalendarEvents } from '../../api/client';
  * individually was invisible to the whole 17-file, 110-test
  * `AdminSessionManager*` suite. Confirmed by a code-reviewer gate that
  * removed each exclusion in turn and ran the suite.
+ *
+ * `isAllocated` gets a DIRECT unit test rather than a full-render arm like
+ * the other three: a full render cannot reach that branch at all (see the
+ * comment on `isAllocated` itself), because `protectedSlotKeys` injects every
+ * session's own exact time as a slot `pruneOverlaps` prefers, and the
+ * overlapping generated cell `isAllocated` would have flagged is the exact
+ * one `pruneOverlaps` already dropped in favour of it - proven by hand below
+ * (a full-render arm claiming to isolate `isAllocated` kept passing with that
+ * branch mutated away, because the fixture's "allocated" session was silently
+ * excluding the cell via `isExistingSession` instead).
  *
  * System time is pinned (`Date` only - real timers stay real) so a slot's
  * past/future-ness does not depend on the wall-clock hour the suite runs at.
@@ -170,21 +180,6 @@ describe('AdminSessionManager - isSlotPickable exclusions, isolated one at a tim
     expect(await readHeadlineCount()).toBe(1);
   });
 
-  it('excludes an allocated cell (overlapped by another study’s session, not an exact match), and nothing else', async () => {
-    mockAvailability([slotAt(day, 11, 30), slotAt(day, 12, 30)]);
-    const allocated = sessionRow(
-      'alloc-1',
-      at(day, 11, 30).toISOString(),
-      new Date(at(day, 11, 30).getTime() + 15 * 60 * 1000).toISOString()
-    );
-    renderManager({ sessions: [allocated] });
-    await settle();
-    await setStartDateToFixedDay();
-    await settle();
-
-    expect(await readHeadlineCount()).toBe(1);
-  });
-
   it('excludes an existing/confirmed session cell (exact match), and nothing else', async () => {
     mockAvailability([slotAt(day, 12, 0), slotAt(day, 12, 30)]);
     const confirmed = sessionRow('conf-1', at(day, 12, 0).toISOString(), at(day, 12, 30).toISOString());
@@ -197,10 +192,45 @@ describe('AdminSessionManager - isSlotPickable exclusions, isolated one at a tim
   });
 });
 
+describe('isSlotPickable - the isAllocated branch, direct (#135)', () => {
+  // Bypasses the whole component and its pruning pipeline on purpose: see the
+  // module docblock above for why a full render cannot isolate this branch.
+  const events: never[] = [];
+  const confirmedSlots = new Set<string>();
+
+  it('excludes a slot overlapped by another session at a non-exact boundary, and nothing else', () => {
+    const slot = slotAt(day, 11, 30);
+    const overlapping = sessionRow(
+      'alloc-1',
+      at(day, 11, 30).toISOString(),
+      new Date(at(day, 11, 30).getTime() + 15 * 60 * 1000).toISOString()
+    );
+
+    expect(isSlotPickable(slot, events, [overlapping], confirmedSlots)).toBe(false);
+  });
+
+  it('does not exclude a slot the same session merely abuts', () => {
+    const slot = slotAt(day, 12, 0);
+    // Ends exactly as `slot` starts - adjacent, not overlapping.
+    const abutting = sessionRow('abut-1', at(day, 11, 0).toISOString(), at(day, 12, 0).toISOString());
+
+    expect(isSlotPickable(slot, events, [abutting], confirmedSlots)).toBe(true);
+  });
+
+  it('does not exclude a slot with no session anywhere near it', () => {
+    const slot = slotAt(day, 12, 30);
+
+    expect(isSlotPickable(slot, events, [], confirmedSlots)).toBe(true);
+  });
+});
+
 describe('AdminSessionManager - all four exclusions together, and the two views agree (#135)', () => {
-  // 08:00 past, 11:00 conflict, 11:30 allocated, 12:00 confirmed/existing
-  // session, 12:30 the one genuinely pickable cell. Every excluded cell has
-  // exactly one reason to be excluded.
+  // 08:00 past, 11:00 conflict, 11:30 & 12:00 existing-session exclusions
+  // (11:30's session overlaps non-exactly, but see the note above: pruning
+  // turns it into an exact-match existing-session cell before the counter
+  // ever filters it), 12:30 the one genuinely pickable cell. Every excluded
+  // cell has a distinct SOURCE (a different session or event), even though
+  // two of them resolve through the same `isExistingSession` check.
   const buildFixture = () => {
     mockAvailability([
       slotAt(day, 8, 0),
