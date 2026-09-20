@@ -36,8 +36,15 @@
      register ground - code-reviewer finding, row 15/Decision 4/5). */
   --accent-strong: var(--accent-fill-text-safe);
   --accent-text: var(--register-accent-text);
-  --success: #2f6f5e;
-  --danger: #a63d40;
+  /* Status hues flow from the Momentum status tokens rather than the two
+     hardcoded hexes this surface used to carry - one source of truth for the
+     green/red across the app. These are the AA-safe FILL values (white text
+     sits on them: the done badge, the pass tick, the fail chip), identical in
+     both themes; the brighter text-role greens/reds live in
+     --status-success-text/--status-danger-text if a text-on-ground legibility
+     pass is wanted later. */
+  --success: var(--status-success);
+  --danger: var(--status-danger);
   --shadow: var(--register-shadow);
   --radius-btn: 10px;
   --font-display: "Fraunces", Georgia, "Times New Roman", serif;
@@ -418,32 +425,34 @@
 }
 
 .fh-recording .journey-frame {
-  /* Light half: the prototype-faithful paper/ink pair this frame always had.
-     --j-line-2/--j-line-strong already ride --ink (above), so they cross
-     theme for free; these three are solid fills with no --ink derivation,
-     so they need their own dark half below (Decision 4). */
-  --j-card: #fffcf6;
-  --j-paper-2: #f1ebe0;
+  /* Surfaces and borders converge onto the Momentum *-current tokens, so this
+     frame reads as one of the app's cards in both themes rather than a ported
+     paper island (Decision 4/5). --surface-*-current and --border-*-current
+     each carry a light and a dark half already, so the bespoke paper/ink pair
+     and its dark override are retired: the FirstHand borders rode --ink, which
+     is near-white in dark and drew the harsh white outlines this surface used
+     to show. --j-ink-3 keeps its own light value and dark override below,
+     being a muted caption ink rather than a surface or line. */
+  --j-card: var(--surface-card-current);
+  --j-paper-2: var(--surface-panel-current);
   --j-ink-3: #8b95a3;
-  --j-line-2: color-mix(in srgb, var(--ink) 22%, transparent);
-  --j-line-strong: color-mix(in srgb, var(--ink) 40%, transparent);
+  --j-line-2: var(--border-subtle-current);
+  --j-line-strong: var(--border-strong-current);
   font-size: 14px;
   line-height: 1.5;
   color: var(--ink);
 }
 
 body.theme-dark .fh-recording .journey-frame {
-  --j-card: var(--register-card);
-  --j-paper-2: color-mix(in srgb, var(--ink) 6%, var(--bg));
   --j-ink-3: var(--muted);
 }
 
 .fh-recording .journey-app {
   display: grid;
   grid-template-columns: 200px 1fr;
-  border: 1.5px solid var(--ink);
+  border: 1px solid var(--border-subtle-current);
   background: var(--bg);
-  box-shadow: 7px 7px 0 color-mix(in srgb, var(--ink) 8%, transparent);
+  box-shadow: var(--shadow-card-current);
 }
 
 .fh-recording .journey-nav {
@@ -564,8 +573,8 @@ body.theme-dark .fh-recording .journey-frame {
 }
 
 .fh-recording .journey-block--hero {
-  border-color: var(--ink);
-  border-width: 2px;
+  border-color: var(--border-strong-current);
+  border-width: 1.5px;
 }
 
 .fh-recording .journey-block-head {
