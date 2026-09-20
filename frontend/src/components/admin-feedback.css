@@ -202,3 +202,37 @@
     max-width: 100%;
   }
 }
+
+/*
+ * THE TWO ALERTS, moved out of inline `style={{}}` by cto/AdaptaLabs#141.
+ *
+ * Both carried hardcoded rgba literals - `rgba(220, 53, 69, *)` for the load
+ * error and `rgba(255, 193, 7, *)` for the truncation notice - which are
+ * bootstrap's danger and warning reds baked at a fixed alpha, so they rendered
+ * identically whatever the theme and ignored the status tokens entirely.
+ *
+ * The tint is expressed with `color-mix` against the status token rather than
+ * a second literal, which is the pattern already used elsewhere in this repo
+ * (see `_components.css`, the `--status-danger` and `--status-success` tints).
+ * The percentages match the alphas they replace, so the rendered weight in
+ * dark is unchanged and light now gets a tint derived from its own token.
+ *
+ * TEXT COLOUR IS NOT TINTED. `--status-danger-text` and `--text-primary` are
+ * the pairs designed to sit on a surface and clear AA in both themes;
+ * `--status-danger` itself is a 3.15:1 signal colour, fine for a border and
+ * not for the words.
+ */
+.feedback-alert {
+  border-radius: 8px;
+}
+
+.feedback-alert--danger {
+  background-color: color-mix(in srgb, var(--status-danger) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--status-danger) 30%, transparent);
+}
+
+.feedback-alert--warning {
+  background-color: color-mix(in srgb, var(--status-warning) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--status-warning) 30%, transparent);
+  color: var(--text-primary);
+}

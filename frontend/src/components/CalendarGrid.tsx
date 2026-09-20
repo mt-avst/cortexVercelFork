@@ -1176,9 +1176,15 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                       marginBottom: '4px',
                       fontSize: 'var(--font-size-small, 0.875rem)',
                       fontWeight: 600,
-                      // cto/AdaptaLabs#141: was `var(--color-emerald-500, #10b981)` -
-                      // that token is never defined anywhere, so this always rendered
-                      // the literal fallback. Swapping in the one green token that IS
+                      // cto/AdaptaLabs#141: this was an undefined-token fallback on
+                      // --color-emerald-500, a token defined nowhere, so it always
+                      // rendered its literal fallback whatever the theme.
+                      //
+                      // The old value is DESCRIBED rather than quoted on purpose. The
+                      // guard in styles/__tests__/undefined-token-color-fallback.test.ts
+                      // scans raw file content, comments included, so a comment quoting
+                      // the old `var(--token, #hex)` shape reports itself as a live
+                      // offence and keeps the entry pinned in KNOWN_DEBT for ever. Swapping in the one green token that IS
                       // defined (--color-analytics-green, #10B981, byte-identical to
                       // the old fallback) would have kept the fix cosmetic but still
                       // broken: it measures 2.28:1 on the light cream ground, well

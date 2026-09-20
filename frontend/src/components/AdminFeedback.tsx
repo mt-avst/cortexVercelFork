@@ -223,11 +223,7 @@ const AdminFeedback: React.FC = () => {
 
   if (error) {
     return (
-      <div className="alert feedback-error-text" style={{
-        backgroundColor: 'rgba(220, 53, 69, 0.15)',
-        border: '1px solid rgba(220, 53, 69, 0.3)',
-        borderRadius: '8px'
-      }}>
+      <div className="alert feedback-error-text feedback-alert feedback-alert--danger">
         <AlertTriangle size={18} className="me-2" />
         {error}
         <button className="btn btn-outline-danger btn-sm ms-3" onClick={loadFeedback}>
@@ -273,13 +269,7 @@ const AdminFeedback: React.FC = () => {
         <div
           data-testid="feedback-truncation-notice"
           role="status"
-          className="alert d-flex align-items-center gap-2 mb-3"
-          style={{
-            backgroundColor: 'rgba(255, 193, 7, 0.12)',
-            border: '1px solid rgba(255, 193, 7, 0.3)',
-            color: 'var(--text-primary)',
-            borderRadius: '8px'
-          }}
+          className="alert d-flex align-items-center gap-2 mb-3 feedback-alert feedback-alert--warning"
         >
           <AlertTriangle size={16} />
           <span>

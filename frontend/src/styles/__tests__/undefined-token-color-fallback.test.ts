@@ -51,18 +51,25 @@ for (const file of cssFiles) {
 const COLOR_FALLBACK = /var\((--[a-z0-9-]+)\s*,\s*(#[0-9a-f]{3,8}|rgba?\([^)]*\))\)/gi;
 
 /**
- * Pre-existing offences outside #140's scope (opportunity-analytics and
- * session-review only). ponytail: known debt, not fixed here - #140 named
- * seven specific files. Each entry is `file:token`; remove a line as its
- * file is fixed so this allowlist only ever shrinks. A NEW occurrence
- * anywhere, including a new line in an allowlisted file, still fails.
+ * Pre-existing offences, carried as an allowlist so the guard can be strict
+ * about everything else. Each entry is `file:token`; remove a line as its file
+ * is fixed, so this list only ever shrinks. A NEW occurrence anywhere,
+ * including a new line in an allowlisted file, still fails.
+ *
+ * MEASURED DOWN FROM SIX TO ONE by cto/AdaptaLabs#141, which fixed the five
+ * others in source. The remaining debt was established by emptying this set
+ * and reading what the guard still reported, rather than by reasoning about
+ * which entries the fix had covered.
+ *
+ * THE GUARD READS RAW FILE CONTENT, COMMENTS INCLUDED. So a comment that
+ * QUOTES a `var(--undefined-token, #hex)` shape - the obvious way to record
+ * what a line used to be - reports itself as a live offence and pins its own
+ * entry here for ever, long after the code is fixed. #141 hit exactly that on
+ * `components/CalendarGrid.tsx:--color-emerald-500`: the source was fixed and
+ * the entry still could not be removed, because the comment explaining the fix
+ * matched the regex. Describe an old value, do not quote it.
  */
 const KNOWN_DEBT = new Set([
-  'components/CalendarGrid.tsx:--color-emerald-500',
-  'components/OpportunityForm/ConsentStep.tsx:--border-color',
-  'components/OpportunityForm/DescribeIt.tsx:--fs-border',
-  'components/OpportunityForm/ExternalLinkTab.tsx:--fs-border',
-  'styles/_components.css:--dynamic-hover-color',
   'styles/_components.css:--accent-border-color'
 ]);
 
