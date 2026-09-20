@@ -209,6 +209,18 @@ export interface Opportunity {
    * screener, or on an unauthenticated request.
    */
   screenerStatus?: ScreenerStatus;
+  /**
+   * The author's affirmation that the external tool handling this study's
+   * hand-off collects its own consent (cto/AdaptaLabs#136). Owner/admin-only -
+   * stripped from the participant payload the same way owner identity is (see
+   * publicOpportunity.ts), because it is authoring metadata about who
+   * confirmed what, not a fact a participant needs. NULL means "never
+   * recorded": every opportunity that predates this column, and stays
+   * distinct from an explicit false. Does not gate publish - that remains an
+   * open compliance decision (see the ponytail beside the publish guards in
+   * backend/src/routes/opportunities.ts).
+   */
+  external_consent_confirmed?: boolean | null;
   created_at: string;
   updated_at: string;
   /**
@@ -275,6 +287,10 @@ export interface CreateOpportunityRequest {
   // The eligibility screener. Absent means no screener. Validated by
   // screenerSchema (shared/screener.ts) wired into the create schema.
   screener?: Screener;
+  // The author's affirmation for an external hand-off (see
+  // Opportunity.external_consent_confirmed). Absent stores null - "never
+  // recorded" - matching the update schema's default.
+  external_consent_confirmed?: boolean;
 }
 
 export interface UpdateOpportunityRequest {
@@ -306,6 +322,10 @@ export interface UpdateOpportunityRequest {
   // replaces it wholesale. Validated by screenerSchema wired into the update
   // schema.
   screener?: Screener | null;
+  // The author's affirmation for an external hand-off (see
+  // Opportunity.external_consent_confirmed). Null resets it back to "never
+  // recorded"; a boolean replaces it.
+  external_consent_confirmed?: boolean | null;
 }
 
 // ============================================================================

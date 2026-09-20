@@ -320,6 +320,21 @@ export async function runMigrations() {
       ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS target_roles JSONB
     `);
 
+    // External-delivery consent affirmation (cto/AdaptaLabs#136). The author's
+    // checkbox affirming the external tool handling a hand-off study collects
+    // its own consent - previously CLIENT-ONLY (OpportunityFormData in
+    // shared/types), dropped from every save payload and defaulted on load to
+    // `status === 'published'`, so an author's confirmation vanished the
+    // moment the study was reopened. NULL means "never recorded" - every
+    // opportunity that predates this column - and stays distinguishable from
+    // an explicit false; no backfill. Does NOT gate publish: see the ponytail
+    // at the publish-validation call sites in routes/opportunities.ts. Owner/
+    // admin-only, like owner identity - redacted from the participant payload
+    // in utils/publicOpportunity.ts. Idempotent add for existing databases.
+    await client.query(`
+      ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS external_consent_confirmed BOOLEAN
+    `);
+
     // Per-participant screener verdicts - the enforcement key. The three apply
     // chokepoints refuse anyone without a 'qualified' row here. questions_snapshot
     // records the screener as it was evaluated, so editing the opportunity's

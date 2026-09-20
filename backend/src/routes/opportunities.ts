@@ -193,6 +193,12 @@ export const UPDATABLE_OPPORTUNITY_COLUMNS: ReadonlySet<string> = new Set([
   // audience. Same JSONB handling as the screener in the PATCH loop; null or an
   // empty list clears it. Public - no redaction, unlike the screener.
   'target_roles',
+  // External-delivery consent affirmation (cto/AdaptaLabs#136): a plain
+  // boolean, so it needs no special branch in the PATCH loop below - null
+  // resets it to "never recorded", a boolean replaces it. Owner/admin-only,
+  // redacted from the participant payload like owner identity (see
+  // publicOpportunity.ts).
+  'external_consent_confirmed',
   // Moderated consent (#79): live sessions and interviews only. Allow-listed
   // here - which both enforcement sites read - and additionally type-gated by
   // resolveModeratedConsentWrite, because membership in this Set says a column
@@ -1814,6 +1820,10 @@ router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOp
       // stored as null, matching the database path.
       target_roles:
         data.target_roles && data.target_roles.length > 0 ? data.target_roles : null,
+      // External-delivery consent affirmation (cto/AdaptaLabs#136). Absent
+      // stores null - "never recorded" - matching the database path.
+      external_consent_confirmed:
+        data.external_consent_confirmed === undefined ? null : data.external_consent_confirmed,
       start_date: data.start_date || null,
       end_date: data.end_date || null,
       created_at: new Date(),
@@ -1895,6 +1905,13 @@ router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOp
   // `shared/firsthand/publish-readiness`, so the Review step can preview this
   // refusal by asking the same function rather than restating it. `linkedStudyId`
   // is already trimmed above, which is why the boolean is safe to pass straight in.
+  //
+  // ponytail: external_consent_confirmed (cto/AdaptaLabs#136) is persisted but
+  //   does NOT gate this publish check, whatever its value. Whether an
+  //   external-delivery study should be refused publication without it is an
+  //   open compliance decision for Nick, not a call this fix makes.
+  //   -> cto/AdaptaLabs#136, add a `PublishReadinessInput` field and a branch
+  //      here (and at the PATCH call site below) if that decision lands as yes.
   const createPublishProblem = findPublishProblem({
     willBePublished: data.status === 'published',
     type: data.type,
@@ -1959,8 +1976,8 @@ router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOp
       owner_user_id, external_link_optional, firsthand_study_id, participant_type_required,
       participant_type_specific_details, start_date, end_date, delivery_mode,
       consent_text, consent_template_id, consent_template_version, screener,
-      target_roles
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20::jsonb, $21::jsonb)
+      target_roles, external_consent_confirmed
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20::jsonb, $21::jsonb, $22)
     RETURNING *
   `;
 
@@ -2109,7 +2126,11 @@ router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOp
     // absent list stores null - the study advertises no specific audience.
     data.target_roles && data.target_roles.length > 0
       ? JSON.stringify(data.target_roles)
-      : null
+      : null,
+    // External-delivery consent affirmation ($22, cto/AdaptaLabs#136). A plain
+    // boolean column - no jsonb cast needed. Absent in the request binds null,
+    // the honest "never recorded" value.
+    data.external_consent_confirmed ?? null
   ];
 
   let result;
@@ -2488,6 +2509,9 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
       hasBookableSlot = slotCount.rowCount ? slotCount.rowCount > 0 : false;
     }
 
+    // ponytail: external_consent_confirmed (cto/AdaptaLabs#136) is not
+    //   consulted here either - see the create call site's ponytail above for
+    //   why, and for the upgrade path if that decision lands as yes.
     const updatePublishProblem = findPublishProblem({
       willBePublished: true,
       type: existingType,
