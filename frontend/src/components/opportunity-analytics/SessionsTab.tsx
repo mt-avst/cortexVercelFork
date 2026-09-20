@@ -195,7 +195,7 @@ const SessionsTab: React.FC<{
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid var(--cortex-border, rgba(255,255,255,0.08))' }}>
+              <tr style={{ borderBottom: '1px solid var(--border-subtle-current)' }}>
                 <th
                   style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}
                   scope="col"
@@ -233,7 +233,7 @@ const SessionsTab: React.FC<{
               {sortedSessions.map((session) => (
                 <tr
                   key={session.sessionId}
-                  style={{ borderBottom: '1px solid var(--cortex-border, rgba(255,255,255,0.04))' }}
+                  style={{ borderBottom: '1px solid var(--border-subtle-current)' }}
                 >
                   <td style={{ padding: '10px 12px' }}>
                     <span style={{ fontWeight: 500 }}>

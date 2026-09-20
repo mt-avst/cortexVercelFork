@@ -72,7 +72,7 @@ const ArtifactRow: React.FC<{
   };
 
   return (
-    <li style={{ padding: '8px 0', borderBottom: '1px solid var(--cortex-border, rgba(255,255,255,0.04))' }}>
+    <li style={{ padding: '8px 0', borderBottom: '1px solid var(--border-subtle-current)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
         <span className="cortex-badge" style={{ textTransform: 'capitalize' }}>{artifact.kind}</span>
         <span style={{ fontWeight: 500 }}>{artifact.file_name}</span>
@@ -143,7 +143,7 @@ const ArtifactRow: React.FC<{
         </video>
       )}
       {playing && playbackError && (
-        <p role="alert" style={{ marginTop: '6px', fontSize: '0.75rem', color: 'var(--bs-danger, #dc3545)' }}>
+        <p role="alert" style={{ marginTop: '6px', fontSize: '0.75rem', color: 'var(--status-danger-text)' }}>
           {playbackError}
         </p>
       )}
@@ -202,7 +202,7 @@ const BookingArtifactsSection: React.FC<BookingArtifactsSectionProps> = ({
       {loading && artifacts === undefined ? (
         <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Loading artefacts...</p>
       ) : loadError ? (
-        <p role="alert" style={{ fontSize: '0.8rem', color: 'var(--bs-danger, #dc3545)' }}>
+        <p role="alert" style={{ fontSize: '0.8rem', color: 'var(--status-danger-text)' }}>
           {loadError}{' '}
           <button
             type="button"
@@ -283,7 +283,7 @@ const BookingArtifactsSection: React.FC<BookingArtifactsSectionProps> = ({
               </span>
             )}
             {actionError && (
-              <span role="alert" style={{ fontSize: '0.75rem', color: 'var(--bs-danger, #dc3545)' }}>
+              <span role="alert" style={{ fontSize: '0.75rem', color: 'var(--status-danger-text)' }}>
                 {actionError}
               </span>
             )}
