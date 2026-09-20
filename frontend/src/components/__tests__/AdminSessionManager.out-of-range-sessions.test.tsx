@@ -243,15 +243,22 @@ describe('AdminSessionManager - a session outside the drawn hours (#95)', () => 
     // equality. cto/AdaptaLabs#135 moved that headline onto `isSlotPickable`,
     // which - like the historical D11 `gridBookableCount` it restores - counts
     // an existing session as NOT "available" (it is booked capacity, not open
-    // capacity), so the headline no longer includes either session here at
-    // all and cannot stand in for "drawn once" any more. Assert the DOM
-    // directly instead: it fails BOTH ways this always meant to catch - a
-    // gutter row dropped entirely, and one drawn TWICE by a partition that
-    // forgot to remove the slot from the timeline.
+    // capacity), so the headline no longer includes either session here and
+    // cannot stand in for "drawn once" any more on its own. Assert the DOM
+    // directly for that property instead: it fails BOTH ways this always
+    // meant to catch - a gutter row dropped entirely, and one drawn TWICE by
+    // a partition that forgot to remove the slot from the timeline.
     renderManager({ sessions: [sessionAt('s-0600', 6, 0), sessionAt('s-1415', 14, 15)] });
     await settle();
 
     expect(screen.getAllByText(labelFor(6, 0))).toHaveLength(1);
     expect(screen.getAllByText(labelFor(14, 15))).toHaveLength(1);
+
+    // And the headline reads 0, not 2: both are existing sessions, and
+    // `isSlotPickable` excludes an existing session unconditionally (row 8 /
+    // #135). A regression that stopped excluding them - the exact defect
+    // #135 fixed - would read 2 here as it used to.
+    const counted = Number(/(\d+) slots available/.exec(document.body.textContent ?? '')?.[1]);
+    expect(counted).toBe(0);
   });
 });
