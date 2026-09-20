@@ -38,13 +38,16 @@
   --accent-text: var(--register-accent-text);
   /* Status hues flow from the Momentum status tokens rather than the two
      hardcoded hexes this surface used to carry - one source of truth for the
-     green/red across the app. These are the AA-safe FILL values (white text
-     sits on them: the done badge, the pass tick, the fail chip), identical in
-     both themes; the brighter text-role greens/reds live in
-     --status-success-text/--status-danger-text if a text-on-ground legibility
-     pass is wanted later. */
+     green/red across the app. --success/--danger are the AA-safe FILL values
+     (white text sits on them: the done badge, the pass tick, the fail chip),
+     identical in both themes. --success-text/--danger-text are the TEXT role:
+     they equal the fill in light and brighten in dark, so status COPY on a
+     surface or a tint stays legible on the dark ground where the fill hue would
+     not. Fills use --success/--danger; copy uses --success-text/--danger-text. */
   --success: var(--status-success);
   --danger: var(--status-danger);
+  --success-text: var(--status-success-text);
+  --danger-text: var(--status-danger-text);
   --shadow: var(--register-shadow);
   --radius-btn: 10px;
   --font-display: "Fraunces", Georgia, "Times New Roman", serif;
@@ -195,7 +198,7 @@
 
 .fh-recording .chip--danger {
   background: rgba(166, 61, 64, 0.12);
-  color: var(--danger);
+  color: var(--danger-text);
 }
 
 .fh-recording.session-layout {
@@ -527,7 +530,7 @@ body.theme-dark .fh-recording .journey-frame {
   gap: 7px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--danger);
+  color: var(--danger-text);
 }
 
 .fh-recording .journey-nav-lock-dot {
@@ -798,7 +801,7 @@ body.theme-dark .fh-recording .journey-frame {
 }
 
 .fh-recording .journey-doneline span {
-  color: var(--success);
+  color: var(--success-text);
 }
 
 .fh-recording .journey-launch {
@@ -848,7 +851,7 @@ body.theme-dark .fh-recording .journey-frame {
 
 .fh-recording .journey-launch-step.is-done .journey-launch-num {
   border-color: var(--success);
-  color: var(--success);
+  color: var(--success-text);
 }
 
 .fh-recording .journey-launch-body {
@@ -1000,7 +1003,7 @@ body.theme-dark .fh-recording .journey-frame {
 }
 
 .fh-recording .pip-trust-rec.is-stopped {
-  color: var(--danger);
+  color: var(--danger-text);
   font-weight: 700;
 }
 
@@ -1047,7 +1050,7 @@ body.theme-dark .fh-recording .journey-frame {
 }
 
 .fh-recording .journey-verdict-tick {
-  color: var(--success);
+  color: var(--success-text);
 }
 
 .fh-recording .journey-verdict-detail {
@@ -1277,7 +1280,7 @@ body.theme-dark .fh-recording .journey-frame {
 }
 
 .fh-recording .journey-rail-val--warn {
-  color: var(--danger);
+  color: var(--danger-text);
   font-weight: 600;
 }
 
@@ -1365,14 +1368,14 @@ body.theme-dark .fh-recording .journey-frame {
 
 .fh-recording .journey-frame .chip--live {
   border-color: var(--danger);
-  color: var(--danger);
+  color: var(--danger-text);
   font-weight: 600;
 }
 
 .fh-recording .journey-frame .chip--danger {
   border-color: var(--danger);
   background: rgba(166, 61, 64, 0.1);
-  color: var(--danger);
+  color: var(--danger-text);
 }
 
 .fh-recording .journey-frame .runner-header--lean h1 {
