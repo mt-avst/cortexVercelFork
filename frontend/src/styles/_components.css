@@ -2757,8 +2757,15 @@ body.admin-page .header .container {
   isolation: isolate;
 }
 
-.admin-dashboard table.admin-data-table tbody td.col-status > * {
+.admin-dashboard table.admin-data-table tbody td.col-status > *:not(.admin-pill) {
   display: inline-block;
+  margin-right: 0.25rem;
+}
+
+/* #142: excluding `.admin-pill` above (so its own `display` is no longer
+   fought over by this rule) also excludes it from the margin-right above,
+   so restate the gutter here for a pill on its own. */
+.admin-dashboard table.admin-data-table tbody td.col-status > .admin-pill {
   margin-right: 0.25rem;
 }
 
@@ -2778,10 +2785,17 @@ body.admin-page .header .container {
   vertical-align: middle;
 }
 
-.admin-dashboard table tbody td:not(:first-child) > span,
+.admin-dashboard table tbody td:not(:first-child) > span:not(.admin-pill),
 .admin-dashboard table tbody td:not(:first-child) > small,
 .admin-dashboard table tbody td:not(:first-child) > div:not(.dropdown):not(.admin-action-group) {
   display: inline-block;
+  text-align: center;
+}
+
+/* #142: an `.admin-pill` still wants its parent cell centred - excluding it
+   from `display: inline-block` above so it keeps the primitive's own
+   `inline-flex` does not exclude it from centring. */
+.admin-dashboard table tbody td:not(:first-child) > span.admin-pill {
   text-align: center;
 }
 
@@ -3169,12 +3183,15 @@ body.admin-page .header .container {
 
 /* Box metrics (display/height/padding/font-size/line-height) for the type
    lozenge in this column now come from the shared `.admin-pill` primitive
-   (#142) - see "Shared pill primitive" above. */
+   (#142) - see "Shared pill primitive" below, near `.admin-study-status`. */
 
-/* Column 3: Status - centered badges. Wide enough for "Auto-closed", the widest
-   badge that can appear here, which a closed study renders under its status. */
+/* Column 3: Status - centered badges. 10% measured 91.8px wide at common
+   desktop widths, one line short of fitting "Auto-closed" at the shared
+   primitive's own metrics (#142, code review HIGH 1: 28.38px tall over two
+   lines instead of 24px on one). Measured at 12%: 108px, 24.00px tall,
+   86.5px wide, one line. */
 .admin-data-table .col-status {
-  width: 10%;
+  width: 12%;
   min-width: 100px;
   text-align: center;
 }
@@ -14033,11 +14050,23 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
    The second rule restates the metrics scoped to the studies table's own
    ancestor chain because two legacy rules elsewhere in this file
    (`.admin-dashboard table.admin-data-table tbody td.col-status > *` and
-   `.admin-dashboard table tbody td:not(:first-child) > span`) force
+   `.admin-dashboard table tbody td:not(:first-child) > span`) used to force
    `display: inline-block` on any direct child of these cells regardless of
-   its own class, and both outrank a bare `.admin-pill`/`.admin-study-status`
-   selector on specificity alone. Matching their ancestor chain (plus the
-   `.admin-pill` class) wins instead of fighting them. */
+   its own class, outranking a bare `.admin-pill`/`.admin-study-status`
+   selector on specificity alone. Both now carry a `:not(.admin-pill)`
+   exception (see their own definitions), which removes the root cause; this
+   rule stays because those two legacy rules are not the only source of
+   drift - `.lozenge`'s own base rule and `.admin-study-status`'s own base
+   rule (below) also set height/font-size/line-height, at a specificity a
+   bare `.admin-pill` still cannot reach without this ancestor-scoped
+   restatement.
+   ponytail: the concrete height/padding/font-size values are duplicated
+   here rather than read from `.admin-pill` once - the next rule this
+   ancestor chain adds will win by file order, not by any principled
+   priority, same as it did before this fix. Upgrade path: scope the
+   `.lozenge`/`.admin-study-status` base rules' own box metrics the same
+   way the two legacy overrides were scoped above, then this whole block
+   collapses into the bare `.admin-pill` class with nothing left to fight. */
 .admin-pill {
   display: inline-flex;
   align-items: center;
@@ -14063,28 +14092,49 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
   box-sizing: border-box;
 }
 
-/* Auto-closed marker - was a bootstrap `.badge.bg-dark`, a fourth primitive
-   with its own display/height/vertical-align. Same colour as before
-   (#212529 / white, matching `.bg-dark` in _utilities.css), now on the
-   shared primitive. */
-.admin-pill--auto-closed {
-  background: #212529;
-  color: #FFFFFF;
-  border: 1px solid transparent;
-  border-radius: var(--radius-full);
+/* The status pill is the one whose label is not a fixed short word -
+   `PUBLISHED_NOT_WORKING_LABEL` ("Published, not working") already
+   overflowed this fixed-width cell on main. `justify-content: center` on
+   the shared primitive turned that overflow into 32px of glyph-on-glyph
+   overlap with the Type column's lozenge (#142 code review, HIGH 2) -
+   centred overflow spills both ways, where main's plain inline-block only
+   spilled right into empty space.
+
+   `text-overflow: ellipsis` does not paint an ellipsis on the flex
+   CONTAINER's own overflowing text (tried first - Chrome hard-clips both
+   ends with no "…", which is less readable than main's uncentred spill it
+   was meant to fix, not more). The label text is wrapped in its own
+   `.admin-study-status__label` flex-item span instead: `min-width: 0`
+   lets that one item shrink below its content size within the pill's
+   constrained width, and the ellipsis then renders correctly on a
+   genuine block-level overflow at the item's own end - the pill itself
+   needs no rule of its own here. Every other status label is short
+   enough that this is a no-op: shrinking and ellipsis only do anything
+   once an item holds more content than its available width allows. */
+.admin-study-status__label {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* "Auto-closed" is the one pill that can legitimately run out of room: the
-   studies table runs `table-layout: fixed` below and col-status's declared
-   min-width is not honoured under it, so at narrower table widths this was
-   clipping to "AUTO-CLO" (finding 2, #142). Letting it wrap rather than
-   forcing nowrap keeps the label intact instead of truncating it. */
-.admin-dashboard table.admin-data-table tbody td.col-status .admin-pill--auto-closed {
-  white-space: normal;
-  text-align: center;
-  line-height: 1.2;
-  height: auto;
-  min-height: 24px;
+/* Auto-closed marker - was a bootstrap `.badge.bg-dark`, a fourth primitive
+   with its own display/height/vertical-align and none of the uppercase/
+   tracking the other two pills carry. Same colour as before (background/
+   text tokens below resolve to the same #212529 / #FFFFFF as `.bg-dark` in
+   _utilities.css) - dark mode overrides `color` from `_themes.css`'s
+   higher-priority `themes` layer regardless of what is declared here (see
+   `body.theme-dark .admin-dashboard table tbody td span:not(.badge):not(.lozenge)`),
+   same as it already did for the bootstrap badge this replaces - not a
+   regression, and not fixable from this file. */
+.admin-pill--auto-closed {
+  background: var(--admin-pill-auto-closed-bg);
+  color: var(--admin-pill-auto-closed-text);
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 /* --- Status pills (Recent bookings + studies table) -------------------- */

@@ -11,16 +11,19 @@ import { join } from 'path';
  * `.admin-study-status` also computed `display: inline-block` even though its
  * own source declared `inline-flex`, because two ancestor-scoped rules in
  * `_components.css` (`td.col-status > *` and `td:not(:first-child) > span`)
- * outrank a bare class selector on specificity and force `inline-block` on
+ * outranked a bare class selector on specificity and forced `inline-block` on
  * any direct child of those cells - "Auto-closed" clipped to "AUTO-CLO" in a
  * narrow column as a result.
  *
- * jsdom does not do real layout, so this cannot measure a computed height or
- * a pixel-clipped label (that is the Playwright falsifier used to diagnose
- * and verify the fix by hand - see the MR description). What it CAN see, and
- * fail by name on, is: the shared class present on all three pills, the
- * bootstrap badge gone, and the higher-specificity rule that wins the
- * cascade for the studies table still declaring `inline-flex`.
+ * jsdom does not do real layout, so source-pin assertions here cannot see a
+ * computed height, a pixel-clipped label or centred overflow overlapping a
+ * neighbouring column - that is what `e2e/admin-table-chrome-layout.test.ts`
+ * (`admin studies table pills share one box (#142)`) is for, in a real
+ * Chromium. What this file CAN see, and fail by name on, is the shape of the
+ * source: the shared class present on all three pills, the bootstrap badge
+ * gone, the two legacy overrides now excepting `.admin-pill` rather than
+ * fighting it, and the metrics/label-truncation rules that make the visible
+ * fix possible.
  */
 
 const ADMIN_TSX = readFileSync(join(__dirname, '..', '..', 'pages', 'Admin.tsx'), 'utf8');
@@ -46,17 +49,46 @@ describe('admin studies table pill primitive (#142)', () => {
     );
   });
 
-  it('the col-status/col-type override is resolved at matching specificity, not deleted wholesale', () => {
-    // The two legacy rules that forced inline-block on any direct child
-    // still exist - they still do real work for other cells in these
-    // columns/table - but the pill primitive rule above now outranks them.
-    expect(CSS).toMatch(/\.admin-dashboard table\.admin-data-table tbody td\.col-status > \* \{/);
-    expect(CSS).toMatch(/\.admin-dashboard table tbody td:not\(:first-child\) > span,/);
+  it('the two legacy col-status/col-type overrides except .admin-pill instead of fighting it', () => {
+    // Code review HIGH 1/MEDIUM 1 (#142): these two rules used to force
+    // `display: inline-block` on every direct child regardless of class,
+    // including a bare `.admin-pill`. They still do real work for other
+    // cells in these columns/table, so they are excepted rather than
+    // deleted - a regression here would mean `display` is back to depending
+    // on which rule happens to win the specificity arms race, which is the
+    // defect #142 was filed against.
+    expect(CSS).toMatch(/\.admin-dashboard table\.admin-data-table tbody td\.col-status > \*:not\(\.admin-pill\) \{/);
+    expect(CSS).toMatch(/\.admin-dashboard table tbody td:not\(:first-child\) > span:not\(\.admin-pill\),/);
   });
 
-  it('the auto-closed pill wraps instead of clipping in a narrow column', () => {
+  it('the auto-closed pill keeps the uppercase/tracking the other two pills carry', () => {
+    // Code review HIGH 1 (#142): the bootstrap badge it replaced had neither,
+    // so this was the one pill of the three still visibly a different style
+    // even once the box metrics matched.
+    expect(CSS).toMatch(/\.admin-pill--auto-closed \{[^}]*text-transform:\s*uppercase;[^}]*letter-spacing:\s*0\.03em;/);
+    expect(CSS).not.toMatch(/\.admin-pill--auto-closed[^{]*\{[^}]*white-space:\s*normal;/);
+  });
+
+  it('the status label renders inside its own truncating span, not the pill directly', () => {
+    // Code review HIGH 2 (#142): PUBLISHED_NOT_WORKING_LABEL already
+    // overflowed this fixed-width cell on main; `justify-content: center`
+    // on the shared primitive turned that overflow into glyph-on-glyph
+    // overlap with the Type lozenge instead of main's harmless rightward
+    // spill. `text-overflow: ellipsis` does not paint on the flex pill's
+    // own overflow (measured: Chrome hard-clips both ends with no "…"), so
+    // the label is wrapped in its own `.admin-study-status__label` span,
+    // which does the shrinking and the ellipsis.
+    expect(ADMIN_TSX).toMatch(/<span className="admin-study-status__label">/);
     expect(CSS).toMatch(
-      /\.admin-dashboard table\.admin-data-table tbody td\.col-status \.admin-pill--auto-closed \{[^}]*white-space:\s*normal;/
+      /\.admin-study-status__label \{[^}]*min-width:\s*0;[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap;/
     );
+  });
+
+  it('the status column is widened to fit "Auto-closed" on one line at the shared primitive height', () => {
+    expect(CSS).toMatch(/\.admin-data-table \.col-status \{\s*width:\s*12%;/);
+  });
+
+  it('the auto-closed pill colours route through tokens, not a raw hex pair', () => {
+    expect(CSS).toMatch(/\.admin-pill--auto-closed \{[^}]*background:\s*var\(--admin-pill-auto-closed-bg\);[^}]*color:\s*var\(--admin-pill-auto-closed-text\);/);
   });
 });

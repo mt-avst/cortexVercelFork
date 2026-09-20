@@ -900,16 +900,18 @@ const Admin: React.FC = () => {
                                   unmoderated study with no content).
                                 */}
                                 <span className={`admin-pill admin-study-status admin-study-status--${opportunity.status}`}>
-                                  {isPublishedButNotWorking(opportunity.status, {
-                                    type: opportunity.type,
-                                    deliveryMode: opportunity.delivery_mode,
-                                    hasLinkedStudy: Boolean(opportunity.firsthand_study_id),
-                                    externalLink: opportunity.external_link_optional,
-                                    sessionCount: (opportunity.sessions ?? []).length,
-                                    meetingLocation: opportunity.meeting_location_optional
-                                  })
-                                    ? PUBLISHED_NOT_WORKING_LABEL
-                                    : getDisplayStatus(opportunity.status)}
+                                  <span className="admin-study-status__label">
+                                    {isPublishedButNotWorking(opportunity.status, {
+                                      type: opportunity.type,
+                                      deliveryMode: opportunity.delivery_mode,
+                                      hasLinkedStudy: Boolean(opportunity.firsthand_study_id),
+                                      externalLink: opportunity.external_link_optional,
+                                      sessionCount: (opportunity.sessions ?? []).length,
+                                      meetingLocation: opportunity.meeting_location_optional
+                                    })
+                                      ? PUBLISHED_NOT_WORKING_LABEL
+                                      : getDisplayStatus(opportunity.status)}
+                                  </span>
                                 </span>
                                 {opportunity.status === 'closed' && (
                                   <span className="admin-pill admin-pill--auto-closed">Auto-closed</span>

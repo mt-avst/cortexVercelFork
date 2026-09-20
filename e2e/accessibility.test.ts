@@ -1587,11 +1587,13 @@ test.describe('Accessibility Tests', () => {
     // glyphs axe cannot contrast-check at all ("non-text characters"), and
     // the STATUS pills (draft/published/closed - a different fix, row 27) hit
     // axe's "partially obscured" heuristic regardless of their color, since
-    // it also fires unchanged on .badge.bg-dark (an unrelated status color
-    // this diff never touches).
+    // it also fires unchanged on the "Auto-closed" marker a closed study
+    // renders alongside its status pill (`.admin-pill--auto-closed`, #142 -
+    // was `.badge.bg-dark` when this exception was first written; an
+    // unrelated colour this diff never touches either way).
     const unexpectedIncomplete = scan.incomplete
       .flatMap((rule) => rule.nodes.map((node) => node.target.map(String).join(' ')))
-      .filter((target) => !/admin-th-sort-caret|Actions for .* study.*aria-hidden|admin-study-status|badge\.bg-dark/.test(target));
+      .filter((target) => !/admin-th-sort-caret|Actions for .* study.*aria-hidden|admin-study-status|admin-pill--auto-closed/.test(target));
     expect(
       unexpectedIncomplete,
       `axe could not resolve ${unexpectedIncomplete.length} unexpected node(s) - the scan may be blind: ${unexpectedIncomplete.join(', ')}`
