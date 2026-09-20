@@ -196,17 +196,36 @@ const Header: React.FC = memo(() => {
       );
     }
 
-    if (user.role !== 'superadmin') {
-      if (user.role === 'employee') {
-        items.push(
-          <GuardedLink key="gamification" to="/gamification" className="dropdown-item">
-            <Trophy size={16} className="me-2" aria-hidden="true" />
-            AdaptaBits
-          </GuardedLink>,
-          <DropdownDivider key="div-after-adaptabits" />
-        );
-      }
+    // ADAPTABITS IS OPEN TO EVERY SIGNED-IN USER, deliberately.
+    //
+    // This link used to be gated on `user.role === 'employee'`, and nested
+    // inside the `!== 'superadmin'` branch besides, so superadmins never saw it
+    // either. The beta made that gate unreachable rather than merely narrow:
+    // CORTEX_BETA_ALL_ADMIN lifts every signed-in adaptavist.com employee to
+    // `researcher_admin` (`resolveEffectiveRole` in
+    // backend/src/middleware/authenticate.ts), so for the duration of the beta
+    // NOBODY holds the `employee` role and the entry rendered for nobody at all.
+    //
+    // The gate was only ever on the LINK. `/gamification` carries no role guard
+    // in App.tsx, and every backend route in routes/gamification.ts is either
+    // unauthenticated (the two leaderboards) or `requireAuth` scoped to the
+    // caller's own id - no route has ever asked for `employee`. So the feature
+    // already worked for anyone signed in; the menu simply refused to mention
+    // it. Opening the link changes who can FIND the page, not who can reach it.
+    //
+    // Nick's call, during the live beta. Note this is independent of the beta
+    // switch and must stay that way - the switch is on deliberately and is not
+    // to be touched. When it goes off at go-live this link stays open, because
+    // it no longer reads the role at all.
+    items.push(
+      <GuardedLink key="gamification" to="/gamification" className="dropdown-item">
+        <Trophy size={16} className="me-2" aria-hidden="true" />
+        AdaptaBits
+      </GuardedLink>,
+      <DropdownDivider key="div-after-adaptabits" />
+    );
 
+    if (user.role !== 'superadmin') {
       items.push(
         <DropdownItem
           key="request-admin"

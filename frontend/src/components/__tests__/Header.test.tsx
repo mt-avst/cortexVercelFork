@@ -241,6 +241,93 @@ describe('Submit Research Request', () => {
 });
 
 /**
+ * ADAPTABITS IS OFFERED TO EVERY SIGNED-IN USER.
+ *
+ * MEASURED BEFORE THE CHANGE, with the old `user.role === 'employee'` gate
+ * nested inside a `user.role !== 'superadmin'` branch - the link rendered for
+ * exactly ONE of these five roles, `employee`, and for nobody at all in
+ * practice: CORTEX_BETA_ALL_ADMIN lifts every signed-in adaptavist.com
+ * employee to `researcher_admin`, so during the beta no session holds
+ * `employee` and the entry was unreachable through the UI.
+ *
+ * THE ROLES ARE WRITTEN OUT AS LITERALS rather than derived from a role union,
+ * because the point of this arm is that the link no longer consults the role at
+ * all. An expectation derived from whatever the code checks would agree with
+ * any gate, including the one this replaces.
+ *
+ * The signed-out arm is the control. Without it, a change that rendered the
+ * link unconditionally - outside the `if (!user) return []` guard - would
+ * satisfy every other arm here perfectly.
+ */
+describe('AdaptaBits link', () => {
+  const renderFor = (role: string | null) => {
+    auth.user = role === null ? null : { name: 'A Person', role };
+    return render(
+      <BrowserRouter>
+        <Header />
+      </BrowserRouter>
+    );
+  };
+
+  /**
+   * `profileMenuItems` feeds BOTH the desktop profile dropdown and the
+   * collapsed phone menu, and a Dropdown renders its items only once opened.
+   * Both surfaces are checked, and each query is scoped to its own branch, so
+   * the desktop copy cannot mask a regression in the phone menu or the reverse.
+   */
+  const openProfile = (container: HTMLElement) => {
+    const desktop = container.querySelector(
+      '.header-actions--desktop'
+    ) as HTMLElement;
+    fireEvent.click(
+      within(desktop).getByRole('button', { name: 'User profile menu' })
+    );
+    const menu = desktop.querySelector('.dropdown-menu') as HTMLElement;
+    expect(menu).toBeTruthy();
+    return within(menu);
+  };
+
+  const openPhoneMenu = (container: HTMLElement) => {
+    const mobile = container.querySelector(
+      '.header-actions--mobile'
+    ) as HTMLElement;
+    fireEvent.click(within(mobile).getByRole('button', { name: 'Menu' }));
+    const menu = mobile.querySelector('.dropdown-menu') as HTMLElement;
+    expect(menu).toBeTruthy();
+    return within(menu);
+  };
+
+  it.each(['employee', 'researcher_admin', 'superadmin', 'participant', 'user'])(
+    'offers AdaptaBits to a %s',
+    (role) => {
+      const { container } = renderFor(role);
+
+      const link = openProfile(container).getByRole('link', {
+        name: /AdaptaBits/i
+      });
+      expect(link).toHaveAttribute('href', '/gamification');
+    }
+  );
+
+  it.each(['employee', 'researcher_admin', 'superadmin'])(
+    'carries AdaptaBits into the collapsed phone menu for a %s',
+    (role) => {
+      const { container } = renderFor(role);
+
+      expect(
+        openPhoneMenu(container).getByRole('link', { name: /AdaptaBits/i })
+      ).toHaveAttribute('href', '/gamification');
+    }
+  );
+
+  it('offers nothing to a signed-out visitor, who has no profile menu at all', () => {
+    const { queryByRole } = renderFor(null);
+
+    expect(queryByRole('link', { name: /AdaptaBits/i })).not.toBeInTheDocument();
+  });
+});
+
+/**
  * The collapsing phone menu (audit row 14). Below 768px the inline toolbar is
  * hidden by CSS and a single menu button carries everything - theme toggle,
  * the primary destination and the profile items - so the header stops wrapping
