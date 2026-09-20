@@ -1186,7 +1186,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                                 position: 'absolute',
                                 top: '2px',
                                 right: '2px',
-                                color: '#198754',
+                                color: 'var(--status-success-text)',
                                 pointerEvents: 'none'
                               }}>
                                 <CheckSquare size={12} />
@@ -1281,7 +1281,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                                         position: 'absolute',
                                         top: '2px',
                                         right: '2px',
-                                        color: '#198754',
+                                        color: 'var(--status-success-text)',
                                         pointerEvents: 'none'
                                       }}
                                     >

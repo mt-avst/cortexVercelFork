@@ -483,9 +483,11 @@ const AdminManagement: React.FC = () => {
                                 className="btn btn-sm btn-success"
                                 onClick={() => handleApprove(request.id)}
                                 disabled={processing === request.id}
-                                style={{ 
-                                  backgroundColor: processing === request.id ? 'rgba(40, 167, 69, 0.5)' : '#28a745',
-                                  borderColor: '#28a745',
+                                style={{
+                                  backgroundColor: processing === request.id
+                                    ? 'color-mix(in srgb, var(--status-success) 50%, transparent)'
+                                    : 'var(--status-success)',
+                                  borderColor: 'var(--status-success)',
                                   color: '#fff'
                                 }}
                               >
@@ -496,9 +498,11 @@ const AdminManagement: React.FC = () => {
                                 className="btn btn-sm btn-danger"
                                 onClick={() => setDenyConfirm({ show: true, request, notes: '' })}
                                 disabled={processing === request.id}
-                                style={{ 
-                                  backgroundColor: processing === request.id ? 'rgba(220, 53, 69, 0.5)' : '#dc3545',
-                                  borderColor: '#dc3545',
+                                style={{
+                                  backgroundColor: processing === request.id
+                                    ? 'color-mix(in srgb, var(--status-danger) 50%, transparent)'
+                                    : 'var(--status-danger)',
+                                  borderColor: 'var(--status-danger)',
                                   color: '#fff'
                                 }}
                               >
