@@ -550,11 +550,11 @@
 }
 
 .feedback-footer__success {
-  color: var(--success, #198754);
+  color: var(--status-success-text);
 }
 
 .feedback-footer__error {
-  color: var(--danger, #dc3545);
+  color: var(--status-danger-text);
 }
 
 /* Responsive: tablet and below – field block full width */
@@ -1141,8 +1141,8 @@ body.theme-light .badge--question {
 
 /* Survey (Success) */
 .badge--survey {
-  background: rgba(16, 185, 129, 0.15);
-  color: #10B981;
+  background: color-mix(in srgb, var(--color-analytics-green) 15%, transparent);
+  color: var(--color-analytics-green);
 }
 
 /* Interview (Brand) */
@@ -5257,32 +5257,27 @@ body.theme-dark .calendar-slot-admin-available:hover {
   box-shadow: 0 0 12px rgba(52, 211, 153, 0.3), 0 4px 6px rgba(0, 0, 0, 0.3) !important;
 }
 
-/* Admin: Selected slot (pending creation) */
+/* Admin: Selected slot (pending creation).
+   Single definition (was also duplicated further down under "ADMIN TABLE
+   POLISH", which won the cascade in light theme with an off-system green -
+   see #139). --status-success/-success-text already vary correctly between
+   themes, so no body.theme-dark override is needed here. */
 .calendar-slot-admin-selected {
-  background: rgba(25, 135, 84, 0.25) !important;
-  border: 2px solid #198754 !important;
+  background: color-mix(in srgb, var(--status-success) 25%, transparent) !important;
+  border: 2px solid var(--status-success) !important;
   border-radius: 8px !important;
   cursor: pointer !important;
 }
 
 .calendar-slot-admin-selected .timeslot-label {
-  color: #198754 !important;
+  color: var(--status-success-text) !important;
   font-weight: 700 !important;
-}
-
-body.theme-dark .calendar-slot-admin-selected {
-  background: rgba(52, 211, 153, 0.2) !important;
-  border: 2px solid #34d399 !important;
-}
-
-body.theme-dark .calendar-slot-admin-selected .timeslot-label {
-  color: #6ee7b7 !important;
 }
 
 /* Admin: Confirmed/Existing session slot */
 .calendar-slot-admin-confirmed {
-  background: #28a745 !important;
-  border: 2px solid #28a745 !important;
+  background: var(--status-success) !important;
+  border: 2px solid var(--status-success) !important;
   border-radius: 8px !important;
   cursor: pointer !important;
 }
@@ -5293,9 +5288,7 @@ body.theme-dark .calendar-slot-admin-selected .timeslot-label {
 }
 
 body.theme-dark .calendar-slot-admin-confirmed {
-  background: #28a745 !important;
-  border: 2px solid #34d399 !important;
-  box-shadow: 0 0 10px rgba(40, 167, 69, 0.3) !important;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--status-success) 30%, transparent) !important;
 }
 
 /* Admin: Busy/Calendar conflict slot */
@@ -6906,9 +6899,9 @@ body.theme-light .atmospheric-orb-secondary {
 
 /* Best/Success badge - Emerald (subtle, not solid) */
 .cortex-badge--best {
-  background: rgba(16, 185, 129, 0.1);
-  color: #10B981;
-  border: 1px solid rgba(16, 185, 129, 0.2);
+  background: color-mix(in srgb, var(--color-analytics-green) 10%, transparent);
+  color: var(--color-analytics-green);
+  border: 1px solid color-mix(in srgb, var(--color-analytics-green) 20%, transparent);
 }
 
 /* Info/Neutral badge - NO solid blue, use transparent + border */
@@ -7429,13 +7422,13 @@ body.theme-light .btn-booking-join:hover {
   border: none;
   cursor: pointer;
   transition: background var(--transition-button), color var(--transition-button);
-  background: rgba(220, 53, 69, 0.15);
-  color: #ff6b6b;
+  background: color-mix(in srgb, var(--status-danger) 15%, transparent);
+  color: var(--status-danger-text);
 }
 
 .btn-booking-cancel:hover:not(:disabled) {
-  background: rgba(220, 53, 69, 0.25);
-  color: #ff8585;
+  background: color-mix(in srgb, var(--status-danger) 25%, transparent);
+  color: var(--status-danger-text);
 }
 
 .btn-booking-cancel:disabled {
@@ -11584,19 +11577,8 @@ body.theme-dark .form-control::placeholder {
   transition: all 0.1s ease;
 }
 
-/* Selected Slots - High Contrast (Green/Black) */
-.calendar-slot-admin-selected {
-  background: #22c55e !important; /* Bright Green */
-  border: 1px solid #16a34a !important;
-  box-shadow: 0 0 10px rgba(34, 197, 94, 0.3); /* Green Glow */
-}
-
-/* Ensure text inside selected slot is readable (Dark on Bright) */
-.calendar-slot-admin-selected .timeslot-label,
-.calendar-slot-admin-selected span {
-  color: #0f172a !important; /* Dark Slate / Black */
-  font-weight: 700 !important;
-}
+/* Selected slot styling lives once, above (#139) - see
+   .calendar-slot-admin-selected under "CALENDAR SESSION MANAGER". */
 
 /* Clean up the heavy column backgrounds - Floating Look */
 .calendar-day-column {

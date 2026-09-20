@@ -132,11 +132,11 @@
 }
 
 .pending-approvals__textarea--invalid {
-  border-color: var(--danger, #c82333);
+  border-color: var(--status-danger);
 }
 
 .pending-approvals__field-error {
-  color: var(--danger, #c82333);
+  color: var(--status-danger-text);
   font-size: 0.8125rem;
   margin: 0.375rem 0 0;
 }

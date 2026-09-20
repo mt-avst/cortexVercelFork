@@ -435,7 +435,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   onSlotDeselect,
   durationMinutes,
   currentPage,
-  onPageChange,
+  onPageChange: _onPageChange,
   daysPerPage,
   startDate,
   endDate,
@@ -661,7 +661,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   const allDays = daysInRange(startDate, endDate, excludeWeekends);
   
   // Calculate pagination based on days
-  const totalPages = Math.ceil(allDays.length / daysPerPage);
+  const _totalPages = Math.ceil(allDays.length / daysPerPage);
   const startDayIndex = currentPage * daysPerPage;
   const endDayIndex = startDayIndex + daysPerPage;
   const currentDays = allDays.slice(startDayIndex, endDayIndex);
@@ -1186,7 +1186,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                                 position: 'absolute',
                                 top: '2px',
                                 right: '2px',
-                                color: '#198754',
+                                color: 'var(--status-success-text)',
                                 pointerEvents: 'none'
                               }}>
                                 <CheckSquare size={12} />
@@ -1281,7 +1281,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                                         position: 'absolute',
                                         top: '2px',
                                         right: '2px',
-                                        color: '#198754',
+                                        color: 'var(--status-success-text)',
                                         pointerEvents: 'none'
                                       }}
                                     >
