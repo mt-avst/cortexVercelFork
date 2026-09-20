@@ -184,7 +184,7 @@ class Logger {
    * Log a simple message (backward compatibility)
    * @deprecated Use info() with context for better structured logging
    */
-  log(message: string, ...args: any[]): void {
+  log(message: string, ...args: unknown[]): void {
     if (this.isDevelopment) {
       // For backward compatibility, support old logging style
       const context: LogContext = {

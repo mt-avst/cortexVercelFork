@@ -66,7 +66,7 @@ const Admin: React.FC = () => {
   const [sortField, setSortField] = useState<'title' | 'created_at' | 'type' | 'status'>('created_at');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
-  const [loadingStats, setLoadingStats] = useState(false);
+  const [_loadingStats, setLoadingStats] = useState(false);
   // Decision 2: "Show all researchers" toggle. Off by default, so an admin lands
   // on their own studies and their own snapshot; on widens both the studies
   // table and the snapshot counts to every researcher, together.
@@ -849,7 +849,7 @@ const Admin: React.FC = () => {
                                   navigate(`/admin/opportunities/${opportunity.id}/edit`);
                                 }
                               }}
-                              onMouseDown={(e) => {
+                              onMouseDown={() => {
                                 // Ensure we don't trigger anything on mousedown
                               }}
                               onKeyDown={(e) => {
