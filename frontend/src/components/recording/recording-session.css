@@ -36,8 +36,18 @@
      register ground - code-reviewer finding, row 15/Decision 4/5). */
   --accent-strong: var(--accent-fill-text-safe);
   --accent-text: var(--register-accent-text);
-  --success: #2f6f5e;
-  --danger: #a63d40;
+  /* Status hues flow from the Momentum status tokens rather than the two
+     hardcoded hexes this surface used to carry - one source of truth for the
+     green/red across the app. --success/--danger are the AA-safe FILL values
+     (white text sits on them: the done badge, the pass tick, the fail chip),
+     identical in both themes. --success-text/--danger-text are the TEXT role:
+     they equal the fill in light and brighten in dark, so status COPY on a
+     surface or a tint stays legible on the dark ground where the fill hue would
+     not. Fills use --success/--danger; copy uses --success-text/--danger-text. */
+  --success: var(--status-success);
+  --danger: var(--status-danger);
+  --success-text: var(--status-success-text);
+  --danger-text: var(--status-danger-text);
   --shadow: var(--register-shadow);
   --radius-btn: 10px;
   --font-display: "Fraunces", Georgia, "Times New Roman", serif;
@@ -188,7 +198,7 @@
 
 .fh-recording .chip--danger {
   background: rgba(166, 61, 64, 0.12);
-  color: var(--danger);
+  color: var(--danger-text);
 }
 
 .fh-recording.session-layout {
@@ -418,32 +428,34 @@
 }
 
 .fh-recording .journey-frame {
-  /* Light half: the prototype-faithful paper/ink pair this frame always had.
-     --j-line-2/--j-line-strong already ride --ink (above), so they cross
-     theme for free; these three are solid fills with no --ink derivation,
-     so they need their own dark half below (Decision 4). */
-  --j-card: #fffcf6;
-  --j-paper-2: #f1ebe0;
+  /* Surfaces and borders converge onto the Momentum *-current tokens, so this
+     frame reads as one of the app's cards in both themes rather than a ported
+     paper island (Decision 4/5). --surface-*-current and --border-*-current
+     each carry a light and a dark half already, so the bespoke paper/ink pair
+     and its dark override are retired: the FirstHand borders rode --ink, which
+     is near-white in dark and drew the harsh white outlines this surface used
+     to show. --j-ink-3 keeps its own light value and dark override below,
+     being a muted caption ink rather than a surface or line. */
+  --j-card: var(--surface-card-current);
+  --j-paper-2: var(--surface-panel-current);
   --j-ink-3: #8b95a3;
-  --j-line-2: color-mix(in srgb, var(--ink) 22%, transparent);
-  --j-line-strong: color-mix(in srgb, var(--ink) 40%, transparent);
+  --j-line-2: var(--border-subtle-current);
+  --j-line-strong: var(--border-strong-current);
   font-size: 14px;
   line-height: 1.5;
   color: var(--ink);
 }
 
 body.theme-dark .fh-recording .journey-frame {
-  --j-card: var(--register-card);
-  --j-paper-2: color-mix(in srgb, var(--ink) 6%, var(--bg));
   --j-ink-3: var(--muted);
 }
 
 .fh-recording .journey-app {
   display: grid;
   grid-template-columns: 200px 1fr;
-  border: 1.5px solid var(--ink);
+  border: 1px solid var(--border-subtle-current);
   background: var(--bg);
-  box-shadow: 7px 7px 0 color-mix(in srgb, var(--ink) 8%, transparent);
+  box-shadow: var(--shadow-card-current);
 }
 
 .fh-recording .journey-nav {
@@ -518,7 +530,7 @@ body.theme-dark .fh-recording .journey-frame {
   gap: 7px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--danger);
+  color: var(--danger-text);
 }
 
 .fh-recording .journey-nav-lock-dot {
@@ -564,8 +576,8 @@ body.theme-dark .fh-recording .journey-frame {
 }
 
 .fh-recording .journey-block--hero {
-  border-color: var(--ink);
-  border-width: 2px;
+  border-color: var(--border-strong-current);
+  border-width: 1.5px;
 }
 
 .fh-recording .journey-block-head {
@@ -608,9 +620,14 @@ body.theme-dark .fh-recording .journey-frame {
 }
 
 .fh-recording .journey-step--key {
-  background: var(--ink);
-  border-color: var(--ink);
-  color: var(--bg);
+  /* The current step marks itself with the accent, the same "active/selected =
+     orange" language the pods and filter chips use, so it pairs with the green
+     --done badge as a status vocabulary (done / current / upcoming) and never
+     inverts to a bright disc in dark. --accent-strong is --accent-fill-text-safe,
+     AA under the white numeral in both themes. */
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+  color: #fff;
 }
 
 .fh-recording .journey-block-body {
@@ -784,7 +801,7 @@ body.theme-dark .fh-recording .journey-frame {
 }
 
 .fh-recording .journey-doneline span {
-  color: var(--success);
+  color: var(--success-text);
 }
 
 .fh-recording .journey-launch {
@@ -834,7 +851,7 @@ body.theme-dark .fh-recording .journey-frame {
 
 .fh-recording .journey-launch-step.is-done .journey-launch-num {
   border-color: var(--success);
-  color: var(--success);
+  color: var(--success-text);
 }
 
 .fh-recording .journey-launch-body {
@@ -986,7 +1003,7 @@ body.theme-dark .fh-recording .journey-frame {
 }
 
 .fh-recording .pip-trust-rec.is-stopped {
-  color: var(--danger);
+  color: var(--danger-text);
   font-weight: 700;
 }
 
@@ -1033,7 +1050,7 @@ body.theme-dark .fh-recording .journey-frame {
 }
 
 .fh-recording .journey-verdict-tick {
-  color: var(--success);
+  color: var(--success-text);
 }
 
 .fh-recording .journey-verdict-detail {
@@ -1263,7 +1280,7 @@ body.theme-dark .fh-recording .journey-frame {
 }
 
 .fh-recording .journey-rail-val--warn {
-  color: var(--danger);
+  color: var(--danger-text);
   font-weight: 600;
 }
 
@@ -1286,7 +1303,10 @@ body.theme-dark .fh-recording .journey-frame {
 }
 
 .fh-recording .journey-vitem--current .journey-vtick {
-  border-color: var(--ink);
+  /* Current = accent, matching the step badge (--key) in the main column, so
+     the rail reads the same status vocabulary: done green, current orange,
+     upcoming neutral. --ink here inverted to a bright white ring in dark. */
+  border-color: var(--accent-strong);
   border-width: 2px;
 }
 
@@ -1351,14 +1371,14 @@ body.theme-dark .fh-recording .journey-frame {
 
 .fh-recording .journey-frame .chip--live {
   border-color: var(--danger);
-  color: var(--danger);
+  color: var(--danger-text);
   font-weight: 600;
 }
 
 .fh-recording .journey-frame .chip--danger {
   border-color: var(--danger);
   background: rgba(166, 61, 64, 0.1);
-  color: var(--danger);
+  color: var(--danger-text);
 }
 
 .fh-recording .journey-frame .runner-header--lean h1 {
