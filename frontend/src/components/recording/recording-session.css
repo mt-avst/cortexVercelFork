@@ -1303,7 +1303,10 @@ body.theme-dark .fh-recording .journey-frame {
 }
 
 .fh-recording .journey-vitem--current .journey-vtick {
-  border-color: var(--ink);
+  /* Current = accent, matching the step badge (--key) in the main column, so
+     the rail reads the same status vocabulary: done green, current orange,
+     upcoming neutral. --ink here inverted to a bright white ring in dark. */
+  border-color: var(--accent-strong);
   border-width: 2px;
 }
 
