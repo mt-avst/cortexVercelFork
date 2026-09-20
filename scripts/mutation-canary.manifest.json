@@ -1541,6 +1541,26 @@
     "test": "drops a trailing slash from CORS_ORIGIN, because a browser Origin header carries none"
   },
   {
+    "id": "cors-origin-refuses-userinfo-before-normalising",
+    "why": "cto/AdaptaLabs#64, raised by the security gate on the MR that added the origin transform. Everything before an at sign in a URL is userinfo, so the HOST is what follows it. MEASURED with the transform in place and this refine removed, all accepted and normalised: https://app.example.com@evil.com became https://evil.com, https://app.example.com:8443@evil.com/ became https://evil.com, and https://x.com%2f@evil.com became https://evil.com. This is worse AFTER the transform than before it rather than merely unchanged: index.ts hands CORS_ORIGIN to cors() as a STRING, and for a string the cors package emits it as Access-Control-Allow-Origin verbatim without comparing it to the request Origin - the browser compares, and credentials true is set alongside. Un-normalised, such a value is an ACAO no browser ever matches, so the misconfiguration fails CLOSED. Normalised, it is a well-formed origin a browser WILL match, so it fails OPEN, granting credentialed cross-origin reads to the host after the at sign rather than to the host the operator appears to have written. There is no attacker-controlled path to this value today - it is deployment config, swept across every tracked file - so this is defence in depth against the transform quietly repairing a broken value into a dangerous one. The mutation deletes the refine, restoring the laundering. It type-checks and the schema still parses, so nothing fails to build.",
+    "file": "shared/config/environment.ts",
+    "anchor": "        return parsed.username === '' && parsed.password === '';\n",
+    "mutation": "        return true;\n",
+    "runner": "jest",
+    "spec": "src/config/__tests__/environment.test.ts",
+    "test": "refuses a CORS origin that hides its real host behind an at sign"
+  },
+  {
+    "id": "cors-origin-normalisation-is-named-at-boot",
+    "why": "cto/AdaptaLabs#64. The write-back in backend/src/config/index.ts puts the normalised origin into process.env.CORS_ORIGIN, which ELEVEN readers outside tests concatenate onto to build redirect targets and OAuth callback URLs. So normalising a path away also moves an operator's callback base - https://x.com/app/auth/google-callback becomes https://x.com/auth/google-callback. Their CORS matched nothing either way, so it is a fix and not a regression, but it is a fix to a value set in an environment this repository cannot enumerate, which is why it is NAMED at boot rather than applied silently. Whitespace-only normalisation stays quiet deliberately, because trimming is not something an operator needs to act on. MEASURED before this arm existed: three separate mutations to this block - deleting it, flipping the condition so it warns on whitespace and stays silent on a dropped path, and writing back the merely-trimmed value - each left the whole backend suite at 1970 passed. The mutation here is the condition flip, which is the exact inverse of the documented intent and the one a reader is most likely to introduce while tidying.",
+    "file": "backend/src/config/index.ts",
+    "anchor": "  if (process.env.CORS_ORIGIN.trim() !== config.CORS_ORIGIN) {\n",
+    "mutation": "  if (process.env.CORS_ORIGIN.trim() === config.CORS_ORIGIN) {\n",
+    "runner": "jest",
+    "spec": "src/config/__tests__/environment.test.ts",
+    "test": "stays quiet when only whitespace was normalised, which no operator can act on"
+  },
+  {
     "id": "all-bookings-page-reports-has-more-when-there-is-more",
     "why": "cto/AdaptaLabs#66. `GET /api/bookings/my/bookings/all` was an unbounded read whose whole contract is \"all of them, cancelled ones included\", so a bare LIMIT would have converted it into a SILENTLY TRUNCATED one - the caller cannot tell a complete answer from a clipped one, and had no way to ask for the rest. `has_more` is the half that makes the truncation visible, and hardcoding it `false` is the mutation that reinstates the original defect while leaving the page arithmetic, the ordering and the cursor all intact. The route follows the points-history disposition (report `has_more` where the rows are the caller's OWN) rather than the leaderboard clamp or `GET /api/opportunities`' 413, so this is the same guard as `points-history-page-reaches-the-wire` on the sibling surface.",
     "file": "backend/src/routes/bookings.ts",

@@ -44,6 +44,14 @@ An unusable value for either throws at boot rather than being quietly coerced, s
 `CORS_ORIGIN` must be an absolute `http://` or `https://` URL, and surrounding whitespace is trimmed; `PORT` must be an integer no greater than 65535.
 Leaving either unset is fine and gives the defaults (3001 and `http://localhost:3000`), but setting either to an empty string is refused.
 
+**A path on `CORS_ORIGIN` is normalised away, and this can move your OAuth callback base.**
+A browser `Origin` header is `scheme://host[:port]` and carries no path, so a value like `https://your-app.example.com/app` matched no origin and CORS was broken.
+That value is now reduced to its bare origin, `https://your-app.example.com`, which fixes the matching.
+It also changes what the backend builds redirect targets and OAuth callback URLs from, because those are concatenated onto `CORS_ORIGIN` - so `https://your-app.example.com/app/auth/google-callback` becomes `https://your-app.example.com/auth/google-callback`.
+If you had a path there and your identity provider has the longer callback registered, either register the new one or set `GOOGLE_OAUTH_REDIRECT_URI` explicitly, which overrides the concatenation entirely.
+The backend logs both the written value and the normalised one at boot whenever it actually drops something, so this never happens silently.
+A lower-cased `http`/`https` scheme is still required, and a value carrying userinfo (anything before an `@`) is refused outright rather than normalised, because the host a browser would use is the part after the `@` and not the part an operator reads.
+
 ### Required for real SSO (e.g. Okta)
 
 | Variable | Purpose |

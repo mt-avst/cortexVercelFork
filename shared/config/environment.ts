@@ -184,7 +184,7 @@ export const backendEnvSchema = z.object({
   // Measured before the fix, against the schema as it then stood:
   //   `http://x.com/`          -> accepted as `http://x.com/`
   //   `https://x.com/app`      -> accepted as `https://x.com/app`
-  //   `https://x.com/a/b?q=1#f`-> accepted as `https://x.com/a/b?q=1#f`
+  //   `https://x.com/a/b?q=1#f` -> accepted as `https://x.com/a/b?q=1#f`
   // A browser `Origin` header is `scheme://host[:port]` with no path and no
   // trailing slash, so every one of those booted and matched nothing. The
   // trailing slash is the likeliest of the family, because it is the shape the
@@ -217,6 +217,49 @@ export const backendEnvSchema = z.object({
     .trim()
     .url('CORS origin must be a valid URL')
     .refine((value) => /^https?:\/\//.test(value), 'CORS origin must be an http(s) URL')
+    // USERINFO IS REFUSED, and this refine exists BECAUSE of the transform
+    // below rather than alongside it (#64, raised by the security gate).
+    //
+    // MEASURED against the real schema with the transform and without this
+    // arm - every one of these was accepted:
+    //   `https://app.example.com@evil.com`       -> `https://evil.com`
+    //   `https://app.example.com:8443@evil.com/` -> `https://evil.com`
+    //   `https://x.com%2f@evil.com`              -> `https://evil.com`
+    //   `http://evil.com\@good.com`              -> `http://evil.com`
+    // Everything before the `@` is userinfo, so the host is what follows it.
+    //
+    // WHY THAT IS WORSE AFTER THE TRANSFORM THAN BEFORE IT. index.ts passes
+    // this to `cors()` as a STRING, and for a string the cors package emits it
+    // as `Access-Control-Allow-Origin` verbatim without comparing it to the
+    // request Origin - the browser does the comparing, and `credentials: true`
+    // is set alongside. Un-normalised, `https://app.example.com@evil.com` is an
+    // ACAO no browser ever matches, so the misconfiguration fails CLOSED.
+    // Normalised, it becomes a well-formed origin a browser WILL match, so it
+    // fails OPEN, granting credentialed cross-origin reads to the host after
+    // the `@` rather than to the one the operator appears to have written.
+    //
+    // No attacker-controlled path exists today - swept every tracked file, and
+    // CORS_ORIGIN is only ever set from deployment config, never composed from
+    // a branch name or a request. This is defence in depth against a value the
+    // transform would otherwise quietly repair into something dangerous, and
+    // it narrows only values that are already broken, so it carries none of the
+    // deploy risk that kept a no-path rule out of #59.
+    // THE try/catch IS LOAD-BEARING, not defensive dressing. zod runs a
+    // refinement even when an earlier STRING check on the same chain has
+    // already failed, so this sees `not a url` and `` as well as the values it
+    // is here to judge - and an unguarded `new URL()` then throws a raw
+    // TypeError that escapes the ZodError handling entirely. Measured: it
+    // turned four of #59's refusal arms from their own named message into
+    // `Invalid URL`. Returning true on a parse failure is correct rather than
+    // lenient: `.url()` owns that refusal and reports it with its own message.
+    .refine((value) => {
+      try {
+        const parsed = new URL(value);
+        return parsed.username === '' && parsed.password === '';
+      } catch {
+        return true;
+      }
+    }, 'CORS origin must not contain userinfo')
     .transform((value) => new URL(value).origin)
     .default('http://localhost:3000'),
 

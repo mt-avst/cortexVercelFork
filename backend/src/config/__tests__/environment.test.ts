@@ -347,7 +347,7 @@ describe('backend CORS_ORIGIN validation', () => {
   );
 
   /**
-   * A PATH IS NORMALISED AWAY, NOT REFUSED #64.
+   * A PATH IS NORMALISED AWAY, NOT REFUSED (#64).
    *
    * MEASURED BEFORE THE FIX, against the schema as it then stood - these are
    * the three values this arm used to accept unchanged:
@@ -403,17 +403,98 @@ describe('backend CORS_ORIGIN validation', () => {
   /**
    * THE REFINE STILL RUNS BEFORE THE TRANSFORM.
    *
-   * The control that makes the arm above safe. `new URL()` would happily
-   * normalise 'http:/x.com' to 'http://x.com/' and 'HTTP://x.com' to
-   * 'http://x.com', so a transform placed BEFORE the refine would silently
-   * repair two values #59 deliberately refuses. Without this arm, swapping the
-   * two would pass every other test in the file.
+   * `new URL()` would happily normalise 'http:/x.com' to 'http://x.com/' and
+   * 'HTTP://x.com' to 'http://x.com', so a transform placed BEFORE the refine
+   * would silently repair two values #59 deliberately refuses.
+   *
+   * WHAT THIS ARM IS AND IS NOT. An earlier version of this docblock said
+   * swapping the two would pass every other test in the file. MUTATION
+   * REFUTED THAT: with the swap applied and this arm deleted, the it.each at
+   * the top of this describe still fails on 'HTTPS://EXAMPLE.COM' and
+   * 'http:/x.com', because #59 already pinned both. So the order is not
+   * unguarded without this arm, and a comment claiming otherwise would send
+   * the next reader to the wrong place.
+   *
+   * What this arm adds is the scheme-PLUS-PATH shapes the #59 arm lacks -
+   * 'HTTP://x.com/' and 'HTTPS://EXAMPLE.COM/app' - and it states the order
+   * dependency at the site that depends on it rather than leaving it implied.
    */
   it.each(['http:/x.com', 'HTTP://x.com/', 'HTTPS://EXAMPLE.COM/app'])(
     'still refuses rather than repairs the non-http scheme CORS_ORIGIN %p',
     (value) => {
       setVar('CORS_ORIGIN', value);
       expect(() => validateBackendEnvironment()).toThrow(/CORS origin must be an http\(s\) URL/);
+    }
+  );
+
+  /**
+   * USERINFO IS REFUSED, and this arm exists BECAUSE of the transform.
+   *
+   * Everything before an `@` in a URL is userinfo, so the host is what follows
+   * it. MEASURED against the schema with the transform and without the refine
+   * - every one of these was accepted and normalised:
+   *   'https://app.example.com@evil.com'       -> 'https://evil.com'
+   *   'https://app.example.com:8443@evil.com/' -> 'https://evil.com'
+   *   'https://x.com%2f@evil.com'              -> 'https://evil.com'
+   *
+   * WHY THE TRANSFORM MAKES IT WORSE RATHER THAN NEUTRAL. index.ts hands this
+   * to `cors()` as a STRING, and for a string the cors package emits it as
+   * `Access-Control-Allow-Origin` verbatim without comparing it to the request
+   * Origin - the browser compares, and `credentials: true` is set alongside.
+   * Un-normalised, `https://app.example.com@evil.com` is an ACAO no browser
+   * ever matches, so the misconfiguration fails CLOSED. Normalised, it is a
+   * well-formed origin a browser WILL match, so it fails OPEN - granting
+   * credentialed cross-origin reads to the host after the `@`.
+   *
+   * There is no attacker-controlled path to this value today; it is deployment
+   * config. This is defence in depth against the transform quietly repairing a
+   * broken value into a dangerous one.
+   */
+  it.each([
+    'https://app.example.com@evil.com',
+    'https://app.example.com:8443@evil.com/',
+    'https://x-example-host%2f@evil.com',
+    'https://user:pass@x-example-host/p'
+  ])('refuses the userinfo-carrying CORS_ORIGIN %p rather than normalising it to the host after the at sign', (value) => {
+    setVar('CORS_ORIGIN', value);
+    expect(() => validateBackendEnvironment()).toThrow(
+      /CORS origin must not contain userinfo/
+    );
+  });
+
+  /**
+   * THE CANARY-SELECTABLE ARM for the userinfo entry.
+   *
+   * Every it.each title above interpolates a URL, and a URL is made of regex
+   * metacharacters - dots at minimum. Both runners treat jest's -t as a regex
+   * and the manifest validator refuses such a name outright, so the entry
+   * would grade TEST_MISSING rather than KILLED. This arm carries the same
+   * assertion under a title made of plain words.
+   */
+  it('refuses a CORS origin that hides its real host behind an at sign', () => {
+    setVar('CORS_ORIGIN', 'https://app-example-host@evil-example-host');
+    expect(() => validateBackendEnvironment()).toThrow(
+      /CORS origin must not contain userinfo/
+    );
+  });
+
+  /**
+   * THE CONTROL ON THE REFINE, and it is not decorative.
+   *
+   * The refine runs even when an earlier STRING check on the same chain has
+   * already failed, so it sees 'not a url' too. An unguarded `new URL()` there
+   * throws a raw TypeError that escapes the ZodError handling - measured, it
+   * turned four of #59's refusal arms from their own named message into
+   * 'Invalid URL'. This arm pins that a malformed value still reports the
+   * malformed-URL message rather than being swallowed or re-labelled.
+   */
+  it.each(['not a url', '', 'example.com'])(
+    'still reports the malformed message for %p rather than a raw URL parse error',
+    (value) => {
+      setVar('CORS_ORIGIN', value);
+      expect(() => validateBackendEnvironment()).toThrow(
+        /CORS origin must be a valid URL/
+      );
     }
   );
 
@@ -495,6 +576,93 @@ describe('backend CORS_ORIGIN normalisation reaching process.env', () => {
     importConfig();
 
     expect(process.env.CORS_ORIGIN).toBeUndefined();
+  });
+
+  /**
+   * THE PATH REACHES THE ELEVEN READERS TOO, not just `config`.
+   *
+   * The scheme half of #59 covered all thirteen consumers for free, because a
+   * bad scheme stops the boot before any of them runs. A PATH does not stop
+   * the boot, so without the write-back carrying the normalised value the
+   * eleven would go on concatenating onto `https://x.com/app` while `cors()`
+   * compared against `https://x.com`. Measured on the diff that introduced
+   * #64's transform: mutating this assignment to write the merely-TRIMMED
+   * value instead left the whole backend suite at 1970 passed. This arm is
+   * what makes that mutation visible.
+   */
+  it('writes the path-normalised origin back, so the eleven readers agree with cors', () => {
+    setVar('CORS_ORIGIN', 'https://x-example-host/app');
+
+    importConfig();
+
+    expect(process.env.CORS_ORIGIN).toBe('https://x-example-host');
+  });
+
+  /**
+   * THE OPERATOR IS TOLD, because this change moves their OAuth callback base.
+   *
+   * A path-carrying CORS_ORIGIN is set in an environment this repository
+   * cannot see - `docker-compose.prod.yml` passes `${CORS_ORIGIN}` through
+   * from the operator. Normalising it is right for `cors()` and it also moves
+   * `${CORS_ORIGIN}/auth/google-callback` from `https://x.com/app/...` to
+   * `https://x.com/...`. That is a fix rather than a regression, because their
+   * CORS matched nothing either way, but it is not something to do silently.
+   *
+   * ALL THREE ARMS ARE NEEDED and the two quiet ones are the controls. Warning
+   * on everything reads as a pass against the first arm alone, and the
+   * measured mutation that flips this condition - warn on whitespace, stay
+   * silent on a dropped path - is the exact inverse of the intent and left the
+   * backend suite at 1970 passed.
+   */
+  describe('the boot warning names a dropped path and stays quiet otherwise', () => {
+    let warn: jest.SpyInstance;
+
+    beforeEach(() => {
+      warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    });
+
+    afterEach(() => {
+      warn.mockRestore();
+    });
+
+    /**
+     * DISTINCT lines, not a call count. `jest.isolateModules` evaluates
+     * `../index` more than once per import here, so the same warning arrives
+     * twice - an artefact of the harness, not of the module, which runs once
+     * in production. Asserting on the distinct set says what is actually
+     * meant ("one warning, naming both forms") and does not encode the
+     * harness's repeat count as if it were the contract.
+     */
+    const warnings = (): string[] => [
+      ...new Set(warn.mock.calls.map((call) => String(call[0])))
+    ];
+
+    it('names both the written value and the normalised one when a path is dropped', () => {
+      setVar('CORS_ORIGIN', 'https://x-example-host/app');
+
+      importConfig();
+
+      const lines = warnings().filter((line) => line.includes('CORS_ORIGIN'));
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toContain('https://x-example-host/app');
+      expect(lines[0]).toContain('https://x-example-host');
+    });
+
+    it('stays quiet when only whitespace was normalised, which no operator can act on', () => {
+      setVar('CORS_ORIGIN', ' https://x-example-host ');
+
+      importConfig();
+
+      expect(warnings().filter((line) => line.includes('CORS_ORIGIN'))).toEqual([]);
+    });
+
+    it('stays quiet when the value needed no normalising at all', () => {
+      setVar('CORS_ORIGIN', 'https://x-example-host');
+
+      importConfig();
+
+      expect(warnings().filter((line) => line.includes('CORS_ORIGIN'))).toEqual([]);
+    });
   });
 
   // A value that needed no normalising must come back byte-identical, so the
