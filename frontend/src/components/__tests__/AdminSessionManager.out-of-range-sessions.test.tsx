@@ -237,19 +237,21 @@ describe('AdminSessionManager - a session outside the drawn hours (#95)', () => 
     expect(parseFloat((tooSmall[0] as HTMLElement).style.height)).toBeLessThan(0.2);
   });
 
-  it('counts the gutter session exactly once, like every other slot', async () => {
-    // The equality `AdminSessionManager.manual-slots.test.tsx` pins, asserted
-    // here with an out-of-range session actually present - which no test in
-    // that file has. It fails BOTH ways: a gutter row drawn without being
-    // counted, and one drawn TWICE by a partition that forgot to remove the
-    // slot from the timeline.
+  it('draws the gutter session and the mid-day session exactly once each, not double-drawn', async () => {
+    // Was pinned via the "N slots available" headline against
+    // `AdminSessionManager.manual-slots.test.tsx`'s counted-equals-drawn
+    // equality. cto/AdaptaLabs#135 moved that headline onto `isSlotPickable`,
+    // which - like the historical D11 `gridBookableCount` it restores - counts
+    // an existing session as NOT "available" (it is booked capacity, not open
+    // capacity), so the headline no longer includes either session here at
+    // all and cannot stand in for "drawn once" any more. Assert the DOM
+    // directly instead: it fails BOTH ways this always meant to catch - a
+    // gutter row dropped entirely, and one drawn TWICE by a partition that
+    // forgot to remove the slot from the timeline.
     renderManager({ sessions: [sessionAt('s-0600', 6, 0), sessionAt('s-1415', 14, 15)] });
     await settle();
 
-    const counted = Number(/(\d+) slots available/.exec(document.body.textContent ?? '')?.[1]);
-    const drawn = (document.body.textContent ?? '').match(/\d{2}:\d{2} - \d{2}:\d{2}/g) ?? [];
-
-    expect(counted).toBe(2);
-    expect(drawn).toHaveLength(counted);
+    expect(screen.getAllByText(labelFor(6, 0))).toHaveLength(1);
+    expect(screen.getAllByText(labelFor(14, 15))).toHaveLength(1);
   });
 });

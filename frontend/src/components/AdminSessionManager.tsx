@@ -426,6 +426,60 @@ const slotConflictsWithEvents = (
   });
 };
 
+/**
+ * Whether a generated slot is one a researcher could actually pick right now
+ * (cto/AdaptaLabs#135): not conflicting with a calendar event, not an
+ * existing session at this time (confirmed or otherwise), not overlapped by
+ * a session booked for another study, and not so far in the past the server
+ * would refuse it.
+ *
+ * Module scope, like `slotConflictsWithEvents` above, for the same reason:
+ * the Calendar counter (`drawnSlots`), the Table counter (`tableSlotCount`)
+ * and `describeSlot`'s `isBlocked`/`isPast` inside `CalendarView` all have to
+ * agree on "pickable", or a headline can read "N slots available" beside a
+ * cell no click can act on. Before this, the two counters excluded ONLY a
+ * calendar conflict - not an allocated, confirmed, existing-session or past
+ * cell - so either view could report a count no click could reach.
+ */
+const isSlotPickable = (
+  slot: { start: string; end: string },
+  events: ReadonlyArray<{ start: string; end: string }>,
+  sessions: ReadonlyArray<{ start_time: string; end_time: string }>,
+  confirmedSlots: ReadonlySet<string>
+): boolean => {
+  if (slotConflictsWithEvents(slot, events)) return false;
+  if (confirmedSlots.has(slotKeyOf(slot))) return false;
+
+  const slotStart = new Date(slot.start);
+  const slotEnd = new Date(slot.end);
+
+  // An existing session at this exact time (within a second's rounding
+  // tolerance) - the same test `describeSlot`'s own session lookup uses.
+  const isExistingSession = sessions.some(session => {
+    const sessionStart = new Date(session.start_time);
+    const sessionEnd = new Date(session.end_time);
+    return (
+      Math.abs(slotStart.getTime() - sessionStart.getTime()) <= 1000 &&
+      Math.abs(slotEnd.getTime() - sessionEnd.getTime()) <= 1000
+    );
+  });
+  if (isExistingSession) return false;
+
+  // A session belonging to another study that overlaps this slot without
+  // being it - excludes exact matches, which are handled above as sessions.
+  const isAllocated = sessions.some(session => {
+    const sessionStart = new Date(session.start_time);
+    const sessionEnd = new Date(session.end_time);
+    const hasOverlap = slotStart < sessionEnd && slotEnd > sessionStart;
+    const isExactMatch =
+      slotStart.getTime() === sessionStart.getTime() && slotEnd.getTime() === sessionEnd.getTime();
+    return hasOverlap && !isExactMatch;
+  });
+  if (isAllocated) return false;
+
+  return !slotIsPast(slot);
+};
+
 const CalendarView: React.FC<CalendarViewProps> = ({
   events,
   availableSlots,
@@ -2534,13 +2588,12 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
   /**
    * What the Calendar (grid) view's counter should report, computed with the
    * same functions the grid uses. Originally just "pre-filter, pre-prune vs
-   * post" (21 counted against 20 drawn) - also excludes calendar-conflict
-   * slots now (row 8, follow-up): those chips are still drawn on the grid,
-   * grey and unselectable, but a headline that counts them is the exact same
-   * lie the Table view's counter told before its own fix - "N slots
-   * available" beside a busy chip nobody can click. `slotConflictsWithEvents`
-   * is the SAME predicate `tableSlotCount` below uses, so the two views can
-   * only ever agree with each other and with what a click can actually do.
+   * post" (21 counted against 20 drawn); then extended to exclude
+   * calendar-conflict slots (row 8); now routed through `isSlotPickable`
+   * (cto/AdaptaLabs#135) so it also excludes an allocated, confirmed or past
+   * cell - `drawnSlots` and `tableSlotCount` below share the exact same
+   * predicate, so the two views can only ever agree with each other and with
+   * what a click can actually do.
    */
   const drawnSlots = React.useMemo(() => {
     const onScreen = visibleDayKeys(startDate, endDate, excludeWeekends, currentPage, daysPerPage);
@@ -2549,7 +2602,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       return (
         !Number.isNaN(when.getTime()) &&
         onScreen.has(when.toDateString()) &&
-        !slotConflictsWithEvents(slot, calendarEvents)
+        isSlotPickable(slot, calendarEvents, sessions, confirmedSlots)
       );
     });
   }, [
@@ -2562,6 +2615,8 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
     currentPage,
     daysPerPage,
     calendarEvents,
+    sessions,
+    confirmedSlots,
   ]);
 
   /**
@@ -2570,12 +2625,11 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
    * the table is not paged - reporting the grid's on-screen page there read
    * "20 slots available" beside a table showing every day (review finding).
    *
-   * Also excludes calendar-conflict slots (row 8): this used to count every
-   * generated cell, including ones a click cannot act on, so "159 slots
-   * available" sat beside a Select-all sum of 129 - the 30-slot gap being
-   * exactly the conflicting cells. `slotConflictsWithEvents` is the SAME
-   * predicate the table's own per-day chips use to decide "blocked", so the
-   * headline can only ever agree with what is actually pickable.
+   * Routed through the same `isSlotPickable` predicate as `drawnSlots`
+   * (cto/AdaptaLabs#135): this used to exclude only a calendar conflict, so
+   * "159 slots available" sat beside a Select-all sum of 129, and later an
+   * allocated, confirmed or past cell could still inflate the count the same
+   * way. The headline can now only ever agree with what is actually pickable.
    */
   const tableSlotCount = React.useMemo(() => {
     const inRange = new Set(
@@ -2586,10 +2640,20 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       return (
         !Number.isNaN(when.getTime()) &&
         inRange.has(when.toDateString()) &&
-        !slotConflictsWithEvents(slot, calendarEvents)
+        isSlotPickable(slot, calendarEvents, sessions, confirmedSlots)
       );
     }).length;
-  }, [displaySlots, durationMinutes, protectedSlotKeys, startDate, endDate, excludeWeekends, calendarEvents]);
+  }, [
+    displaySlots,
+    durationMinutes,
+    protectedSlotKeys,
+    startDate,
+    endDate,
+    excludeWeekends,
+    calendarEvents,
+    sessions,
+    confirmedSlots,
+  ]);
 
   /**
    * Existing sessions the Calendar view's grid cannot draw at all (row 39),
