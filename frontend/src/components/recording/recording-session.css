@@ -617,9 +617,14 @@ body.theme-dark .fh-recording .journey-frame {
 }
 
 .fh-recording .journey-step--key {
-  background: var(--ink);
-  border-color: var(--ink);
-  color: var(--bg);
+  /* The current step marks itself with the accent, the same "active/selected =
+     orange" language the pods and filter chips use, so it pairs with the green
+     --done badge as a status vocabulary (done / current / upcoming) and never
+     inverts to a bright disc in dark. --accent-strong is --accent-fill-text-safe,
+     AA under the white numeral in both themes. */
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+  color: #fff;
 }
 
 .fh-recording .journey-block-body {
