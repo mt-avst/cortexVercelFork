@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { getPendingApprovals, approveSession, rejectSession } from '../api/client';
 import LoadingSpinner from './LoadingSpinner';
-import { AppError } from '../utils/errorHandler';
+import { AppError } from '../api/types';
 import { logger } from '../utils/logger';
 import { RefreshCw, CheckCircle, UserCheck, XCircle } from 'lucide-react';
 

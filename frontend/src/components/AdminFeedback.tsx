@@ -3,7 +3,7 @@ import { getFeedback, deleteFeedback, exportFeedbackCsv, FeedbackItem } from '..
 import { useAuth } from '../contexts/AuthContext';
 import LoadingSpinner from './LoadingSpinner';
 import ConfirmationModal from './ConfirmationModal';
-import { AppError } from '../utils/errorHandler';
+import { AppError } from '../api/types';
 import { logger } from '../utils/logger';
 import { AlertTriangle, RefreshCw, Download, Inbox, ChevronRight, Trash2, X, Calendar, Link2, ChevronLeft } from 'lucide-react';
 import { SortCaret } from './ui';
