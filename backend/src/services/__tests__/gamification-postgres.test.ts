@@ -492,4 +492,68 @@ describe.skipIf(skipDbTests)("gamification reads against real Postgres", () => {
       }
     });
   });
+  /**
+   * A PUBLIC BOARD IS EARNED, NOT JOINED BY ARRIVING.
+   *
+   * `getUserProfile` is a GET handler that INSERTs a `user_profiles` row when
+   * none exists, and both leaderboards are UNAUTHENTICATED and select `u.name`
+   * with no filter. So merely opening /gamification published the visitor's
+   * real name to any anonymous caller. MEASURED before the filter, on this
+   * harness: one GET took the public board from 1 row to 2, the second being a
+   * 0-point newcomer who had done nothing but load a page.
+   *
+   * That mechanism pre-dated the AdaptaBits menu change; what the change did
+   * was give every signed-in staff member and superadmin a signpost to it.
+   * Nick's call was to filter rather than to ship the wider blast radius.
+   *
+   * EACH BOARD FILTERS ON THE METRIC IT RANKS BY - all-time on `total_points`,
+   * monthly on `monthly_points`. The monthly arm is the one that matters in
+   * practice: after a reset everyone sits at 0, ordering among ties is
+   * unspecified, and a brand-new profile can surface in the visible top 20.
+   *
+   * THE TWO QUERIES ARE TESTED SEPARATELY ON PURPOSE. They are twenty-six
+   * lines apart and near-identical, and this file's own history is the reason
+   * the source docblock warns that a fix applied to one reads as a fix applied
+   * to both. A shared arm would hide exactly that.
+   *
+   * EXPECTATIONS ARE LITERAL NAME LISTS rather than counts derived from the
+   * fixture, so an arm cannot agree with whatever the query happens to return.
+   */
+  describe("the public leaderboards exclude anyone who has not scored", () => {
+    beforeEach(async () => {
+      await seedParticipant("Scored All Time", 120, 0);
+      await seedParticipant("Scored This Month", 40, 25);
+      await seedParticipant("Arrived And Did Nothing", 0, 0);
+    });
+
+    it("keeps a zero-total newcomer off the all-time board", async () => {
+      const rows = await gamification.getLeaderboard(pool, 20);
+
+      expect(rows.map((r) => r.name)).toEqual(["Scored All Time", "Scored This Month"]);
+    });
+
+    it("keeps a zero-month participant off the monthly board, including one with all-time points", async () => {
+      const rows = await gamification.getMonthlyLeaderboard(pool, 20);
+
+      // "Scored All Time" has 120 lifetime points and 0 this month, so it is
+      // absent HERE and present above. That asymmetry is the whole point of
+      // filtering each board on the metric it ranks by, and an arm that only
+      // checked the 0/0 newcomer could not see it.
+      expect(rows.map((r) => r.name)).toEqual(["Scored This Month"]);
+    });
+
+    it("still ranks everyone who has scored, so the filter cannot be an empty board", async () => {
+      // THE CONTROL. An `expect(...).toEqual([])`-shaped guard passes just as
+      // well when the query is broken outright, so this arm proves the boards
+      // still return what they should.
+      const allTime = await gamification.getLeaderboard(pool, 20);
+      const monthly = await gamification.getMonthlyLeaderboard(pool, 20);
+
+      expect(allTime).toHaveLength(2);
+      expect(allTime[0].name).toBe("Scored All Time");
+      expect(Number(allTime[0].rank)).toBe(1);
+      expect(monthly).toHaveLength(1);
+      expect(Number(monthly[0].rank)).toBe(1);
+    });
+  });
 });
