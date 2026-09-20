@@ -1,13 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
 import { submitFeedback } from '../api/client';
 import { logger } from '../utils/logger';
-import { CheckCircle, MessageSquare, AlertTriangle, Send, X } from 'lucide-react';
+import { CheckCircle, AlertTriangle, Send, X } from 'lucide-react';
 
 const Feedback: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
   const [feedback, setFeedback] = useState('');
   const [category, setCategory] = useState<'bug' | 'feature' | 'question' | 'other'>('bug');
   const [submitted, setSubmitted] = useState(false);

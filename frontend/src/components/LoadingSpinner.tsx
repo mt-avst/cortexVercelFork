@@ -5,12 +5,6 @@ interface LoadingSpinnerProps {
   text?: string;
 }
 
-const SIZE_MAP = {
-  small: 'sm',
-  medium: '',
-  large: 'lg' // Custom class if needed, or inline style
-} as const;
-
 /**
  * LoadingSpinner Component
  * Displays a premium, accessible loading indicator using brand tokens.
