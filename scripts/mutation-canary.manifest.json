@@ -1531,6 +1531,16 @@
     "test": "writes the trimmed origin back, so a padded value cannot reach a redirect"
   },
   {
+    "id": "cors-origin-path-is-normalised-away",
+    "why": "cto/AdaptaLabs#64, the last of the #48/#59 family and the one left as a ponytail rather than folded into somebody else's MR. Measured on the schema before this change, with the #59 .trim().url().refine in place, ALL ACCEPTED UNCHANGED: CORS_ORIGIN=http://x.com/ parsed to 'http://x.com/', https://x.com/app to 'https://x.com/app' and https://x.com/a/b?q=1#f to itself. A browser Origin header is scheme://host[:port] with NO path and NO trailing slash, and the live consumer is the cors() origin in backend/src/index.ts which compares that header to this string, so every one of those booted and matched nothing. The trailing slash is the likeliest of the whole family because it is the shape the address bar shows and therefore the shape an operator copies. Normalising was chosen over refusing because new URL(v).origin is exactly the string a browser sends, which makes it strictly MORE permissive than the schema it replaces - nothing that boots today stops booting - whereas a no-path rule could refuse a boot in the operator environment docker-compose.prod.yml takes ${CORS_ORIGIN} from, which this repository cannot enumerate. The mutation deletes the transform, restoring the accept-as-written behaviour. It type-checks and CORS_ORIGIN stays a string, so nothing fails to build, and the three expectations in the pinned test are LITERALS rather than derived from new URL, so the arm can still see the transform go.",
+    "file": "shared/config/environment.ts",
+    "anchor": "    .transform((value) => new URL(value).origin)\n",
+    "mutation": "",
+    "runner": "jest",
+    "spec": "src/config/__tests__/environment.test.ts",
+    "test": "drops a trailing slash from CORS_ORIGIN, because a browser Origin header carries none"
+  },
+  {
     "id": "all-bookings-page-reports-has-more-when-there-is-more",
     "why": "cto/AdaptaLabs#66. `GET /api/bookings/my/bookings/all` was an unbounded read whose whole contract is \"all of them, cancelled ones included\", so a bare LIMIT would have converted it into a SILENTLY TRUNCATED one - the caller cannot tell a complete answer from a clipped one, and had no way to ask for the rest. `has_more` is the half that makes the truncation visible, and hardcoding it `false` is the mutation that reinstates the original defect while leaving the page arithmetic, the ordering and the cursor all intact. The route follows the points-history disposition (report `has_more` where the rows are the caller's OWN) rather than the leaderboard clamp or `GET /api/opportunities`' 413, so this is the same guard as `points-history-page-reaches-the-wire` on the sibling surface.",
     "file": "backend/src/routes/bookings.ts",

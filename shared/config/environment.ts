@@ -172,24 +172,52 @@ export const backendEnvSchema = z.object({
   // it is refused rather than repaired. Both are pinned as literals in
   // backend/src/config/__tests__/environment.test.ts.
   //
-  // THE ASYMMETRY WITH #64 IS DELIBERATE AND WORTH NAMING, because the
-  // deploy-risk argument below applies to both. An upper-cased scheme and a
-  // trailing slash are equally broken config, and equally unsweepable in the
-  // `${CORS_ORIGIN}` that `docker-compose.prod.yml` takes from an operator.
-  // They are treated differently because the right FIX differs: refusing an
-  // upper-cased scheme is the whole answer, whereas for a path the likely
-  // answer is to NORMALISE (`new URL(v).origin` is exactly what a browser
-  // sends) rather than refuse - and choosing between refusing and normalising
-  // is a design decision, not a line to bolt onto somebody else's MR.
+  // THE ASYMMETRY WITH THE PATH IS STILL DELIBERATE, and #64 settled it rather
+  // than removing it. An upper-cased scheme and a trailing slash are equally
+  // broken config, but the right FIX differs: refusing an upper-cased scheme is
+  // the whole answer, whereas a path is NORMALISED away by the transform below.
+  // Refusing a scheme narrows what boots; normalising a path does not, which is
+  // why only one of the two carried deploy risk.
   //
-  // ponytail: the scheme is checked, the PATH is not - `http://x.com/` and
-  //   `http://x.com/app` still boot and still match no Origin header
-  //   -> #64, same family.
+  // THE PATH IS NORMALISED AWAY RATHER THAN REFUSED (#64).
+  //
+  // Measured before the fix, against the schema as it then stood:
+  //   `http://x.com/`          -> accepted as `http://x.com/`
+  //   `https://x.com/app`      -> accepted as `https://x.com/app`
+  //   `https://x.com/a/b?q=1#f`-> accepted as `https://x.com/a/b?q=1#f`
+  // A browser `Origin` header is `scheme://host[:port]` with no path and no
+  // trailing slash, so every one of those booted and matched nothing. The
+  // trailing slash is the likeliest of the family, because it is the shape the
+  // address bar shows and therefore the shape an operator copies.
+  //
+  // REFUSING WAS THE OTHER OPTION AND IS THE WRONG ONE. `docker-compose.prod.yml`
+  // passes `${CORS_ORIGIN}` straight through from an operator environment this
+  // repository cannot enumerate, so a no-path rule could refuse a boot that
+  // succeeds today. `new URL(v).origin` is exactly the string a browser sends,
+  // so normalising is strictly more permissive than the schema it replaces:
+  // nothing that boots today stops booting.
+  //
+  // WHAT NORMALISING ALSO CHANGES, named because it is not free. The write-back
+  // in backend/src/config/index.ts puts this value into
+  // `process.env.CORS_ORIGIN`, which eleven readers outside tests use as a
+  // redirect target or an OAuth callback base built by concatenation. An
+  // operator who set `https://x.com/app` gets `https://x.com/callback` after
+  // this change where they got `https://x.com/app/callback` before. That is the
+  // correct reading of a variable named for an ORIGIN, and their CORS was
+  // broken either way, but it is a behaviour change on a value this repository
+  // cannot see - so config/index.ts logs a warning naming both forms when the
+  // normalisation actually drops something, rather than changing it silently.
+  //
+  // ORDER IS LOAD-BEARING. The refine runs BEFORE this transform, so
+  // `http:/x.com` (one slash) and `HTTP://x.com` are still refused rather than
+  // repaired - `new URL()` would happily normalise both. Pinned as literals in
+  // backend/src/config/__tests__/environment.test.ts.
   CORS_ORIGIN: z
     .string()
     .trim()
     .url('CORS origin must be a valid URL')
     .refine((value) => /^https?:\/\//.test(value), 'CORS origin must be an http(s) URL')
+    .transform((value) => new URL(value).origin)
     .default('http://localhost:3000'),
 
   // Security Configuration

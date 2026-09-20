@@ -346,6 +346,77 @@ describe('backend CORS_ORIGIN validation', () => {
     }
   );
 
+  /**
+   * A PATH IS NORMALISED AWAY, NOT REFUSED #64.
+   *
+   * MEASURED BEFORE THE FIX, against the schema as it then stood - these are
+   * the three values this arm used to accept unchanged:
+   *   'http://x.com/'           -> 'http://x.com/'
+   *   'https://x.com/app'       -> 'https://x.com/app'
+   *   'https://x.com/a/b?q=1#f' -> 'https://x.com/a/b?q=1#f'
+   * A browser Origin header is scheme://host[:port] with no path and no
+   * trailing slash, and the cors middleware in backend/src/index.ts compares
+   * the header to this string, so each of those booted and matched nothing.
+   *
+   * The trailing slash is the likeliest of the family: it is what the address
+   * bar shows, so it is what an operator copies.
+   *
+   * REFUSING WAS THE OTHER OPTION. Normalising was chosen because it is
+   * strictly more permissive than the schema it replaces - nothing that boots
+   * today stops booting - whereas a no-path rule could refuse a boot in the
+   * operator environment that docker-compose.prod.yml takes CORS_ORIGIN from,
+   * which this repository cannot enumerate.
+   *
+   * EXPECTATIONS ARE LITERALS, not derived from new URL, so this arm can still
+   * see the transform change. Deriving them would make the test agree with any
+   * transform at all, including no transform.
+   *
+   * NO PARENTHESES IN THE TITLE, deliberately - the mutation canary selects the
+   * test it pins with jest's -t, which is a regex.
+   */
+  it.each([
+    ['http://x.com/', 'http://x.com'],
+    ['https://x.com/app', 'https://x.com'],
+    ['https://x.com/a/b?q=1#f', 'https://x.com'],
+    ['https://x.com:8443/app/', 'https://x.com:8443'],
+    ['http://localhost:3000/', 'http://localhost:3000']
+  ])('normalises the path off CORS_ORIGIN %p to %p', (value, expected) => {
+    setVar('CORS_ORIGIN', value);
+    expect(validateBackendEnvironment().CORS_ORIGIN).toBe(expected);
+  });
+
+  /**
+   * THE CANARY-SELECTABLE ARM for the entry above.
+   *
+   * The it.each titles interpolate the values, and every one of those values
+   * contains a dot, which is a regex metacharacter - both runners treat jest's
+   * -t as a regex, so the manifest's own validator refuses such a name and the
+   * entry would grade TEST_MISSING rather than KILLED. This arm carries the
+   * same assertion under a title made of plain words, so the canary has
+   * something it can select.
+   */
+  it('drops a trailing slash from CORS_ORIGIN, because a browser Origin header carries none', () => {
+    setVar('CORS_ORIGIN', 'http://x-example-host/');
+    expect(validateBackendEnvironment().CORS_ORIGIN).toBe('http://x-example-host');
+  });
+
+  /**
+   * THE REFINE STILL RUNS BEFORE THE TRANSFORM.
+   *
+   * The control that makes the arm above safe. `new URL()` would happily
+   * normalise 'http:/x.com' to 'http://x.com/' and 'HTTP://x.com' to
+   * 'http://x.com', so a transform placed BEFORE the refine would silently
+   * repair two values #59 deliberately refuses. Without this arm, swapping the
+   * two would pass every other test in the file.
+   */
+  it.each(['http:/x.com', 'HTTP://x.com/', 'HTTPS://EXAMPLE.COM/app'])(
+    'still refuses rather than repairs the non-http scheme CORS_ORIGIN %p',
+    (value) => {
+      setVar('CORS_ORIGIN', value);
+      expect(() => validateBackendEnvironment()).toThrow(/CORS origin must be an http\(s\) URL/);
+    }
+  );
+
   it('treats an UNSET CORS_ORIGIN as http://localhost:3000', () => {
     setVar('CORS_ORIGIN', undefined);
     expect(validateBackendEnvironment().CORS_ORIGIN).toBe('http://localhost:3000');
