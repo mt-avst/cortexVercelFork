@@ -1,4 +1,4 @@
-import axios, { AxiosResponse, AxiosError } from 'axios';
+import axios, { AxiosResponse, AxiosError, InternalAxiosRequestConfig } from 'axios';
 
 import { API_CONFIG, getAuthUrl, getApiBaseUrl } from '../config/api';
 import { ensureCsrfToken, isCsrfError, isMutatingMethod, CSRF_HEADER } from './csrf';
@@ -6,7 +6,16 @@ import { logger } from '../utils/logger';
 import { getVisitorNonce } from '../utils/visitorNonce';
 import { authNavigation, isAdminRoute, isProductionEnvironment, redirectTo, AUTH_ENDPOINTS } from '../utils/navigation';
 
-import { User, Opportunity, CreateOpportunityRequest, UpdateOpportunityRequest, Session, CreateSessionRequest, Booking, UserBookings, RescheduleBookingRequest, CalendarEvent, AvailabilityResponse, AdminRequest, OpportunityBookingRow, ResearcherNotesResponse } from './types';
+import { User, Opportunity, CreateOpportunityRequest, UpdateOpportunityRequest, Session, CreateSessionRequest, Booking, UserBookings, RescheduleBookingRequest, CalendarEvent, AvailabilityResponse, AdminRequest, OpportunityBookingRow, ResearcherNotesResponse, PendingApprovalBooking } from './types';
+
+/** Request-timing config, stamped by the request interceptor and read back by the response/error interceptors. */
+type TimedRequestConfig = InternalAxiosRequestConfig & { __startTime?: number };
+
+declare global {
+  interface Window {
+    __setInitialAuthCheck?: (value: boolean) => void;
+  }
+}
 
 /**
  * Primary API client for all frontend API requests
@@ -65,7 +74,7 @@ const setInitialAuthCheck = (value: boolean) => {
   isInitialAuthCheck = value;
 };
 // Export so AuthContext can set this flag
-(window as any).__setInitialAuthCheck = setInitialAuthCheck;
+window.__setInitialAuthCheck = setInitialAuthCheck;
 
 // Add request interceptor to generate request IDs (for consistency with apiClient)
 api.interceptors.request.use(
@@ -77,8 +86,8 @@ api.interceptors.request.use(
     }
     
     const startTime = Date.now();
-    (config as any).__startTime = startTime;
-    
+    (config as TimedRequestConfig).__startTime = startTime;
+
     return config;
   },
   (error) => {
@@ -96,7 +105,7 @@ api.interceptors.response.use(
       logger.setRequestId(requestId);
     }
     
-    const startTime = (response.config as any).__startTime;
+    const startTime = (response.config as TimedRequestConfig).__startTime;
     if (startTime) {
       const responseTime = Date.now() - startTime;
       logger.apiResponse(
@@ -118,7 +127,7 @@ api.interceptors.response.use(
       logger.setRequestId(requestId);
     }
     
-    const startTime = (error.config as any)?.__startTime;
+    const startTime = (error.config as TimedRequestConfig | undefined)?.__startTime;
     if (startTime) {
       const responseTime = Date.now() - startTime;
       logger.apiError(
@@ -516,7 +525,7 @@ export const getMyBookings = async (): Promise<UserBookings> => {
   return response.data;
 };
 
-export const getPendingApprovals = async (): Promise<any[]> => {
+export const getPendingApprovals = async (): Promise<PendingApprovalBooking[]> => {
   const response = await api.get('/bookings/pending-approvals');
   return response.data;
 };

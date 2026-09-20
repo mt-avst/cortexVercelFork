@@ -51,3 +51,19 @@ export interface ResearcherNotesResponse {
   researcher_notes: string | null;
   researcher_notes_updated_at: string | null;
 }
+
+/** One row of GET /api/bookings/pending-approvals - a completed session awaiting admin sign-off. */
+export interface PendingApprovalBooking {
+  booking_id: string;
+  user_id: string;
+  session_id: string;
+  completed_at: string;
+  admin_notes: string | null;
+  user_name: string;
+  user_email: string;
+  start_time: string;
+  end_time: string;
+  opportunity_title: string;
+  opportunity_type: string;
+  owner_user_id: string;
+}

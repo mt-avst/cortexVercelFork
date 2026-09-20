@@ -125,12 +125,12 @@ const dayGridMetrics = (dayCount: number): { gap: number; minWidth: number } => 
 // ============================================================
 
 const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSession, bookingLoading, hideLegend = false }) => {
-  const navigate = useNavigate();
+  const _navigate = useNavigate();
   const [confirmingSlot, setConfirmingSlot] = useState<string | null>(null);
   const [bookedSlots, setBookedSlots] = useState<Set<string>>(new Set());
   const [userCalendarEvents, setUserCalendarEvents] = useState<CalendarEvent[]>([]);
-  const [calendarConnected, setCalendarConnected] = useState(false);
-  const [loadingCalendar, setLoadingCalendar] = useState(false);
+  const [_calendarConnected, setCalendarConnected] = useState(false);
+  const [_loadingCalendar, setLoadingCalendar] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
 
   /**
@@ -159,17 +159,17 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
 
   // Cursor spotlight state - scoped to grid area only
   const gridContainerRef = useRef<HTMLDivElement>(null);
-  const [isMouseInGrid, setIsMouseInGrid] = useState(false);
+  const [_isMouseInGrid, setIsMouseInGrid] = useState(false);
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
-  
+
   // Smooth spring-based cursor tracking
   const smoothMouseX = useSpring(mouseX, { stiffness: 300, damping: 30 });
   const smoothMouseY = useSpring(mouseY, { stiffness: 300, damping: 30 });
-  
+
   // Transform for spotlight position (hooks must be called unconditionally)
-  const spotlightX = useTransform(smoothMouseX, x => x - 200);
-  const spotlightY = useTransform(smoothMouseY, y => y - 200);
+  const _spotlightX = useTransform(smoothMouseX, x => x - 200);
+  const _spotlightY = useTransform(smoothMouseY, y => y - 200);
   
   // Update current time every minute for the time indicator
   useEffect(() => {
@@ -235,10 +235,8 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
       try {
         setLoadingCalendar(true);
         
-        let calendarConnectedStatus = false;
         try {
           const status = await getCalendarConnectionStatus();
-          calendarConnectedStatus = status.connected;
           setCalendarConnected(status.connected);
         } catch (error: unknown) {
           // Not surfaced: "we could not ask" and "not connected" look the same
@@ -436,7 +434,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
       sessionsByDateMap.get(dateKey)!.push(session);
     });
 
-    sessionsByDateMap.forEach((sessions, date) => {
+    sessionsByDateMap.forEach((sessions, _date) => {
       sessions.sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
     });
 
@@ -850,7 +848,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
   };
 
   // Tactile slot interaction variants (no scale to prevent text artifacts)
-  const slotVariants = {
+  const _slotVariants = {
     idle: { 
       boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
     },
@@ -1424,7 +1422,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                       transition: 'opacity 0.3s ease, filter 0.3s ease'
                     }}>
                       
-                      {dateSessions.map((session, slotIndex) => {
+                      {dateSessions.map((session, _slotIndex) => {
                         const isBooked = bookedSlots.has(session.id);
                         const conflict = getCalendarConflict(session);
                         const hasConflict = !!conflict;

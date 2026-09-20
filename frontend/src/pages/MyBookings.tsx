@@ -16,7 +16,7 @@ import {
   formatDateTime,
 } from '../utils/datetime';
 import ConfirmationModal from '../components/ConfirmationModal';
-import { Button, Card, CardHeader, CardBody, CardFooter, CardTitle, Alert, Spinner } from '../components/ui';
+import { Button, Card, CardBody, CardFooter, Alert, Spinner } from '../components/ui';
 import { ArrowLeft, RefreshCw, ExternalLink, CalendarX, Monitor } from 'lucide-react';
 import { isPublishableExternalLink } from '@shared/firsthand/url-safety';
 
