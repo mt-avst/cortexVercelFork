@@ -58,7 +58,10 @@
 
 .survey-error {
   margin: 0;
-  color: var(--text-danger, #ff6b6b);
+  /* --status-danger-text is the danger TEXT role: deep enough to pass AA on the
+     light card, brighter on the dark ground. --text-danger was never defined,
+     so this fell back to a hardcoded #ff6b6b that failed AA in light. */
+  color: var(--status-danger-text);
   font-size: 0.9rem;
   font-weight: 500;
 }
@@ -238,8 +241,10 @@
 }
 
 .survey-runner .alert-banner.alert-danger {
-  border-color: var(--text-danger, #ff6b6b);
-  background: color-mix(in srgb, var(--text-danger, #ff6b6b) 10%, transparent);
+  /* Fill/border role, not the text role: --status-danger is the AA-safe danger
+     fill, the same token the recorded flow's fail states use. */
+  border-color: var(--status-danger);
+  background: color-mix(in srgb, var(--status-danger) 10%, transparent);
 }
 
 .survey-runner .alert-banner .status-copy {
