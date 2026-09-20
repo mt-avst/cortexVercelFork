@@ -4,7 +4,20 @@
  * Scoped to this component, following the two existing component-local
  * stylesheets in this folder. Colours come from the design tokens so the builder
  * follows the theme without a second theme block, and every interactive control
- * is at least 24 x 24 CSS px (WCAG 2.2 SC 2.5.8).
+ * is at least 24 x 24 CSS px (WCAG 2.2 SC 2.5.8). Text colour is unset
+ * throughout and inherits `body { color: var(--text-body); }` (`_base.css`) -
+ * verified, not assumed - which is cto/AdaptaLabs#141's "--text-*" requirement
+ * satisfied by inheritance rather than a redundant per-element declaration.
+ *
+ * cto/AdaptaLabs#141: border-card is a real, theme-aware token but predates
+ * the --border-*-current / --surface-*-current family review-step.css and
+ * pending-approvals.css already use, so borders below are converged to
+ * --border-subtle-current (identical value in light - both alias --fs-line;
+ * a touch more subtle in dark, 0.06 vs the old 0.10 alpha). --bg-card is
+ * deliberately NOT converged to --surface-card-current: see the matching
+ * note in question-list.css - a near-transparent dark tint vs a near-opaque
+ * dark panel is a visual-weight change for a repeated card list, not a pure
+ * tokenisation.
  */
 
 .screener-questions__list {
@@ -13,7 +26,7 @@
 }
 
 .screener-card {
-  border: 1px solid var(--border-card);
+  border: 1px solid var(--border-subtle-current);
   border-radius: 8px;
   margin-bottom: 0.75rem;
   background: var(--bg-card);
@@ -34,7 +47,7 @@
   height: 28px;
   flex: 0 0 auto;
   margin-top: 1.75rem;
-  border: 1.5px solid var(--border-card);
+  border: 1.5px solid var(--border-subtle-current);
   border-radius: 50%;
   font-weight: 600;
   font-size: 0.8125rem;
@@ -54,10 +67,15 @@
   min-height: 32px;
   flex: 0 0 auto;
   padding: 0;
-  border: 1px solid var(--border-card);
+  border: 1px solid var(--border-subtle-current);
   border-radius: 6px;
   background: none;
-  color: var(--status-danger);
+  /* --status-danger-text, not the fill token: this paints an icon (bare
+     text-role use), and --status-danger measures 3.15:1 as text on the dark
+     app ground per the token doc in _tokens.css - --status-danger-text is
+     the pair built for exactly this role (7.12:1 dark, same value as
+     --status-danger in light). cto/AdaptaLabs#141. */
+  color: var(--status-danger-text);
   cursor: pointer;
 }
 

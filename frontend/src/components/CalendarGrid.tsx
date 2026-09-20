@@ -1176,7 +1176,17 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                       marginBottom: '4px',
                       fontSize: 'var(--font-size-small, 0.875rem)',
                       fontWeight: 600,
-                      color: isToday ? 'var(--color-emerald-500, #10b981)' : undefined
+                      // cto/AdaptaLabs#141: was `var(--color-emerald-500, #10b981)` -
+                      // that token is never defined anywhere, so this always rendered
+                      // the literal fallback. Swapping in the one green token that IS
+                      // defined (--color-analytics-green, #10B981, byte-identical to
+                      // the old fallback) would have kept the fix cosmetic but still
+                      // broken: it measures 2.28:1 on the light cream ground, well
+                      // under the 4.5:1 this bold-but-not-large (14px/600) marker
+                      // needs. --status-success-text is the pair actually designed
+                      // for bare text in both themes and clears AA in each
+                      // (11.30:1 dark, 5.30:1 light).
+                      color: isToday ? 'var(--status-success-text)' : undefined
                     }}
                   >
                     {formatDate(date)}

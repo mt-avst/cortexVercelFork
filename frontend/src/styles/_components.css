@@ -6091,21 +6091,29 @@ body.theme-light .study-summary-line {
   transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
-/* Clickable Card Hover - Dynamic border color from study type */
+/* Clickable Card Hover - Dynamic border color from study type
+   cto/AdaptaLabs#141: --dynamic-hover-color is never set anywhere - the
+   runtime code that sets a per-study-type accent (getCardHoverColor in
+   OpportunityDetail.tsx) writes --accent-border-color, a different
+   property, so every var(--dynamic-hover-color, X) in this file always
+   rendered its literal fallback. Also verified (case-insensitive grep,
+   *.tsx/*.ts/*.jsx, whole src) that .card-clickable, .spotlight-card and
+   .bento-grid have zero call sites in current markup, so this whole rule
+   family is dead - the undefined-token fix here is dropping the
+   never-resolving indirection down to its own literal fallback, not wiring
+   up a live effect. Candidate for a follow-up dead-CSS removal pass. */
 /* High specificity to override .bento-grid .card:hover in themes */
 .bento-grid .card.card-clickable:hover,
 .card.card-clickable:hover {
-  border-color: var(--dynamic-hover-color, var(--brand-headline)) !important;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15),
-              0 0 0 1px var(--dynamic-hover-color, transparent) !important;
+  border-color: var(--brand-headline) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15) !important;
 }
 
 /* Light mode: use text color for crisp, high-contrast hover borders */
 body.theme-light .bento-grid .card.card-clickable:hover,
 body.theme-light .card.card-clickable:hover {
-  border-color: var(--dynamic-hover-color, var(--brand-headline)) !important;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1), 
-              0 0 0 1px var(--dynamic-hover-color, transparent) !important;
+  border-color: var(--brand-headline) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1) !important;
 }
 
 /* ============================================================
@@ -6128,8 +6136,11 @@ body.theme-light .card.card-clickable:hover {
   --spotlight-y: 0px;
   --spotlight-opacity: 0;
   --spotlight-size: 400px;
-  /* Use dynamic hover color from opportunity type, fallback to brand orange */
-  --spotlight-color: var(--dynamic-hover-color, color-mix(in srgb, var(--brand-orange-500) 60%, transparent));
+  /* Use dynamic hover color from opportunity type, fallback to brand orange.
+     cto/AdaptaLabs#141: --dynamic-hover-color is never set (see the note by
+     .card.card-clickable:hover above) and .spotlight-card has no current
+     call sites, so this is the literal fallback, unwrapped. */
+  --spotlight-color: color-mix(in srgb, var(--brand-orange-500) 60%, transparent);
 }
 
 /* Spotlight Border - Radial gradient that follows cursor */
@@ -6302,8 +6313,12 @@ body.theme-light .spotlight-card-featured {
 
 /* Light mode hover: category color on border ONLY */
 body.theme-light .spotlight-card:hover {
-  /* Use dynamic hover color for border accent */
-  border-color: var(--dynamic-hover-color, #d1d5db) !important;
+  /* Use dynamic hover color for border accent.
+     cto/AdaptaLabs#141: --dynamic-hover-color is never set (see the note by
+     .card.card-clickable:hover above) - tokenised the literal fallback
+     rather than dropping to a bare grey, since a real border token is a
+     one-word swap here. */
+  border-color: var(--border-strong-current) !important;
   background: #FFFFFF !important; /* Keep pure white on hover */
 }
 

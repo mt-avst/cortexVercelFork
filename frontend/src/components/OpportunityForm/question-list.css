@@ -3,12 +3,31 @@
  *
  * Scoped to this component rather than added to the global component sheet,
  * following the three existing component-local stylesheets. Colours come from
- * the design tokens so the list follows the theme without a second theme block.
+ * the design tokens so the list follows the theme without a second theme block:
+ * every rule below either reads a token directly or sets no `color` at all, in
+ * which case it inherits `body { color: var(--text-body); }` (`_base.css`) -
+ * verified, not assumed, so this satisfies cto/AdaptaLabs#141's "--text-*"
+ * requirement without a redundant re-declaration on every element.
  *
  * Every control here is at least 24 x 24 CSS px, which is WCAG 2.2 SC 2.5.8
  * (Target Size, Minimum). The old Up/Down/Remove group was a `btn-group-sm`
  * whose class is not defined anywhere in this repo's stylesheets, so its
  * buttons were whatever the text happened to make them.
+ *
+ * cto/AdaptaLabs#141: border-card is a real, theme-aware token (aliases
+ * --fs-line in light) but predates the --border-*-current / --surface-*-
+ * current family review-step.css and pending-approvals.css already use, so
+ * the border below is converged to --border-subtle-current (identical value
+ * in light - both alias --fs-line; a touch more subtle in dark, 0.06 vs the
+ * old 0.10 alpha). --bg-card is deliberately NOT converged to
+ * --surface-card-current: in dark, --bg-card is a near-transparent white
+ * tint (0.05 alpha, a glass sheen over the app background) while
+ * --surface-card-current is a near-opaque panel (0.96 alpha) - swapping it
+ * would turn every row of a long question list into a stack of solid dark
+ * cards, a visual-weight change for a repeated list item, not a pure
+ * tokenisation. --bg-card already resolves correctly per theme; ponytail:
+ * convergence to a shared surface family is a design call for whoever owns
+ * this list's visual density next, not a blind swap here.
  */
 
 .question-list__items {
@@ -17,7 +36,7 @@
 }
 
 .question-card {
-  border: 1px solid var(--border-card);
+  border: 1px solid var(--border-subtle-current);
   border-radius: 8px;
   margin-bottom: 0.5rem;
   background: var(--bg-card);
@@ -120,7 +139,7 @@
   min-width: 32px;
   min-height: 32px;
   padding: 0;
-  border: 1px solid var(--border-card);
+  border: 1px solid var(--border-subtle-current);
   border-radius: 6px;
   background: none;
   color: inherit;
@@ -138,14 +157,17 @@
 }
 
 .question-card__control--danger {
-  color: var(--status-danger);
+  /* --status-danger-text, not the fill token: bare text-role use on an
+     icon button. See the matching note in screener-questions.css.
+     cto/AdaptaLabs#141. */
+  color: var(--status-danger-text);
 }
 
 .question-card__position {
   min-width: 56px;
   min-height: 32px;
   padding: 0 0.25rem;
-  border: 1px solid var(--border-card);
+  border: 1px solid var(--border-subtle-current);
   border-radius: 6px;
   background: none;
   color: inherit;

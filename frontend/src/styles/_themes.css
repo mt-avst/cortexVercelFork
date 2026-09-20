@@ -1070,9 +1070,9 @@ body.theme-light .admin-page-bg > * {
 
 body.theme-dark .admin-dashboard .card,
 body.theme-dark .admin-dashboard .admin-card {
-  background: rgba(12, 12, 14, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.25);
+  background: var(--surface-card-current);
+  border: 1px solid var(--border-subtle-current);
+  box-shadow: var(--shadow-card-current);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
@@ -1096,94 +1096,103 @@ body.theme-dark .admin-dashboard h2,
 body.theme-dark .admin-dashboard h3,
 body.theme-dark .admin-dashboard h4,
 body.theme-dark .admin-dashboard .admin-dashboard-title {
-  color: #FFFFFF;
+  color: var(--text-primary);
 }
 
 body.theme-dark .admin-dashboard p,
 body.theme-dark .admin-dashboard .lead,
 body.theme-dark .admin-dashboard .card-text {
-  color: rgba(224, 224, 224, 0.9);
+  color: var(--text-secondary);
 }
 
 body.theme-dark .admin-dashboard .text-muted,
 body.theme-dark .admin-dashboard small {
-  color: rgba(224, 224, 224, 0.85);
+  color: var(--text-muted);
 }
 
 /* Table row title and description text - dark mode */
 body.theme-dark .admin-dashboard table td strong,
 body.theme-dark .admin-dashboard .admin-table-title,
 body.theme-dark .admin-table-title {
-  color: #FFFFFF;
+  color: var(--text-primary);
 }
 
 body.theme-dark .admin-dashboard table td small {
-  color: rgba(224, 224, 224, 0.8);
+  color: var(--text-muted);
 }
 
 body.theme-dark .admin-dashboard .form-label {
-  color: rgba(224, 224, 224, 0.9);
+  color: var(--text-secondary);
 }
 
 body.theme-dark .admin-dashboard table {
-  color: #E0E0E0;
+  color: var(--text-secondary);
 }
 
 body.theme-dark .admin-dashboard table th {
-  color: #FFFFFF;
+  color: var(--text-primary);
   background: transparent;
-  border-color: rgba(255, 255, 255, 0.1);
+  border-color: var(--border-strong-current);
 }
 
 /* Dark Mode: Transparent table header row (matches Light Mode) */
 body.theme-dark .admin-dashboard table thead,
 body.theme-dark .admin-dashboard table thead tr {
   background: transparent !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--border-strong-current);
 }
 
 body.theme-dark .admin-dashboard table td {
-  border-color: rgba(255, 255, 255, 0.05);
+  border-color: var(--border-subtle-current);
 }
 
 body.theme-dark .admin-dashboard table tbody tr:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--surface-tint-subtle-current);
 }
 
 body.theme-dark .admin-tabs .nav-link {
-  color: rgba(224, 224, 224, 0.7);
+  color: var(--text-muted);
 }
 
 body.theme-dark .admin-tabs .nav-link:hover {
-  color: #FFFFFF;
-  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  background: var(--surface-tint-subtle-current);
 }
 
 body.theme-dark .admin-tabs .nav-link.active {
   color: var(--brand-headline);
-  background: rgba(255, 78, 80, 0.1);
+  /* Matches the light-theme equivalent a few hundred lines down, which
+     already reached for color-mix over the brand fill rather than a
+     hardcoded tint. */
+  background: color-mix(in srgb, var(--brand-orange-500) 10%, transparent);
 }
 
 /* Admin stat cards - dark mode (enhanced depth system) */
 body.theme-dark .admin-stat-card {
-  background: rgba(255, 255, 255, var(--glass-opacity-card));
-  border: 1px solid var(--border-strength-medium);
-  box-shadow: var(--depth-1), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  background: var(--surface-card-current);
+  border: 1px solid var(--border-subtle-current);
+  box-shadow: var(--shadow-card-current);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   transition: transform var(--transition-lift), box-shadow var(--transition-card), border-color var(--transition-card);
 }
 
 body.theme-dark .admin-stat-card:hover {
-  border-color: var(--border-strength-strong);
-  box-shadow: var(--depth-2), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  border-color: var(--border-strong-current);
+  box-shadow: var(--shadow-card-current), inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 /* Admin data table - uses panel surface system with enhanced depth */
 body.theme-dark .admin-data-table-container {
-  background: rgba(255, 255, 255, var(--glass-opacity-panel));
-  border: 1px solid var(--border-strength-medium);
-  box-shadow: var(--depth-2), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  background: var(--surface-panel-current);
+  border: 1px solid var(--border-strong-current);
+  box-shadow: var(--shadow-panel-current), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  /* ponytail: #4DD0E1 has no matching semantic token - --accent-teal is a
+     different hue (#4DD4C0) - and the light-theme container a few hundred
+     lines down carries no equivalent accent stripe at all, so retokenising
+     this is a design decision (a real --accent-cyan token, or drop the
+     stripe to match light) rather than a pure migration. Left as the one
+     literal in this rule; cto/AdaptaLabs#141. */
   border-top: 2px solid #4DD0E1;
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
@@ -1192,8 +1201,8 @@ body.theme-dark .admin-data-table-container {
 /* Settings button - dark mode (transparent with border) */
 body.theme-dark .admin-settings-btn {
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #FFFFFF;
+  border: 1px solid var(--surface-tint-strong-current);
+  color: var(--text-primary);
   border-radius: 6px;
   font-weight: 600;
   font-size: 0.85rem;
@@ -1201,20 +1210,23 @@ body.theme-dark .admin-settings-btn {
 }
 
 body.theme-dark .admin-settings-btn:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--surface-tint-subtle-current);
+  /* ponytail: no tint tier stronger than --surface-tint-strong-current
+     (0.18 alpha) exists yet, so the hover escalation over the 0.18 base
+     border stays a literal rather than a fabricated token; cto/AdaptaLabs#141. */
   border-color: rgba(255, 255, 255, 0.3);
 }
 
 body.theme-dark .admin-stat-card .stat-value {
-  color: #FFFFFF;
+  color: var(--text-primary);
 }
 
 body.theme-dark .admin-stat-card .stat-label {
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
 }
 
 body.theme-dark .admin-stat-card .stat-subtitle {
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--text-muted);
 }
 
 /* STRICT MONOCHROME - No colored icons in Dark Mode. This theme-scoped
@@ -1238,28 +1250,28 @@ body.theme-dark .cortex-page-title {
 
 /* Admin table text hierarchy - dark mode */
 body.theme-dark .row-title {
-  color: #FFFFFF;
+  color: var(--text-primary);
 }
 
 body.theme-dark .row-desc {
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
 }
 
 /* Admin table headers - dark mode */
 body.theme-dark .admin-data-table th {
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--text-muted);
   border-bottom: 1px solid var(--border-cortex-glass);
 }
 
 /* Admin buttons - dark mode */
 body.theme-dark .admin-settings-btn {
-  color: rgba(224, 224, 224, 0.9);
-  border-color: rgba(255, 255, 255, 0.2);
+  color: var(--text-secondary);
+  border-color: var(--surface-tint-strong-current);
 }
 
 body.theme-dark .admin-settings-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #FFFFFF;
+  background: var(--surface-tint-medium-current);
+  color: var(--text-primary);
 }
 
 body.theme-dark .admin-create-btn {
@@ -1603,11 +1615,11 @@ body.theme-dark .admin-dashboard table tbody td small:not(.badge) {
 /* Admin loading and empty states - dark mode */
 body.theme-dark .admin-loading-text,
 body.theme-dark .admin-empty-title {
-  color: #FFFFFF;
+  color: var(--text-primary);
 }
 
 body.theme-dark .admin-empty-text {
-  color: rgba(224, 224, 224, 0.7);
+  color: var(--text-secondary);
 }
 
 /* Admin tab buttons - dark mode (Cortex Underline Style) */
@@ -1624,7 +1636,7 @@ body.theme-dark .custom-tab-button:hover {
 }
 
 body.theme-dark .custom-tab-button.active {
-  color: #FFFFFF;
+  color: var(--text-primary);
   background: transparent;
   border-bottom: 2px solid var(--color-brand-orange);
 }
@@ -1640,9 +1652,9 @@ body.theme-dark .custom-tab-button span {
 
 body.theme-light .admin-dashboard .card,
 body.theme-light .admin-dashboard .admin-card {
-  background: #FFFFFF;
-  border: 1px solid rgba(0, 0, 0, 0.04);
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  background: var(--surface-card-current);
+  border: 1px solid var(--border-subtle-current);
+  box-shadow: var(--shadow-card-current);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
@@ -1667,37 +1679,37 @@ body.theme-light .admin-dashboard h2,
 body.theme-light .admin-dashboard h3,
 body.theme-light .admin-dashboard h4,
 body.theme-light .admin-dashboard .admin-dashboard-title {
-  color: #1A1A1A;
+  color: var(--text-primary);
 }
 
 body.theme-light .admin-dashboard p,
 body.theme-light .admin-dashboard .lead,
 body.theme-light .admin-dashboard .card-text {
-  color: #374151;
+  color: var(--text-secondary);
 }
 
 body.theme-light .admin-dashboard .text-muted,
 body.theme-light .admin-dashboard small {
-  color: #4B5563;
+  color: var(--text-muted);
 }
 
 /* Table row title and description text - light mode */
 body.theme-light .admin-dashboard table td strong,
 body.theme-light .admin-dashboard .admin-table-title,
 body.theme-light .admin-table-title {
-  color: #1A1A1A;
+  color: var(--text-primary);
 }
 
 body.theme-light .admin-dashboard table td small {
-  color: #4B5563;
+  color: var(--text-muted);
 }
 
 body.theme-light .admin-dashboard .form-label {
-  color: #374151;
+  color: var(--text-secondary);
 }
 
 body.theme-light .admin-dashboard table {
-  color: #374151;
+  color: var(--text-secondary);
 }
 
 body.theme-light .admin-dashboard table thead,
@@ -1801,15 +1813,15 @@ body.theme-light .admin-data-table tbody tr:hover {
 }
 
 body.theme-light .admin-stat-card .stat-value {
-  color: #1A1A1A;
+  color: var(--text-primary);
 }
 
 body.theme-light .admin-stat-card .stat-label {
-  color: #4B5563;
+  color: var(--text-secondary);
 }
 
 body.theme-light .admin-stat-card .stat-subtitle {
-  color: #6B7280;
+  color: var(--text-muted);
 }
 
 /* STRICT MONOCHROME - No colored icons in Light Mode. Same defect as the
@@ -1854,11 +1866,11 @@ body.theme-light .admin-settings-btn:hover {
 
 /* Admin table text hierarchy - light mode */
 body.theme-light .row-title {
-  color: #1A1A1A;
+  color: var(--text-primary);
 }
 
 body.theme-light .row-desc {
-  color: #6B7280;
+  color: var(--text-muted);
 }
 
 /* Admin table headers - light mode - FORCE WHITE BACKGROUND */
@@ -1943,11 +1955,11 @@ body.theme-light .admin-create-btn:hover {
 /* Admin loading and empty states - light mode */
 body.theme-light .admin-loading-text,
 body.theme-light .admin-empty-title {
-  color: #1A1A1A;
+  color: var(--text-primary);
 }
 
 body.theme-light .admin-empty-text {
-  color: #6B7280;
+  color: var(--text-muted);
 }
 
 /* ============================================================

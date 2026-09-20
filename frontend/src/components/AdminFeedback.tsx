@@ -7,6 +7,7 @@ import { AppError } from '../api/types';
 import { logger } from '../utils/logger';
 import { AlertTriangle, RefreshCw, Download, Inbox, ChevronRight, Trash2, X, Calendar, Link2, ChevronLeft } from 'lucide-react';
 import { SortCaret } from './ui';
+import './admin-feedback.css';
 
 import { formatDateTime } from '../utils/datetime';
 const AdminFeedback: React.FC = () => {
@@ -222,10 +223,9 @@ const AdminFeedback: React.FC = () => {
 
   if (error) {
     return (
-      <div className="alert" style={{
+      <div className="alert feedback-error-text" style={{
         backgroundColor: 'rgba(220, 53, 69, 0.15)',
         border: '1px solid rgba(220, 53, 69, 0.3)',
-        color: '#ff6b6d',
         borderRadius: '8px'
       }}>
         <AlertTriangle size={18} className="me-2" />
@@ -239,193 +239,6 @@ const AdminFeedback: React.FC = () => {
 
   return (
     <div className="admin-feedback">
-      <style>
-        {`
-          .admin-feedback .feedback-table {
-            background-color: transparent !important;
-          }
-          .admin-feedback .feedback-table thead th {
-            background-color: var(--bg-table-header) !important;
-            color: var(--text-primary) !important;
-            border-bottom: 1px solid var(--border-card) !important;
-            padding: 12px 16px !important;
-          }
-          .admin-feedback .feedback-table tbody tr {
-            background-color: transparent !important;
-            border-bottom: 1px solid var(--border-table-row) !important;
-            cursor: pointer;
-            transition: background-color 0.15s ease;
-          }
-          .admin-feedback .feedback-table tbody tr:hover {
-            background-color: var(--bg-hover) !important;
-          }
-          .admin-feedback .feedback-table tbody td {
-            color: var(--text-primary) !important;
-            padding: 16px !important;
-            vertical-align: middle !important;
-          }
-          .admin-feedback .feedback-preview {
-            max-width: 400px;
-            white-space: pre-wrap;
-            word-break: break-word;
-            line-height: 1.5;
-          }
-          .admin-feedback .feedback-preview-text {
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-          }
-          .admin-feedback .read-more {
-            color: var(--brand-headline);
-            font-size: 0.85rem;
-            margin-top: 4px;
-          }
-          .admin-feedback .user-info {
-            font-size: 0.85rem;
-            color: var(--text-muted);
-          }
-          .admin-feedback .sortable {
-            user-select: none;
-          }
-          /* The click target is a real button now (row 13); it fills the header
-             cell and inherits its type so nothing shifts visually. */
-          .admin-feedback .feedback-th-sort {
-            display: block;
-            width: 100%;
-            padding: 0;
-            border: 0;
-            background: none;
-            font: inherit;
-            color: inherit;
-            text-align: inherit;
-            cursor: pointer;
-          }
-          .admin-feedback .feedback-th-sort:hover {
-            color: var(--brand-headline);
-          }
-          .admin-feedback .feedback-th-sort:focus-visible {
-            outline: 2px solid var(--focus-ring, var(--brand-headline));
-            outline-offset: 2px;
-            border-radius: 2px;
-          }
-          .admin-feedback .feedback-heading {
-            color: var(--text-primary);
-          }
-          .admin-feedback .empty-state-icon {
-            color: var(--text-muted);
-          }
-          .admin-feedback .empty-state-title {
-            color: var(--text-primary);
-          }
-          .admin-feedback .empty-state-text {
-            color: var(--text-muted);
-          }
-          .admin-feedback .date-text {
-            color: var(--text-muted);
-          }
-          /* Modal styling */
-          .admin-feedback .feedback-modal-content {
-            background: var(--bg-card);
-            border: 1px solid var(--border-card);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-          }
-          .admin-feedback .feedback-modal-header {
-            border-bottom: 1px solid var(--border-card);
-          }
-          .admin-feedback .feedback-modal-header h5 {
-            color: var(--text-primary);
-          }
-          .admin-feedback .feedback-modal-header small {
-            color: var(--text-muted);
-          }
-          .admin-feedback .feedback-modal-header button {
-            color: var(--text-muted);
-          }
-          .admin-feedback .feedback-modal-text {
-            color: var(--text-primary);
-          }
-          .admin-feedback .feedback-modal-placeholder {
-            color: var(--text-muted);
-            font-style: italic;
-          }
-          .admin-feedback .feedback-modal-meta {
-            border-top: 1px solid var(--border-table-row);
-            color: var(--text-muted);
-            font-size: 0.85rem;
-          }
-          .admin-feedback .feedback-modal-meta i {
-            color: var(--brand-headline);
-            opacity: 0.7;
-            margin-right: 0.5rem;
-          }
-          .admin-feedback .feedback-modal-footer {
-            border-top: 1px solid var(--border-card);
-          }
-          .admin-feedback .feedback-nav-btn {
-            background: var(--bg-hover);
-            border: 1px solid var(--border-card);
-            color: var(--text-primary);
-          }
-          .admin-feedback .feedback-nav-btn:hover:not(:disabled) {
-            background: var(--bg-table-header);
-          }
-          .admin-feedback .feedback-pagination-text {
-            color: var(--text-muted);
-          }
-
-          /* Phone: reflow to stacked cards, matching the admin dashboard tables
-             (audit row 14 / #122). Lives here rather than in _components.css
-             because the tbody td rule above sets padding:16px !important in the
-             document body, which an !important rule in the head stylesheet
-             cannot beat on source order. Below 768px each row is a card with
-             its column name inline above the value, so the table no longer
-             scrolls sideways inside .table-responsive. */
-          @media (max-width: 767.98px) {
-            .admin-feedback .table-responsive {
-              overflow-x: visible;
-            }
-            .admin-feedback .feedback-table,
-            .admin-feedback .feedback-table tbody,
-            .admin-feedback .feedback-table tr {
-              display: block;
-              width: 100%;
-            }
-            .admin-feedback .feedback-table thead {
-              display: none;
-            }
-            .admin-feedback .feedback-table tbody tr {
-              border: 1px solid var(--border-card) !important;
-              border-radius: 8px;
-              margin-bottom: 12px;
-              padding: 8px 12px;
-            }
-            .admin-feedback .feedback-table tbody td {
-              display: block;
-              width: auto;
-              padding: 6px 0 !important;
-              text-align: left !important;
-              border: 0 !important;
-            }
-            .admin-feedback .feedback-table tbody td[data-label]::before {
-              content: attr(data-label);
-              display: block;
-              margin-bottom: 0.15rem;
-              font-size: 0.7rem;
-              font-weight: 600;
-              letter-spacing: 0.05em;
-              text-transform: uppercase;
-              text-align: left;
-              color: var(--text-muted);
-            }
-            .admin-feedback .feedback-preview {
-              max-width: 100%;
-            }
-          }
-        `}
-      </style>
-
       <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <h3 className="feedback-heading mb-0">
           Feedback Inbox
@@ -573,7 +386,16 @@ const AdminFeedback: React.FC = () => {
 
       {/* View Feedback Modal */}
       {viewModal.show && currentFeedback && (
-        <div 
+        // ponytail: the scrim (rgba(0, 0, 0, 0.85) below) and the dialog's
+        // drop shadow (rgba(0, 0, 0, 0.5), a few lines down) stay hardcoded
+        // black rather than routed through a token. Both are theme-neutral
+        // overlay effects, not content colour, and the only shadow token
+        // available (--shadow-card-current) is tuned for an ambient card
+        // lift, not a dialog floating over a near-black scrim - swapping it
+        // in would make the dialog's edge nearly disappear in dark theme.
+        // Upgrade path: a dedicated --shadow-modal-current token, if a
+        // second modal ever needs the same shape.
+        <div
           onClick={closeViewModal}
           style={{
             position: 'fixed',
@@ -612,20 +434,19 @@ const AdminFeedback: React.FC = () => {
                 <span className={getCategoryBadgeClass(currentFeedback.category)}>
                   {getCategoryLabel(currentFeedback.category)}
                 </span>
-                <h5 style={{ color: '#fff', marginTop: '0.5rem', marginBottom: 0 }}>
+                <h5 style={{ marginTop: '0.5rem', marginBottom: 0 }}>
                   {currentFeedback.user_name}
                 </h5>
-                <small style={{ color: 'rgba(224, 224, 224, 0.6)' }}>
+                <small>
                   {currentFeedback.user_email}
                 </small>
               </div>
-              <button 
-                onClick={closeViewModal} 
+              <button
+                onClick={closeViewModal}
                 aria-label="Close"
                 style={{
                   background: 'transparent',
                   border: 'none',
-                  color: 'rgba(224, 224, 224, 0.7)',
                   fontSize: '1.5rem',
                   cursor: 'pointer',
                   padding: 0,
@@ -658,13 +479,13 @@ const AdminFeedback: React.FC = () => {
                 marginTop: '1rem',
                 paddingTop: '1rem'
               }}>
-                <div style={{ fontSize: '0.85rem', color: 'rgba(224, 224, 224, 0.6)' }}>
-                  <Calendar size={14} style={{ marginRight: '0.5rem', color: 'rgba(255, 78, 80, 0.7)' }} />
+                <div className="feedback-modal-meta-item" style={{ fontSize: '0.85rem' }}>
+                  <Calendar size={14} className="feedback-modal-meta-icon" />
                   {formatDate(currentFeedback.created_at)}
                 </div>
                 {currentFeedback.url && currentFeedback.url !== 'Unknown' && (
-                  <div style={{ fontSize: '0.85rem', color: 'rgba(224, 224, 224, 0.6)' }}>
-                    <Link2 size={14} style={{ marginRight: '0.5rem', color: 'rgba(255, 78, 80, 0.7)' }} />
+                  <div className="feedback-modal-meta-item" style={{ fontSize: '0.85rem' }}>
+                    <Link2 size={14} className="feedback-modal-meta-icon" />
                     {currentFeedback.url}
                   </div>
                 )}
