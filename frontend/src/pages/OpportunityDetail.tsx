@@ -234,15 +234,16 @@ const OpportunityDetail: React.FC = () => {
   // so the button cannot disagree with what the rest of the product says
   // about this study.
   const closingTime = opportunity ? getClosingTime(opportunity) : null;
-  // ponytail: client-only refusal - the mint routes (survey-session, recorded
-  // study, poll) check only opportunity status, not end_date. Decision 3's
-  // hourly sweep now flips a published study to closed at its end_date, so the
-  // window where a stale tab or a direct request can still start a session past
-  // the deadline is bounded to that hour rather than indefinite - but it is not
-  // zero, and a mint route gating on end_date directly is the full fix.
-  //   -> cto/AdaptaLabs#129, breaks once a participant reaches the endpoint
-  //      after their deadline, within the hour before the sweep, without
-  //      reloading the page first.
+  // NO LONGER CLIENT-ONLY (cto/AdaptaLabs#129). Both mint routes now derive the
+  // same closing time in SQL - `end_date`, else the last session's `end_time` -
+  // and refuse with a 403 past it, so a stale tab, a replayed request or a
+  // script gets the refusal this branch renders rather than a session. Keep the
+  // two rules in step: `loadMintableOpportunity` in backend/src/routes/
+  // opportunities.ts mirrors `getClosingTime` arm for arm, and a change to
+  // either belongs in both. The one path this gate still owns alone is the
+  // external hand-off, where `window.open` leaves Cortex and the server sees no
+  // request at all - inherent to handing off, and the same reason the screener
+  // note further down this file exists.
   const hasEnded = getTimeRemainingUntil(closingTime).urgency === 'ended';
   const closedOnLabel = formatStudyDate(closingTime?.toISOString());
 

@@ -2449,5 +2449,38 @@
     "spec": "src/routes/__tests__/screener-enforcement-postgres.test.ts",
     "test": "refuses to mint a native survey session when the participant has no verdict",
     "needsDatabase": true
+  },
+  {
+    "id": "recorded-mint-refuses-a-closed-study",
+    "why": "The server-side half of cto/AdaptaLabs#129. Both participant surfaces refuse a closed study, and until this guard existed they refused it ONLY in the browser: the recorded-study mint asked whether the opportunity was published and never when it closed, so a stale tab, a replayed request or a script minted a recorded session - screen and microphone capture - for a study the product calls closed. Measured before the fix: 200 with a real session_url for a published study whose end_date was a day in the past. Deleting the guard is the whole defect back, and no mocked-pool test can see it because the closing time is derived in the SELECT against the database clock. Proven by mutation before entry: deleting these three lines reds the named test, which answers 200 instead of 403.",
+    "file": "backend/src/routes/opportunities.ts",
+    "anchor": "    if (loaded.row.has_closed === true) {\n      return refuseClosedStudyMint(res, loaded.canonicalOpportunityId ?? id, 'recorded');\n    }\n",
+    "mutation": "",
+    "runner": "vitest",
+    "spec": "src/routes/__tests__/mint-refuses-a-closed-study-postgres.test.ts",
+    "test": "refuses a published study whose end date has passed",
+    "needsDatabase": true
+  },
+  {
+    "id": "survey-mint-refuses-a-closed-study",
+    "why": "The SECOND of two near-identical guards in one file, and it gets its own entry for the reason the ownership pair above does: a fix applied to one of a pair reads as a fix applied to both, and an entry naming only one would carry that blind spot into the thing meant to detect it. This is also the arm with a results consequence - an answered survey or poll is counted in the researcher's numbers, so a study still accepting answers after its deadline moves a tally that was supposed to be final. Proven by mutation before entry: deleting these three lines reds the named test, which answers 200 instead of 403.",
+    "file": "backend/src/routes/opportunities.ts",
+    "anchor": "    if (row.has_closed === true) {\n      return refuseClosedStudyMint(res, loaded.canonicalOpportunityId ?? id, 'survey');\n    }\n",
+    "mutation": "",
+    "runner": "vitest",
+    "spec": "src/routes/__tests__/mint-refuses-a-closed-study-postgres.test.ts",
+    "test": "refuses a published survey whose end date has passed",
+    "needsDatabase": true
+  },
+  {
+    "id": "closing-time-keeps-its-sessions-fallback",
+    "why": "The arm of cto/AdaptaLabs#129 that is easiest to lose and hardest to notice. `getClosingTime` on the frontend closes a study at its end_date where one is set and at its LAST SESSION otherwise, and the SQL here mirrors both arms; simplifying it to an end_date comparison - the obvious tidy-up, and what the ticket's own upgrade path suggested - leaves both route guards standing and every status test green while reopening the gap for exactly the studies the UI is most confident about disabling, the undated ones whose slots have all run. Proven by mutation before entry: replacing the subquery with NULL reds the named test, which answers 200 instead of 403, while the end_date tests stay green.",
+    "file": "backend/src/routes/opportunities.ts",
+    "anchor": "              (SELECT MAX(s.end_time) FROM sessions s WHERE s.opportunity_id = o.id)\n",
+    "mutation": "              NULL::timestamptz\n",
+    "runner": "vitest",
+    "spec": "src/routes/__tests__/mint-refuses-a-closed-study-postgres.test.ts",
+    "test": "refuses an undated study once its last slot has finished",
+    "needsDatabase": true
   }
 ]

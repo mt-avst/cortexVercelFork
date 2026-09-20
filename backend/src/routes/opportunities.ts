@@ -3229,14 +3229,58 @@ router.get('/:id/recorded-study-brief', recordedStudyBriefLimiter, optionalAuth,
  */
 async function loadMintableOpportunity(id: string): Promise<{
   canonicalOpportunityId: string | null;
-  row: { id: unknown; type: string; status: string; delivery_mode?: string | null; firsthand_study_id: string | null; screener?: Screener | null };
+  row: {
+    id: unknown;
+    type: string;
+    status: string;
+    delivery_mode?: string | null;
+    firsthand_study_id: string | null;
+    screener?: Screener | null;
+    /**
+     * Whether this study's closing time is already past, or null when nothing
+     * says when it closes. Read as `=== true` at the call sites, so an absent
+     * column - the mock-data fallback, a mocked pool - can never be mistaken
+     * for a closed study.
+     */
+    has_closed?: boolean | null;
+  };
 } | null> {
   if (!(await isDatabaseAvailable())) {
     return null;
   }
 
+  /*
+   * `has_closed` MIRRORS THE FRONTEND'S `getClosingTime` (cto/AdaptaLabs#129),
+   * arm for arm, rather than checking `end_date` alone.
+   *
+   * `frontend/src/utils/opportunityUtils.ts` closes a study at its `end_date`
+   * where one is set and at its LAST SESSION otherwise, and calls the deadline
+   * unknown when neither says. That asymmetry is the whole of the ticket: a
+   * server checking only `end_date` would leave the gap open for exactly the
+   * studies whose Start button the UI is most confident about disabling - the
+   * undated ones whose slots have all run. Two rules for one fact is how a
+   * client-side refusal comes back.
+   *
+   * It costs no extra round trip. The fallback arm is a correlated subquery on
+   * `idx_sessions_opportunity`, so this stays the single-row read it always
+   * was: a SECOND query before every mint would have been a reason to settle
+   * for the narrower rule, and there is no second query.
+   *
+   * `NOW()` is the DATABASE clock - the same clock Decision 3's hourly
+   * `autoClosePublishedStudiesPastEndDate` sweep compares against, so the two
+   * cannot disagree about the boundary. `<=` matches `getTimeRemainingUntil`,
+   * which calls a zero remainder 'ended'. NULL propagates through both the
+   * COALESCE and the comparison, so a study with no end date and no sessions
+   * reads null: unknown, never closed.
+   */
   const result = await pool.query(
-    'SELECT id, type, firsthand_study_id, status, delivery_mode, screener FROM opportunities WHERE id = $1',
+    `SELECT o.id, o.type, o.firsthand_study_id, o.status, o.delivery_mode, o.screener,
+            COALESCE(
+              o.end_date,
+              (SELECT MAX(s.end_time) FROM sessions s WHERE s.opportunity_id = o.id)
+            ) <= NOW() AS has_closed
+     FROM opportunities o
+     WHERE o.id = $1`,
     [id]
   );
 
@@ -3251,6 +3295,35 @@ async function loadMintableOpportunity(id: string): Promise<{
     canonicalOpportunityId: parsedId == null ? null : String(parsedId),
     row
   };
+}
+
+/**
+ * What a participant is told when they reach a mint route for a study whose
+ * deadline has passed (cto/AdaptaLabs#129).
+ *
+ * THE SAME CLASS OF REFUSAL AS THE `status` CHECK BESIDE IT, deliberately:
+ * 403 with a bare `{ error }`, which both participant surfaces already render
+ * as a refusal without a frontend change. It has to be, because the two are
+ * the same fact an hour apart - Decision 3's hourly sweep flips a study past
+ * its `end_date` to `closed`, and from that moment the existing status check
+ * answers this same 403. A different shape here would mean one study answering
+ * two ways either side of a cron tick.
+ *
+ * Not the 410 `OPPORTUNITY_CLOSED` the detail READ gives (see
+ * `unavailableOpportunityError`): that one is a page-level state the
+ * participant page renders as its own screen, while this is a button press,
+ * and the mint callers route an unrecognised status into "try again or
+ * contact support" - a fault, which this is not.
+ */
+const STUDY_HAS_CLOSED = 'Study has closed';
+
+/**
+ * One refusal, two chokepoints. The log line is the only place the refusal is
+ * observable in production, so it names the opportunity.
+ */
+function refuseClosedStudyMint(res: Response, opportunityId: string, route: 'recorded' | 'survey'): Response {
+  logger.warn('Refused a mint on a study that has closed', { opportunityId, route });
+  return res.status(403).json({ error: STUDY_HAS_CLOSED });
 }
 
 /**
@@ -3358,6 +3431,17 @@ router.post(['/:id/recorded-study-session', '/:id/firsthand-handoff'], requireAu
     }
     if (loaded.row.status !== 'published') {
       return res.status(403).json({ error: 'Study is not published' });
+    }
+    // Deadline gate (cto/AdaptaLabs#129), next to the status check because it
+    // answers the same question one field along: may this study be started at
+    // all, right now. Both participant surfaces already refuse a closed study,
+    // but only in the browser, so a stale tab, a replayed request or a script
+    // minted a RECORDED session for a study the product calls closed. NOT
+    // exempted for an admin, exactly like the status check above it: neither
+    // gate on this route has ever had an admin branch, and an admin previewing
+    // a study that has closed is in the same position as a participant.
+    if (loaded.row.has_closed === true) {
+      return refuseClosedStudyMint(res, loaded.canonicalOpportunityId ?? id, 'recorded');
     }
     // Screener gate: refuse anyone without a stored 'qualified' verdict before
     // minting a recorded session. Keyed to the canonical opportunity id, the
@@ -3488,6 +3572,17 @@ router.post('/:id/survey-session', requireAuth, participantSessionMintLimiter, p
 
     if (row.status !== 'published') {
       return res.status(403).json({ error: 'Study is not published' });
+    }
+
+    // Deadline gate (cto/AdaptaLabs#129). The recorded route's twin, and
+    // written out here rather than folded into `loadMintableOpportunity`
+    // because that helper deliberately decides nothing about whether an
+    // opportunity may be minted - see its docblock. An answered survey is
+    // counted in the researcher's results, so a poll still accepting answers
+    // after its deadline moves numbers that were supposed to be final. NOT
+    // exempted for an admin, exactly like the status check above it.
+    if (row.has_closed === true) {
+      return refuseClosedStudyMint(res, loaded.canonicalOpportunityId ?? id, 'survey');
     }
 
     // Screener gate: refuse anyone without a stored 'qualified' verdict before
