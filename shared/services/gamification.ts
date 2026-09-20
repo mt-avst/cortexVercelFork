@@ -482,6 +482,18 @@ export async function getUserAchievements(pool: Pool, userId: string): Promise<U
  *
  * NO `up.user_id` IN THE SELECT LIST, and that is the payload boundary rather
  * than a tidy-up - see `LeaderboardEntry`. cto/AdaptaLabs#17.
+ *
+ * A PUBLIC BOARD IS EARNED, NOT JOINED BY ARRIVING. `WHERE up.total_points > 0`
+ * is a privacy filter, not a presentation one. `getUserProfile` INSERTs a row
+ * on a GET, and this route is UNAUTHENTICATED and selects `u.name` - so
+ * without the filter, merely opening /gamification published the visitor's
+ * real name to any anonymous caller. Measured on the real database: one GET
+ * took the board from one row to two, the second a 0-point newcomer who had
+ * done nothing but load a page.
+ *
+ * FILTER ON THE METRIC THIS BOARD RANKS BY. The monthly sibling filters
+ * `monthly_points` instead, which is not a copy-paste slip: a participant with
+ * lifetime points and nothing this month belongs here and not there.
  */
 export async function getLeaderboard(pool: Pool, limit: number = 10): Promise<LeaderboardEntry[]> {
   const client = await pool.connect();
@@ -495,6 +507,7 @@ export async function getLeaderboard(pool: Pool, limit: number = 10): Promise<Le
         ROW_NUMBER() OVER (ORDER BY up.total_points DESC) as rank
       FROM user_profiles up
       JOIN users u ON up.user_id = u.id
+      WHERE up.total_points > 0
       ORDER BY up.total_points DESC
       LIMIT $1
     `, [limit]);
@@ -512,6 +525,15 @@ export async function getLeaderboard(pool: Pool, limit: number = 10): Promise<Le
  * near-identical, which is the shape where a fix applied to one reads as a fix
  * applied to both - #17 capped the limit on both and this file's own history
  * shows the trap. cto/AdaptaLabs#17.
+ *
+ * SAME TRAP, SECOND TIME. The zero-point privacy filter was applied to both
+ * for the same reason, and on `monthly_points` here rather than on
+ * `total_points`. This is the arm that matters in practice: after a monthly
+ * reset everyone sits at 0, ordering among ties is unspecified, and a brand-new
+ * profile can surface in the visible top 20. Both are pinned by SEPARATE arms
+ * in gamification-postgres.test.ts, including one asserting a lifetime-scorer
+ * with no monthly points is absent HERE and present on the all-time board - a
+ * shared arm would have hidden exactly that.
  */
 export async function getMonthlyLeaderboard(pool: Pool, limit: number = 10): Promise<LeaderboardEntry[]> {
   const client = await pool.connect();
@@ -525,6 +547,7 @@ export async function getMonthlyLeaderboard(pool: Pool, limit: number = 10): Pro
         ROW_NUMBER() OVER (ORDER BY up.monthly_points DESC) as rank
       FROM user_profiles up
       JOIN users u ON up.user_id = u.id
+      WHERE up.monthly_points > 0
       ORDER BY up.monthly_points DESC
       LIMIT $1
     `, [limit]);

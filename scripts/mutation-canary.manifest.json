@@ -1068,6 +1068,28 @@
     "needsDatabase": true
   },
   {
+    "id": "leaderboard-excludes-a-zero-point-arrival",
+    "why": "A PUBLIC BOARD IS EARNED, NOT JOINED BY ARRIVING. `getUserProfile` is a GET handler that INSERTs a user_profiles row when none exists, and both leaderboard routes are UNAUTHENTICATED (cto/AdaptaLabs#17, a deliberate product decision) and select u.name. So without this filter, merely OPENING /gamification published the visitor's real name to any anonymous caller. MEASURED on a real Postgres before the fix: a single GET /api/gamification/profile took the public board from one row to two, the second a 0-point newcomer who had done nothing but load a page. The mechanism pre-dated the AdaptaBits menu change; what that change did was give every signed-in staff member and superadmin a signpost to it, which is why the filter was taken rather than the wider blast radius. The mutation deletes the WHERE clause, restoring the leak. It is valid SQL and the board still returns rows, so nothing fails to build and only a real query can see it. This entry is the ALL-TIME board, filtered on total_points, the metric it ranks by. Its monthly sibling is pinned separately and filters monthly_points instead: the pair is twenty-six lines apart and near-identical, which is the exact shape where a fix applied to one reads as a fix applied to both, and this file's own docblock records #17 hitting that trap already. A shared arm would hide it, so there are two.",
+    "file": "shared/services/gamification.ts",
+    "anchor": "      WHERE up.total_points > 0\n",
+    "mutation": "",
+    "runner": "vitest",
+    "spec": "src/services/__tests__/gamification-postgres.test.ts",
+    "test": "keeps a zero-total newcomer off the all-time board",
+    "needsDatabase": true
+  },
+  {
+    "id": "leaderboard-monthly-excludes-a-zero-point-arrival",
+    "why": "A PUBLIC BOARD IS EARNED, NOT JOINED BY ARRIVING. `getUserProfile` is a GET handler that INSERTs a user_profiles row when none exists, and both leaderboard routes are UNAUTHENTICATED (cto/AdaptaLabs#17, a deliberate product decision) and select u.name. So without this filter, merely OPENING /gamification published the visitor's real name to any anonymous caller. MEASURED on a real Postgres before the fix: a single GET /api/gamification/profile took the public board from one row to two, the second a 0-point newcomer who had done nothing but load a page. The mechanism pre-dated the AdaptaBits menu change; what that change did was give every signed-in staff member and superadmin a signpost to it, which is why the filter was taken rather than the wider blast radius. The mutation deletes the WHERE clause, restoring the leak. It is valid SQL and the board still returns rows, so nothing fails to build and only a real query can see it. This entry is the MONTHLY board, filtered on monthly_points rather than total_points, and it is the arm that matters in practice: after a monthly reset everyone sits at 0, ordering among ties is unspecified, and a brand-new profile can surface in the visible top 20. The pinned test also asserts that a lifetime scorer with no monthly points is absent HERE and present on the all-time board, so a copy-paste slip filtering total_points in this query fails by name rather than passing as a near-enough fix.",
+    "file": "shared/services/gamification.ts",
+    "anchor": "      WHERE up.monthly_points > 0\n",
+    "mutation": "",
+    "runner": "vitest",
+    "spec": "src/services/__tests__/gamification-postgres.test.ts",
+    "test": "keeps a zero-month participant off the monthly board, including one with all-time points",
+    "needsDatabase": true
+  },
+  {
     "id": "points-history-asks-for-one-row-more-than-it-returns",
     "why": "WITHOUT THE +1, `has_more` IS UNSATISFIABLE and silently always false - the exact defect cto/AdaptaLabs#23 was opened for, wearing the fix's clothes. A full page and the end of a caller's own transaction history are the same response unless one extra row is fetched to tell them apart. The mutation binds `limit` instead of `limit + 1`: `rows.length > limit` can then never be true, every page reports the history as finished, and the caller with fifty transactions on the default twenty is told those twenty are all there is. Same shape as `MAX_CSV_PARTICIPANTS + 1`, and it survived a review there once already. Only a real query can see it - the route-level spec mocks the service and would return whatever the mock was told to. ANCHOR RENAMED BY cto/AdaptaLabs#47, which added the keyset cursor and so appended two bind parameters to this line. The PROPERTY is untouched and the entry keeps its id: `+ 1` is still the probe row and it is still the only thing making `has_more` satisfiable. Recorded here because this is what an ANCHOR_MISSING is FOR - the harness reported it by name on a full run, where a manifest filtered to one branch's own new entries could not have seen it, and a silent re-add under a new id would have been a rename undone.",
     "file": "shared/services/gamification.ts",
