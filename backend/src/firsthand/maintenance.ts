@@ -10,8 +10,8 @@ import { logger } from '../utils/logger';
 // here: the transcript backstop (finalize already generates transcripts inline
 // best-effort, so this only reprocesses jobs left `queued` by a transient
 // failure) and the stale-upload reaper. The third, the outbound HMAC callback
-// outbox, is deliberately NOT run: internalised sessions carry no callback_url
-// so nothing is ever enqueued, and the HMAC hop is being retired.
+// outbox, has been removed entirely: internalised sessions carry no callback_url
+// so nothing was ever enqueued, and the HMAC delivery hop is now retired.
 
 const DEFAULT_TRANSCRIPT_LIMIT = 5;
 const DEFAULT_UPLOAD_CLEANUP_LIMIT = 20;
