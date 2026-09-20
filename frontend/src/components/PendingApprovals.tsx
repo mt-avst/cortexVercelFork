@@ -1,28 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { getPendingApprovals, approveSession, rejectSession } from '../api/client';
 import LoadingSpinner from './LoadingSpinner';
-import { AppError } from '../api/types';
+import { AppError, PendingApprovalBooking as PendingApproval } from '../api/types';
 import { logger } from '../utils/logger';
 import { RefreshCw, CheckCircle, UserCheck, XCircle } from 'lucide-react';
 
 import { formatDateTime } from '../utils/datetime';
 import { getParticipantFacingType } from '../utils/opportunityUtils';
 import './pending-approvals.css';
-
-interface PendingApproval {
-  booking_id: string;
-  user_id: string;
-  session_id: string;
-  completed_at: string;
-  admin_notes: string | null;
-  user_name: string;
-  user_email: string;
-  start_time: string;
-  end_time: string;
-  opportunity_title: string;
-  opportunity_type: string;
-  owner_user_id: string;
-}
 
 /** A resolved-action banner, shown inline instead of a blocking browser alert. */
 interface ActionMessage {
