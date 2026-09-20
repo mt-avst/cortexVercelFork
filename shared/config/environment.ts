@@ -194,8 +194,8 @@ export const backendEnvSchema = z.object({
   // passes `${CORS_ORIGIN}` straight through from an operator environment this
   // repository cannot enumerate, so a no-path rule could refuse a boot that
   // succeeds today. `new URL(v).origin` is exactly the string a browser sends,
-  // so normalising is strictly more permissive than the schema it replaces:
-  // nothing that boots today stops booting.
+  // so the transform on its own refuses nothing. The allow-list further down
+  // DOES narrow what boots, and says exactly what it narrows.
   //
   // WHAT NORMALISING ALSO CHANGES, named because it is not free. The write-back
   // in backend/src/config/index.ts puts this value into
@@ -225,8 +225,14 @@ export const backendEnvSchema = z.object({
     //   `https://app.example.com@evil.com`       -> `https://evil.com`
     //   `https://app.example.com:8443@evil.com/` -> `https://evil.com`
     //   `https://x.com%2f@evil.com`              -> `https://evil.com`
-    //   `http://evil.com\@good.com`              -> `http://evil.com`
     // Everything before the `@` is userinfo, so the host is what follows it.
+    //
+    // WHAT THIS REFINE CANNOT SEE. It asks the parser, and the parser reports
+    // an EMPTY username for `https://@evil.com`, `https://:@evil.com` and a
+    // backslash shape like `http://evil.com\@good.com` (the backslash reads as
+    // `/`, so the `@` lands in the path). Those are refused by the allow-list
+    // below, not here. This refine stays for the MESSAGE: a value that really
+    // does carry a username or password is told so by name.
     //
     // WHY THAT IS WORSE AFTER THE TRANSFORM THAN BEFORE IT. index.ts passes
     // this to `cors()` as a STRING, and for a string the cors package emits it
@@ -260,6 +266,37 @@ export const backendEnvSchema = z.object({
         return true;
       }
     }, 'CORS origin must not contain userinfo')
+    // THE SHAPE IS ALLOW-LISTED on the trimmed RAW text, before the parser
+    // sees it (#64, raised by the security gate). The transform below does
+    // more than drop a path: the WHATWG parser reads `\` as `/`, strips tab
+    // and newline from anywhere, percent-decodes and case-folds the host and
+    // maps fullwidth letters, ideographic dots and zero-width characters onto
+    // ASCII. So a broken value can come out as a DIFFERENT, well-formed origin
+    // - measured on this branch before this refine, all accepted:
+    //   `http://evil.com\@good.com`       -> `http://evil.com`
+    //   `https:///evil.com`               -> `https://evil.com`
+    //   `https://good.com<LF>.evil.com`   -> `https://good.com.evil.com`
+    //   `https://%65vil.com`              -> `https://evil.com`
+    //   `https://a.com/,https://evil.com` -> `https://a.com`
+    // and the userinfo refine above passed every one of them. A block-list
+    // would stay one entry behind the parser, so this names the one shape an
+    // operator means and refuses the rest: lower-case http or https, a host of
+    // ASCII letters, digits, dots and hyphens, an optional numeric port, and
+    // an optional path, query or fragment with no backslash, whitespace, `@`
+    // or comma in it.
+    //
+    // WHAT THIS NARROWS, because unlike the transform it is not free. It
+    // refuses some values origin/main booted: an IPv6 literal (`http://[::1]`),
+    // an underscore in the host, and a non-ASCII host. None is a shape a
+    // deployed CORS origin takes, and a non-ASCII host can still be written in
+    // punycode. Swept every tracked file for a CORS_ORIGIN setter (git grep
+    // -i, test files and the canary manifest excluded): all five literal
+    // values match, and docker-compose.prod.yml passes `${CORS_ORIGIN}`
+    // through from outside this repository, which no sweep can see.
+    .refine(
+      (value) => /^https?:\/\/[A-Za-z0-9.-]+(:\d+)?(?:[/?#][^\\\s@,]*)?$/.test(value),
+      'CORS origin must be http(s)://host[:port] with an optional path - a host of ASCII letters, digits, dots and hyphens only, and no backslash, whitespace, @ or comma anywhere'
+    )
     .transform((value) => new URL(value).origin)
     .default('http://localhost:3000'),
 

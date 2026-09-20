@@ -361,11 +361,12 @@ describe('backend CORS_ORIGIN validation', () => {
    * The trailing slash is the likeliest of the family: it is what the address
    * bar shows, so it is what an operator copies.
    *
-   * REFUSING WAS THE OTHER OPTION. Normalising was chosen because it is
-   * strictly more permissive than the schema it replaces - nothing that boots
-   * today stops booting - whereas a no-path rule could refuse a boot in the
-   * operator environment that docker-compose.prod.yml takes CORS_ORIGIN from,
-   * which this repository cannot enumerate.
+   * REFUSING WAS THE OTHER OPTION. Normalising was chosen because the
+   * transform on its own refuses nothing a browser could send, whereas a
+   * no-path rule could refuse a boot in the operator environment that
+   * docker-compose.prod.yml takes CORS_ORIGIN from, which this repository
+   * cannot enumerate. The shape allow-list further down DOES narrow what
+   * boots, and its own arms name what it narrows.
    *
    * EXPECTATIONS ARE LITERALS, not derived from new URL, so this arm can still
    * see the transform change. Deriving them would make the test agree with any
@@ -454,7 +455,10 @@ describe('backend CORS_ORIGIN validation', () => {
     'https://app.example.com@evil.com',
     'https://app.example.com:8443@evil.com/',
     'https://x-example-host%2f@evil.com',
-    'https://user:pass@x-example-host/p'
+    'https://user:pass@x-example-host/p',
+    // PASSWORD WITHOUT A USERNAME. The username half of the refine cannot see
+    // this one, so it is the arm that fails when the password half goes.
+    'https://:secret@x-example-host'
   ])('refuses the userinfo-carrying CORS_ORIGIN %p rather than normalising it to the host after the at sign', (value) => {
     setVar('CORS_ORIGIN', value);
     expect(() => validateBackendEnvironment()).toThrow(
@@ -479,6 +483,110 @@ describe('backend CORS_ORIGIN validation', () => {
   });
 
   /**
+   * THE SHAPE IS ALLOW-LISTED, because the transform REPAIRS what it parses.
+   *
+   * `new URL(v).origin` does not only drop a path. The WHATWG parser reads `\`
+   * as `/`, strips tab and newline from anywhere in the value, percent-decodes
+   * and case-folds the host and maps fullwidth letters, ideographic dots and
+   * zero-width characters onto ASCII. So a broken value comes out the far side
+   * as a DIFFERENT, well-formed origin - and index.ts hands that string to
+   * `cors()`, which emits it as Access-Control-Allow-Origin with credentials
+   * on. MEASURED on this branch before the allow-list, every one of these
+   * booted:
+   *   'http://evil.com\@good.com'        -> 'http://evil.com'
+   *   'https://\evil.com'                -> 'https://evil.com'
+   *   'https:///evil.com'                -> 'https://evil.com'
+   *   'https://good.com<LF>.evil.com'    -> 'https://good.com.evil.com'
+   *   'https://%65vil.com'               -> 'https://evil.com'
+   *   'https://@evil.com'                -> 'https://evil.com'
+   *   'https://a.com,https://b.com'      -> 'https://a.com,https'
+   *   'https://a.com/,https://evil.com'  -> 'https://a.com'
+   *   'https://*.good.com'               -> 'https://*.good.com'
+   * The userinfo refine sees none of the backslash, empty-userinfo or comma
+   * shapes, because the parser reports an empty username for all of them. A
+   * block-list would be one more entry behind the parser each time, so the
+   * raw text is held to the one shape an operator means instead.
+   */
+  it.each([
+    'http://evil.com\\@good.com',
+    'https://\\evil.com',
+    'https:///evil.com',
+    'https://good.com\n.evil.com',
+    'https://good.com\r.evil.com',
+    'https://go\tod.com',
+    'https://%65vil.com',
+    // FULLWIDTH small e, U+FF45 - folds to ASCII 'e'.
+    'https://ｅvil.com',
+    // IDEOGRAPHIC FULL STOP, U+3002 - folds to '.'.
+    'https://good.com。evil.com',
+    // ZERO WIDTH SPACE, U+200B - dropped by the host parser.
+    'https://go​od.com',
+    'https://@evil.com',
+    'https://:@evil.com',
+    'https://a.com,https://b.com',
+    'https://a.com/,https://evil.com',
+    'https://*.good.com',
+    'https://good.com/pa th',
+    'https://good.com/p\\q',
+    // THE RULE ITSELF rather than a measured repair. An `@` in the path parses
+    // to the right host, and a non-numeric port is userinfo the refine above
+    // also refuses - so neither is exploitable today. They are here so that
+    // loosening the path class or the port group fails by name.
+    'https://good.com/x@evil.com',
+    'https://good.com:x@evil.com'
+  ])('refuses the CORS_ORIGIN %p rather than repairing it into another origin', (value) => {
+    setVar('CORS_ORIGIN', value);
+    expect(() => validateBackendEnvironment()).toThrow(
+      /CORS origin must be http\(s\):\/\/host\[:port\]/
+    );
+  });
+
+  /**
+   * THE CANARY-SELECTABLE ARM for the allow-list entry. Plain words only: the
+   * it.each titles above interpolate URLs, and the canary selects with jest's
+   * -t, which is a regex.
+   */
+  it('refuses a CORS origin whose backslash would hand the host to whatever precedes it', () => {
+    setVar('CORS_ORIGIN', 'http://evil-example-host\\@good-example-host');
+    expect(() => validateBackendEnvironment()).toThrow(
+      /CORS origin must be http\(s\):\/\/host\[:port\]/
+    );
+  });
+
+  /**
+   * THE CONTROL on the allow-list. A pattern that refused everything would
+   * satisfy every arm above, so the shapes an operator actually writes are
+   * pinned as accepted, with LITERAL expectations.
+   */
+  it.each([
+    ['https://good.com', 'https://good.com'],
+    ['https://good.com/', 'https://good.com'],
+    ['https://good.com:8443/app?x#y', 'https://good.com:8443'],
+    ['http://localhost:3000', 'http://localhost:3000'],
+    ['https://adaptalabs.kubera-playground.adaptavist.net', 'https://adaptalabs.kubera-playground.adaptavist.net']
+  ])('still accepts the well-shaped CORS_ORIGIN %p as %p', (value, expected) => {
+    setVar('CORS_ORIGIN', value);
+    expect(validateBackendEnvironment().CORS_ORIGIN).toBe(expected);
+  });
+
+  /**
+   * THE PRICE, pinned so it is a decision rather than an accident. The host
+   * class is ASCII letters, digits, dots and hyphens, so an IPv6 literal, an
+   * underscore and a non-ASCII host are refused although origin/main booted
+   * them. None is a shape a deployed CORS origin takes, and a non-ASCII host
+   * can still be written in its punycode form.
+   */
+  it.each(['http://[::1]:3000', 'https://my_host.example.com'])(
+    'refuses the CORS_ORIGIN %p because its host falls outside the allow-list',
+    (value) => {
+      setVar('CORS_ORIGIN', value);
+      expect(() => validateBackendEnvironment()).toThrow(
+        /CORS origin must be http\(s\):\/\/host\[:port\]/
+      );
+    }
+  );
+
+  /**
    * THE CONTROL ON THE REFINE, and it is not decorative.
    *
    * The refine runs even when an earlier STRING check on the same chain has
@@ -495,6 +603,10 @@ describe('backend CORS_ORIGIN validation', () => {
       expect(() => validateBackendEnvironment()).toThrow(
         /CORS origin must be a valid URL/
       );
+      // NOT RE-LABELLED. The refine's catch returns true because `.url()` owns
+      // this refusal; a catch returning false would add a userinfo complaint
+      // about a value that carries no userinfo, and only this line sees it.
+      expect(() => validateBackendEnvironment()).not.toThrow(/userinfo/);
     }
   );
 
@@ -626,12 +738,13 @@ describe('backend CORS_ORIGIN normalisation reaching process.env', () => {
     });
 
     /**
-     * DISTINCT lines, not a call count. `jest.isolateModules` evaluates
-     * `../index` more than once per import here, so the same warning arrives
-     * twice - an artefact of the harness, not of the module, which runs once
-     * in production. Asserting on the distinct set says what is actually
-     * meant ("one warning, naming both forms") and does not encode the
-     * harness's repeat count as if it were the contract.
+     * DISTINCT lines, not a call count. The same warning has been observed
+     * arriving twice here, depending on which other tests ran first. The
+     * cause is NOT known: a load counter showed `../index` evaluated once per
+     * import, so it is not a double module load. Production boots once and
+     * warns once. Asserting on the distinct set says what is meant ("one
+     * warning, naming both forms") without encoding a repeat count nobody
+     * can explain as if it were the contract.
      */
     const warnings = (): string[] => [
       ...new Set(warn.mock.calls.map((call) => String(call[0])))

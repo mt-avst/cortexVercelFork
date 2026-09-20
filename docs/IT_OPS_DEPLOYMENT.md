@@ -50,7 +50,11 @@ That value is now reduced to its bare origin, `https://your-app.example.com`, wh
 It also changes what the backend builds redirect targets and OAuth callback URLs from, because those are concatenated onto `CORS_ORIGIN` - so `https://your-app.example.com/app/auth/google-callback` becomes `https://your-app.example.com/auth/google-callback`.
 If you had a path there and your identity provider has the longer callback registered, either register the new one or set `GOOGLE_OAUTH_REDIRECT_URI` explicitly, which overrides the concatenation entirely.
 The backend logs both the written value and the normalised one at boot whenever it actually drops something, so this never happens silently.
-A lower-cased `http`/`https` scheme is still required, and a value carrying userinfo (anything before an `@`) is refused outright rather than normalised, because the host a browser would use is the part after the `@` and not the part an operator reads.
+The value must have the shape `http(s)://host[:port]` with an optional path, query or fragment, and anything else is refused at boot rather than normalised.
+The scheme must be lower-case `http` or `https`, the host may contain only ASCII letters, digits, dots and hyphens, and the port, if present, must be numeric.
+No backslash, whitespace, `@` or comma may appear inside the value (surrounding whitespace is still trimmed), so a value carrying userinfo or a comma-separated list of origins is refused, and the host rule refuses a wildcard such as `https://*.example.com`.
+This is deliberate: the URL parser would otherwise silently repair such a value into a different, well-formed origin - `http://evil.com\@good.com` would become `http://evil.com` - and the backend sends that origin to browsers with credentials allowed.
+An IPv6 literal, an underscore in the host and a non-ASCII host are refused too; write a non-ASCII host in its punycode (`xn--`) form.
 
 ### Required for real SSO (e.g. Okta)
 
