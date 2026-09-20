@@ -390,6 +390,12 @@ router.post(
         });
       }
 
+      // ponytail: no virus scanning on any upload path repo-wide, and this one
+      //   is the weakest of the three - the mime type comes from the client's
+      //   own x-firsthand-mime-type header with no signature binding, so only
+      //   the size is server-verified before this row makes the bytes a
+      //   servable recording
+      //   -> cto/AdaptaLabs#98, sized there with the mitigation spectrum.
       const asset = await saveUploadedRecordingAsset({
         payload,
         attemptNumber: attempt ?? undefined,
@@ -524,11 +530,6 @@ router.post(
     //   and HeadObject above pins the size, but the bytes themselves are never
     //   inspected before this row makes them a servable recording
     //   -> cto/AdaptaLabs#98, sized there with the mitigation spectrum.
-    //
-    // The sibling marker on the booking-artefact finalize path
-    // (routes/booking-artifacts.ts) named this flow as in scope but carried no
-    // marker here, so the recorded-runner chokepoint read as covered when it
-    // was only described. Both chokepoints now point at the same issue.
     const asset = await saveUploadedRecordingAsset({
       attemptNumber: attempt ?? undefined,
       durationSeconds: parsedBody.data.durationSeconds,
