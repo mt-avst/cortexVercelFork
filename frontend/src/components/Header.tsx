@@ -196,16 +196,49 @@ const Header: React.FC = memo(() => {
       );
     }
 
+    // ADAPTABITS IS OPEN TO EVERY SIGNED-IN USER, deliberately.
+    //
+    // This link used to be gated on `user.role === 'employee'`, nested inside
+    // the `!== 'superadmin'` branch besides, so superadmins never saw it.
+    //
+    // WHO ACTUALLY GAINED IT, measured rather than assumed. An earlier version
+    // of this comment claimed nobody held `employee` during the beta, so the
+    // entry rendered for nobody. That is wrong, and wrong in the direction that
+    // matters. CORTEX_BETA_ALL_ADMIN is BOUNDED to an email-domain allow-list
+    // (`DEFAULT_ALLOWED_DOMAINS = ['adaptavist.com']` in config/betaAllAdmin.ts),
+    // and a new user takes the `employee` column default at signup. Run against
+    // the real resolver with the switch on:
+    //   someone@adaptavist.com     -> researcher_admin
+    //   tester@externalcompany.com -> employee
+    //   tester@gmail.com           -> employee
+    // So external testers were never lifted, still hold `employee`, and have
+    // been seeing this link throughout the beta. What this change adds is the
+    // link for LIFTED INTERNAL STAFF and for superadmins - not for participants.
+    //
+    // The gate was only ever on the LINK. `/gamification` carries no role guard
+    // in App.tsx, and every backend route in routes/gamification.ts is either
+    // unauthenticated (the two leaderboards) or `requireAuth` scoped to the
+    // caller's own id - no route has ever asked for `employee`. So the feature
+    // already worked for anyone signed in; the menu simply refused to mention
+    // it. Opening the link changes who can FIND the page, not who can reach it.
+    //
+    // Nick's call, during the live beta. Independent of the beta switch and it
+    // must stay that way - the switch is on deliberately and is not to be
+    // touched. Because this no longer reads the role at all, the link also
+    // stays open when the switch goes off at go-live.
+    items.push(
+      <GuardedLink key="gamification" to="/gamification" className="dropdown-item">
+        <Trophy size={16} className="me-2" aria-hidden="true" />
+        AdaptaBits
+      </GuardedLink>
+    );
+
     if (user.role !== 'superadmin') {
-      if (user.role === 'employee') {
-        items.push(
-          <GuardedLink key="gamification" to="/gamification" className="dropdown-item">
-            <Trophy size={16} className="me-2" aria-hidden="true" />
-            AdaptaBits
-          </GuardedLink>,
-          <DropdownDivider key="div-after-adaptabits" />
-        );
-      }
+      // THE DIVIDER BELONGS TO THE ITEM THAT FOLLOWS IT, not to AdaptaBits.
+      // Pushed unconditionally it lands against `div-before-feedback` for a
+      // superadmin, who has no `request-admin` item between them - measured as
+      // two adjacent separators in the rendered menu.
+      items.push(<DropdownDivider key="div-after-adaptabits" />);
 
       items.push(
         <DropdownItem
