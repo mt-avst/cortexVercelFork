@@ -14,11 +14,6 @@
       "count": 4
     }
   },
-  "backend/src/firsthand/runtime-repository-postgres.ts": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    }
-  },
   "backend/src/firsthand/s3-upload-integration.test.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
