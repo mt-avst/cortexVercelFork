@@ -35,7 +35,7 @@ const ResponsesSection: React.FC<{
             key={step.step_id}
             style={{
               padding: '14px 0',
-              borderBottom: '1px solid var(--cortex-border, rgba(255,255,255,0.04))'
+              borderBottom: '1px solid var(--border-subtle-current)'
             }}
           >
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', marginBottom: '6px' }}>

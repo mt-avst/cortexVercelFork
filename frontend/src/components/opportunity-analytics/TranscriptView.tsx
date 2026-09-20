@@ -102,7 +102,7 @@ const TranscriptView: React.FC<TranscriptViewProps> = ({ mediaUrl }) => {
 
   if (state.status === 'error') {
     return (
-      <p role="alert" style={{ fontSize: '0.8rem', color: 'var(--bs-danger, #dc3545)', marginTop: '8px' }}>
+      <p role="alert" style={{ fontSize: '0.8rem', color: 'var(--status-danger-text)', marginTop: '8px' }}>
         {state.message}
       </p>
     );
@@ -120,7 +120,7 @@ const TranscriptView: React.FC<TranscriptViewProps> = ({ mediaUrl }) => {
           fontFamily: 'inherit',
           padding: '12px',
           borderRadius: '4px',
-          background: 'var(--cortex-surface, rgba(255,255,255,0.03))'
+          background: 'var(--surface-panel-current)'
         }}
       >
         {state.text}
@@ -145,7 +145,7 @@ const TranscriptView: React.FC<TranscriptViewProps> = ({ mediaUrl }) => {
             display: 'flex',
             gap: '10px',
             padding: '6px 0',
-            borderBottom: '1px solid var(--cortex-border, rgba(255,255,255,0.04))'
+            borderBottom: '1px solid var(--border-subtle-current)'
           }}
         >
           <span

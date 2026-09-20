@@ -83,7 +83,7 @@ const AssetsSection: React.FC<{
               key={asset.asset_id}
               style={{
                 padding: '10px 0',
-                borderBottom: '1px solid var(--cortex-border, rgba(255,255,255,0.04))'
+                borderBottom: '1px solid var(--border-subtle-current)'
               }}
             >
               <span style={{ fontWeight: 500 }}>{asset.file_name}</span>
@@ -128,7 +128,7 @@ const AssetsSection: React.FC<{
                       background: 'none',
                       border: 'none',
                       padding: 0,
-                      color: 'var(--cortex-orange, #d98a3d)',
+                      color: 'var(--brand-orange-500)',
                       cursor: 'pointer',
                       textDecoration: 'underline',
                       font: 'inherit'
