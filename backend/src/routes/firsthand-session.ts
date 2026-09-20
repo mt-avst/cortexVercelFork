@@ -390,6 +390,12 @@ router.post(
         });
       }
 
+      // ponytail: no virus scanning on any upload path repo-wide, and this one
+      //   is the weakest of the three - the mime type comes from the client's
+      //   own x-firsthand-mime-type header with no signature binding, so only
+      //   the size is server-verified before this row makes the bytes a
+      //   servable recording
+      //   -> cto/AdaptaLabs#98, sized there with the mitigation spectrum.
       const asset = await saveUploadedRecordingAsset({
         payload,
         attemptNumber: attempt ?? undefined,
@@ -519,6 +525,11 @@ router.post(
       });
     }
 
+    // ponytail: no virus scanning on any upload path repo-wide - the presigned
+    //   PUT pins the content type into the signature, the key is server-derived
+    //   and HeadObject above pins the size, but the bytes themselves are never
+    //   inspected before this row makes them a servable recording
+    //   -> cto/AdaptaLabs#98, sized there with the mitigation spectrum.
     const asset = await saveUploadedRecordingAsset({
       attemptNumber: attempt ?? undefined,
       durationSeconds: parsedBody.data.durationSeconds,
