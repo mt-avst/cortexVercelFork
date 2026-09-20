@@ -5548,7 +5548,7 @@ describe('Opportunities API', () => {
     it('mints an in-process session and returns a same-origin URL', async () => {
       process.env.FRONTEND_URL = 'https://cortex.example.com';
       mockQuery.mockResolvedValueOnce({
-        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published' }]
+        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published', has_closed: false }]
       });
       mockCreateSession.mockResolvedValueOnce({
         ok: true,
@@ -5564,6 +5564,34 @@ describe('Opportunities API', () => {
         studyId: 'study_abc123',
         participant: expect.objectContaining({ participant_id: 'test-user-id', external_ref: '1' })
       }));
+    });
+
+    /**
+     * FAILS CLOSED WHEN THE PRECONDITION IS MISSING (cto/AdaptaLabs#129).
+     *
+     * Both mint gates read `has_closed === true`, which an ABSENT column
+     * satisfies exactly as a `false` one does - so a rewrite of the mint SELECT
+     * that dropped the projection would disarm both of them in production with
+     * every status test still green. `pg` rows are `any`, so no type can catch
+     * that; `loadMintableOpportunity` asserts the column is there instead, and
+     * this is the only place that assertion can be exercised, because a real
+     * database always returns it.
+     *
+     * The refusal is a 500, not a mint: a route that cannot establish whether
+     * the study has closed refuses everybody rather than starting sessions for
+     * everybody.
+     */
+    it('refuses to mint when the opportunity read returns no closing-time column', async () => {
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published' }]
+      });
+
+      const response = await request(listening(app))
+        .post('/api/opportunities/1/recorded-study-session')
+        .expect(500);
+
+      expect(response.body.code).toBe('MINT_PRECONDITION_MISSING');
+      expect(mockCreateSession).not.toHaveBeenCalled();
     });
 
     it('should reject an unauthenticated request with 401', async () => {
@@ -5586,7 +5614,8 @@ describe('Opportunities API', () => {
           id: '1',
           type: 'survey',
           firsthand_study_id: 'study_questions',
-          status: 'published'
+          status: 'published',
+          has_closed: false
         }]
       });
 
@@ -5603,7 +5632,8 @@ describe('Opportunities API', () => {
           id: '1',
           type: 'interview',
           firsthand_study_id: 'study_abc123',
-          status: 'published'
+          status: 'published',
+          has_closed: false
         }]
       });
 
@@ -5627,7 +5657,8 @@ describe('Opportunities API', () => {
           id: '1',
           type: 'unmoderated',
           firsthand_study_id: 'study_swapped',
-          status: 'published'
+          status: 'published',
+          has_closed: false
         }]
       });
       mockGetStudyById.mockResolvedValueOnce({
@@ -5677,7 +5708,8 @@ describe('Opportunities API', () => {
           id: '97bfe613-4e1f-472c-917e-b90d1c0326b8',
           type: 'unmoderated',
           firsthand_study_id: 'study_abc123',
-          status: 'published'
+          status: 'published',
+          has_closed: false
         }]
       });
       mockCreateSession.mockResolvedValueOnce({
@@ -5703,7 +5735,7 @@ describe('Opportunities API', () => {
 
     it('ignores an opportunity id supplied in the request body', async () => {
       mockQuery.mockResolvedValueOnce({
-        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published' }]
+        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published', has_closed: false }]
       });
       mockCreateSession.mockResolvedValueOnce({
         ok: true,
@@ -5722,7 +5754,7 @@ describe('Opportunities API', () => {
 
     it('maps a study-without-steps result to 400', async () => {
       mockQuery.mockResolvedValueOnce({
-        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published' }]
+        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published', has_closed: false }]
       });
       mockCreateSession.mockResolvedValueOnce({ ok: false, error: 'study_has_no_steps' });
 
@@ -5737,7 +5769,7 @@ describe('Opportunities API', () => {
       ['study_not_found', 404, 'Linked recorded study not found'],
     ])('maps createSession error %s to HTTP %i', async (error, status, message) => {
       mockQuery.mockResolvedValueOnce({
-        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published' }]
+        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published', has_closed: false }]
       });
       mockCreateSession.mockResolvedValueOnce({ ok: false, error });
 
@@ -5751,7 +5783,7 @@ describe('Opportunities API', () => {
 
     it('maps payload_assembly_failed to a 500 with a neutral error code', async () => {
       mockQuery.mockResolvedValueOnce({
-        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published' }]
+        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published', has_closed: false }]
       });
       mockCreateSession.mockResolvedValueOnce({ ok: false, error: 'payload_assembly_failed' });
 
@@ -5766,7 +5798,7 @@ describe('Opportunities API', () => {
 
     it('maps an unmodelled createSession error through the default branch without leaking the raw value', async () => {
       mockQuery.mockResolvedValueOnce({
-        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published' }]
+        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published', has_closed: false }]
       });
       // A value outside the CreateSessionError union drives the exhaustiveness
       // guard. Its message must be static, not the interpolated raw value.
@@ -5789,7 +5821,7 @@ describe('Opportunities API', () => {
     it('still serves the deprecated /:id/firsthand-handoff alias path', async () => {
       process.env.FRONTEND_URL = 'https://cortex.example.com';
       mockQuery.mockResolvedValueOnce({
-        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published' }]
+        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published', has_closed: false }]
       });
       mockCreateSession.mockResolvedValueOnce({
         ok: true,
@@ -5982,12 +6014,17 @@ describe('Opportunities API', () => {
   });
 
   describe('POST /api/opportunities/:id/survey-session', () => {
+    // `has_closed` is what the mint SELECT projects for the deadline gate
+    // (cto/AdaptaLabs#129): false here means "open", and the helper refuses to
+    // mint at all when the key is absent, so a mocked row without it is a row
+    // the route could never receive from the real query.
     const surveyRow = (overrides: Record<string, unknown> = {}) => ({
       id: '1',
       type: 'survey',
       firsthand_study_id: 'study_questions',
       status: 'published',
       delivery_mode: 'native',
+      has_closed: false,
       ...overrides
     });
 

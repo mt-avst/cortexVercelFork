@@ -24,6 +24,27 @@ import { ExternalHandoff, ExternalDestinationNote } from '../components/External
 import { RefreshCw, CheckCircle, Calendar, Info, LayoutGrid, Table2, ArrowLeft } from 'lucide-react';
 import { Icon } from '../components/ui';
 
+/**
+ * The server's own sentence when a mint is refused because the study has closed
+ * (cto/AdaptaLabs#129), or null when this failure is something else.
+ *
+ * KEYED ON THE CODE, not on the 403, because the two 403s the mint routes send
+ * mean opposite things: `OPPORTUNITY_CLOSED` is terminal and a bare
+ * "not published" 403 is a study that may yet open. Both used to render "not
+ * yet available, please try again later", which for a study that has ENDED is
+ * the one sentence on the page that is actively false - it will not become
+ * available and there is nothing to come back for.
+ *
+ * The server's wording is preferred over a local copy for the same reason the
+ * detail read's handler prefers it: one sentence, written once, so the page
+ * cannot tell a participant something different from the API.
+ */
+const readClosedStudyRefusal = (err: unknown): string | null => {
+  const response = (err as { response?: { data?: { error?: string; code?: string } } }).response;
+  if (response?.data?.code !== 'OPPORTUNITY_CLOSED') return null;
+  return response.data.error || 'This study has closed and is no longer accepting participants.';
+};
+
 // Helper function to render poll description with checkbox indicators
 const renderPollDescription = (description: string) => {
   if (!description) return null;
@@ -234,16 +255,26 @@ const OpportunityDetail: React.FC = () => {
   // so the button cannot disagree with what the rest of the product says
   // about this study.
   const closingTime = opportunity ? getClosingTime(opportunity) : null;
-  // NO LONGER CLIENT-ONLY (cto/AdaptaLabs#129). Both mint routes now derive the
+  // NO LONGER CLIENT-ONLY (cto/AdaptaLabs#129). Both mint routes derive the
   // same closing time in SQL - `end_date`, else the last session's `end_time` -
   // and refuse with a 403 past it, so a stale tab, a replayed request or a
-  // script gets the refusal this branch renders rather than a session. Keep the
-  // two rules in step: `loadMintableOpportunity` in backend/src/routes/
-  // opportunities.ts mirrors `getClosingTime` arm for arm, and a change to
-  // either belongs in both. The one path this gate still owns alone is the
-  // external hand-off, where `window.open` leaves Cortex and the server sees no
-  // request at all - inherent to handing off, and the same reason the screener
-  // note further down this file exists.
+  // script gets a refusal rather than a session. `loadMintableOpportunity` in
+  // backend/src/routes/opportunities.ts mirrors `getClosingTime` arm for arm,
+  // and a change to either belongs in both.
+  //
+  // THIS PAGE agrees with that server rule on both arms, because the detail
+  // read serves every session unfiltered. THE BROWSE ROW agrees on `end_date`
+  // only: the listing attaches sessions through UPCOMING_SESSIONS_ONLY, so an
+  // undated study whose slots have all run reaches the row with `sessions: []`,
+  // reads as "no deadline" there and still shows its action verb - while this
+  // page and the server both call it ended. Pre-existing and the safe
+  // direction, the server being the stricter side, but do not read the row as
+  // proof of the sessions arm.
+  //
+  // The one path this gate still owns alone is the external hand-off, where
+  // `window.open` leaves Cortex and the server sees no request at all -
+  // inherent to handing off, and the same reason the screener note further down
+  // this file exists.
   const hasEnded = getTimeRemainingUntil(closingTime).urgency === 'ended';
   const closedOnLabel = formatStudyDate(closingTime?.toISOString());
 
@@ -798,12 +829,15 @@ const OpportunityDetail: React.FC = () => {
         window.location.assign(session_url);
       } catch (err: unknown) {
         const status = (err as { response?: { status?: number } }).response?.status;
+        const closedResponse = readClosedStudyRefusal(err);
         // 404 is the API's answer for every "this is not a runnable native
         // survey" case - wrong type, external delivery, a task list linked by
         // mistake. The participant cannot act on any of them, so they get one
         // honest sentence.
         if (status === 404) {
           setError('This survey is not available. Please contact your research team.');
+        } else if (closedResponse) {
+          setError(closedResponse);
         } else if (status === 403) {
           setError('This study is not yet available. Please try again later.');
         } else if (status === 409) {
@@ -830,10 +864,13 @@ const OpportunityDetail: React.FC = () => {
         // A database outage and an unconfigured study both answer 503; only the
         // second is the research team's to fix, so key on the code before the
         // status.
+        const closedResponse = readClosedStudyRefusal(err);
         if (code === 'DB_CONNECTION_FAILED' || code === 'DB_NOT_CONFIGURED') {
           setError('Temporarily unavailable. Please try again shortly.');
         } else if (status === 503) {
           setError('This study is not yet configured. Please contact your research team.');
+        } else if (closedResponse) {
+          setError(closedResponse);
         } else if (status === 403) {
           setError('This study is not yet available. Please try again later.');
         } else {

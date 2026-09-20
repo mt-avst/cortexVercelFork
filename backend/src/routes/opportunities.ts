@@ -120,13 +120,24 @@ import { Opportunity, CreateOpportunityRequest, UpdateOpportunityRequest, Sessio
  * The frontend reads `code`, not the status, to choose the message and to drop
  * the dead Retry button on these two terminal states.
  */
+/**
+ * ONE SENTENCE AND ONE CODE FOR "THIS STUDY HAS CLOSED", wherever a participant
+ * meets it (cto/AdaptaLabs#129).
+ *
+ * Shared with the mint refusal below, which answers 403 rather than 410 - the
+ * status differs because the two are different questions ("this page is gone"
+ * against "you may not start this"), while the fact and therefore the wording
+ * are the same. The frontend keys on the CODE at both sites and renders the
+ * server's own sentence, so the two cannot drift into telling a participant
+ * two different things about one study.
+ */
+const OPPORTUNITY_CLOSED_CODE = 'OPPORTUNITY_CLOSED';
+const OPPORTUNITY_CLOSED_MESSAGE =
+  'This study has closed and is no longer accepting participants.';
+
 function unavailableOpportunityError(status: string): AppError {
   if (status === 'closed') {
-    return new AppError(
-      'This study has closed and is no longer accepting participants.',
-      410,
-      'OPPORTUNITY_CLOSED'
-    );
+    return new AppError(OPPORTUNITY_CLOSED_MESSAGE, 410, OPPORTUNITY_CLOSED_CODE);
   }
   return new AppError(
     "This study isn't open yet. Check back once the researcher publishes it.",
@@ -3238,11 +3249,22 @@ async function loadMintableOpportunity(id: string): Promise<{
     screener?: Screener | null;
     /**
      * Whether this study's closing time is already past, or null when nothing
-     * says when it closes. Read as `=== true` at the call sites, so an absent
-     * column - the mock-data fallback, a mocked pool - can never be mistaken
-     * for a closed study.
+     * says when it closes (no `end_date` and no sessions).
+     *
+     * REQUIRED, not optional, and its presence is asserted below. Read as
+     * `=== true` at the two call sites so a SQL NULL is "unknown, may start"
+     * rather than "closed" - NOT as `!== false`, which would collapse that NULL
+     * into a refusal and turn every undated study away.
+     *
+     * `=== true` rather than a plain truthy test buys nothing against anything
+     * node-pg can produce - `null` and `undefined` are both falsy - so it is
+     * only a shape that reads honestly against a HAND-WRITTEN mocked row, and
+     * that is all it is claimed to be. The guarantee that a dropped projection
+     * cannot silently disarm both gates is the runtime assertion below, not
+     * this comparison and not the type: `pg` hands back `any`, so the compiler
+     * cannot see the SELECT at all.
      */
-    has_closed?: boolean | null;
+    has_closed: boolean | null;
   };
 } | null> {
   if (!(await isDatabaseAvailable())) {
@@ -3266,12 +3288,19 @@ async function loadMintableOpportunity(id: string): Promise<{
    * was: a SECOND query before every mint would have been a reason to settle
    * for the narrower rule, and there is no second query.
    *
-   * `NOW()` is the DATABASE clock - the same clock Decision 3's hourly
-   * `autoClosePublishedStudiesPastEndDate` sweep compares against, so the two
-   * cannot disagree about the boundary. `<=` matches `getTimeRemainingUntil`,
-   * which calls a zero remainder 'ended'. NULL propagates through both the
-   * COALESCE and the comparison, so a study with no end date and no sessions
-   * reads null: unknown, never closed.
+   * `NOW()` is the DATABASE CLOCK - the same clock Decision 3's hourly
+   * `autoClosePublishedStudiesPastEndDate` sweep compares against, so neither
+   * can be ahead of the other by an app server's drift. They do NOT share an
+   * operator: the sweep uses `end_date < NOW()` and this uses `<=`, because
+   * this one mirrors `getTimeRemainingUntil`, which calls a zero remainder
+   * 'ended'. The disagreement is the single instant of exact equality, which no
+   * caller can observe and which resolves the same way one tick later. `<=` is
+   * pinned as a literal by the boundary test in
+   * `mint-refuses-a-closed-study-postgres.test.ts`, because a zero-width window
+   * cannot be pinned behaviourally.
+   *
+   * NULL propagates through both the COALESCE and the comparison, so a study
+   * with no end date and no sessions reads null: unknown, never closed.
    */
   const result = await pool.query(
     `SELECT o.id, o.type, o.firsthand_study_id, o.status, o.delivery_mode, o.screener,
@@ -3289,6 +3318,29 @@ async function loadMintableOpportunity(id: string): Promise<{
   }
 
   const row = result.rows[0];
+
+  /*
+   * THE PRECONDITION MUST BE PRESENT, or nothing may be minted.
+   *
+   * Both mint gates read `has_closed === true`, which an ABSENT column
+   * satisfies exactly as a `false` one does - so a future rewrite of the SELECT
+   * above that dropped the projection would disarm both of them in production
+   * with every status test still green. The compiler cannot stop that (`pg`
+   * rows are `any`) and no route-level test can see it, so the check lives here,
+   * once, at the only place the column is produced.
+   *
+   * Failing CLOSED, loudly: a mint route that cannot establish whether the
+   * study has closed refuses everybody and says so in the log, rather than
+   * minting for everybody. It can only fire on a developer's change to this
+   * query, and the database suite reds on the first one.
+   */
+  if (!('has_closed' in row)) {
+    logger.error('Mint precondition missing: the opportunity read returned no has_closed', {
+      opportunityId: row?.id == null ? null : String(row.id)
+    });
+    throw new AppError('Study availability could not be determined', 500, 'MINT_PRECONDITION_MISSING');
+  }
+
   const parsedId = row.id;
 
   return {
@@ -3298,32 +3350,35 @@ async function loadMintableOpportunity(id: string): Promise<{
 }
 
 /**
- * What a participant is told when they reach a mint route for a study whose
- * deadline has passed (cto/AdaptaLabs#129).
+ * One refusal, two chokepoints: the mint answer for a study whose deadline has
+ * passed (cto/AdaptaLabs#129).
  *
- * THE SAME CLASS OF REFUSAL AS THE `status` CHECK BESIDE IT, deliberately:
- * 403 with a bare `{ error }`, which both participant surfaces already render
- * as a refusal without a frontend change. It has to be, because the two are
- * the same fact an hour apart - Decision 3's hourly sweep flips a study past
- * its `end_date` to `closed`, and from that moment the existing status check
- * answers this same 403. A different shape here would mean one study answering
- * two ways either side of a cron tick.
+ * 403, THE SAME STATUS AS THE `status` CHECK BESIDE IT. For a study carrying an
+ * `end_date` the two really are the same fact an hour apart - Decision 3's
+ * hourly sweep flips such a study to `closed`, and from then on the status
+ * check answers 403 for the same participant - so a different status here would
+ * mean one study answering two ways either side of a cron tick. That argument
+ * does NOT extend to the sessions arm: `autoClosePublishedStudiesPastEndDate`
+ * carries `end_date IS NOT NULL`, and the only session-based closer
+ * (`autoCloseOpportunityIfNeeded`) is admin-triggered rather than scheduled, so
+ * an undated study whose slots have all run stays `published` indefinitely
+ * while this gate refuses it permanently. That is the intended behaviour - the
+ * UI has called such a study ended all along - and it is why this refusal
+ * carries its own wording rather than waiting for a status to catch up.
  *
- * Not the 410 `OPPORTUNITY_CLOSED` the detail READ gives (see
- * `unavailableOpportunityError`): that one is a page-level state the
- * participant page renders as its own screen, while this is a button press,
- * and the mint callers route an unrecognised status into "try again or
- * contact support" - a fault, which this is not.
- */
-const STUDY_HAS_CLOSED = 'Study has closed';
-
-/**
- * One refusal, two chokepoints. The log line is the only place the refusal is
- * observable in production, so it names the opportunity.
+ * The BODY is the 410 read's body: same `code`, same sentence (see
+ * OPPORTUNITY_CLOSED_MESSAGE). The frontend keys on the code, so a participant
+ * who presses Start on a study that has closed is told it has closed, rather
+ * than being told to try again later - which was true of the bare
+ * `{ error }` shape this used to send and was the one thing on the page that
+ * was actively false.
+ *
+ * The log line is the only place the refusal is observable in production, so it
+ * names the opportunity and which route refused.
  */
 function refuseClosedStudyMint(res: Response, opportunityId: string, route: 'recorded' | 'survey'): Response {
   logger.warn('Refused a mint on a study that has closed', { opportunityId, route });
-  return res.status(403).json({ error: STUDY_HAS_CLOSED });
+  return res.status(403).json({ error: OPPORTUNITY_CLOSED_MESSAGE, code: OPPORTUNITY_CLOSED_CODE });
 }
 
 /**
@@ -3432,14 +3487,28 @@ router.post(['/:id/recorded-study-session', '/:id/firsthand-handoff'], requireAu
     if (loaded.row.status !== 'published') {
       return res.status(403).json({ error: 'Study is not published' });
     }
-    // Deadline gate (cto/AdaptaLabs#129), next to the status check because it
-    // answers the same question one field along: may this study be started at
-    // all, right now. Both participant surfaces already refuse a closed study,
-    // but only in the browser, so a stale tab, a replayed request or a script
-    // minted a RECORDED session for a study the product calls closed. NOT
-    // exempted for an admin, exactly like the status check above it: neither
-    // gate on this route has ever had an admin branch, and an admin previewing
-    // a study that has closed is in the same position as a participant.
+    /*
+     * Deadline gate (cto/AdaptaLabs#129), next to the status check because it
+     * answers the same question one field along: may this study be started at
+     * all, right now. The detail page has refused a closed study in the browser
+     * since the second-pass review, and only in the browser - so a stale tab, a
+     * replayed request or a script minted a RECORDED session, screen and
+     * microphone capture and all, for a study the page calls closed.
+     *
+     * NOT exempted for an admin, exactly like the status check above it:
+     * neither gate on this route has ever had an admin branch, and an admin
+     * previewing a study that has closed is in the same position as a
+     * participant.
+     *
+     * AT THE TOP OF THE HANDLER, unlike the survey route's twin, which sits
+     * below its resume lookup so an in-flight run can be finished. There is
+     * nothing to exempt here: this route holds no resume path at all -
+     * `createSession` always mints a NEW runtime session, so a second POST is a
+     * second attempt rather than a return to the first - and a participant
+     * already inside a recorded run is on their session token, which this route
+     * never sees. A fresh attempt after the deadline is exactly what this
+     * refuses.
+     */
     if (loaded.row.has_closed === true) {
       return refuseClosedStudyMint(res, loaded.canonicalOpportunityId ?? id, 'recorded');
     }
@@ -3550,6 +3619,9 @@ router.post('/:id/survey-session', requireAuth, participantSessionMintLimiter, p
   let studyId: string | null = null;
   // See loadMintableOpportunity: the parsed id, never the path segment.
   let canonicalOpportunityId: string | null = null;
+  // null means "nothing says when this closes", which is not closed. Read only
+  // by the deadline gate below the resume lookup.
+  let hasClosed: boolean | null = null;
 
   const loaded = await loadMintableOpportunity(id);
   if (loaded) {
@@ -3574,23 +3646,15 @@ router.post('/:id/survey-session', requireAuth, participantSessionMintLimiter, p
       return res.status(403).json({ error: 'Study is not published' });
     }
 
-    // Deadline gate (cto/AdaptaLabs#129). The recorded route's twin, and
-    // written out here rather than folded into `loadMintableOpportunity`
-    // because that helper deliberately decides nothing about whether an
-    // opportunity may be minted - see its docblock. An answered survey is
-    // counted in the researcher's results, so a poll still accepting answers
-    // after its deadline moves numbers that were supposed to be final. NOT
-    // exempted for an admin, exactly like the status check above it.
-    if (row.has_closed === true) {
-      return refuseClosedStudyMint(res, loaded.canonicalOpportunityId ?? id, 'survey');
-    }
-
     // Screener gate: refuse anyone without a stored 'qualified' verdict before
     // minting a native survey session.
     await assertScreenerPassed(pool, loaded.canonicalOpportunityId ?? id, req.user.id, row.screener);
 
     studyId = row.firsthand_study_id;
     canonicalOpportunityId = loaded.canonicalOpportunityId;
+    // Carried out of this block for the deadline gate, which deliberately sits
+    // BELOW the resume lookup further down - see the gate itself.
+    hasClosed = row.has_closed;
   }
 
   if (!studyId) {
@@ -3662,6 +3726,40 @@ router.post('/:id/survey-session', requireAuth, participantSessionMintLimiter, p
     return res.json({
       session_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/survey/${existing.token}`
     });
+  }
+
+  /**
+   * DEADLINE GATE, AND ITS POSITION IS THE PRODUCT DECISION (cto/AdaptaLabs#129).
+   *
+   * BELOW the resume lookup, not above it, so a participant who was part-way
+   * through when the deadline passed can come back and finish. Above it - where
+   * this gate first shipped - the answers already given could never be
+   * submitted: the runtime session stayed `in_progress` for ever and every
+   * return trip answered 403, which is the opposite of what the resume path
+   * two blocks up exists to promise. Nick's call, made on exactly that
+   * evidence, with the stated cost accepted: a researcher may see a handful of
+   * responses land shortly after close. No grace window - the exemption lasts
+   * as long as the session would otherwise have been resumable, and the session
+   * token's own expiry is the only bound.
+   *
+   * WHAT COUNTS AS IN-FLIGHT is `findParticipantSessionForOpportunity` above
+   * and nothing else: the most recent `runtime_sessions` row whose
+   * `opportunity_id` is this opportunity's CANONICAL id and whose
+   * `participant_id` is the authenticated user's, in a status
+   * `isAnsweredRuntimeStatus` does not call answered. So it excludes another
+   * participant's session, a session under a different opportunity, an
+   * already-answered or uploading one (409 above), and - the case that matters
+   * here - somebody who never started at all, who reaches this line and is
+   * refused. Nothing the caller supplies takes part in that decision.
+   *
+   * KEEP IT HERE. Both directions are pinned by name in
+   * `mint-refuses-a-closed-study-postgres.test.ts`: a fresh mint past the
+   * deadline is refused, and a resume of an `in_progress` session past the
+   * deadline returns its session url. Moving this back above the lookup reds
+   * the second of those.
+   */
+  if (hasClosed === true) {
+    return refuseClosedStudyMint(res, canonicalOpportunityId ?? id, 'survey');
   }
 
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';

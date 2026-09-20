@@ -2463,9 +2463,9 @@
   },
   {
     "id": "survey-mint-refuses-a-closed-study",
-    "why": "The SECOND of two near-identical guards in one file, and it gets its own entry for the reason the ownership pair above does: a fix applied to one of a pair reads as a fix applied to both, and an entry naming only one would carry that blind spot into the thing meant to detect it. This is also the arm with a results consequence - an answered survey or poll is counted in the researcher's numbers, so a study still accepting answers after its deadline moves a tally that was supposed to be final. Proven by mutation before entry: deleting these three lines reds the named test, which answers 200 instead of 403.",
+    "why": "The SECOND of two near-identical guards in one file, and it gets its own entry for the reason the ownership pair above does: a fix applied to one of a pair reads as a fix applied to both, and an entry naming only one would carry that blind spot into the thing meant to detect it. This is also the arm with a results consequence - an answered survey or poll is counted in the researcher's numbers, so a study still accepting answers after its deadline moves a tally that was supposed to be final. Its POSITION below the resume lookup is a separate decision graded by survey-deadline-gate-stays-below-the-resume-lookup; this entry grades only that it is there at all. Proven by mutation before entry: deleting these three lines reds the named test, which answers 200 instead of 403.",
     "file": "backend/src/routes/opportunities.ts",
-    "anchor": "    if (row.has_closed === true) {\n      return refuseClosedStudyMint(res, loaded.canonicalOpportunityId ?? id, 'survey');\n    }\n",
+    "anchor": "  if (hasClosed === true) {\n    return refuseClosedStudyMint(res, canonicalOpportunityId ?? id, 'survey');\n  }\n",
     "mutation": "",
     "runner": "vitest",
     "spec": "src/routes/__tests__/mint-refuses-a-closed-study-postgres.test.ts",
@@ -2481,6 +2481,39 @@
     "runner": "vitest",
     "spec": "src/routes/__tests__/mint-refuses-a-closed-study-postgres.test.ts",
     "test": "refuses an undated study once its last slot has finished",
+    "needsDatabase": true
+  },
+  {
+    "id": "closing-time-projection-is-present",
+    "why": "Both gates read `has_closed === true`, and an ABSENT column satisfies that exactly as a false one does - so a rewrite of this SELECT that dropped or renamed the projection would disarm both of them in production with every status test still green. `pg` rows are `any`, so no type can catch it; `loadMintableOpportunity` asserts the column is present and fails closed with a 500 instead. This entry grades the projection the assertion protects: the mutation renames the alias, which is what a tidy-up of this query looks like, and the study is then refused for a reason nobody can act on rather than minted for a study that has closed. Proven by mutation before entry: renaming the alias reds the named test.",
+    "file": "backend/src/routes/opportunities.ts",
+    "anchor": "            ) <= NOW() AS has_closed\n",
+    "mutation": "            ) <= NOW() AS closing_time_is_past\n",
+    "runner": "vitest",
+    "spec": "src/routes/__tests__/mint-refuses-a-closed-study-postgres.test.ts",
+    "test": "refuses an admin too, exactly as the published check already does",
+    "needsDatabase": true
+  },
+  {
+    "id": "closing-time-boundary-is-inclusive",
+    "why": "`<=` rather than `<` matches `getTimeRemainingUntil`, which calls a zero remainder 'ended'. The difference is the single instant where the closing time equals the database's own NOW(), which no fixture can be seeded to hit - so it cannot be pinned behaviourally, and a review gate measured exactly that: mutating the operator left all ten behavioural arms green. The named test therefore asserts on the text of the query the route ISSUED, captured from the pool rather than re-typed. This entry is what stops that pin being deleted as redundant. Proven by mutation before entry: `<=` to `<` reds the named test and nothing else in the file.",
+    "file": "backend/src/routes/opportunities.ts",
+    "anchor": "            ) <= NOW() AS has_closed\n",
+    "mutation": "            ) < NOW() AS has_closed\n",
+    "runner": "vitest",
+    "spec": "src/routes/__tests__/mint-refuses-a-closed-study-postgres.test.ts",
+    "test": "compares with less than or equal to, matching the countdown that calls a zero remainder ended",
+    "needsDatabase": true
+  },
+  {
+    "id": "survey-deadline-gate-stays-below-the-resume-lookup",
+    "why": "THE GATE'S POSITION IS THE PRODUCT DECISION, not just its existence. Nick's call on cto/AdaptaLabs#129: a participant part-way through when the deadline passes may come back and finish, so the survey route's deadline gate sits BELOW the resume lookup and refuses only a fresh mint. Above it - where the gate first shipped, and where a tidy-up would naturally put it beside the status check - the answers already given can never be submitted: the runtime session stays in_progress for ever and every return trip answers 403. Nothing about that is visible in the gate itself, which is why the mutation re-inserts a copy ABOVE the resume block rather than deleting anything: both gates then exist, the file reads as if nothing is missing, and the decision is quietly reversed. Proven by mutation before entry: the named test answers 403 instead of the resumed session url.",
+    "file": "backend/src/routes/opportunities.ts",
+    "anchor": "  if (existing) {\n    if (isAnsweredRuntimeStatus(existing.sessionStatus)) {\n",
+    "mutation": "  if (hasClosed === true) {\n    return refuseClosedStudyMint(res, canonicalOpportunityId ?? id, 'survey');\n  }\n\n  if (existing) {\n    if (isAnsweredRuntimeStatus(existing.sessionStatus)) {\n",
+    "runner": "vitest",
+    "spec": "src/routes/__tests__/mint-refuses-a-closed-study-postgres.test.ts",
+    "test": "resumes an unfinished session after the deadline rather than refusing it",
     "needsDatabase": true
   }
 ]
