@@ -6,10 +6,9 @@ import type { RuntimeMutation, RuntimeSessionRecord } from './runtime-records';
 
 // In-process lifecycle-event write for internalised recorded-study sessions.
 //
-// FirstHand posted lifecycle events back to Cortex over an HMAC callback
-// (src/lib/integration-callbacks.ts -> deliverSignedCallback). The merge deletes
-// that hop: when the runtime is internalised there is no second app to call
-// back, so the participant runtime route (B4) writes the same
+// FirstHand posted lifecycle events back to Cortex over an HMAC callback hop.
+// That hop has been removed: when the runtime is internalised there is no second
+// app to call back, so the participant runtime route (B4) writes the same
 // opportunity_session_events row in-process. This is the write the B3b/B3c notes
 // deferred to B4 ("internal sessions have no completion notification until then").
 //

@@ -15,7 +15,6 @@ describe("firsthand domain layer backend smoke-import", () => {
     expect(typeof repo.seedRuntimeSession).toBe("function");
     expect(typeof repo.getRuntimeSession).toBe("function");
     expect(typeof repo.saveUploadedRecordingAsset).toBe("function");
-    expect(typeof repo.processDueCallbackDeliveries).toBe("function");
   });
 
   it("loads the postgres repository, studies repository and database modules", async () => {
@@ -50,6 +49,5 @@ describe("firsthand domain layer backend smoke-import", () => {
     await import("./runtime-session-model");
     await import("./state-model");
     await import("./transcript-generator");
-    await import("./callback-delivery");
   });
 });
