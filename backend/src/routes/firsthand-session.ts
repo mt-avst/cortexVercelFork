@@ -519,6 +519,16 @@ router.post(
       });
     }
 
+    // ponytail: no virus scanning on any upload path repo-wide - the presigned
+    //   PUT pins the content type into the signature, the key is server-derived
+    //   and HeadObject above pins the size, but the bytes themselves are never
+    //   inspected before this row makes them a servable recording
+    //   -> cto/AdaptaLabs#98, sized there with the mitigation spectrum.
+    //
+    // The sibling marker on the booking-artefact finalize path
+    // (routes/booking-artifacts.ts) named this flow as in scope but carried no
+    // marker here, so the recorded-runner chokepoint read as covered when it
+    // was only described. Both chokepoints now point at the same issue.
     const asset = await saveUploadedRecordingAsset({
       attemptNumber: attempt ?? undefined,
       durationSeconds: parsedBody.data.durationSeconds,
