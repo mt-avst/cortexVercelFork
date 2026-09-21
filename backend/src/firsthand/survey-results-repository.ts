@@ -1,3 +1,5 @@
+import type { PoolClient } from "pg";
+
 import {
   isPostgresRuntimeConfigured,
   withRuntimeDatabaseClient,
@@ -8,7 +10,11 @@ import {
   isRuntimePoolRefusal
 } from "./runtime-pool-admission";
 import { UNKNOWN_REMOVED_PROMPT, type StoredResponse } from "./survey-results";
-import { QUESTION_TYPES, type RemovedQuestion } from "./survey-csv";
+import {
+  QUESTION_TYPES,
+  type CsvSessionRow,
+  type RemovedQuestion
+} from "./survey-csv";
 import { logger } from "../utils/logger";
 import { AppError } from "../../../shared/types";
 
@@ -606,6 +612,41 @@ const MAX_CSV_PARTICIPANTS = 200_000;
  * Bounded by the number of DELETED QUESTIONS, so it stays small however many
  * answers the study holds.
  */
+async function readRemovedColumns(
+  client: PoolClient,
+  filter: ResponseFilter,
+  params: unknown[]
+): Promise<RemovedQuestion[]> {
+  const result = await client.query<{
+    step_type: string;
+    step_prompt: string | null;
+  }>(
+    `
+        SELECT r.step_type, r.step_prompt
+        FROM participant_responses AS r
+        JOIN runtime_sessions AS s ON s.session_id = r.session_id
+        WHERE ${filter} AND r.step_id IS NULL
+          AND r.step_type = ANY($${params.length + 1}::text[])
+        GROUP BY r.step_type, r.step_prompt
+        ORDER BY MIN(r.saved_at) ASC, MIN(r.id) ASC
+      `,
+    [...params, [...QUESTION_TYPES]]
+  );
+
+  return result.rows.map((row) => ({
+    type: row.step_type,
+    prompt: row.step_prompt ?? UNKNOWN_REMOVED_PROMPT
+  }));
+}
+
+/**
+ * The removed-question columns for a scope, on their own checkout.
+ *
+ * The export reads this inside the shared preflight snapshot (see
+ * `readSurveyCsvPreflight`); this wrapper exists for the callers that want the
+ * columns alone - the results-page JSON view and the tests that pin the query
+ * directly.
+ */
 export async function surveyCsvColumns(
   scope: ResponseScope
 ): Promise<RemovedQuestion[]> {
@@ -616,88 +657,183 @@ export async function surveyCsvColumns(
   const { filter, params } = filterFor(scope);
 
   return withRuntimeDatabaseClient(
-    async (client) => {
-      const result = await client.query<{
-        step_type: string;
-        step_prompt: string | null;
-      }>(
-        `
-        SELECT r.step_type, r.step_prompt
-        FROM participant_responses AS r
-        JOIN runtime_sessions AS s ON s.session_id = r.session_id
-        WHERE ${filter} AND r.step_id IS NULL
-          AND r.step_type = ANY($${params.length + 1}::text[])
-        GROUP BY r.step_type, r.step_prompt
-        ORDER BY MIN(r.saved_at) ASC, MIN(r.id) ASC
-      `,
-        [...params, [...QUESTION_TYPES]]
-      );
-
-      return result.rows.map((row) => ({
-        type: row.step_type,
-        prompt: row.step_prompt ?? UNKNOWN_REMOVED_PROMPT
-      }));
-    },
+    (client) => readRemovedColumns(client, filter, params),
     { statementTimeoutMs: RESULTS_STATEMENT_TIMEOUT_MS }
   );
 }
 
 /**
- * Every participant who answered, in the order they first answered.
+ * Every SESSION that answered, grouped by person: people in the order they
+ * first answered, and each person's sessions in the order THEY first
+ * answered. That is the order `toCsvSessionRows` produces for the oracle, and
+ * it puts one person's sessions next to each other so a researcher comparing
+ * them is not hunting through the file (cto/AdaptaLabs#152).
  *
- * `MIN(saved_at), MIN(id)` reproduces the order the unbatched CSV produced -
- * it built its rows from a set ordered by `(saved_at, id)` and kept first
- * appearance - EXCEPT WHERE TWO PARTICIPANTS TIE ON THE MILLISECOND of their
- * first answer.
+ * SESSIONS, NOT PEOPLE, is the unit batches are cut from - and that is a
+ * bound, not a preference. A session holds at most one answer per question,
+ * so a batch of a hundred sessions is bounded by the study's length. A person
+ * is bounded by nothing: an abandoned session earns a fresh mint, so one
+ * account can hold thousands of answer-carrying sessions, and a batch of a
+ * hundred PEOPLE read one such account's ~100MB in a single statement (the
+ * security gate measured it on an intermediate version of #152). Whether a
+ * session holds a superseded answer needs the person's OTHER sessions, so that
+ * is decided in SQL by `readSupersededSessions` below rather than by reading
+ * them all into one batch.
  *
- * That exception is real and was demonstrated on Postgres 16 by a review gate,
- * against an earlier version of this comment which claimed the output was
- * "byte-identical, not merely equivalent". It is not: `MIN(id)` is taken over
+ * `MIN(saved_at), MIN(id)` reproduces the unbatched order EXCEPT WHERE TWO
+ * ROWS TIE ON THE MILLISECOND. That exception is real and was demonstrated on
+ * Postgres 16 by a review gate, against an earlier comment which claimed the
+ * output was "byte-identical, not merely equivalent". `MIN(id)` is taken over
  * the whole group independently of which row carries the minimum `saved_at`,
- * and `participant_responses.id` is an application-generated uuid stored as
- * TEXT, so its minimum is a lexicographic minimum of random values with no
- * relation to insertion order. `saved_at` is client-supplied at millisecond
- * precision, so ties are not exotic - imported and seeded data tie routinely.
- *
- * Left as it is rather than fixed, deliberately. Ordering by the first row
- * instead needs a correlated subquery or `DISTINCT ON` over a
- * `(saved_at, id)`-ordered scan on every export, and the consequence of the
- * tie is that two participants swap places in a spreadsheet - not a wrong
- * value, not a missing row. Recorded here so the next reader does not discover
- * the claim was stronger than the code.
+ * and `participant_responses.id` is a random uuid stored as TEXT, so it has no
+ * relation to insertion order; two PEOPLE tied on their first millisecond are
+ * ordered by `participant_id` here and by that uuid in the oracle. `saved_at`
+ * has millisecond precision (stamped by the server unless an API caller
+ * supplies one), so ties are not exotic - imported and seeded data tie
+ * routinely. Left as it is, deliberately: the consequence of a tie is that two
+ * rows swap places in a spreadsheet - not a wrong value, not a missing row.
  */
-async function surveyCsvParticipantIds(
-  scope: ResponseScope
-): Promise<string[]> {
-  const { filter, params } = filterFor(scope);
-
-  return withRuntimeDatabaseClient(
-    async (client) => {
-      const result = await client.query<{ session_id: string }>(
-        `
-        SELECT r.session_id
+async function readCsvSessions(
+  client: PoolClient,
+  filter: ResponseFilter,
+  params: unknown[]
+): Promise<{ sessionId: string; participantId: string }[]> {
+  const result = await client.query<{
+    session_id: string;
+    participant_id: string;
+  }>(
+    `
+        SELECT r.session_id, s.participant_id
         FROM participant_responses AS r
         JOIN runtime_sessions AS s ON s.session_id = r.session_id
         WHERE ${filter}
-        GROUP BY r.session_id
-        ORDER BY MIN(r.saved_at) ASC, MIN(r.id) ASC
+        GROUP BY r.session_id, s.participant_id
+        ORDER BY MIN(MIN(r.saved_at)) OVER (PARTITION BY s.participant_id) ASC,
+                 s.participant_id ASC,
+                 MIN(r.saved_at) ASC, MIN(r.id) ASC
         LIMIT ${MAX_CSV_PARTICIPANTS + 1}
       `,
-        params
-      );
-
-      if (result.rows.length > MAX_CSV_PARTICIPANTS) {
-        throw new AppError(
-          "This study has collected answers from more participants than can be exported in one request. Ask for a database export.",
-          413,
-          "RESPONSE_SET_TOO_LARGE"
-        );
-      }
-
-      return result.rows.map((row) => row.session_id);
-    },
-    { statementTimeoutMs: RESULTS_STATEMENT_TIMEOUT_MS }
+    params
   );
+
+  if (result.rows.length > MAX_CSV_PARTICIPANTS) {
+    throw new AppError(
+      "This study has collected answers from more participants than can be exported in one request. Ask for a database export.",
+      413,
+      "RESPONSE_SET_TOO_LARGE"
+    );
+  }
+
+  return result.rows.map((row) => ({
+    sessionId: row.session_id,
+    participantId: row.participant_id
+  }));
+}
+
+/**
+ * Text that `String.prototype.trim` would NOT reduce to nothing, as a
+ * Postgres regular expression: at least one character outside the exact set
+ * ECMAScript trims (WhiteSpace plus LineTerminator - tab, vertical tab, form
+ * feed, space, U+00A0, U+1680, U+2000-U+200A, U+202F, U+205F, U+3000, U+FEFF,
+ * line feed, carriage return, U+2028, U+2029).
+ *
+ * The SQL half of `countsAsAnswer` in survey-results.ts, which decides
+ * blankness with `.trim()`. Spelled out character by character because
+ * `[:space:]` and `\S` are locale-dependent in Postgres and disagree with
+ * JavaScript on U+00A0 at least - an answer of nothing but non-breaking
+ * spaces would then be blank on the page and an answer in the CSV's flag.
+ */
+const NON_BLANK_TEXT =
+  "[^\\t\\v\\f \\u00a0\\u1680\\u2000-\\u200a\\u202f\\u205f\\u3000\\ufeff\\n\\r\\u2028\\u2029]";
+
+/**
+ * The sessions holding at least one SUPERSEDED answer (cto/AdaptaLabs#152):
+ * an answer that the same person's later answer to the same question replaces
+ * on the results page.
+ *
+ * THE SAME RULE AS `supersededAnswers` in survey-results.ts, RESTATED IN SQL,
+ * and that duplication is the price of the bound above: the stream reads a
+ * hundred sessions at a time, and a person's other sessions may sit in any
+ * batch, so the flag cannot be computed from the rows a batch holds. Each part
+ * of the rule has its SQL twin here:
+ *
+ *   - who: `respondentKey` - the participant id, or the session for a row
+ *     with none (the column is NOT NULL, so that arm is unreachable)
+ *   - which question: `questionKey` - the step id, or for a removed question
+ *     the type and the wording, NULL wording standing for the unknown one
+ *   - what counts: `countsAsAnswer` - a question type, and a payload the
+ *     tallies would count (non-blank text, a string selection, a non-empty
+ *     multi-selection, a numeric rating)
+ *   - which wins: the latest `(saved_at, id)`, which is exactly "later in the
+ *     input" for rows both readers order by `(saved_at, id)`
+ *
+ * The two cannot drift apart unnoticed: survey-csv-export-postgres.test.ts
+ * compares the streamed export byte for byte against `toResponsesCsv`, which
+ * computes the flag in JavaScript, over a fixture seeded to exercise every
+ * arm above.
+ *
+ * The `AND r.step_type = ANY(...)` line is BELT-AND-BRACES: every OR arm below
+ * already names its own type (`open_text`, `rating`/`nps`, `single_choice`,
+ * `multi_choice` - which is exactly `QUESTION_TYPES`), so a row matching any
+ * arm already has a question type and the ANY clause admits nothing more. It
+ * stays because it keeps the scope of the read legible at a glance and it is
+ * what `csv-superseded-sql-keeps-to-the-export-scope` mutates to prove the
+ * `${filter}` scope holds.
+ *
+ * Bounded by the session list: it returns ids, never payloads.
+ */
+async function readSupersededSessions(
+  client: PoolClient,
+  filter: ResponseFilter,
+  params: unknown[]
+): Promise<Set<string>> {
+  const typesParam = `$${params.length + 1}`;
+  const unknownParam = `$${params.length + 2}`;
+  const nonBlankParam = `$${params.length + 3}`;
+
+  const result = await client.query<{ session_id: string }>(
+    `
+        SELECT DISTINCT ranked.session_id
+        FROM (
+          SELECT r.session_id,
+                 ROW_NUMBER() OVER (
+                   PARTITION BY
+                     CASE WHEN s.participant_id <> ''
+                          THEN 'p:' || s.participant_id
+                          ELSE 's:' || r.session_id END,
+                     r.step_id,
+                     CASE WHEN r.step_id IS NULL THEN r.step_type END,
+                     CASE WHEN r.step_id IS NULL
+                          THEN COALESCE(r.step_prompt, ${unknownParam}) END
+                   ORDER BY r.saved_at DESC, r.id DESC
+                 ) AS recency
+          FROM participant_responses AS r
+          JOIN runtime_sessions AS s ON s.session_id = r.session_id
+          WHERE ${filter}
+            AND r.step_type = ANY(${typesParam}::text[])
+            AND (
+              (r.step_type = 'open_text'
+                AND jsonb_typeof(r.response_payload -> 'text') = 'string'
+                AND (r.response_payload ->> 'text') ~ ${nonBlankParam})
+              OR (r.step_type IN ('rating', 'nps')
+                AND jsonb_typeof(r.response_payload -> 'rating') = 'number')
+              OR (r.step_type = 'single_choice'
+                AND jsonb_typeof(r.response_payload -> 'selectedOption') = 'string')
+              OR (r.step_type = 'multi_choice'
+                AND jsonb_typeof(r.response_payload -> 'selectedOptions') = 'array'
+                AND EXISTS (
+                  SELECT 1
+                  FROM jsonb_array_elements(r.response_payload -> 'selectedOptions') AS picked(value)
+                  WHERE jsonb_typeof(picked.value) = 'string'
+                ))
+            )
+        ) AS ranked
+        WHERE ranked.recency > 1
+      `,
+    [...params, [...QUESTION_TYPES], UNKNOWN_REMOVED_PROMPT, NON_BLANK_TEXT]
+  );
+
+  return new Set(result.rows.map((row) => row.session_id));
 }
 
 /**
@@ -768,20 +904,27 @@ async function readBatch(
  * saved DURING an export may or may not appear, depending on whether its
  * participant had already been passed. The unbatched reader took one statement
  * and therefore one snapshot. That is a real difference and an acceptable one -
- * the alternative is holding a transaction open for the length of a download -
- * and the participant LIST is fixed up front, so somebody who starts answering
- * mid-export is consistently absent rather than half-present.
+ * the alternative is holding a transaction open for the length of a download.
+ *
+ * The PREFLIGHT is different: the session list, the removed-question columns
+ * and the superseded flags are read together in one REPEATABLE READ snapshot
+ * (`readSurveyCsvPreflight`), so they describe one instant. A session started
+ * after that snapshot is consistently absent rather than half-present, and -
+ * the part a separate flag read got wrong - a session the list holds cannot be
+ * flagged superseded against a later answer that the file does not contain,
+ * because the flag and the list saw the same rows.
  */
 async function* streamParticipants(
   scope: ResponseScope,
-  participantIds: string[],
+  sessions: { sessionId: string; participantId: string }[],
+  superseded: ReadonlySet<string>,
   signal: AbortSignal
-): AsyncGenerator<{ sessionId: string; answers: StoredResponse[] }> {
+): AsyncGenerator<CsvSessionRow> {
   const { filter, params } = filterFor(scope);
 
   for (
     let index = 0;
-    index < participantIds.length;
+    index < sessions.length;
     index += CSV_PARTICIPANT_BATCH
   ) {
     // THROWS RATHER THAN RETURNING, checked before paying for the next batch.
@@ -790,7 +933,7 @@ async function* streamParticipants(
     // outcome the refusal design exists to prevent.
     signal.throwIfAborted();
 
-    const batch = participantIds.slice(index, index + CSV_PARTICIPANT_BATCH);
+    const batch = sessions.slice(index, index + CSV_PARTICIPANT_BATCH);
 
     // `${filter}` in the statement below is DEFENCE IN DEPTH AND CANNOT BE
     // TESTED, which is worth saying so nobody deletes it as dead or claims it
@@ -804,36 +947,102 @@ async function* streamParticipants(
     // The BATCH clause is a different matter and IS pinned: deleting it with
     // its bind parameter is caught in survey-csv-export.test.ts, on the
     // parameters, by `asks each batch for ITS OWN hundred ids`.
-    const rows = await readBatch(filter, params, batch, signal);
+    const rows = await readBatch(
+      filter,
+      params,
+      batch.map((session) => session.sessionId),
+      signal
+    );
 
-    // GROUPED BY `session_id`, WHICH THE RESULTS PAGE NO LONGER DOES
-    // (cto/AdaptaLabs#152). `respondentKey` in survey-results.ts counts
-    // distinct `participant_id`, so one person holding two answer-carrying
-    // sessions - ordinary since an expired session started earning a fresh
-    // mint rather than a dead link, cto/AdaptaLabs#129 - reads as 1
-    // participant on the page and 2 rows in this export, under a column
-    // headed "Participant". Left as it is deliberately: regrouping on
-    // `participant_id` needs a which-answer-wins rule for the same question
-    // answered in both sessions, and that is #152's decision to make.
-    // `toResponsesCsv` is the oracle this path is checked against and groups
-    // the same way, so the two cannot drift apart while the disagreement
-    // stands.
-    const byParticipant = new Map<string, StoredResponse[]>();
+    const bySession = new Map<string, StoredResponse[]>();
     for (const row of rows) {
-      const group = byParticipant.get(row.session_id);
+      const group = bySession.get(row.session_id);
       if (group) {
         group.push(row);
       } else {
-        byParticipant.set(row.session_id, [row]);
+        bySession.set(row.session_id, [row]);
       }
     }
 
     // Yielded in the ORDER OF THE ID LIST, not the order the batch query
-    // happened to return them. The list is what carries first-answer order.
-    for (const sessionId of batch) {
-      yield { sessionId, answers: byParticipant.get(sessionId) ?? [] };
+    // happened to return them. The list is what carries the grouped,
+    // first-answer order. A session whose answers vanished between the
+    // preflight and this read - a retake cascades them away - is yielded with
+    // none, and the writer skips it as an absence.
+    for (const session of batch) {
+      yield {
+        sessionId: session.sessionId,
+        participantId: session.participantId || null,
+        superseded: superseded.has(session.sessionId),
+        answers: bySession.get(session.sessionId) ?? []
+      };
     }
   }
+}
+
+/**
+ * The three preflight reads, in ONE checkout and ONE snapshot.
+ *
+ * The session list, the removed-question columns and the superseded flags have
+ * to agree, because the writer pairs them row by row: a flag set against a
+ * session the list holds must describe the same rows the list was built from.
+ * Read on three separate checkouts, as they once were, a session saved between
+ * the list read and the flag read could be flagged superseded against a later
+ * answer that the export - already scoped to the earlier list - does not
+ * contain. A probe reproduced exactly that.
+ *
+ * So all three run on one client inside a REPEATABLE READ, READ ONLY
+ * transaction. REPEATABLE READ freezes the snapshot at the first statement, so
+ * the three see identical rows; READ ONLY says none of them writes and lets
+ * Postgres skip the bookkeeping for a rollback it will never need. One checkout
+ * rather than three is also one admission attempt rather than three on the
+ * five-connection pool live participants share.
+ *
+ * The transaction wraps the PREFLIGHT ONLY. The batch reads run afterwards, on
+ * their own short-lived checkouts with nothing held between them - the
+ * occupancy property `streamParticipants` documents - so a slow download never
+ * holds a transaction open.
+ */
+async function readSurveyCsvPreflight(scope: ResponseScope): Promise<{
+  sessions: { sessionId: string; participantId: string }[];
+  removedQuestions: RemovedQuestion[];
+  superseded: Set<string>;
+}> {
+  const { filter, params } = filterFor(scope);
+
+  return withRuntimeDatabaseClient(
+    async (client) => {
+      await client.query(
+        "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY"
+      );
+
+      try {
+        // THE BOUND FIRST, so the refusal is the cheap thing. All three scan
+        // participant_responses under the same 120s statement budget, but only
+        // the session list is bounded - it carries `LIMIT MAX_CSV_PARTICIPANTS
+        // + 1` and decides the 413. Run last, a study too large to export would
+        // pay for the other two reads before anyone told it no. All three are
+        // reads of the same scope and none writes, so ordering only decides
+        // WHICH pre-first-byte refusal arrives first, and either is honest.
+        const sessions = await readCsvSessions(client, filter, params);
+        const removedQuestions = await readRemovedColumns(client, filter, params);
+        const superseded = await readSupersededSessions(client, filter, params);
+
+        await client.query("COMMIT");
+        return { sessions, removedQuestions, superseded };
+      } catch (error) {
+        // A read that threw (the 413, a pool refusal, a lost connection) leaves
+        // the transaction open on a pooled connection the next borrower would
+        // inherit mid-transaction - node-pg does not reset a connection on
+        // release. Roll back before it goes home. Swallowed because the read's
+        // own error is the one worth surfacing and a READ ONLY rollback has
+        // nothing to fail at.
+        await client.query("ROLLBACK").catch(() => {});
+        throw error;
+      }
+    },
+    { statementTimeoutMs: RESULTS_STATEMENT_TIMEOUT_MS }
+  );
 }
 
 /**
@@ -843,7 +1052,7 @@ async function* streamParticipants(
  * route set its headers and then started pulling would have discovered the
  * participant bound - and its 413 - with the response already committed. Once a
  * byte of the body is written the status is fixed, and the only honest failure
- * left is to destroy the connection. So both preflight reads happen HERE, in an
+ * left is to destroy the connection. So the preflight happens HERE, in an
  * ordinary awaited call, and the caller gets a generator that is known to have
  * something to say.
  *
@@ -854,10 +1063,7 @@ async function* streamParticipants(
  */
 export async function openSurveyCsvExport(scope: ResponseScope): Promise<{
   removedQuestions: RemovedQuestion[];
-  participants: (signal: AbortSignal) => AsyncGenerator<{
-    sessionId: string;
-    answers: StoredResponse[];
-  }>;
+  participants: (signal: AbortSignal) => AsyncGenerator<CsvSessionRow>;
 }> {
   if (!isPostgresRuntimeConfigured()) {
     return {
@@ -869,18 +1075,8 @@ export async function openSurveyCsvExport(scope: ResponseScope): Promise<{
     };
   }
 
-  // THE BOUND FIRST, so the refusal is the cheap thing. Both reads scan
-  // participant_responses under the same 120s statement budget, but only this
-  // one is bounded - it carries `LIMIT MAX_CSV_PARTICIPANTS + 1` and decides
-  // the 413. Run second, as it was, a study too large to export still pays for
-  // the unbounded removed-columns grouping before anyone tells it no.
-  //
-  // Order is all that changes. Both are independent reads of the same scope
-  // and neither writes, so the only observable difference is WHICH refusal
-  // arrives first when both would fail - and both are pre-first-byte refusals,
-  // so either is honest.
-  const participantIds = await surveyCsvParticipantIds(scope);
-  const removedQuestions = await surveyCsvColumns(scope);
+  const { sessions, removedQuestions, superseded } =
+    await readSurveyCsvPreflight(scope);
 
   return {
     removedQuestions,
@@ -888,6 +1084,6 @@ export async function openSurveyCsvExport(scope: ResponseScope): Promise<{
     // drop by accident, and the drop is silent - the export simply goes back
     // to being unbounded on the database side.
     participants: (signal: AbortSignal) =>
-      streamParticipants(scope, participantIds, signal)
+      streamParticipants(scope, sessions, superseded, signal)
   };
 }

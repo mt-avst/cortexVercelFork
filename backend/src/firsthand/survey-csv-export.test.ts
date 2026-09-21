@@ -23,7 +23,9 @@ const checkouts: Array<{
 }> = [];
 
 let open = 0;
-let participantRows: Array<{ session_id: string }> = [];
+let participantRows: Array<{ session_id: string; participant_id?: string }> = [];
+/** What the superseded-sessions preflight returns (cto/AdaptaLabs#152). */
+let supersededRows: Array<{ session_id: string }> = [];
 let answerRows: Array<Record<string, unknown>> = [];
 let removedRows: Array<{ step_type: string; step_prompt: string | null }> = [];
 
@@ -62,6 +64,7 @@ vi.mock("./runtime-database", async (importOriginal) => ({
           entry.params.push(params);
           onQuery(sql);
           if (sql.includes("GROUP BY r.step_type")) return { rows: removedRows };
+          if (sql.includes("ROW_NUMBER()")) return { rows: supersededRows };
           if (sql.includes("GROUP BY r.session_id")) return { rows: participantRows };
           return { rows: answerRows };
         }
@@ -104,6 +107,7 @@ describe("opening and draining a CSV export", () => {
     open = 0;
     onQuery = () => {};
     removedRows = [];
+    supersededRows = [];
     answerRows = [];
     participantRows = Array.from({ length: 250 }, (_u, i) => ({
       session_id: `s${i}`
@@ -115,11 +119,40 @@ describe("opening and draining a CSV export", () => {
 
     expect(seen).toHaveLength(250);
 
-    // Two preflight reads (removed columns, participant ids) plus one per
-    // batch of 100. If this ever reads 3, somebody has replaced the batching
+    // ONE preflight checkout (the three preflight reads now share a single
+    // REPEATABLE READ transaction - cto/AdaptaLabs#152, MEDIUM) plus one per
+    // batch of 100. If this ever reads 1, somebody has replaced the batching
     // with a cursor and the connection is being held for the whole export.
-    expect(checkouts).toHaveLength(2 + 3);
+    expect(checkouts).toHaveLength(1 + 3);
     expect(checkouts.every((entry) => !entry.openWhileAnotherWasOpen)).toBe(true);
+  });
+
+  it("reads the whole preflight in one REPEATABLE READ snapshot", async () => {
+    await drain();
+
+    // The session list, the removed-question columns and the superseded flags
+    // must describe ONE instant. Read on separate checkouts, a session saved
+    // between the list read and the flag read can be flagged superseded against
+    // a later answer the export - already scoped to the earlier list - does not
+    // contain (cto/AdaptaLabs#152, MEDIUM). One checkout, opened REPEATABLE
+    // READ READ ONLY and committed, is what guarantees it.
+    const preflight = checkouts.find((entry) =>
+      entry.sql.some((sql) => sql.includes("GROUP BY r.session_id"))
+    );
+
+    // The control: `find` returning undefined would make every assertion below
+    // vacuous, and splitting the preflight back into three checkouts would do
+    // exactly that to a test that looked for all three in one entry.
+    expect(preflight).toBeDefined();
+    const sql = preflight?.sql.join("\n") ?? "";
+
+    expect(sql).toMatch(/BEGIN[\s\S]*REPEATABLE READ[\s\S]*READ ONLY/);
+    expect(sql).toContain("COMMIT");
+    // All three reads share this ONE checkout: the removed-columns grouping and
+    // the superseded ROW_NUMBER() are in the same entry, not checkouts of their
+    // own.
+    expect(sql).toContain("GROUP BY r.step_type");
+    expect(sql).toContain("ROW_NUMBER()");
   });
 
   it("asks each batch for ITS OWN hundred ids, and never for everything", async () => {
@@ -213,6 +246,38 @@ describe("opening and draining a CSV export", () => {
     expect(seen).toEqual(["ghost"]);
   });
 
+  it("carries each session's person and superseded flag from the preflights onto its row", async () => {
+    // cto/AdaptaLabs#152. The flag is decided in SQL before the first byte,
+    // because a person's other sessions can sit in any batch; the stream only
+    // has to carry it - and the person - onto the right row.
+    participantRows = [
+      { session_id: "old", participant_id: "p1" },
+      { session_id: "new", participant_id: "p1" },
+      { session_id: "other", participant_id: "p2" }
+    ];
+    supersededRows = [{ session_id: "old" }];
+    answerRows = ["old", "new", "other"].map((session_id) => ({
+      session_id,
+      step_id: "q1",
+      step_prompt: null,
+      step_type: "open_text",
+      response_payload: {},
+      saved_at: "2026-08-21T10:00:00.000Z"
+    }));
+
+    const csvExport = await openSurveyCsvExport(scope);
+    const rows: Array<{ sessionId: string; participantId: string | null; superseded: boolean }> = [];
+    for await (const row of csvExport.participants(new AbortController().signal)) {
+      rows.push({ sessionId: row.sessionId, participantId: row.participantId, superseded: row.superseded });
+    }
+
+    expect(rows).toEqual([
+      { sessionId: "old", participantId: "p1", superseded: true },
+      { sessionId: "new", participantId: "p1", superseded: false },
+      { sessionId: "other", participantId: "p2", superseded: false }
+    ]);
+  });
+
   it("asks the database for one participant more than it will return", async () => {
     await openSurveyCsvExport(scope);
 
@@ -262,6 +327,31 @@ describe("opening and draining a CSV export", () => {
       statusCode: 413
     });
   });
+
+  it("rolls back the preflight transaction when a read throws, rather than leaving it open", async () => {
+    // cto/AdaptaLabs#152. The three preflight reads share ONE checkout inside a
+    // REPEATABLE READ transaction; a read that throws - here the 413 from the
+    // session-list read - must ROLL BACK before the client returns to the pool,
+    // or the next borrower inherits an open transaction (node-pg does not reset
+    // a connection on release). The test above proves the throw; this proves
+    // the cleanup, which nothing else pins.
+    participantRows = Array.from({ length: 200_001 }, (_u, i) => ({
+      session_id: `s${i}`
+    }));
+
+    await expect(openSurveyCsvExport(scope)).rejects.toMatchObject({
+      statusCode: 413
+    });
+
+    const preflight = checkouts.find((entry) =>
+      entry.sql.some((sql) => sql.includes("GROUP BY r.session_id"))
+    );
+    expect(preflight).toBeDefined();
+    const sql = preflight?.sql ?? [];
+    // Ended on the error path: rolled back, never committed.
+    expect(sql).toContain("ROLLBACK");
+    expect(sql).not.toContain("COMMIT");
+  });
 });
 
 /**
@@ -285,6 +375,7 @@ describe("retrying a batch read the runtime pool refused", () => {
     open = 0;
     onQuery = () => {};
     removedRows = [];
+    supersededRows = [];
     answerRows = [];
     participantRows = Array.from({ length: 250 }, (_u, i) => ({
       session_id: `s${i}`

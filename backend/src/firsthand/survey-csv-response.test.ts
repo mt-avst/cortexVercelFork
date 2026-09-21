@@ -45,6 +45,14 @@ const answer = (sessionId: string): StoredResponse => ({
   saved_at: "2026-08-22T00:00:00.000Z"
 });
 
+/** One CSV row's worth of answers, in the shape the export's generator yields. */
+const sessionRow = (sessionId: string, answers: StoredResponse[]) => ({
+  sessionId,
+  participantId: sessionId,
+  superseded: false,
+  answers
+});
+
 /** A response that reports a full buffer, so every write waits for a drain. */
 function backpressuredResponse() {
   const emitter = new EventEmitter();
@@ -166,7 +174,7 @@ const settleTick = () =>
 async function* participantsOf(ids: string[], onPull?: (id: string) => void) {
   for (const id of ids) {
     onPull?.(id);
-    yield { sessionId: id, answers: [answer(id)] };
+    yield sessionRow(id, [answer(id)]);
   }
 }
 
@@ -216,11 +224,11 @@ describe("writing the export to the socket", () => {
     const res = stalledResponse();
 
     async function* withAGhost() {
-      yield { sessionId: "kept", answers: [answer("kept")] };
+      yield sessionRow("kept", [answer("kept")]);
       // Their session was deleted between the preflight and this batch - a
       // retake cascades exactly this way - so the batch read returned nothing
       // for them.
-      yield { sessionId: "ghost", answers: [] };
+      yield sessionRow("ghost", []);
       // IN THE MIDDLE, AND THIS IS THE WHOLE POINT. With the ghost last, the
       // skip's `continue` and a `break` emit identical bytes, so `continue` ->
       // `break` survived the entire suite - 825 jest, 590 vitest, 16 db tests,
@@ -229,7 +237,7 @@ describe("writing the export to the socket", () => {
       // right filename: refusal turned into truncation, the one outcome this
       // file's headline forbids. Somebody has to come after the ghost or the
       // test cannot tell the two apart.
-      yield { sessionId: "after", answers: [answer("after")] };
+      yield sessionRow("after", [answer("after")]);
     }
 
     const writing = writeSurveyCsv(res, steps, [], () => withAGhost(), {
@@ -381,7 +389,7 @@ describe("writing the export to the socket", () => {
     const res = backpressuredResponse();
 
     async function* exploding() {
-      yield { sessionId: "s1", answers: [answer("s1")] };
+      yield sessionRow("s1", [answer("s1")]);
       throw new Error("batch read failed");
     }
 
@@ -484,7 +492,7 @@ function acceptingResponse() {
 async function* unhurriedParticipants(ids: string[], everyMs: number) {
   for (const id of ids) {
     await new Promise((resolve) => setTimeout(resolve, everyMs));
-    yield { sessionId: id, answers: [answer(id)] };
+    yield sessionRow(id, [answer(id)]);
   }
 }
 

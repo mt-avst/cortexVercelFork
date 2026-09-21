@@ -301,10 +301,13 @@ const tallyOnly = (step: StudyStep, rows: StoredResponse[]): QuestionResult => {
 /**
  * The wordings these answers were given against, minus the current one.
  *
- * Counted over ROWS rather than over distinct participants, because the
- * question being answered is a property of the answer: one person who answered
- * before and after a reword contributes to both wordings, and that is the
- * honest report.
+ * Counted over the answers that WON (`supersededAnswers`), the same set
+ * `answered` counts, so the wordings under a question never total more than
+ * the question does. A session stores one answer per question, so the only
+ * way one person reaches two wordings is by answering again in a second
+ * session - and then only their latest answer is on this page, under the
+ * wording it was given against (cto/AdaptaLabs#152). The earlier one is still
+ * in the CSV, flagged as superseded.
  *
  * A null `step_prompt` - a row written before 0015, or one whose step was
  * missing from its session's own step list - is skipped rather than reported as
@@ -430,11 +433,10 @@ const removedQuestionsFrom = (detached: StoredResponse[]): QuestionResult[] => {
  * in that component's header.
  *
  * So the defect was a headline overstating the turnout, not inflated
- * percentages - and the researcher-visible shape it leaves BEHIND is the
- * mirror image, which is the thing to know when reading this page today: a
- * study can now say "1 participant" above a chart whose own total is 2,
- * because the headline counts people while every question still counts answer
- * rows. That is cto/AdaptaLabs#152, the ponytail at the foot of this block.
+ * percentages. Its mirror image - "1 participant" above a chart totalling 2,
+ * because the headline counted people while every question counted answer
+ * rows - was cto/AdaptaLabs#152, closed by `supersededAnswers` below: the
+ * tallies now count one answer per person per question as well.
  *
  * A row with no `participant_id` falls back to its own `session_id` rather
  * than collapsing every such row into a single respondent. The column is
@@ -451,27 +453,123 @@ const removedQuestionsFrom = (detached: StoredResponse[]): QuestionResult[] => {
  * Prefixed, so a `participant_id` equal to some other row's `session_id`
  * cannot collide with it.
  *
- * ponytail: the PER-QUESTION tallies below still count one answer row as one
- *   answer, so the same participant answering the same question in both
- *   sessions counts twice in `answered`, in a choice option's count and in a
- *   scale's mean and NPS. The page can therefore read "1 participant" over a
- *   chart totalling 2.
- *   -> cto/AdaptaLabs#152, reachable whenever a participant lets a 24-hour
- *      token lapse and re-answers a question
- *
- *   The CSV EXPORT DISAGREES WITH THIS PAGE, and the export is deliberately
- *   left alone (same issue). It groups by `session_id` under a column headed
- *   "Participant", so one person holding two sessions is 1 respondent here
- *   and 2 "Participant" rows there. Changing the export's grouping to match
- *   needs the same which-answer-wins rule the tallies need - latest
- *   `saved_at`? the completed session's? - and that is a researcher-facing
- *   decision about what a study's results mean, not a refactor. Both export
- *   sites say so at the grouping itself: `toResponsesCsv` and
- *   `toCsvHeaderRow` in `survey-csv.ts`, and `streamParticipants` in
- *   `survey-results-repository.ts`.
+ * Exported because the CSV groups its rows by the same person, and a second
+ * copy of the fallback is a second place for the two to disagree.
  */
-const respondentKey = (row: StoredResponse): string =>
+export const respondentKey = (row: StoredResponse): string =>
   row.participant_id ? `p:${row.participant_id}` : `s:${row.session_id}`;
+
+/**
+ * The question an answer was given to, as a key.
+ *
+ * The step id while the question exists. Once it is removed the step id is
+ * NULL and the wording and type are all the identity the answer has left -
+ * the same pair `removedQuestionsFrom` above and the CSV's removed columns
+ * group on, so an answer superseded here is superseded under the heading it is
+ * reported under. Prefixed so the two kinds cannot collide.
+ */
+const questionKey = (row: StoredResponse): string =>
+  row.step_id !== null
+    ? `q:${row.step_id}`
+    : `r:${row.step_type}\u0000${row.step_prompt ?? UNKNOWN_REMOVED_PROMPT}`;
+
+/**
+ * Whether a stored row is an answer the tallies would count, by the same
+ * predicates they use: non-blank text, at least one selection, a numeric
+ * rating. The rating's RANGE is not checked here - that needs the step's
+ * scale, which a removed question no longer has - so an off-scale rating
+ * still takes part, and would then be dropped by `tallyScale`. That is the
+ * one gap between this and the tallies, and it needs a stored rating outside
+ * the question's own scale to reach.
+ */
+const countsAsAnswer = (row: StoredResponse): boolean => {
+  if (!QUESTION_TYPES.has(row.step_type)) {
+    return false;
+  }
+
+  const payload = row.response_payload ?? {};
+
+  if (row.step_type === "open_text") {
+    return asText(payload).trim().length > 0;
+  }
+
+  if (row.step_type === "rating" || row.step_type === "nps") {
+    return asRating(payload) !== undefined;
+  }
+
+  return asSelections(payload, row.step_type).length > 0;
+};
+
+/**
+ * The answers that LOST: for each person and each question, every answer but
+ * the latest (cto/AdaptaLabs#152).
+ *
+ * One person can hold two answer-carrying sessions - an expired session earns
+ * a fresh mint rather than a dead link (cto/AdaptaLabs#129) - and answer the
+ * same question in both. The results page counts people in its headline, so
+ * it must count one answer per person per question in every tally under it,
+ * or it reads "1 participant" above a chart totalling 2. The decision is
+ * LATEST WINS: the answer with the greatest `saved_at`, on the reasoning that
+ * the most recent thing a person told us is what they think now.
+ *
+ * A tie on `saved_at` goes to the answer LATER IN THE INPUT. Both readers hand
+ * this rows ordered by `(saved_at, id)`, so a tie is broken by `id` - a random
+ * uuid, so the choice is arbitrary, but it is DETERMINISTIC and the same
+ * whichever reader asked, which is the property that matters: the page and
+ * the CSV's flag never disagree about which answer won.
+ *
+ * `saved_at` is stamped by the server unless an API caller supplies one; the
+ * app never does. A caller who backdates can only choose between their OWN
+ * answers, so it buys nothing over simply answering again.
+ *
+ * Returned as the losers rather than the winners because both consumers want
+ * the losers: the aggregation SKIPS them, and the CSV keeps every row and
+ * FLAGS the sessions holding one. A lost answer is still data - for a small
+ * qualitative study, somebody changing their mind is a finding.
+ *
+ * Only ANSWERS take part - an answerable type carrying something the tallies
+ * below would count (`countsAsAnswer`). An `instruction` row is not an answer,
+ * so flagging a session for one would mark a row superseded with nothing on
+ * it that lost. And a BLANK later row - storable by a client driving the API,
+ * which accepts partial saves - must not knock out a real earlier answer:
+ * the tallies drop blanks, so letting one win would leave the person counted
+ * in the headline with their real answer gone from every chart.
+ *
+ * Keyed by object identity, so it only means anything for the array it was
+ * built from - which is how both callers use it.
+ *
+ * HAS A TWIN IN SQL. The streamed CSV export reads a hundred sessions at a
+ * time, so it decides the same thing in `readSupersededSessions`
+ * (survey-results-repository.ts); change this rule there too.
+ * survey-csv-export-postgres.test.ts compares the two byte for byte and goes
+ * red if they disagree.
+ */
+export function supersededAnswers(
+  responses: readonly StoredResponse[]
+): ReadonlySet<StoredResponse> {
+  const latest = new Map<string, StoredResponse>();
+  const superseded = new Set<StoredResponse>();
+
+  for (const row of responses) {
+    if (!countsAsAnswer(row)) {
+      continue;
+    }
+
+    const key = `${respondentKey(row)}\u0000${questionKey(row)}`;
+    const current = latest.get(key);
+
+    if (current === undefined) {
+      latest.set(key, row);
+    } else if (Date.parse(row.saved_at) >= Date.parse(current.saved_at)) {
+      superseded.add(current);
+      latest.set(key, row);
+    } else {
+      superseded.add(row);
+    }
+  }
+
+  return superseded;
+}
 
 export function aggregateSurveyResults(
   steps: StudyStep[],
@@ -482,9 +580,19 @@ export function aggregateSurveyResults(
   const byStep = new Map<string, StoredResponse[]>();
   const detached: StoredResponse[] = [];
   const respondents = new Set<string>();
+  const superseded = supersededAnswers(responses);
 
   for (const row of responses) {
     respondents.add(respondentKey(row));
+
+    // AFTER the respondent is counted and before anything is tallied: a person
+    // whose only answer lost is still somebody who answered, but the answer
+    // itself is replaced by their later one (cto/AdaptaLabs#152). This is the
+    // one line that keeps `answered`, the option counts, the means and the
+    // NPS from counting one person twice.
+    if (superseded.has(row)) {
+      continue;
+    }
 
     if (row.step_id === null) {
       detached.push(row);

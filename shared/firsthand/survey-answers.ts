@@ -18,6 +18,11 @@ import { NPS_SCALE_MAX, type StudyStep } from "./contract";
  * silently strips and the aggregate quietly reads as "unanswered".
  */
 export const surveyAnswerSchema = z.object({
+  // ponytail: unbounded free text. A single answer is capped only by the 100kb
+  //   request-body limit, so the aggregate results body bounds itself with
+  //   MAX_AGGREGATE_RESPONSE_CHARS instead (survey-results-repository.ts).
+  //   Upgrade path: a `.max()` here, once a sensible per-answer ceiling is
+  //   agreed. -> cto/AdaptaLabs#155
   text: z.string().optional(),
   selectedOption: z.string().optional(),
   selectedOptions: z.array(z.string()).optional(),
