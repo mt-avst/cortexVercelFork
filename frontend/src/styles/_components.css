@@ -3263,12 +3263,12 @@ body.admin-page .header .container {
    way and its icon was squeezed to 0px - an empty outlined box where the row
    menu should be (measured on main at 1240 and 1440).
 
-   The columns now sum to EXACTLY 100%, so each number means what it says,
-   and 13% with the kebab's padding trimmed to 8px gives the pair several
-   pixels of slack rather than a fraction of one (13% of the old 102% set
-   fitted by 0.1px on Manrope and overflowed on the fallback font).
-   `e2e/admin-pill-primitive.test.ts` measures the painted icon and both
-   edges of the group, with the web font loaded and without it. */
+   The columns now sum to EXACTLY 100%, so each number means what it says.
+   13% resolves to a ~103px content box at 1240px (the column is %-driven here,
+   not content-sized - min-width is advisory under table-layout: fixed). The
+   View + kebab pair is ~98px, so the slack lives in `.admin-action-group`'s
+   gap, NOT in this column's width or padding - trimming either shrinks the
+   cell with it and changes nothing. See that rule for the measured fit. */
 .admin-data-table .col-actions {
   width: 13%;
   min-width: 132px;
@@ -14381,7 +14381,16 @@ body.theme-light .admin-study-status--not-working {
   display: inline-flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 0.4rem;
+  /* The View + kebab pair has to fit the Actions column's ~103px content box
+     (13% at 1240px) with slack. The old 0.4rem (~5.5px) gap spent the whole
+     margin, so on the FALLBACK font - what a CI runner with no Google Fonts
+     egress renders, and wider than Manrope - the pair overflowed the cell by
+     0.42px at 1240 and 1440px. Measured in the pinned CI image
+     (node:20.20.2-bookworm), 2px leaves ~3.5px of slack. The column width and
+     the cell padding are the wrong lever: %-driven, the cell tracks neither,
+     so trimming them shrinks the box with the buttons. Pinned by
+     e2e/admin-pill-primitive.test.ts on both fonts at both widths. */
+  gap: 2px;
   justify-content: center;
 }
 
