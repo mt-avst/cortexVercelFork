@@ -64,20 +64,10 @@ jest.mock('../../firsthand/survey-results-repository', () => {
     openSurveyCsvExport: async (...args: unknown[]) => {
       scopeSpy(args[0]);
       const rows = (await listed(...(args as []))) ?? [];
-      const { removedQuestionColumns } =
+      const { removedQuestionColumns, toCsvSessionRows } =
         jest.requireActual<typeof import('../../firsthand/survey-csv')>(
           '../../firsthand/survey-csv'
         );
-
-      const byParticipant = new Map<
-        string,
-        import('../../firsthand/survey-results').StoredResponse[]
-      >();
-      for (const row of rows) {
-        const group = byParticipant.get(row.session_id) ?? [];
-        group.push(row);
-        byParticipant.set(row.session_id, group);
-      }
 
       return {
         removedQuestions: removedQuestionColumns(rows),
@@ -90,9 +80,7 @@ jest.mock('../../firsthand/survey-results-repository', () => {
         // caller passing NOTHING; it cannot stop them passing something ELSE.
         participants: async function* (signal: AbortSignal) {
           signalSpy(signal);
-          for (const [sessionId, answers] of byParticipant) {
-            yield { sessionId, answers };
-          }
+          yield* toCsvSessionRows(rows);
         },
       };
     },
@@ -117,7 +105,7 @@ jest.mock('../../firsthand/survey-csv', () => {
     // The streamed export never calls `toResponsesCsv`. The per-participant
     // emitter is what it does call, and it is the only place left where a
     // failure can happen AFTER the response has committed to 200.
-    toCsvParticipantRow: jest.fn(actual.toCsvParticipantRow),
+    toCsvSessionRow: jest.fn(actual.toCsvSessionRow),
   };
 });
 
@@ -204,7 +192,7 @@ import {
 } from '../../firsthand/runtime-repository-postgres';
 import { claimStudyIfUnowned, countStudyTasks, createStudy, deleteStudyUnchecked, getStudyById, isStudiesPersistenceConfigured, updateStudy } from '../../firsthand/studies-repository';
 import { listResponsesForOpportunity, studyHasResponses } from '../../firsthand/survey-results-repository';
-import { toCsvParticipantRow } from '../../firsthand/survey-csv';
+import { toCsvSessionRow } from '../../firsthand/survey-csv';
 import { errorHandler, AppError } from '../../utils/errorHandler';
 // Spied per-test rather than module-mocked: the route logs from a dozen places
 // and silencing all of them for the whole file would hide more than it proves.
@@ -243,8 +231,8 @@ const mockListResponsesForOpportunity =
   listResponsesForOpportunity as jest.MockedFunction<typeof listResponsesForOpportunity>;
 const mockStudyHasResponses =
   studyHasResponses as jest.MockedFunction<typeof studyHasResponses>;
-const mockToCsvParticipantRow = toCsvParticipantRow as jest.MockedFunction<
-  typeof toCsvParticipantRow
+const mockToCsvSessionRow = toCsvSessionRow as jest.MockedFunction<
+  typeof toCsvSessionRow
 >;
 
 const app = express();
@@ -7106,7 +7094,7 @@ describe('Opportunities API', () => {
       ]);
       // First participant writes, second blows up - after the 200 and the
       // headers have already gone out.
-      mockToCsvParticipantRow
+      mockToCsvSessionRow
         .mockImplementationOnce(() => 'session-1,Fine')
         .mockImplementationOnce(() => {
           throw new Error('row blew up');

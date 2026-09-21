@@ -91,9 +91,9 @@
   },
   {
     "id": "csv-batch-asks-for-its-own-ids",
-    "why": "The output is identical whether a batch fetched its hundred participants or all of them, so deleting the predicate AND its bind parameter together changes nothing anybody can see - while loading the study's whole answer set once per batch, which is the exact heap streaming exists to remove. It survived every test in four files, including the real-Postgres one, because they all compare output. ANCHOR UPDATED when !214 moved this query into `readBatch` and reindented its parameter list - the canary reported ANCHOR_MISSING rather than quietly dropping the entry, which is the whole point of requiring an exact single match. THE PARAMETER HALF, and only that half: it asserts what the statement BOUND. What it RETURNED is now pinned separately by csv-batch-read-takes-only-what-it-asked-for, which is what closes cto/AdaptaLabs#20 - this entry used to say that gap was open, and it no longer is.",
+    "why": "The output is identical whether a batch fetched its hundred participants or all of them, so deleting the predicate AND its bind parameter together changes nothing anybody can see - while loading the study's whole answer set once per batch, which is the exact heap streaming exists to remove. It survived every test in four files, including the real-Postgres one, because they all compare output. ANCHOR UPDATED when !214 moved this query into `readBatch` and reindented its parameter list - the canary reported ANCHOR_MISSING rather than quietly dropping the entry, which is the whole point of requiring an exact single match. THE PARAMETER HALF, and only that half: it asserts what the statement BOUND. What it RETURNED is now pinned separately by csv-batch-read-takes-only-what-it-asked-for, which is what closes cto/AdaptaLabs#20 - this entry used to say that gap was open, and it no longer is. ANCHOR UPDATED for cto/AdaptaLabs#152: the batch binds participant ids now, not session ids.",
     "file": "backend/src/firsthand/survey-results-repository.ts",
-    "anchor": "        WHERE ${filter} AND r.session_id = ANY($${params.length + 1}::text[])\n        ORDER BY r.saved_at ASC, r.id ASC\n      `,\n            [...params, batch]",
+    "anchor": "        WHERE ${filter} AND s.participant_id = ANY($${params.length + 1}::text[])\n        ORDER BY r.saved_at ASC, r.id ASC\n      `,\n            [...params, batch]",
     "mutation": "        WHERE ${filter}\n        ORDER BY r.saved_at ASC, r.id ASC\n      `,\n            [...params]",
     "runner": "vitest",
     "spec": "src/firsthand/survey-csv-export.test.ts",
@@ -101,10 +101,10 @@
   },
   {
     "id": "csv-batch-read-takes-only-what-it-asked-for",
-    "why": "The other half of the batch predicate, and the half nothing could see. Widening the statement while leaving the bind parameter in place - `AND (r.session_id = ANY(...) OR TRUE)` - keeps every parameter assertion satisfied and the substring present while every batch reads the study's ENTIRE answer set: the heap defect streaming exists to remove, restored in full. Measured on this branch's base: 62 tests across the four files covering this path, the real-Postgres one included, exit 0. Nothing downstream can see it and nothing downstream is at fault - `streamParticipants` yields from the id list, so the surplus rows are grouped, ignored and dropped, and the CSV bytes are identical. So the new test asserts on the ROWS: what each batch bound, against what Postgres handed back. Not a tighter string match on the WHERE clause, which would be prefix-fragile in the way `clock_timestamp()` proved to be. cto/AdaptaLabs#20.",
+    "why": "The other half of the batch predicate, and the half nothing could see. Widening the statement while leaving the bind parameter in place - `AND (r.session_id = ANY(...) OR TRUE)` - keeps every parameter assertion satisfied and the substring present while every batch reads the study's ENTIRE answer set: the heap defect streaming exists to remove, restored in full. Measured on this branch's base: 62 tests across the four files covering this path, the real-Postgres one included, exit 0. Nothing downstream can see it and nothing downstream is at fault - `streamParticipants` yields from the id list, so the surplus rows are grouped, ignored and dropped, and the CSV bytes are identical. So the new test asserts on the ROWS: what each batch bound, against what Postgres handed back. Not a tighter string match on the WHERE clause, which would be prefix-fragile in the way `clock_timestamp()` proved to be. cto/AdaptaLabs#20. ANCHOR UPDATED for cto/AdaptaLabs#152, which moved the batch from session ids to participant ids so one person's sessions land in one read; the widening mutation and the row-level assertion carry over unchanged, now keyed on participant_id.",
     "file": "backend/src/firsthand/survey-results-repository.ts",
-    "anchor": "        WHERE ${filter} AND r.session_id = ANY($${params.length + 1}::text[])\n        ORDER BY r.saved_at ASC, r.id ASC",
-    "mutation": "        WHERE ${filter} AND (r.session_id = ANY($${params.length + 1}::text[]) OR TRUE)\n        ORDER BY r.saved_at ASC, r.id ASC",
+    "anchor": "        WHERE ${filter} AND s.participant_id = ANY($${params.length + 1}::text[])\n        ORDER BY r.saved_at ASC, r.id ASC",
+    "mutation": "        WHERE ${filter} AND (s.participant_id = ANY($${params.length + 1}::text[]) OR TRUE)\n        ORDER BY r.saved_at ASC, r.id ASC",
     "runner": "vitest",
     "spec": "src/firsthand/survey-csv-batch-scope-postgres.test.ts",
     "test": "reads only the participants each batch asked for",
@@ -2799,7 +2799,7 @@
   },
   {
     "id": "survey-aggregate-projection-delivers-participant-id",
-    "why": "The DELIVERY half of the respondent fix, which nothing could see. `respondentKey` counts one respondent per `participant_id` (cto/AdaptaLabs#129), and every other test of it feeds `aggregateSurveyResults` a fixture array - so the arithmetic was pinned everywhere and the read that supplies the column nowhere. Measured before this entry: deleting `s.participant_id,` from BOTH projections in this file left the whole backend suite green, 67 files and 942 tests including all 29 real-Postgres specs, and typecheck passed too. SQL is a string and `pg` rows are `any`, so `ResponseRow.participant_id: string` just becomes a false statement about the runtime row; at runtime the field is undefined, `respondentKey` falls back to `s:${session_id}`, and the double count is silently back. Same shape as closing-time-projection-is-present, one file over. Proven by mutation before entry: dropping the column from THIS projection reds the named test, which reads 2 respondents instead of 1, and reds nothing else in the real-Postgres set (1 file, 2 tests of 200).",
+    "why": "The DELIVERY half of the respondent fix, which nothing could see. `respondentKey` counts one respondent per `participant_id` (cto/AdaptaLabs#129), and every other test of it feeds `aggregateSurveyResults` a fixture array - so the arithmetic was pinned everywhere and the read that supplies the column nowhere. Measured before this entry: deleting `s.participant_id,` from BOTH projections in this file left the whole backend suite green, 67 files and 942 tests including all 29 real-Postgres specs, and typecheck passed too. SQL is a string and `pg` rows are `any`, so `ResponseRow.participant_id: string` just becomes a false statement about the runtime row; at runtime the field is undefined, `respondentKey` falls back to `s:${session_id}`, and the double count is silently back. Same shape as closing-time-projection-is-present, one file over. Proven by mutation before entry: dropping the column from THIS projection reds the named test, which reads 2 respondents instead of 1, and reds nothing else in the real-Postgres set (1 file, 2 tests of 200). Since cto/AdaptaLabs#152 the same named test is also the acceptance test for latest-answer-wins: it asserts `answered: 1` and the winning option as well as `respondents: 1`, and with the column dropped both collapse back to per-session counting.",
     "file": "backend/src/firsthand/survey-results-repository.ts",
     "anchor": "        SELECT r.session_id, s.participant_id, r.step_id, r.step_prompt, r.step_type,\n               r.response_payload, r.saved_at\n        FROM participant_responses AS r\n        JOIN runtime_sessions AS s ON s.session_id = r.session_id\n        WHERE ${filter}\n",
     "mutation": "        SELECT r.session_id, r.step_id, r.step_prompt, r.step_type,\n               r.response_payload, r.saved_at\n        FROM participant_responses AS r\n        JOIN runtime_sessions AS s ON s.session_id = r.session_id\n        WHERE ${filter}\n",
@@ -2810,13 +2810,54 @@
   },
   {
     "id": "survey-csv-batch-projection-delivers-participant-id",
-    "why": "THE SECOND COPY of the projection above, in `readBatch`, which can lose the column while the first keeps it. Nothing about the CSV bytes depends on it: the export groups by `session_id` and prints `session_id` in its first cell, deliberately and by researcher-facing decision (cto/AdaptaLabs#152), so no output assertion in any CSV suite can see this column vanish. What breaks is the contract - `StoredResponse.participant_id` is populated by this path and declared non-optional on the row type, and the first consumer to group the export by person, which is #152's likely shape, would find it undefined from one of the two reads that produce it. The named test therefore asserts the delivered field rather than an outcome, on rows a real Postgres returned. Proven by mutation before entry: dropping the column from THIS projection reds the named test alone, 1 test of 200 in the real-Postgres set, while the aggregate entry's test stays green.",
+    "why": "THE SECOND COPY of the projection above, in `readBatch`, which can lose the column while the first keeps it. Before cto/AdaptaLabs#152 nothing about the CSV bytes depended on it; since #152 the export batches, groups and flags by person, so losing it empties the Participant cell and drops the superseded flag. The named test asserts the delivered field itself, on rows a real Postgres returned, so a failure names the cause rather than a symptom. Proven by mutation before entry (and re-proven on #152's branch with the anchor moved to the participant_id batch predicate): dropping the column from THIS projection reds the named test, while the aggregate entry's test stays green.",
     "file": "backend/src/firsthand/survey-results-repository.ts",
-    "anchor": "        SELECT r.session_id, s.participant_id, r.step_id, r.step_prompt, r.step_type,\n               r.response_payload, r.saved_at\n        FROM participant_responses AS r\n        JOIN runtime_sessions AS s ON s.session_id = r.session_id\n        WHERE ${filter} AND r.session_id = ANY($${params.length + 1}::text[])\n",
-    "mutation": "        SELECT r.session_id, r.step_id, r.step_prompt, r.step_type,\n               r.response_payload, r.saved_at\n        FROM participant_responses AS r\n        JOIN runtime_sessions AS s ON s.session_id = r.session_id\n        WHERE ${filter} AND r.session_id = ANY($${params.length + 1}::text[])\n",
+    "anchor": "        SELECT r.session_id, s.participant_id, r.step_id, r.step_prompt, r.step_type,\n               r.response_payload, r.saved_at\n        FROM participant_responses AS r\n        JOIN runtime_sessions AS s ON s.session_id = r.session_id\n        WHERE ${filter} AND s.participant_id = ANY($${params.length + 1}::text[])\n",
+    "mutation": "        SELECT r.session_id, r.step_id, r.step_prompt, r.step_type,\n               r.response_payload, r.saved_at\n        FROM participant_responses AS r\n        JOIN runtime_sessions AS s ON s.session_id = r.session_id\n        WHERE ${filter} AND s.participant_id = ANY($${params.length + 1}::text[])\n",
     "runner": "vitest",
     "spec": "src/firsthand/survey-respondent-identity-postgres.test.ts",
     "test": "delivers the participant id on every row the csv batch read returns",
+    "needsDatabase": true
+  },
+  {
+    "id": "survey-results-skip-superseded-answers",
+    "why": "cto/AdaptaLabs#152. The results page counts one respondent per person, so every tally under it must count one answer per person per question - the latest - or it reads \"1 participant\" above a chart totalling 2. This line is the whole rule on the page side: removing it reverts the aggregation to counting answer rows, and `answered`, the option counts, the mean and the NPS all double-count a person who re-answered in a second session. Proven KILLED before entry.",
+    "file": "backend/src/firsthand/survey-results.ts",
+    "anchor": "    if (superseded.has(row)) {\n      continue;\n    }\n",
+    "mutation": "",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-results.test.ts",
+    "test": "counts the latest answer once, and the earlier one not at all"
+  },
+  {
+    "id": "superseded-tie-goes-to-the-later-row",
+    "why": "cto/AdaptaLabs#152. `saved_at` is client-supplied at millisecond precision, so ties are ordinary in imported and seeded data. Both readers order by (saved_at, id), and `>=` hands a tie to the later row so the winner does not depend on which reader asked. `>` hands it to the earlier one and the aggregate and the CSV flag still agree with each other - so only a test that names the expected winner can see the rule change. Proven KILLED before entry.",
+    "file": "backend/src/firsthand/survey-results.ts",
+    "anchor": "    } else if (Date.parse(row.saved_at) >= Date.parse(current.saved_at)) {",
+    "mutation": "    } else if (Date.parse(row.saved_at) > Date.parse(current.saved_at)) {",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-results.test.ts",
+    "test": "breaks a saved_at tie by input order, which both readers sort by saved_at then id"
+  },
+  {
+    "id": "csv-flags-a-session-holding-a-lost-answer",
+    "why": "cto/AdaptaLabs#152. The export keeps every answer - a person changing their mind is a finding in a small qualitative study - and the Superseded column is the only thing that tells a researcher which rows the results page set aside. Without this line every row reads false and the CSV silently disagrees with the page. Proven KILLED before entry.",
+    "file": "backend/src/firsthand/survey-csv.ts",
+    "anchor": "    if (superseded.has(answer)) {\n      session.superseded = true;\n    }\n",
+    "mutation": "",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-csv.test.ts",
+    "test": "keeps both rows, names the person on each and flags the one that lost"
+  },
+  {
+    "id": "csv-batch-read-keeps-the-export-scope",
+    "why": "cto/AdaptaLabs#152 moved the batch from session ids (primary keys the scoped preflight had chosen) to participant ids (people). One person can hold sessions in two opportunities of the same study, so the scope filter on the batch read stopped being an untestable equivalent mutant and became the thing keeping a per-opportunity export from pulling that person's answers to another researcher's recruitment, under different consent wording. `OR TRUE` keeps every bind parameter referenced, so the statement still runs. Proven KILLED before entry.",
+    "file": "backend/src/firsthand/survey-results-repository.ts",
+    "anchor": "        WHERE ${filter} AND s.participant_id = ANY($${params.length + 1}::text[])\n",
+    "mutation": "        WHERE (${filter} OR TRUE) AND s.participant_id = ANY($${params.length + 1}::text[])\n",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-respondent-identity-postgres.test.ts",
+    "test": "keeps a per-opportunity export to that opportunity when one person answered in two",
     "needsDatabase": true
   }
 ]

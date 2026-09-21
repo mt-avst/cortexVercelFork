@@ -112,6 +112,14 @@ const CSV_STEPS: StudyStep[] = [
   { step_id: 'q1', order: 1, type: 'open_text', prompt: 'Tell us everything' }
 ];
 
+/** One CSV row's worth of answers, in the shape the export's generator yields. */
+const sessionRow = (sessionId: string, answers: StoredResponse[]) => ({
+  sessionId,
+  participantId: sessionId,
+  superseded: false,
+  answers
+});
+
 const answersFor = (sessionId: string): StoredResponse[] => [
   {
     session_id: sessionId,
@@ -196,7 +204,7 @@ async function startServer() {
 
     const participants = async function* () {
       for (let index = 0; index < rows; index += 1) {
-        yield { sessionId: `s${index}`, answers: answersFor(`s${index}`) };
+        yield sessionRow(`s${index}`, answersFor(`s${index}`));
       }
     };
 

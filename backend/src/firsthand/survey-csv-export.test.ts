@@ -23,8 +23,14 @@ const checkouts: Array<{
 }> = [];
 
 let open = 0;
-let participantRows: Array<{ session_id: string }> = [];
-let answerRows: Array<Record<string, unknown>> = [];
+let participantRows: Array<{ participant_id: string }> = [];
+/**
+ * What a batch read returns. `null` answers every batch with ONE row per
+ * person it asked for - session id equal to the person's id - because the
+ * export builds its sessions from the rows, and a batch returning nothing
+ * now yields nothing (cto/AdaptaLabs#152).
+ */
+let answerRows: Array<Record<string, unknown>> | null = null;
 let removedRows: Array<{ step_type: string; step_prompt: string | null }> = [];
 
 /**
@@ -62,8 +68,20 @@ vi.mock("./runtime-database", async (importOriginal) => ({
           entry.params.push(params);
           onQuery(sql);
           if (sql.includes("GROUP BY r.step_type")) return { rows: removedRows };
-          if (sql.includes("GROUP BY r.session_id")) return { rows: participantRows };
-          return { rows: answerRows };
+          if (sql.includes("GROUP BY s.participant_id")) return { rows: participantRows };
+          if (answerRows !== null) return { rows: answerRows };
+          const asked = (params[params.length - 1] ?? []) as string[];
+          return {
+            rows: asked.map((id) => ({
+              session_id: id,
+              participant_id: id,
+              step_id: "q1",
+              step_prompt: null,
+              step_type: "open_text",
+              response_payload: {},
+              saved_at: "2026-08-21T10:00:00.000Z"
+            }))
+          };
         }
       });
     } finally {
@@ -83,9 +101,9 @@ import {
   RuntimeDatabaseBusyError
 } from "./runtime-pool-admission";
 
-const IS_BATCH = (sql: string) => sql.includes("r.session_id = ANY");
+const IS_BATCH = (sql: string) => sql.includes("s.participant_id = ANY");
 const IS_PARTICIPANT_PREFLIGHT = (sql: string) =>
-  sql.includes("GROUP BY r.session_id");
+  sql.includes("GROUP BY s.participant_id");
 
 const scope = { kind: "study" as const, studyId: "study_abc" };
 
@@ -104,9 +122,9 @@ describe("opening and draining a CSV export", () => {
     open = 0;
     onQuery = () => {};
     removedRows = [];
-    answerRows = [];
+    answerRows = null;
     participantRows = Array.from({ length: 250 }, (_u, i) => ({
-      session_id: `s${i}`
+      participant_id: `s${i}`
     }));
   });
 
@@ -129,7 +147,7 @@ describe("opening and draining a CSV export", () => {
     // THE PROPERTY THE BYTES CANNOT SHOW. `streamParticipants` yields
     // `for (const sessionId of batch)`, so the output is identical whether the
     // batch read fetched 100 participants or all 250 - which means deleting
-    // the `session_id = ANY(...)` predicate AND its parameter together changes
+    // the `participant_id = ANY(...)` predicate AND its parameter together changes
     // nothing anybody can see. It survived every test in four files, including
     // the real-Postgres one, because that file only ever compares output.
     //
@@ -138,7 +156,7 @@ describe("opening and draining a CSV export", () => {
     // repeatedly. So the assertion is on the PARAMETERS - what was asked for -
     // rather than on the answer.
     const batches = checkouts
-      .filter((entry) => entry.sql.some((sql) => sql.includes("r.session_id = ANY")))
+      .filter((entry) => entry.sql.some((sql) => sql.includes("s.participant_id = ANY")))
       .map((entry) => entry.params[0]?.at(-1) as string[]);
 
     expect(batches).toHaveLength(3);
@@ -190,10 +208,11 @@ describe("opening and draining a CSV export", () => {
   });
 
   it("yields participants in the order the id list gives, not the order rows arrive", async () => {
-    participantRows = [{ session_id: "b" }, { session_id: "a" }, { session_id: "c" }];
+    participantRows = [{ participant_id: "b" }, { participant_id: "a" }, { participant_id: "c" }];
     answerRows = [
-      { session_id: "c", step_id: "q1", step_prompt: null, step_type: "open_text", response_payload: {}, saved_at: "2026-08-21T10:00:00.000Z" },
-      { session_id: "a", step_id: "q1", step_prompt: null, step_type: "open_text", response_payload: {}, saved_at: "2026-08-21T10:00:00.000Z" }
+      { session_id: "c", participant_id: "c", step_id: "q1", step_prompt: null, step_type: "open_text", response_payload: {}, saved_at: "2026-08-21T10:00:00.000Z" },
+      { session_id: "a", participant_id: "a", step_id: "q1", step_prompt: null, step_type: "open_text", response_payload: {}, saved_at: "2026-08-21T10:00:00.000Z" },
+      { session_id: "b", participant_id: "b", step_id: "q1", step_prompt: null, step_type: "open_text", response_payload: {}, saved_at: "2026-08-21T10:00:00.000Z" }
     ];
 
     const { seen } = await drain();
@@ -204,13 +223,41 @@ describe("opening and draining a CSV export", () => {
     expect(seen).toEqual(["b", "a", "c"]);
   });
 
-  it("yields a participant with no rows rather than skipping them", async () => {
-    participantRows = [{ session_id: "ghost" }];
+  it("yields every session one person holds, together, in first-answer order", async () => {
+    // cto/AdaptaLabs#152. A person's sessions are ADJACENT in the export so a
+    // researcher comparing them is not hunting through the file, and the
+    // superseded flag is computed with both in hand.
+    participantRows = [{ participant_id: "p1" }, { participant_id: "p2" }];
+    answerRows = [
+      { session_id: "p1-old", participant_id: "p1", step_id: "q1", step_prompt: null, step_type: "open_text", response_payload: { text: "before" }, saved_at: "2026-08-21T10:00:00.000Z" },
+      { session_id: "p2-only", participant_id: "p2", step_id: "q1", step_prompt: null, step_type: "open_text", response_payload: { text: "other" }, saved_at: "2026-08-21T11:00:00.000Z" },
+      { session_id: "p1-new", participant_id: "p1", step_id: "q1", step_prompt: null, step_type: "open_text", response_payload: { text: "after" }, saved_at: "2026-08-22T10:00:00.000Z" }
+    ];
+
+    const csvExport = await openSurveyCsvExport(scope);
+    const rows: Array<{ sessionId: string; participantId: string | null; superseded: boolean }> = [];
+    for await (const row of csvExport.participants(new AbortController().signal)) {
+      rows.push({ sessionId: row.sessionId, participantId: row.participantId, superseded: row.superseded });
+    }
+
+    expect(rows).toEqual([
+      { sessionId: "p1-old", participantId: "p1", superseded: true },
+      { sessionId: "p1-new", participantId: "p1", superseded: false },
+      { sessionId: "p2-only", participantId: "p2", superseded: false }
+    ]);
+  });
+
+  it("yields nothing for a person whose answers vanished before their batch", async () => {
+    // A retake cascades the old session's rows away between the preflight and
+    // the batch. The export builds sessions from the rows it read, so the
+    // person is an ABSENCE - never a row of empty cells in somebody's
+    // response-rate denominator.
+    participantRows = [{ participant_id: "ghost" }];
     answerRows = [];
 
     const { seen } = await drain();
 
-    expect(seen).toEqual(["ghost"]);
+    expect(seen).toEqual([]);
   });
 
   it("asks the database for one participant more than it will return", async () => {
@@ -230,7 +277,7 @@ describe("opening and draining a CSV export", () => {
     // reason survey-results-repository.test.ts spells out `LIMIT 200001` for
     // the row bound, which is the template this copies.
     const listing = checkouts.find((entry) =>
-      entry.sql.some((sql) => sql.includes("GROUP BY r.session_id"))
+      entry.sql.some((sql) => sql.includes("GROUP BY s.participant_id"))
     );
 
     // The control: `find` returning undefined would make any assertion on it
@@ -245,7 +292,7 @@ describe("opening and draining a CSV export", () => {
     // turns the largest legitimate export into a 413 that names a limit it has
     // not actually reached. A boundary needs both of its sides.
     participantRows = Array.from({ length: 200_000 }, (_u, i) => ({
-      session_id: `s${i}`
+      participant_id: `s${i}`
     }));
 
     await expect(openSurveyCsvExport(scope)).resolves.toBeDefined();
@@ -253,7 +300,7 @@ describe("opening and draining a CSV export", () => {
 
   it("refuses before yielding anything when there are too many participants", async () => {
     participantRows = Array.from({ length: 200_001 }, (_u, i) => ({
-      session_id: `s${i}`
+      participant_id: `s${i}`
     }));
 
     // A 413 is impossible once the response has started, so the bound has to
@@ -285,9 +332,9 @@ describe("retrying a batch read the runtime pool refused", () => {
     open = 0;
     onQuery = () => {};
     removedRows = [];
-    answerRows = [];
+    answerRows = null;
     participantRows = Array.from({ length: 250 }, (_u, i) => ({
-      session_id: `s${i}`
+      participant_id: `s${i}`
     }));
   });
 

@@ -1,12 +1,24 @@
 import type { StudyStep } from "../../../shared/firsthand/contract";
-import { UNKNOWN_REMOVED_PROMPT, type StoredResponse } from "./survey-results";
+import {
+  UNKNOWN_REMOVED_PROMPT,
+  respondentKey,
+  supersededAnswers,
+  type StoredResponse
+} from "./survey-results";
 
 /**
- * The raw responses as CSV: one row per participant, one column per question.
+ * The raw responses as CSV: one row per SESSION, one column per question.
  *
  * That shape rather than a row per answer, because it is what a spreadsheet or
  * a stats package expects. A row per answer would have to be pivoted before
  * anyone could look at it.
+ *
+ * Per session rather than per person, deliberately (cto/AdaptaLabs#152). One
+ * person can hold two answer-carrying sessions, and the results page keeps
+ * only their latest answer to each question. The export keeps EVERY answer,
+ * names the person beside each session and flags a session holding an answer
+ * the page replaced - so a researcher can see that somebody answered twice,
+ * and can still reproduce the page by setting the flagged answers aside.
  */
 
 /**
@@ -162,21 +174,17 @@ export function toCsvHeaderRow(
   // Every question keeps its column even when nobody answered it: an absent
   // column reads as a question that was never asked. Prompts are
   // researcher-authored free text, so they are neutralised like any other
-  // human-authored cell; the fixed "Participant" label is ours.
+  // human-authored cell; the three fixed labels are ours.
   //
-  // "PARTICIPANT" IS A SESSION, AND THAT DISAGREES WITH THE RESULTS PAGE
-  // (cto/AdaptaLabs#152). This column carries a `session_id`, and the export
-  // emits one row per session, while the page's "N participants" headline
-  // counts distinct `participant_id` (`respondentKey` in survey-results.ts,
-  // cto/AdaptaLabs#129). Since an expired session now earns a fresh mint
-  // rather than a dead link, one person can hold two answer-carrying sessions
-  // - and reads as 1 participant on the page and 2 "Participant" rows here.
-  // Deliberately NOT reconciled by renaming this cell or regrouping the
-  // export: both need the which-answer-wins rule #152 exists to decide, and
-  // a rename alone would change every researcher's column headings for a
-  // disagreement the numbers would still have.
+  // "Session" WAS HEADED "Participant" while printing a `session_id`, which
+  // stopped being true when one person could hold two sessions
+  // (cto/AdaptaLabs#152). The person is now their own column, and
+  // "Superseded" marks a session holding at least one answer that the same
+  // person's later answer replaced on the results page.
   return [
+    cell("Session", false),
     cell("Participant", false),
+    cell("Superseded", false),
     ...questions.map((step) => cell(step.prompt, true)),
     ...removed.map((question) =>
       cell(neutralise(question.prompt) + REMOVED_COLUMN_SUFFIX, false)
@@ -185,33 +193,48 @@ export function toCsvHeaderRow(
 }
 
 /**
+ * One session's worth of answers, with who gave them and whether any lost.
+ *
+ * The unit the streaming export works in and the unit `toCsvSessionRows`
+ * produces, so the oracle and the stream hand the row emitter the same shape.
+ */
+export type CsvSessionRow = {
+  sessionId: string;
+  /** Null only for a row the database cannot produce; see `respondentKey`. */
+  participantId: string | null;
+  /**
+   * True when AT LEAST ONE answer in this session lost to a later answer from
+   * the same person to the same question. Not "every answer lost": a person
+   * who answered Q1 and Q2 on Monday and Q2 again on Tuesday has a Monday row
+   * whose Q1 still counts, and that row is flagged because its Q2 does not.
+   */
+  superseded: boolean;
+  answers: StoredResponse[];
+};
+
+/**
  * One SESSION's row, from that session's answers alone.
  *
- * The unit the streaming export works in: a row needs nothing but one
- * session's answers plus the column layout, which is why the export can hold
- * one row in memory instead of two hundred thousand.
- *
- * SESSION, NOT PERSON - it was called "one participant's row" and the two
- * stopped being the same thing (cto/AdaptaLabs#152). The caller keys on
- * `session_id`, the first cell is a `session_id`, and one person holding two
- * answer-carrying sessions gets two rows here while the results page counts
- * them as one. The export's grouping is left as it is on purpose; see the
- * note on the "Participant" header cell above.
+ * A row needs nothing but one session's answers plus the column layout, which
+ * is why the export can hold one batch in memory instead of the whole study.
  */
-export function toCsvParticipantRow(
+export function toCsvSessionRow(
   steps: StudyStep[],
   removed: RemovedQuestion[],
-  sessionId: string,
-  answers: StoredResponse[]
+  row: CsvSessionRow
 ): string {
+  const { answers } = row;
   const questions = steps.filter((step) => QUESTION_TYPES.has(step.type));
 
   const byColumn = new Map<string, Record<string, unknown>>();
-  for (const row of answers) {
+  for (const answer of answers) {
     byColumn.set(
-      row.step_id ??
-        detachedKey(row.step_type, row.step_prompt ?? UNKNOWN_REMOVED_PROMPT),
-      row.response_payload ?? {}
+      answer.step_id ??
+        detachedKey(
+          answer.step_type,
+          answer.step_prompt ?? UNKNOWN_REMOVED_PROMPT
+        ),
+      answer.response_payload ?? {}
     );
   }
 
@@ -228,7 +251,10 @@ export function toCsvParticipantRow(
   };
 
   return [
-    cell(sessionId, false),
+    cell(row.sessionId, false),
+    // Neutralised: an id we did not mint ourselves, and the cost is nothing.
+    cell(row.participantId ?? "", true),
+    cell(row.superseded ? "true" : "false", false),
     ...questions.map((step) => columnFor(step, byColumn.get(step.step_id))),
     ...removed.map((question) =>
       columnFor(
@@ -267,6 +293,51 @@ export function removedQuestionColumns(
   ];
 }
 
+/**
+ * A set of answers as CSV rows: grouped by PERSON, then by session, each in
+ * first-appearance order, with every session holding a lost answer flagged.
+ *
+ * THE ONE GROUPING, used by the oracle below over a whole study and by
+ * `streamParticipants` over one batch of people at a time. Those agree because
+ * a batch holds every answer its people gave: the flag depends only on one
+ * person's own answers, so computing it per batch or per study is the same
+ * computation. That is why the stream batches by person, not by session - a
+ * session-sized batch could split one person across two reads and never see
+ * that their earlier answer lost.
+ *
+ * A person's sessions sit together, so the rows a researcher needs to compare
+ * are adjacent rather than scattered through the file by date.
+ */
+export function toCsvSessionRows(
+  responses: readonly StoredResponse[]
+): CsvSessionRow[] {
+  const superseded = supersededAnswers(responses);
+  const people = new Map<string, Map<string, CsvSessionRow>>();
+
+  for (const answer of responses) {
+    const personKey = respondentKey(answer);
+    const sessions = people.get(personKey) ?? new Map<string, CsvSessionRow>();
+    people.set(personKey, sessions);
+
+    const session = sessions.get(answer.session_id) ?? {
+      sessionId: answer.session_id,
+      participantId: answer.participant_id || null,
+      superseded: false,
+      answers: []
+    };
+    sessions.set(answer.session_id, session);
+
+    // Local to this function until it returns; nothing else holds these rows
+    // yet, so building them in place costs a reader nothing.
+    session.answers.push(answer);
+    if (superseded.has(answer)) {
+      session.superseded = true;
+    }
+  }
+
+  return [...people.values()].flatMap((sessions) => [...sessions.values()]);
+}
+
 /** CRLF is what RFC 4180 specifies and what Excel expects. */
 export const CSV_LINE_ENDING = "\r\n";
 
@@ -293,23 +364,8 @@ export function toResponsesCsv(
 ): string {
   const removed = removedQuestionColumns(responses);
 
-  // KEYED ON `session_id`, matching `streamParticipants` exactly - the two
-  // must group identically or the equivalence test this oracle exists for
-  // compares nothing. The name says participant and the key says session, and
-  // those are no longer the same thing: see the "Participant" header cell
-  // above, and cto/AdaptaLabs#152.
-  const byParticipant = new Map<string, StoredResponse[]>();
-  for (const row of responses) {
-    const group = byParticipant.get(row.session_id);
-    if (group) {
-      group.push(row);
-    } else {
-      byParticipant.set(row.session_id, [row]);
-    }
-  }
-
-  const lines = [...byParticipant.entries()].map(([sessionId, answers]) =>
-    toCsvParticipantRow(steps, removed, sessionId, answers)
+  const lines = toCsvSessionRows(responses).map((row) =>
+    toCsvSessionRow(steps, removed, row)
   );
 
   return (

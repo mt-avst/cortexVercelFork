@@ -8,10 +8,10 @@ import type { StudyStep } from '../../../shared/firsthand/contract';
 import {
   CSV_LINE_ENDING,
   toCsvHeaderRow,
-  toCsvParticipantRow,
+  toCsvSessionRow,
+  type CsvSessionRow,
   type RemovedQuestion
 } from './survey-csv';
-import type { StoredResponse } from './survey-results';
 import { logger } from '../utils/logger';
 
 /*
@@ -153,7 +153,7 @@ export async function writeSurveyCsv(
   removedQuestions: RemovedQuestion[],
   openParticipants: (
     signal: AbortSignal
-  ) => AsyncGenerator<{ sessionId: string; answers: StoredResponse[] }>,
+  ) => AsyncGenerator<CsvSessionRow>,
   context: { studyId: string }
 ): Promise<void> {
   /**
@@ -246,6 +246,11 @@ export async function writeSurveyCsv(
       // ordinary retake between the preflight and this batch cascades their
       // answers away.
       //
+      // Since cto/AdaptaLabs#152 the repository's own generator cannot yield
+      // one - it builds sessions from the rows a batch returned, so a vanished
+      // person simply is not there. The guard stays because it is this
+      // writer's contract with ANY factory, and the route tests hand it others.
+      //
       // Emitting the row anyway writes a session id followed by empty cells,
       // which lands in the denominator of any response-rate calculation for
       // somebody who did answer.
@@ -266,12 +271,7 @@ export async function writeSurveyCsv(
       }
 
       await write(
-        toCsvParticipantRow(
-          steps,
-          removedQuestions,
-          participant.sessionId,
-          participant.answers
-        ) + CSV_LINE_ENDING
+        toCsvSessionRow(steps, removedQuestions, participant) + CSV_LINE_ENDING
       );
     }
 

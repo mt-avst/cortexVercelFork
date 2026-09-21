@@ -8,7 +8,12 @@ import {
   isRuntimePoolRefusal
 } from "./runtime-pool-admission";
 import { UNKNOWN_REMOVED_PROMPT, type StoredResponse } from "./survey-results";
-import { QUESTION_TYPES, type RemovedQuestion } from "./survey-csv";
+import {
+  QUESTION_TYPES,
+  toCsvSessionRows,
+  type CsvSessionRow,
+  type RemovedQuestion
+} from "./survey-csv";
 import { logger } from "../utils/logger";
 import { AppError } from "../../../shared/types";
 
@@ -643,12 +648,17 @@ export async function surveyCsvColumns(
 }
 
 /**
- * Every participant who answered, in the order they first answered.
+ * Every PERSON who answered, in the order they first answered.
+ *
+ * People, not sessions, since cto/AdaptaLabs#152: one person can hold two
+ * answer-carrying sessions, and whether their earlier answer was superseded is
+ * only decidable with both sessions in the same batch. `participant_id` is
+ * `TEXT NOT NULL` (migration 0001), so grouping on it cannot drop a row.
  *
  * `MIN(saved_at), MIN(id)` reproduces the order the unbatched CSV produced -
  * it built its rows from a set ordered by `(saved_at, id)` and kept first
- * appearance - EXCEPT WHERE TWO PARTICIPANTS TIE ON THE MILLISECOND of their
- * first answer.
+ * appearance - EXCEPT WHERE TWO PEOPLE TIE ON THE MILLISECOND of their first
+ * answer.
  *
  * That exception is real and was demonstrated on Postgres 16 by a review gate,
  * against an earlier version of this comment which claimed the output was
@@ -662,9 +672,9 @@ export async function surveyCsvColumns(
  * Left as it is rather than fixed, deliberately. Ordering by the first row
  * instead needs a correlated subquery or `DISTINCT ON` over a
  * `(saved_at, id)`-ordered scan on every export, and the consequence of the
- * tie is that two participants swap places in a spreadsheet - not a wrong
- * value, not a missing row. Recorded here so the next reader does not discover
- * the claim was stronger than the code.
+ * tie is that two people swap places in a spreadsheet - not a wrong value, not
+ * a missing row. Recorded here so the next reader does not discover the claim
+ * was stronger than the code.
  */
 async function surveyCsvParticipantIds(
   scope: ResponseScope
@@ -673,13 +683,13 @@ async function surveyCsvParticipantIds(
 
   return withRuntimeDatabaseClient(
     async (client) => {
-      const result = await client.query<{ session_id: string }>(
+      const result = await client.query<{ participant_id: string }>(
         `
-        SELECT r.session_id
+        SELECT s.participant_id
         FROM participant_responses AS r
         JOIN runtime_sessions AS s ON s.session_id = r.session_id
         WHERE ${filter}
-        GROUP BY r.session_id
+        GROUP BY s.participant_id
         ORDER BY MIN(r.saved_at) ASC, MIN(r.id) ASC
         LIMIT ${MAX_CSV_PARTICIPANTS + 1}
       `,
@@ -694,7 +704,7 @@ async function surveyCsvParticipantIds(
         );
       }
 
-      return result.rows.map((row) => row.session_id);
+      return result.rows.map((row) => row.participant_id);
     },
     { statementTimeoutMs: RESULTS_STATEMENT_TIMEOUT_MS }
   );
@@ -727,7 +737,7 @@ async function readBatch(
                r.response_payload, r.saved_at
         FROM participant_responses AS r
         JOIN runtime_sessions AS s ON s.session_id = r.session_id
-        WHERE ${filter} AND r.session_id = ANY($${params.length + 1}::text[])
+        WHERE ${filter} AND s.participant_id = ANY($${params.length + 1}::text[])
         ORDER BY r.saved_at ASC, r.id ASC
       `,
             [...params, batch]
@@ -776,7 +786,7 @@ async function* streamParticipants(
   scope: ResponseScope,
   participantIds: string[],
   signal: AbortSignal
-): AsyncGenerator<{ sessionId: string; answers: StoredResponse[] }> {
+): AsyncGenerator<CsvSessionRow> {
   const { filter, params } = filterFor(scope);
 
   for (
@@ -792,46 +802,35 @@ async function* streamParticipants(
 
     const batch = participantIds.slice(index, index + CSV_PARTICIPANT_BATCH);
 
-    // `${filter}` in the statement below is DEFENCE IN DEPTH AND CANNOT BE
-    // TESTED, which is worth saying so nobody deletes it as dead or claims it
-    // is covered. `session_id` is the primary key of runtime_sessions and
-    // these ids came from the scoped preflight, so the `ANY(...)` clause
-    // already fixes the row set - collapsing this filter to a study-wide one
-    // is an equivalent mutant and survives every test, correctly. It stays
-    // because a later change to how the id list is built should not be able to
-    // widen the read silently.
+    // `${filter}` in the statement below is DEFENCE IN DEPTH, and unlike the
+    // session-keyed read this replaced it is not the only thing standing
+    // between a batch and a wider read: a `participant_id` is a person, not a
+    // row, and the same person can have sessions in another opportunity of the
+    // same study. So the scope filter is what keeps a per-opportunity export
+    // from pulling that person's answers to somebody else's recruitment.
     //
-    // The BATCH clause is a different matter and IS pinned: deleting it with
-    // its bind parameter is caught in survey-csv-export.test.ts, on the
-    // parameters, by `asks each batch for ITS OWN hundred ids`.
+    // The BATCH clause is pinned on the parameters in survey-csv-export.test.ts,
+    // by `asks each batch for ITS OWN hundred ids`, and on the rows Postgres
+    // returned in survey-csv-batch-scope-postgres.test.ts.
     const rows = await readBatch(filter, params, batch, signal);
 
-    // GROUPED BY `session_id`, WHICH THE RESULTS PAGE NO LONGER DOES
-    // (cto/AdaptaLabs#152). `respondentKey` in survey-results.ts counts
-    // distinct `participant_id`, so one person holding two answer-carrying
-    // sessions - ordinary since an expired session started earning a fresh
-    // mint rather than a dead link, cto/AdaptaLabs#129 - reads as 1
-    // participant on the page and 2 rows in this export, under a column
-    // headed "Participant". Left as it is deliberately: regrouping on
-    // `participant_id` needs a which-answer-wins rule for the same question
-    // answered in both sessions, and that is #152's decision to make.
-    // `toResponsesCsv` is the oracle this path is checked against and groups
-    // the same way, so the two cannot drift apart while the disagreement
-    // stands.
-    const byParticipant = new Map<string, StoredResponse[]>();
-    for (const row of rows) {
-      const group = byParticipant.get(row.session_id);
-      if (group) {
-        group.push(row);
-      } else {
-        byParticipant.set(row.session_id, [row]);
-      }
+    // ONE GROUPING FOR THE ORACLE AND THE STREAM (`toCsvSessionRows`), run
+    // over the whole batch: every answer a person in it gave is here, so the
+    // superseded flag it computes is the one the oracle computes over the
+    // whole study (cto/AdaptaLabs#152).
+    const byPerson = new Map<string, CsvSessionRow[]>();
+    for (const row of toCsvSessionRows(rows)) {
+      const key = row.participantId ?? "";
+      byPerson.set(key, [...(byPerson.get(key) ?? []), row]);
     }
 
     // Yielded in the ORDER OF THE ID LIST, not the order the batch query
     // happened to return them. The list is what carries first-answer order.
-    for (const sessionId of batch) {
-      yield { sessionId, answers: byParticipant.get(sessionId) ?? [] };
+    // A person whose answers vanished between the preflight and this read -
+    // a retake cascades the old session's rows away - yields nothing, which
+    // is an absence rather than a blank row.
+    for (const participantId of batch) {
+      yield* byPerson.get(participantId) ?? [];
     }
   }
 }
@@ -854,10 +853,7 @@ async function* streamParticipants(
  */
 export async function openSurveyCsvExport(scope: ResponseScope): Promise<{
   removedQuestions: RemovedQuestion[];
-  participants: (signal: AbortSignal) => AsyncGenerator<{
-    sessionId: string;
-    answers: StoredResponse[];
-  }>;
+  participants: (signal: AbortSignal) => AsyncGenerator<CsvSessionRow>;
 }> {
   if (!isPostgresRuntimeConfigured()) {
     return {

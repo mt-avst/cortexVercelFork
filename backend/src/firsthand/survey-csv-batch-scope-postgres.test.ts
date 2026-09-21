@@ -16,7 +16,7 @@ import { startTestPostgres, type TestPostgres } from "../__tests__/helpers/postg
  * the blunt mutation where the predicate and its bind parameter are deleted
  * together. It cannot see the statement widen underneath them:
  *
- *     WHERE ${filter} AND (r.session_id = ANY($n::text[]) OR TRUE)
+ *     WHERE ${filter} AND (s.participant_id = ANY($n::text[]) OR TRUE)
  *
  * keeps the parameter bound and the substring present while every batch reads
  * the study's ENTIRE answer set. Measured on the base of this branch, across
@@ -163,13 +163,15 @@ let postgres: TestPostgres;
 /**
  * The ids a read RECEIVED, deduplicated.
  *
- * Reads `session_id` defensively rather than asserting a shape, so a mutation
- * that changes the projection fails on the count below rather than throwing
- * here with a stack trace nobody can read.
+ * Reads `participant_id` - the key the batch binds since cto/AdaptaLabs#152
+ * moved the export from batching sessions to batching people - defensively
+ * rather than asserting a shape, so a mutation that changes the projection
+ * fails on the count below rather than throwing here with a stack trace nobody
+ * can read.
  */
 function returnedParticipants(rows: readonly Record<string, unknown>[]): string[] {
   const ids = rows
-    .map((row) => row.session_id)
+    .map((row) => row.participant_id)
     .filter((id): id is string => typeof id === "string");
   return [...new Set(ids)];
 }
@@ -385,18 +387,18 @@ describe.skipIf(skipDbTests)("the CSV batch read, against real Postgres", () => 
     // against the same rows. WITHOUT THIS the assertion above is satisfied by
     // a detector that returns an empty array for everything - the shape of
     // absence-assertion this repository has been caught by before.
-    const asked = ["b000", "b001"];
+    const asked = ["user_b000", "user_b001"];
     const from = `FROM firsthand.participant_responses AS r
       JOIN firsthand.runtime_sessions AS s ON s.session_id = r.session_id`;
 
     const narrow = await pool.query<Record<string, unknown>>(
-      `SELECT r.session_id ${from}
-       WHERE s.study_id = $1 AND r.session_id = ANY($2::text[])`,
+      `SELECT s.participant_id ${from}
+       WHERE s.study_id = $1 AND s.participant_id = ANY($2::text[])`,
       [STUDY_ID, asked]
     );
     const widened = await pool.query<Record<string, unknown>>(
-      `SELECT r.session_id ${from}
-       WHERE s.study_id = $1 AND (r.session_id = ANY($2::text[]) OR TRUE)`,
+      `SELECT s.participant_id ${from}
+       WHERE s.study_id = $1 AND (s.participant_id = ANY($2::text[]) OR TRUE)`,
       [STUDY_ID, asked]
     );
 
