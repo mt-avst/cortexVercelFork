@@ -364,4 +364,194 @@ test.describe('admin studies table pills share one box (#142)', () => {
     expect(measured!.sameLine).toBe(true);
     expect(measured!.gap).toBeGreaterThanOrEqual(3.5);
   });
+
+  /**
+   * The row menu's trigger is an icon-only button, so an icon squeezed to 0px
+   * leaves an empty outlined box with nothing saying it is a menu. That is what
+   * the Actions column did at 11%: 83px of cell for ~102px of View plus kebab,
+   * and the kebab's flex-shrink took the difference out of its icon. The box
+   * never looked broken to a box comparison - it measured the button, not the
+   * icon - so this measures the icon's painted width.
+   */
+  for (const width of [1240, 1440]) {
+    test(`the row menu's icon paints and the actions fit their cell at ${width}px`, async ({ page }) => {
+      await serve(page, [CLOSED]);
+      await page.setViewportSize({ width, height: 900 });
+      await openAdmin(page);
+
+      const kebab = page.locator('td.col-actions .admin-action-btn-kebab');
+      await expect(kebab).toHaveCount(1);
+      await kebab.scrollIntoViewIfNeeded();
+
+      const m = await kebab.evaluate((button) => {
+        const icon = button.querySelector('svg');
+        const cell = button.closest('td')!;
+        const c = cell.getBoundingClientRect();
+        const pad = parseFloat(getComputedStyle(cell).paddingRight);
+        return {
+          iconWidth: icon ? icon.getBoundingClientRect().width : -1,
+          buttonWidth: button.getBoundingClientRect().width,
+          // The BUTTON's edge, not the action group's: the group is capped at
+          // the cell by `max-width: 100%`, so a button overflowing it leaves
+          // the group's own box exactly where it was (measured - asserting on
+          // the group passed with the column back at 11%).
+          buttonRight: button.getBoundingClientRect().right,
+          cellContentRight: c.right - pad,
+        };
+      });
+
+      // Control first: the button itself has always had a box, which is why
+      // nothing noticed. The icon inside it is the thing that vanished.
+      expect(m.buttonWidth).toBeGreaterThan(20);
+      expect(m.iconWidth, 'the kebab icon is squeezed to nothing - the row menu renders as an empty box').toBeGreaterThanOrEqual(14);
+      expect(m.buttonRight, 'the row menu overflows the Actions cell').toBeLessThanOrEqual(m.cellContentRight + 0.5);
+    });
+  }
+
+  /**
+   * #149: a published study that is not working must read as broken without
+   * relying on its label. Above 1220px the label truncates to PUBLISHED
+   * followed by an ellipsis - the word is not the mark - so the mark is an
+   * amber fill plus a warning glyph that sits outside the truncating label.
+   *
+   * Asserted in a real browser because #142's lesson was that a source-pin
+   * guard stayed green through the real defect. Every property here is a
+   * rendered outcome: the glyph's painted box and hit-test, the computed fill
+   * against a healthy published pill, and contrast read off the pill's
+   * screenshot pixels rather than from declared CSS.
+   */
+  test.describe('a published study that is not working is marked beyond its label (#149)', () => {
+    /** Published and ready: an external poll with a link. The control row. */
+    const HEALTHY = study('Healthy study', 'published', {
+      type: 'poll',
+      delivery_mode: 'external',
+      external_link_optional: 'https://example.com/poll',
+    });
+
+    /** WCAG relative luminance of an sRGB triple, 0-255 per channel. */
+    const luminance = ([r, g, b]: number[]) => {
+      const lin = (c: number) => {
+        const v = c / 255;
+        return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+      };
+      return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+    };
+    const contrast = (a: number[], b: number[]) => {
+      const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+      return (hi + 0.05) / (lo + 0.05);
+    };
+
+    for (const theme of ['light', 'dark'] as const) {
+      for (const width of [1240, 1440]) {
+        test(`the not-working pill shows its warning glyph and amber fill in ${theme} at ${width}px`, async ({ page }) => {
+          await page.addInitScript((t) => localStorage.setItem('theme', t), theme);
+          await serve(page, [NOT_WORKING, HEALTHY]);
+          await page.setViewportSize({ width, height: 900 });
+          await openAdmin(page);
+          await expect(page.locator(`body.theme-${theme}`)).toHaveCount(1);
+
+          const broken = page.locator('td.col-status .admin-study-status--not-working');
+          await expect(broken).toHaveCount(1);
+          await broken.scrollIntoViewIfNeeded();
+
+          const measured = await page.evaluate(() => {
+            const pills = [...document.querySelectorAll('td.col-status .admin-study-status')] as HTMLElement[];
+            const brokenPill = pills.find((p) => p.classList.contains('admin-study-status--not-working'));
+            const healthyPill = pills.find((p) => !p.classList.contains('admin-study-status--not-working'));
+            if (!brokenPill || !healthyPill) return null;
+            const glyph = brokenPill.querySelector('.admin-study-status__glyph');
+            const label = brokenPill.querySelector('.admin-study-status__label') as HTMLElement | null;
+            const p = brokenPill.getBoundingClientRect();
+            const g = glyph?.getBoundingClientRect();
+            const hit = g ? document.elementFromPoint(g.left + g.width / 2, g.top + g.height / 2) : null;
+            return {
+              glyphCount: brokenPill.querySelectorAll('.admin-study-status__glyph').length,
+              healthyGlyphCount: healthyPill.querySelectorAll('.admin-study-status__glyph').length,
+              glyph: g && { left: g.left, right: g.right, top: g.top, bottom: g.bottom, width: g.width, height: g.height },
+              pill: { left: p.left, right: p.right, top: p.top, bottom: p.bottom, height: p.height },
+              glyphHit: Boolean(hit && glyph && (hit === glyph || glyph.contains(hit))),
+              labelTruncated: label ? label.scrollWidth > label.clientWidth + 1 : null,
+              brokenFill: getComputedStyle(brokenPill).backgroundColor,
+              healthyFill: getComputedStyle(healthyPill).backgroundColor,
+            };
+          });
+
+          expect(measured).not.toBeNull();
+          const m = measured!;
+
+          // The glyph exists on the broken row only. The healthy row is the
+          // control: a glyph on every published pill would mark nothing.
+          expect(m.glyphCount, 'the not-working pill has lost its warning glyph').toBe(1);
+          expect(m.healthyGlyphCount).toBe(0);
+
+          // It PAINTS: a real box, inside the pill, and on top at its centre -
+          // not clipped away by the pill or collapsed by the flex row.
+          expect(m.glyph).not.toBeNull();
+          expect(m.glyph!.width).toBeGreaterThanOrEqual(12);
+          expect(m.glyph!.height).toBeGreaterThanOrEqual(12);
+          expect(m.glyph!.left).toBeGreaterThanOrEqual(m.pill.left - 0.5);
+          expect(m.glyph!.right).toBeLessThanOrEqual(m.pill.right + 0.5);
+          expect(m.glyph!.top).toBeGreaterThanOrEqual(m.pill.top - 0.5);
+          expect(m.glyph!.bottom).toBeLessThanOrEqual(m.pill.bottom + 0.5);
+          expect(m.glyphHit, 'the glyph is covered or clipped at its own centre').toBe(true);
+
+          // The shared primitive's height is unchanged by the glyph.
+          expect(m.pill.height).toBeGreaterThan(23);
+          expect(m.pill.height).toBeLessThan(25);
+
+          // Colour as well as the glyph: the fill differs from a healthy
+          // published pill's.
+          expect(m.brokenFill).not.toBe(m.healthyFill);
+
+          // RENDERED CONTRAST, from the pill's own pixels. The fill is the
+          // commonest colour in the screenshot; the ink is the pixel furthest
+          // from it in luminance (the cores of bold text and a 2px stroke
+          // reach the full colour; anti-aliased edges only sit between).
+          const shot = await broken.screenshot({ animations: 'disabled' });
+          const pixels = await page.evaluate(async (b64) => {
+            const img = new Image();
+            img.src = `data:image/png;base64,${b64}`;
+            await img.decode();
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d')!;
+            ctx.drawImage(img, 0, 0);
+            const data = ctx.getImageData(0, 0, img.width, img.height).data;
+            // Inset past the rounded border so the page ground behind the
+            // corners does not vote for the fill.
+            const inset = 4;
+            const out: number[][] = [];
+            for (let y = inset; y < img.height - inset; y += 1) {
+              for (let x = inset; x < img.width - inset; x += 1) {
+                const i = (y * img.width + x) * 4;
+                out.push([data[i], data[i + 1], data[i + 2]]);
+              }
+            }
+            return out;
+          }, shot.toString('base64'));
+
+          const counts = new Map<string, number>();
+          for (const px of pixels) counts.set(px.join(','), (counts.get(px.join(',')) ?? 0) + 1);
+          const fill = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0].split(',').map(Number);
+          const fillL = luminance(fill);
+          const ink = pixels.reduce((best, px) =>
+            Math.abs(luminance(px) - fillL) > Math.abs(luminance(best) - fillL) ? px : best
+          );
+
+          // Positive control: a pill with no ink would score 1:1 and fail
+          // below anyway, but this names that case.
+          expect(pixels.length).toBeGreaterThan(200);
+          expect(
+            contrast(ink, fill),
+            `rendered ink rgb(${ink}) on fill rgb(${fill}) in ${theme} at ${width}px`
+          ).toBeGreaterThanOrEqual(4.5);
+
+          // The case #149 exists for: at 1440 the label really is truncated,
+          // so the glyph is doing the work the word cannot.
+          if (width === 1440) expect(m.labelTruncated).toBe(true);
+        });
+      }
+    }
+  });
 });

@@ -3145,9 +3145,10 @@ body.admin-page .header .container {
 /* Column 1: Title - generous space for title + description */
 /* NB: under `table-layout: fixed` these percentages are the whole story -
    min-width is not honoured, so a column gets exactly its share and no more.
-   Title gives up the 3% that Status needs for its widest badge. */
+   Title gives up the 3% that Status needs for its widest badge, and 2% more
+   to Actions (see there) - a title wraps, a pair of buttons cannot. */
 .admin-data-table .col-title {
-  width: 17%;
+  width: 15%;
   min-width: 260px;
 }
 
@@ -3251,9 +3252,17 @@ body.admin-page .header .container {
 }
 
 /* Actions - an inline View/Edit button plus the kebab menu, so wider than the
-   bare-kebab column it replaced. */
+   bare-kebab column it replaced.
+
+   11% was not enough, and the failure was silent: the percentages here sum to
+   more than 100, `table-layout: fixed` scales them down, and the action group
+   is capped at the cell (`max-width: 100%`), so at every width above 1220px
+   the cell offered 83px to ~102px of buttons. The kebab's `flex-shrink` gave
+   way and its icon was squeezed to 0px - an empty outlined box where the row
+   menu should be (measured on main at 1240 and 1440). 13% fits the pair;
+   `e2e/admin-pill-primitive.test.ts` measures the painted icon. */
 .admin-data-table .col-actions {
-  width: 11%;
+  width: 13%;
   min-width: 132px;
   text-align: center;
 }
@@ -5801,6 +5810,13 @@ body.theme-dark .legend-label-past {
 /* Admin action button (kebab menu) */
 .admin-action-btn-kebab {
   padding: 4px 10px;
+  flex: none;
+}
+
+/* The icon is the whole control, so it never shrinks: if the cell is ever too
+   narrow again the button overflows visibly rather than rendering empty. */
+.admin-action-btn-kebab svg {
+  flex: none;
 }
 
 /* The shared Dropdown marks its trigger `.dropdown-toggle`, which paints a
@@ -14230,12 +14246,34 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
   color: var(--text-muted);
 }
 
+/* "Published, not working" (cto/AdaptaLabs#149). The label truncates to
+   PUBLISHED... above 1220px, so the mark that says "broken" cannot be the
+   word: it is the draft pill's amber fill plus a warning glyph ahead of the
+   label. Declared AFTER `--published` so that equal-specificity rule loses -
+   the element carries both classes. The column is NOT widened for this; the
+   next long label would re-break it. */
+.admin-study-status--not-working {
+  background: color-mix(in srgb, var(--status-warning) 18%, transparent);
+  border-color: color-mix(in srgb, var(--status-warning) 45%, transparent);
+  color: color-mix(in srgb, var(--status-warning) 80%, var(--text-primary));
+}
+
+/* Never shrinks: the label beside it is the flex item that gives way, so the
+   glyph survives every width the label truncates at. `currentColor`, so it
+   takes the pill's AA-checked text colour in both themes. */
+.admin-study-status__glyph {
+  flex: none;
+  margin-right: 0.3rem;
+  color: currentColor;
+}
+
 /* Audit #121: the draft study pill's 80% warning/ink text mix renders #9f6830
    on its light warning fill = 3.84:1, below WCAG AA (4.5:1). Darken the text in
    light theme only. The booking "pending" pill uses the same treatment but a
    78% mix, which already clears AA, so it is deliberately left alone. Dark theme
    is unaffected: there the mix is warning+white on a dark fill and passes. */
-body.theme-light .admin-study-status--draft {
+body.theme-light .admin-study-status--draft,
+body.theme-light .admin-study-status--not-working {
   color: #8a5a29; /* darker amber, 4.83:1 on the pill's #f4e7d9 fill */
 }
 
