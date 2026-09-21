@@ -172,24 +172,140 @@ export const backendEnvSchema = z.object({
   // it is refused rather than repaired. Both are pinned as literals in
   // backend/src/config/__tests__/environment.test.ts.
   //
-  // THE ASYMMETRY WITH #64 IS DELIBERATE AND WORTH NAMING, because the
-  // deploy-risk argument below applies to both. An upper-cased scheme and a
-  // trailing slash are equally broken config, and equally unsweepable in the
-  // `${CORS_ORIGIN}` that `docker-compose.prod.yml` takes from an operator.
-  // They are treated differently because the right FIX differs: refusing an
-  // upper-cased scheme is the whole answer, whereas for a path the likely
-  // answer is to NORMALISE (`new URL(v).origin` is exactly what a browser
-  // sends) rather than refuse - and choosing between refusing and normalising
-  // is a design decision, not a line to bolt onto somebody else's MR.
+  // THE ASYMMETRY WITH THE PATH IS STILL DELIBERATE, and #64 settled it rather
+  // than removing it. An upper-cased scheme and a trailing slash are equally
+  // broken config, but the right FIX differs: refusing an upper-cased scheme is
+  // the whole answer, whereas a path is NORMALISED away by the transform below.
+  // Refusing a scheme narrows what boots; normalising a path does not, which is
+  // why only one of the two carried deploy risk.
   //
-  // ponytail: the scheme is checked, the PATH is not - `http://x.com/` and
-  //   `http://x.com/app` still boot and still match no Origin header
-  //   -> #64, same family.
+  // THE PATH IS NORMALISED AWAY RATHER THAN REFUSED (#64).
+  //
+  // Measured before the fix, against the schema as it then stood:
+  //   `http://x.com/`          -> accepted as `http://x.com/`
+  //   `https://x.com/app`      -> accepted as `https://x.com/app`
+  //   `https://x.com/a/b?q=1#f` -> accepted as `https://x.com/a/b?q=1#f`
+  // A browser `Origin` header is `scheme://host[:port]` with no path and no
+  // trailing slash, so every one of those booted and matched nothing. The
+  // trailing slash is the likeliest of the family, because it is the shape the
+  // address bar shows and therefore the shape an operator copies.
+  //
+  // REFUSING WAS THE OTHER OPTION AND IS THE WRONG ONE. `docker-compose.prod.yml`
+  // passes `${CORS_ORIGIN}` straight through from an operator environment this
+  // repository cannot enumerate, so a no-path rule could refuse a boot that
+  // succeeds today. `new URL(v).origin` is exactly the string a browser sends,
+  // so the transform on its own refuses nothing. The allow-list further down
+  // DOES narrow what boots, and says exactly what it narrows.
+  //
+  // WHAT NORMALISING ALSO CHANGES, named because it is not free. The write-back
+  // in backend/src/config/index.ts puts this value into
+  // `process.env.CORS_ORIGIN`, which eleven readers outside tests use as a
+  // redirect target or an OAuth callback base built by concatenation. An
+  // operator who set `https://x.com/app` gets `https://x.com/callback` after
+  // this change where they got `https://x.com/app/callback` before. That is the
+  // correct reading of a variable named for an ORIGIN, and their CORS was
+  // broken either way, but it is a behaviour change on a value this repository
+  // cannot see - so config/index.ts logs a warning naming both forms when the
+  // normalisation actually drops something, rather than changing it silently.
+  //
+  // ORDER IS LOAD-BEARING. The refine runs BEFORE this transform, so
+  // `http:/x.com` (one slash) and `HTTP://x.com` are still refused rather than
+  // repaired - `new URL()` would happily normalise both. Pinned as literals in
+  // backend/src/config/__tests__/environment.test.ts.
   CORS_ORIGIN: z
     .string()
     .trim()
     .url('CORS origin must be a valid URL')
     .refine((value) => /^https?:\/\//.test(value), 'CORS origin must be an http(s) URL')
+    // USERINFO IS REFUSED, and this refine exists BECAUSE of the transform
+    // below rather than alongside it (#64, raised by the security gate).
+    //
+    // MEASURED against the real schema with the transform and without this
+    // arm - every one of these was accepted:
+    //   `https://app.example.com@evil.com`       -> `https://evil.com`
+    //   `https://app.example.com:8443@evil.com/` -> `https://evil.com`
+    //   `https://x.com%2f@evil.com`              -> `https://evil.com`
+    // Everything before the `@` is userinfo, so the host is what follows it.
+    //
+    // WHAT THIS REFINE CANNOT SEE. It asks the parser, and the parser reports
+    // an EMPTY username for `https://@evil.com`, `https://:@evil.com` and a
+    // backslash shape like `http://evil.com\@good.com` (the backslash reads as
+    // `/`, so the `@` lands in the path). Those are refused by the allow-list
+    // below, not here. This refine stays for the MESSAGE: a value that really
+    // does carry a username or password is told so by name.
+    //
+    // WHY THAT IS WORSE AFTER THE TRANSFORM THAN BEFORE IT. index.ts passes
+    // this to `cors()` as a STRING, and for a string the cors package emits it
+    // as `Access-Control-Allow-Origin` verbatim without comparing it to the
+    // request Origin - the browser does the comparing, and `credentials: true`
+    // is set alongside. Un-normalised, `https://app.example.com@evil.com` is an
+    // ACAO no browser ever matches, so the misconfiguration fails CLOSED.
+    // Normalised, it becomes a well-formed origin a browser WILL match, so it
+    // fails OPEN, granting credentialed cross-origin reads to the host after
+    // the `@` rather than to the one the operator appears to have written.
+    //
+    // No attacker-controlled path exists today - swept every tracked file, and
+    // CORS_ORIGIN is only ever set from deployment config, never composed from
+    // a branch name or a request. This is defence in depth against a value the
+    // transform would otherwise quietly repair into something dangerous, and
+    // it narrows only values that are already broken, so it carries none of the
+    // deploy risk that kept a no-path rule out of #59.
+    // THE try/catch IS LOAD-BEARING, not defensive dressing. zod runs a
+    // refinement even when an earlier STRING check on the same chain has
+    // already failed, so this sees `not a url` and `` as well as the values it
+    // is here to judge - and an unguarded `new URL()` then throws a raw
+    // TypeError that escapes the ZodError handling entirely. Measured: it
+    // turned four of #59's refusal arms from their own named message into
+    // `Invalid URL`. Returning true on a parse failure is correct rather than
+    // lenient: `.url()` owns that refusal and reports it with its own message.
+    .refine((value) => {
+      try {
+        const parsed = new URL(value);
+        return parsed.username === '' && parsed.password === '';
+      } catch {
+        return true;
+      }
+    }, 'CORS origin must not contain userinfo')
+    // THE SHAPE IS ALLOW-LISTED on the trimmed RAW text, before the parser
+    // sees it (#64, raised by the security gate). The transform below does
+    // more than drop a path: the WHATWG parser reads `\` as `/`, strips tab
+    // and newline from anywhere, percent-decodes and case-folds the host and
+    // maps fullwidth letters, ideographic dots and zero-width characters onto
+    // ASCII. So a broken value can come out as a DIFFERENT, well-formed origin
+    // - measured on this branch before this refine, all accepted:
+    //   `http://evil.com\@good.com`       -> `http://evil.com`
+    //   `https:///evil.com`               -> `https://evil.com`
+    //   `https://good.com<LF>.evil.com`   -> `https://good.com.evil.com`
+    //   `https://%65vil.com`              -> `https://evil.com`
+    //   `https://a.com/,https://evil.com` -> `https://a.com`
+    // and the userinfo refine above passed every one of them. A block-list
+    // would stay one entry behind the parser, so this names the one shape an
+    // operator means and refuses the rest: lower-case http or https, a host of
+    // ASCII letters, digits, dots and hyphens, an optional numeric port, and
+    // an optional path, query or fragment with no backslash, whitespace, `@`
+    // or comma in it.
+    //
+    // It does NOT make the parser's output character-identical to what was
+    // written: an IPv4 address in shorthand or hex still gets rewritten into
+    // dotted form (measured: `https://127.1` and `https://0x7f000001` both
+    // come out as `https://127.0.0.1`). That is the SAME host written another
+    // way - a browser serialises its own Origin the same way - so it is not
+    // the class of repair this refine exists to stop, which is a value coming
+    // out as a DIFFERENT host from the one written between the slashes.
+    //
+    // WHAT THIS NARROWS, because unlike the transform it is not free. It
+    // refuses some values origin/main booted: an IPv6 literal (`http://[::1]`),
+    // an underscore in the host, and a non-ASCII host. None is a shape a
+    // deployed CORS origin takes, and a non-ASCII host can still be written in
+    // punycode. Swept every tracked file for a CORS_ORIGIN setter (git grep
+    // -i, test files and the canary manifest excluded): all five literal
+    // values match, and docker-compose.prod.yml passes `${CORS_ORIGIN}`
+    // through from outside this repository, which no sweep can see.
+    .refine(
+      (value) => /^https?:\/\/[A-Za-z0-9.-]+(:\d+)?(?:[/?#][^\\\s@,]*)?$/.test(value),
+      'CORS origin must be http(s)://host[:port] with an optional path - a host of ASCII letters, digits, dots and hyphens only, and no backslash, whitespace, @ or comma anywhere'
+    )
+    .transform((value) => new URL(value).origin)
     .default('http://localhost:3000'),
 
   // Security Configuration
