@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { getNotificationPreferences, updateNotificationPreferences, NotificationPreference } from '../api/client';
@@ -25,12 +25,19 @@ const Settings: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState(false);
+  const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (user) {
       loadPreferences();
     }
   }, [user]);
+
+  // Clear the success-banner timer on unmount only, so a toggle right before
+  // navigating away can't fire setSuccess after the page has gone.
+  useEffect(() => () => {
+    if (successTimerRef.current) clearTimeout(successTimerRef.current);
+  }, []);
 
   const loadPreferences = async () => {
     try {
@@ -67,9 +74,10 @@ const Settings: React.FC = () => {
       
       setPreferences(saved);
       setSuccess(true);
-      
+
       // Clear success message after 3 seconds
-      setTimeout(() => setSuccess(false), 3000);
+      if (successTimerRef.current) clearTimeout(successTimerRef.current);
+      successTimerRef.current = setTimeout(() => setSuccess(false), 3000);
     } catch (err: unknown) {
       // The toggle is left showing the OLD value, which is correct - preferences
       // state is only replaced from the server's response - but it means a

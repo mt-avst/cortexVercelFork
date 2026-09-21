@@ -1,4 +1,4 @@
-import React, { useState, useEffect, memo } from 'react';
+import React, { useState, useEffect, useRef, memo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { GuardedLink } from '../contexts/NavigationGuardContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -49,6 +49,7 @@ const Header: React.FC = memo(() => {
   const [requestingAdmin, setRequestingAdmin] = useState(false);
   const [adminRequestMessage, setAdminRequestMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const adminRequestTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // The landing header is fixed and transparent over the hero; once the page
   // scrolls, content would pass under it and collide. Flag scroll so the header
@@ -82,16 +83,23 @@ const Header: React.FC = memo(() => {
       setAdminRequestMessage(null);
       const result = await requestAdminAccess();
       setAdminRequestMessage({ type: 'success', text: result.message });
-      setTimeout(() => setAdminRequestMessage(null), 5000);
+      if (adminRequestTimerRef.current) clearTimeout(adminRequestTimerRef.current);
+      adminRequestTimerRef.current = setTimeout(() => setAdminRequestMessage(null), 5000);
     } catch (error: unknown) {
       const axiosError = error as { response?: { data?: { error?: string } }; message?: string };
       const message = axiosError.response?.data?.error || axiosError.message || 'Failed to submit admin request';
       setAdminRequestMessage({ type: 'error', text: message });
-      setTimeout(() => setAdminRequestMessage(null), 5000);
+      if (adminRequestTimerRef.current) clearTimeout(adminRequestTimerRef.current);
+      adminRequestTimerRef.current = setTimeout(() => setAdminRequestMessage(null), 5000);
     } finally {
       setRequestingAdmin(false);
     }
   };
+
+  // Clear the admin-request banner timer on unmount only.
+  useEffect(() => () => {
+    if (adminRequestTimerRef.current) clearTimeout(adminRequestTimerRef.current);
+  }, []);
 
   const getRequestModalContent = () => {
     if (user?.role === 'researcher_admin') {
