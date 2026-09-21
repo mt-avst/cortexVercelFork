@@ -62,8 +62,11 @@ const NOT_PUBLISHED_REFUSAL = "Study is not published";
  * against the database's own clock, and it cannot be reached through the route:
  * `NOW()` is the mint statement's own timestamp, so no fixture can be seeded to
  * equal it. A behavioural test therefore cannot pin this operator - mutating
- * `<=` to `<` left all ten behavioural arms green. What can be pinned is the
- * text of the query the route actually issued, captured rather than re-typed.
+ * `<=` to `<` left every OTHER behavioural test in this file green (24 of the
+ * 25 in it as of cto/AdaptaLabs#129's LOW-8 pass; re-measure rather than trust
+ * this number after adding or removing a test here, it is not derived from
+ * anything that would move with it). What can be pinned is the text of the
+ * query the route actually issued, captured rather than re-typed.
  */
 const CLOSING_TIME_PREDICATE = ") <= NOW() AS has_closed";
 
@@ -81,6 +84,15 @@ vi.mock("../../firsthand/session-create", () => ({
 let postgres: TestPostgres;
 let pool: pg.Pool;
 let app: express.Express;
+/**
+ * The REAL hourly sweep (cto/AdaptaLabs#129, HIGH-1) - the same function
+ * `index.ts` schedules - not a hand-rolled `UPDATE opportunities SET status`.
+ * A fixture that only sets `status: 'closed'` at seed time cannot prove
+ * anything about the sweep reaching a study that opened published: this is
+ * what proves the resume path survives the ACTUAL state transition, not a
+ * shortcut to the same end state.
+ */
+let autoClosePublishedStudiesPastEndDate: () => Promise<number>;
 
 async function seedUser(role = "employee"): Promise<string> {
   const id = crypto.randomUUID();
@@ -149,23 +161,45 @@ async function seedSession(opportunityId: string, startOffset: string, endOffset
  * and the participant's own user id, in a status `isAnsweredRuntimeStatus` does
  * not call answered, so the survey route resumes it rather than refusing a
  * second attempt.
+ *
+ * `expiresInHours` (cto/AdaptaLabs#129, LOW-8) writes the session's own
+ * PAYLOAD-carried expiry - `session_payload->'session'->>'expires_at'`, the
+ * field `findParticipantSessionForOpportunity` actually reads, matching
+ * production: every session `session-create.ts` mints carries one, default
+ * 24h (`DEFAULT_SESSION_EXPIRES_IN_MINUTES`). Defaults to 24 here too, so a
+ * caller that does not care about expiry still seeds a session that reads as
+ * live. Pass a negative number for an already-expired session, or `null` to
+ * omit `expires_at` entirely - a payload minted before the field existed,
+ * which reads as expired for the same fail-closed reason `isExpired` in
+ * session-store.ts does.
  */
 async function seedInFlightSurveySession(opts: {
   opportunityId: string;
   participantId: string;
   token: string;
   sessionStatus?: string;
+  expiresInHours?: number | null;
 }): Promise<void> {
+  const expiresInHours = opts.expiresInHours === undefined ? 24 : opts.expiresInHours;
+  const sessionPayload =
+    expiresInHours === null
+      ? null
+      : JSON.stringify({
+          session: {
+            expires_at: new Date(Date.now() + expiresInHours * 60 * 60 * 1000).toISOString(),
+          },
+        });
+
   await pool.query(
     `INSERT INTO firsthand.runtime_sessions
        (session_id, token, study_id, study_title, participant_id, participant_display_name,
         session_status, transcript_status, microphone_permission, screen_permission,
         recording_status, upload_status, steps, opportunity_id,
-        logical_session_id, attempt_number, created_via)
+        logical_session_id, attempt_number, created_via, session_payload)
      VALUES ($1, $2, 'study', 'Study', $3, 'Participant',
              $4, 'not_requested', 'not_requested', 'not_requested',
              'not_started', 'not_started', '[]'::jsonb, $5,
-             $6, 1, 'manual')`,
+             $6, 1, 'manual', $7::jsonb)`,
     [
       `session_${crypto.randomUUID()}`,
       opts.token,
@@ -173,6 +207,7 @@ async function seedInFlightSurveySession(opts: {
       opts.sessionStatus ?? "in_progress",
       opts.opportunityId,
       crypto.randomUUID(),
+      sessionPayload,
     ]
   );
 }
@@ -212,6 +247,10 @@ describe.skipIf(skipDbTests)("mint routes refuse a study that has closed", () =>
 
     const { pool: appPool } = await import("../../config");
     pool = appPool;
+
+    ({ autoClosePublishedStudiesPastEndDate } = await import(
+      "../../utils/opportunityLifecycle"
+    ));
 
     const opportunitiesRouter = (await import("../opportunities")).default;
     const { errorHandler } = await import("../../utils/errorHandler");
@@ -432,8 +471,10 @@ describe.skipIf(skipDbTests)("mint routes refuse a study that has closed", () =>
    * Everything else in this file is behavioural. This one cannot be: the
    * difference between `<=` and `<` is the single instant where the closing
    * time equals the database's own `NOW()`, which no fixture can be written to
-   * hit, and the mutation survived all ten behavioural arms. So the assertion
-   * is on the text of the query the route ISSUED - captured from the pool, not
+   * hit, and the mutation survived every other test in this file (24 of 25 as
+   * measured for cto/AdaptaLabs#129's LOW-8 pass - re-measure, do not trust
+   * this figure once the file's test count moves). So the assertion is on the
+   * text of the query the route ISSUED - captured from the pool, not
    * re-typed - which fails by name when somebody changes the comparison or
    * drops the projection the two gates read.
    */
@@ -555,6 +596,281 @@ describe.skipIf(skipDbTests)("mint routes refuse a study that has closed", () =>
       // open or closed.
       const response = await mintSurvey(opportunity, participant).expect(409);
       expect(response.body.error).toBe("You have already answered this");
+    });
+  });
+
+  /*
+   * HIGH-1 (cto/AdaptaLabs#129): THE EXEMPTION SURVIVES THE HOURLY SWEEP.
+   *
+   * The suite above proves the exemption works while the opportunity is still
+   * `published` and `has_closed` alone says the deadline has passed. It does
+   * NOT prove the exemption survives `autoClosePublishedStudiesPastEndDate`
+   * actually flipping the row to `closed` - the survey route used to refuse
+   * `status !== 'published'` ABOVE its resume lookup, so once the sweep ran,
+   * an in-flight participant's next visit answered 403 "Study is not
+   * published" and never reached the resume code at all. Proven before the
+   * fix: this exact test 403'd.
+   */
+  describe("the exemption after the REAL hourly sweep has run (not a hand-set status)", () => {
+    it("resumes an in-flight survey session after the sweep has closed the study", async () => {
+      const owner = await seedUser("researcher_admin");
+      const participant = await seedUser();
+      const study = await seedStudy("survey");
+      const opportunity = await seedOpportunity({
+        ownerId: owner,
+        type: "survey",
+        deliveryMode: "native",
+        studyId: study,
+        endDateOffset: "-1 day",
+      });
+      await seedInFlightSurveySession({
+        opportunityId: opportunity,
+        participantId: participant,
+        token: "tok_swept_inflight",
+      });
+
+      const closedCount = await autoClosePublishedStudiesPastEndDate();
+      expect(closedCount).toBeGreaterThan(0);
+      const statusAfterSweep = await pool.query("SELECT status FROM opportunities WHERE id = $1", [
+        opportunity,
+      ]);
+      expect(statusAfterSweep.rows[0].status).toBe("closed");
+
+      const response = await mintSurvey(opportunity, participant).expect(200);
+      expect(response.body.session_url).toBe(
+        "https://cortex.example.com/survey/tok_swept_inflight"
+      );
+    });
+
+    it("still refuses a fresh mint on the same study once the sweep has closed it", async () => {
+      const owner = await seedUser("researcher_admin");
+      const neverStarted = await seedUser();
+      const study = await seedStudy("survey");
+      const opportunity = await seedOpportunity({
+        ownerId: owner,
+        type: "survey",
+        deliveryMode: "native",
+        studyId: study,
+        endDateOffset: "-1 day",
+      });
+
+      await autoClosePublishedStudiesPastEndDate();
+
+      const response = await mintSurvey(opportunity, neverStarted).expect(403);
+      expect(response.body.error).toBe(CLOSED_REFUSAL);
+      expect(response.body.code).toBe(CLOSED_REFUSAL_CODE);
+    });
+  });
+
+  /*
+   * MEDIUM-3 (cto/AdaptaLabs#129): THE CODE, NOT JUST THE STATUS, ONCE THE
+   * SWEEP HAS RUN.
+   *
+   * Before this, a `closed` study answered the bare `{ error: 'Study is not
+   * published' }` on both routes - no `code` - so the frontend's closed-study
+   * message ("try again later") rendered for a study that had actually ended.
+   * Seeded with status LITERALLY `closed` and no end date of its own, so
+   * `has_closed` reads null (unknown) - isolating that the STATUS check is
+   * what answers here, not the has_closed formula these routes already had.
+   */
+  describe("the closed-study code, once status alone says closed", () => {
+    it("answers OPPORTUNITY_CLOSED for a recorded study whose status is closed, even with has_closed unknown", async () => {
+      const owner = await seedUser("researcher_admin");
+      const participant = await seedUser();
+      const study = await seedStudy("recorded");
+      const opportunity = await seedOpportunity({
+        ownerId: owner,
+        type: "unmoderated",
+        status: "closed",
+        studyId: study,
+        endDateOffset: null,
+      });
+
+      const response = await mintRecorded(opportunity, participant).expect(403);
+      expect(response.body.error).toBe(CLOSED_REFUSAL);
+      expect(response.body.code).toBe(CLOSED_REFUSAL_CODE);
+    });
+
+    it("answers OPPORTUNITY_CLOSED for a survey whose status is closed, even with has_closed unknown, and no session held", async () => {
+      const owner = await seedUser("researcher_admin");
+      const participant = await seedUser();
+      const study = await seedStudy("survey");
+      const opportunity = await seedOpportunity({
+        ownerId: owner,
+        type: "survey",
+        deliveryMode: "native",
+        status: "closed",
+        studyId: study,
+        endDateOffset: null,
+      });
+
+      const response = await mintSurvey(opportunity, participant).expect(403);
+      expect(response.body.error).toBe(CLOSED_REFUSAL);
+      expect(response.body.code).toBe(CLOSED_REFUSAL_CODE);
+    });
+  });
+
+  /*
+   * MEDIUM-4 (cto/AdaptaLabs#129): `hasClosed === true` MUST STAY `=== true`,
+   * NOT WIDEN TO `!== false`, on the survey route too.
+   *
+   * The recorded suite already pins the recorded twin of this
+   * ("still mints a published study that carries no end date and no slots").
+   * A study with neither an end_date nor any sessions reads `has_closed` as
+   * SQL NULL - unknown, not closed - and `hasClosed !== false` would treat
+   * that unknown as closed, refusing a survey that has never had a deadline
+   * at all.
+   */
+  describe("an undated survey with no slots at all is still open", () => {
+    it("still mints a published survey that carries no end date and no slots", async () => {
+      const owner = await seedUser("researcher_admin");
+      const participant = await seedUser();
+      const study = await seedStudy("survey");
+      const opportunity = await seedOpportunity({
+        ownerId: owner,
+        type: "survey",
+        deliveryMode: "native",
+        studyId: study,
+        endDateOffset: null,
+      });
+
+      const response = await mintSurvey(opportunity, participant).expect(200);
+      expect(response.body.session_url).toBe("https://cortex.example.com/survey/tok_minted");
+    });
+  });
+
+  /*
+   * LOW-7 (cto/AdaptaLabs#129): THE FALLBACK MEASURES THE LAST SLOT'S END,
+   * NOT ITS START.
+   *
+   * A slot that started in the past but has not yet ENDED is still ongoing -
+   * `MAX(s.end_time)` reads that correctly; `MAX(s.start_time)` would not,
+   * closing a study mid-session on both routes.
+   */
+  describe("an undated study's last slot has started but not yet ended", () => {
+    it("still mints an undated recorded study whose last slot started before now and has not ended", async () => {
+      const owner = await seedUser("researcher_admin");
+      const participant = await seedUser();
+      const study = await seedStudy("recorded");
+      const opportunity = await seedOpportunity({
+        ownerId: owner,
+        type: "unmoderated",
+        studyId: study,
+        endDateOffset: null,
+      });
+      await seedSession(opportunity, "-1 hour", "1 hour");
+
+      const response = await mintRecorded(opportunity, participant).expect(200);
+      expect(response.body.session_url).toBe("https://cortex.example.com/session/tok_minted");
+    });
+
+    it("still mints an undated survey whose last slot started before now and has not ended", async () => {
+      const owner = await seedUser("researcher_admin");
+      const participant = await seedUser();
+      const study = await seedStudy("survey");
+      const opportunity = await seedOpportunity({
+        ownerId: owner,
+        type: "survey",
+        deliveryMode: "native",
+        studyId: study,
+        endDateOffset: null,
+      });
+      await seedSession(opportunity, "-1 hour", "1 hour");
+
+      const response = await mintSurvey(opportunity, participant).expect(200);
+      expect(response.body.session_url).toBe("https://cortex.example.com/survey/tok_minted");
+    });
+  });
+
+  /*
+   * LOW-8 (cto/AdaptaLabs#129): IN-FLIGHT MEANS LIVE, NOT MERELY UNANSWERED.
+   *
+   * Before this, `findParticipantSessionForOpportunity`'s most recent row was
+   * resumed whatever its status or age: an abandoned or failed session from
+   * months ago, or one whose 24-hour token had long since expired, was handed
+   * back as the SAME dead link forever, and the participant behind it could
+   * never mint a fresh attempt either. `seedInFlightSurveySession`'s default
+   * `expiresInHours: 24` is what every other test above relies on to prove
+   * the exemption still resumes a LIVE session; these tests are the control
+   * the other direction, holding that expiry fixed while varying status, and
+   * then holding status fixed while expiring it.
+   */
+  describe("a held session that is dead, not in flight", () => {
+    it.each(["abandoned", "failed"])(
+      "mints a fresh session rather than resuming a %s one, before the deadline",
+      async (sessionStatus) => {
+        const owner = await seedUser("researcher_admin");
+        const participant = await seedUser();
+        const study = await seedStudy("survey");
+        const opportunity = await seedOpportunity({
+          ownerId: owner,
+          type: "survey",
+          deliveryMode: "native",
+          studyId: study,
+          endDateOffset: "1 day",
+        });
+        await seedInFlightSurveySession({
+          opportunityId: opportunity,
+          participantId: participant,
+          token: `tok_dead_${sessionStatus}`,
+          sessionStatus,
+        });
+
+        const response = await mintSurvey(opportunity, participant).expect(200);
+        // The FRESH mint's token, from the stubbed createSession - proving a
+        // new session was actually started rather than the dead one handed
+        // back again.
+        expect(response.body.session_url).toBe("https://cortex.example.com/survey/tok_minted");
+      }
+    );
+
+    it("mints a fresh session rather than resuming one whose own token has already expired", async () => {
+      const owner = await seedUser("researcher_admin");
+      const participant = await seedUser();
+      const study = await seedStudy("survey");
+      const opportunity = await seedOpportunity({
+        ownerId: owner,
+        type: "survey",
+        deliveryMode: "native",
+        studyId: study,
+        endDateOffset: "1 day",
+      });
+      await seedInFlightSurveySession({
+        opportunityId: opportunity,
+        participantId: participant,
+        token: "tok_expired",
+        expiresInHours: -1,
+      });
+
+      const response = await mintSurvey(opportunity, participant).expect(200);
+      expect(response.body.session_url).toBe("https://cortex.example.com/survey/tok_minted");
+    });
+
+    it("refuses a fresh mint on a study the deadline has already closed, even though the held session is dead", async () => {
+      // The two intended consequences of LOW-8 side by side: a dead session
+      // buys nothing either way, and which one this participant gets -
+      // fresh mint or closed refusal - is decided by the DEADLINE, exactly as
+      // it would be for someone who had never started at all.
+      const owner = await seedUser("researcher_admin");
+      const participant = await seedUser();
+      const study = await seedStudy("survey");
+      const opportunity = await seedOpportunity({
+        ownerId: owner,
+        type: "survey",
+        deliveryMode: "native",
+        studyId: study,
+        endDateOffset: "-1 day",
+      });
+      await seedInFlightSurveySession({
+        opportunityId: opportunity,
+        participantId: participant,
+        token: "tok_dead_and_closed",
+        sessionStatus: "abandoned",
+      });
+
+      const response = await mintSurvey(opportunity, participant).expect(403);
+      expect(response.body.error).toBe(CLOSED_REFUSAL);
+      expect(response.body.code).toBe(CLOSED_REFUSAL_CODE);
     });
   });
 });

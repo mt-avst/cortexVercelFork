@@ -72,6 +72,57 @@ export function isAnsweredRuntimeStatus(status: string): boolean {
   return (answeredRuntimeStates as readonly string[]).includes(status);
 }
 
+/**
+ * The runtime statuses that mean the participant's session died WITHOUT
+ * being answered: `abandoned` (the participant walked away) and `failed`
+ * (the runtime gave up). Neither has a transition back to `completed` -
+ * `applyRuntimeMutationToSession` carries none - so a session in either of
+ * these is not a candidate to resume, only a fact that a previous attempt did
+ * not finish.
+ *
+ * Distinct from `answeredRuntimeStates`: those are DONE (refuse a fresh
+ * attempt outright, 409); these are DEAD (a fresh attempt is exactly right,
+ * the same as if the participant had never started). See
+ * `isInFlightRuntimeSession`, which is neither of these plus the expiry check
+ * no status value carries.
+ */
+export const terminalUnansweredRuntimeStates = ["abandoned", "failed"] as const;
+
+/**
+ * Whether a runtime session is a live, resumable, IN-FLIGHT attempt
+ * (cto/AdaptaLabs#129, LOW-8): not yet answered, not dead (terminal without
+ * ever being answered), and not past its own session token's expiry.
+ *
+ * The single definition every caller that needs to tell "still going" from
+ * "a dead link" shares, so none of them can drift from each other:
+ *   - the survey-session mint route's resume lookup, which now returns the
+ *     existing session_url only for one of these, rather than for ANY
+ *     unanswered row whatever its age or status;
+ *   - the participant detail read's `completion.inProgress`, and the
+ *     closed-study 200-vs-410 decision that reads it.
+ * Both reach it through `findParticipantSessionForOpportunity`, the one query
+ * that produces `sessionNotExpired` - see that function's docblock for why
+ * the flag is read from the session's PAYLOAD rather than the
+ * `runtime_sessions.expires_at` ROW COLUMN.
+ *
+ * Before this existed, ANY unanswered row - an abandoned session from months
+ * ago, one whose 24-hour token expired the day it was minted - was handed
+ * back as the same "resume" link forever, and the participant behind it could
+ * never mint a fresh attempt either.
+ */
+export function isInFlightRuntimeSession(input: {
+  sessionStatus: string;
+  sessionNotExpired: boolean;
+}): boolean {
+  if (isAnsweredRuntimeStatus(input.sessionStatus)) {
+    return false;
+  }
+  if ((terminalUnansweredRuntimeStates as readonly string[]).includes(input.sessionStatus)) {
+    return false;
+  }
+  return input.sessionNotExpired;
+}
+
 export type SessionLifecycleState = (typeof sessionLifecycleStates)[number];
 export type MicrophonePermissionState =
   (typeof microphonePermissionStates)[number];

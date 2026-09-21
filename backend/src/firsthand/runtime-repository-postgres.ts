@@ -303,18 +303,46 @@ export async function resetRuntimeSession(payload: SessionPayload) {
  * back resumes rather than starting again - which is also why the completed
  * case is answered here rather than filtered out: the route needs to tell the
  * two apart.
+ *
+ * `sessionNotExpired` (cto/AdaptaLabs#129, LOW-8) is the second half of that
+ * same "tell them apart" job: whether the session's own token is still live,
+ * for `isInFlightRuntimeSession` to combine with `sessionStatus`. Read from
+ * `session_payload->'session'->>'expires_at'` - the JSONB PAYLOAD - rather
+ * than the `runtime_sessions.expires_at` ROW COLUMN. The column is written
+ * once at INSERT and never revisited by anything afterwards; session-store.ts
+ * (`isExpired`) documents a real case where the column and the payload
+ * disagreed and settled on the payload as the only authoritative copy for
+ * this exact question. Reading the column here would be a SECOND, looser
+ * definition of the same fact, exactly the kind of drift this function exists
+ * to prevent. Compared against `NOW()` - the DATABASE clock, matching
+ * `loadMintableOpportunity`'s `has_closed`, so neither an app server's drift
+ * nor a mismatched read/write path can move the boundary. A payload with no
+ * `expires_at` at all (pre-dates the field) reads as expired, matching
+ * `isExpired`'s fail-closed default: a token with no stated lifetime is
+ * refused, not honoured forever.
  */
 export async function findParticipantSessionForOpportunity(input: {
   opportunityId: string;
   participantId: string;
-}): Promise<{ token: string; sessionStatus: string } | null> {
+}): Promise<{
+  token: string;
+  sessionStatus: string;
+  completedAt: string | null;
+  sessionNotExpired: boolean;
+} | null> {
   return withRuntimeDatabaseClient(async (client) => {
     const result = await client.query<{
       token: string;
       session_status: string;
+      completed_at: Date | null;
+      session_not_expired: boolean;
     }>(
       `
-        SELECT token, session_status
+        SELECT token, session_status, completed_at,
+               (
+                 (session_payload->'session'->>'expires_at') IS NOT NULL
+                 AND (session_payload->'session'->>'expires_at')::timestamptz > NOW()
+               ) AS session_not_expired
         FROM runtime_sessions
         WHERE opportunity_id = $1
           AND participant_id = $2
@@ -325,7 +353,14 @@ export async function findParticipantSessionForOpportunity(input: {
     );
 
     const row = result.rows[0];
-    return row ? { token: row.token, sessionStatus: row.session_status } : null;
+    return row
+      ? {
+          token: row.token,
+          sessionStatus: row.session_status,
+          completedAt: row.completed_at ? row.completed_at.toISOString() : null,
+          sessionNotExpired: row.session_not_expired
+        }
+      : null;
   });
 }
 

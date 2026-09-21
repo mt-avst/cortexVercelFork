@@ -242,10 +242,21 @@ export interface Opportunity {
    * and drops the Start button, and the home row reads "Completed" - and false
    * (or the whole object absent) means they can still take part. `completedAt`
    * is the ISO timestamp of that completion, or null.
+   *
+   * `inProgress` (cto/AdaptaLabs#129) is present only on the single-
+   * opportunity detail read (`GET /:id`), not the list (`GET /`): true when
+   * the viewer holds a live, unanswered, unexpired session on this study -
+   * the SAME in-flight definition the survey-session mint route's resume
+   * lookup uses, so a participant this says can Resume is exactly the
+   * participant that route would actually resume. It is what lets a `closed`
+   * study still open at 200 for a participant mid-survey when the hourly
+   * sweep closed it out from under them (see `unavailableOpportunityError`
+   * server-side) - everyone else on a closed study still gets 410.
    */
   completion?: {
     completed: boolean;
     completedAt: string | null;
+    inProgress?: boolean;
   };
 }
 

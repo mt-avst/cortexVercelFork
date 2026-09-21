@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   answeredRuntimeStates,
   isAnsweredRuntimeStatus,
-  sessionLifecycleStates
+  isInFlightRuntimeSession,
+  sessionLifecycleStates,
+  terminalUnansweredRuntimeStates
 } from "../state-model";
 
 describe("isAnsweredRuntimeStatus", () => {
@@ -49,5 +51,56 @@ describe("isAnsweredRuntimeStatus", () => {
 
   it("returns false for an unknown status string", () => {
     expect(isAnsweredRuntimeStatus("banana")).toBe(false);
+  });
+});
+
+describe("isInFlightRuntimeSession", () => {
+  // Pinned as literals for the same reason answeredRuntimeStates is: this is
+  // the ONE predicate the survey-session mint route's resume lookup and the
+  // participant detail read's completion.inProgress both use, and a drift in
+  // it is a drift in both (cto/AdaptaLabs#129).
+  it("pins the terminal-unanswered set to exactly abandoned and failed", () => {
+    expect([...terminalUnansweredRuntimeStates]).toEqual(["abandoned", "failed"]);
+  });
+
+  it("is in flight for an unanswered, unexpired session", () => {
+    expect(
+      isInFlightRuntimeSession({ sessionStatus: "link_opened", sessionNotExpired: true })
+    ).toBe(true);
+  });
+
+  it("is not in flight once the session has been answered (completed)", () => {
+    expect(
+      isInFlightRuntimeSession({ sessionStatus: "completed", sessionNotExpired: true })
+    ).toBe(false);
+  });
+
+  it("is not in flight while the recording still uploads", () => {
+    // Shares the answered set with the recorded runtime - an uploading
+    // session is done, not resumable.
+    expect(
+      isInFlightRuntimeSession({ sessionStatus: "uploading", sessionNotExpired: true })
+    ).toBe(false);
+  });
+
+  it.each(["abandoned", "failed"])(
+    "is not in flight once the session is terminal-unanswered (%s)",
+    (sessionStatus) => {
+      expect(isInFlightRuntimeSession({ sessionStatus, sessionNotExpired: true })).toBe(false);
+    }
+  );
+
+  it("is not in flight once the session's own token has expired", () => {
+    // An unanswered, non-terminal status - but the payload-carried expiry has
+    // passed. A dead link, not a live one: LOW-8 (cto/AdaptaLabs#129).
+    expect(
+      isInFlightRuntimeSession({ sessionStatus: "link_opened", sessionNotExpired: false })
+    ).toBe(false);
+  });
+
+  it("an answered session outranks expiry: still not in flight even if unexpired", () => {
+    expect(
+      isInFlightRuntimeSession({ sessionStatus: "completed", sessionNotExpired: false })
+    ).toBe(false);
   });
 });
