@@ -22,8 +22,8 @@ import { closeListeningServers, listening } from "../../__tests__/helpers/listen
  *
  * NULL is a real, distinct state - "never recorded", which is every
  * opportunity that predates this column - and must never collapse into
- * `false`. It does NOT gate publish (an open compliance decision - see the
- * ponytail at the publish-validation call sites in this router).
+ * `false`. It deliberately does NOT gate publish (decided 2026-09-21 - see
+ * the publish-validation call sites in this router for why).
  */
 const skipDbTests = process.env.FIRSTHAND_SKIP_DB_TESTS === "1";
 
@@ -244,8 +244,9 @@ describe.skipIf(skipDbTests)("external-delivery consent affirmation against real
    *
    * The affirmation is about ONE external destination. Left alone across a
    * change of `external_link_optional`, a `true` made about tool A silently
-   * reads as an affirmation about tool B - and becomes a compliance hole the
-   * moment the deferred publish gate consults it.
+   * reads as an affirmation about tool B. It gates nothing, but Review would
+   * say "confirmed" for a tool nobody confirmed, and any provenance added
+   * later (cto/AdaptaLabs#126) would record an attestation nobody made.
    *
    * This reset is the FLOOR, not the whole fix. Cortex's own form clears the
    * tick in state when the author edits the link, so a relink saved from the
