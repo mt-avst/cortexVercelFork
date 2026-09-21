@@ -63,7 +63,15 @@ const json = (body: unknown) => ({
 
 test.describe('admin studies table pills share one box (#142)', () => {
   test.beforeEach(async ({ page, baseURL }) => {
-    test.skip(!baseURL?.includes('localhost'), 'route mocks below assume the local stack, not a deployment');
+    // LOUD IN CI, quiet locally. A bare skip on a baseURL predicate is the
+    // shape this spec was moved here to stop: point BASE_URL at 127.0.0.1 or
+    // a service hostname and all five tests vanish while the job stays green.
+    // In CI the skip is the failure, so assert it cannot happen.
+    if (process.env.CI) {
+      expect(baseURL, 'CI must run this spec against the local preview, not skip it').toContain('localhost');
+    } else {
+      test.skip(!baseURL?.includes('localhost'), 'route mocks below assume the local stack, not a deployment');
+    }
 
     await page.route('**/api/me', async (route) => {
       await route.fulfill(
@@ -233,7 +241,12 @@ test.describe('admin studies table pills share one box (#142)', () => {
         pillLeft: p.left,
         pillRight: p.right,
         hitsBeyondPill,
-        overlapWithType: Math.max(0, Math.min(p.right, t.right) - Math.max(p.left, t.left)),
+        // Measured on the LABEL, not the pill. The pill boxes are capped at
+        // their cells (see the docblock above) so they never move, and a
+        // pill-to-pill comparison therefore read 0 even with the clip removed
+        // and the ink hanging ~27px off each end - a witness that could not
+        // testify. The label's own box is the thing that grows.
+        overlapWithType: Math.max(0, Math.min(l.right, t.right) - Math.max(l.left, t.left)),
       };
     });
 

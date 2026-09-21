@@ -67,7 +67,17 @@ describe('admin studies table pill primitive (#142)', () => {
     // own overflow (measured: Chrome hard-clips both ends with no "…"), so
     // the label is wrapped in its own `.admin-study-status__label` span,
     // which does the shrinking and the ellipsis.
-    expect(ADMIN_TSX).toMatch(/<span className="admin-study-status__label">/);
+    //
+    // Matched with the attribute list open rather than as an exact string: the
+    // span carries a `title` as well, and a pin that spells the whole opening
+    // tag fails on any attribute added beside the class - which is a pin
+    // reporting on its own spelling rather than on the structure it is here to
+    // hold.
+    expect(ADMIN_TSX).toMatch(/<span className="admin-study-status__label"[^>]*>/);
+    // The hover affordance for the truncated label. The full string is in the
+    // DOM either way, so a screen reader announces it regardless; this is the
+    // sighted-user half, and it must carry the SAME value the span renders.
+    expect(ADMIN_TSX).toMatch(/<span className="admin-study-status__label" title=\{statusLabel\}>\s*\{statusLabel\}\s*<\/span>/);
     expect(CSS).toMatch(
       /\.admin-study-status__label \{[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap;/
     );
