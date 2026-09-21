@@ -1091,12 +1091,22 @@ body.theme-dark .admin-dashboard .card-header {
   border-bottom: none;
 }
 
+/* cto/AdaptaLabs#141 fix round: the dashboard already had a correct
+   dark-mode literal for every rule below (they are not a dark-mode gap,
+   just pre-existing hardcoded colour). --text-primary/-secondary/-muted
+   resolve to a different grey scale (#F0F0F0/#B8C0CC/#94A3B8) than the
+   #FFFFFF/rgba(224,224,224,*) scale these rules were tuned to, so tokenising
+   them changed the rendered colour beyond what this ticket covers. Restyling
+   this hierarchy onto the semantic scale is a separate, deliberate design
+   change for Nick to sign off - not bundled into an "untheme the admin
+   islands" fix. --color-text-main is the one exact match (#FFFFFF in dark),
+   so headings/titles route through it instead of staying a bare literal. */
 body.theme-dark .admin-dashboard h1,
 body.theme-dark .admin-dashboard h2,
 body.theme-dark .admin-dashboard h3,
 body.theme-dark .admin-dashboard h4,
 body.theme-dark .admin-dashboard .admin-dashboard-title {
-  color: #FFFFFF;
+  color: var(--color-text-main);
 }
 
 body.theme-dark .admin-dashboard p,
@@ -1114,7 +1124,7 @@ body.theme-dark .admin-dashboard small {
 body.theme-dark .admin-dashboard table td strong,
 body.theme-dark .admin-dashboard .admin-table-title,
 body.theme-dark .admin-table-title {
-  color: #FFFFFF;
+  color: var(--color-text-main);
 }
 
 body.theme-dark .admin-dashboard table td small {
@@ -1129,17 +1139,19 @@ body.theme-dark .admin-dashboard table {
   color: #E0E0E0;
 }
 
+/* --border-strong-current resolves to rgba(255, 255, 255, 0.10) in dark,
+   an exact match for the literal this replaced, so it stays tokenised. */
 body.theme-dark .admin-dashboard table th {
-  color: #FFFFFF;
+  color: var(--color-text-main);
   background: transparent;
-  border-color: rgba(255, 255, 255, 0.1);
+  border-color: var(--border-strong-current);
 }
 
 /* Dark Mode: Transparent table header row (matches Light Mode) */
 body.theme-dark .admin-dashboard table thead,
 body.theme-dark .admin-dashboard table thead tr {
   background: transparent !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--border-strong-current);
 }
 
 body.theme-dark .admin-dashboard table td {
@@ -1155,7 +1167,7 @@ body.theme-dark .admin-tabs .nav-link {
 }
 
 body.theme-dark .admin-tabs .nav-link:hover {
-  color: #FFFFFF;
+  color: var(--color-text-main);
   background: rgba(255, 255, 255, 0.05);
 }
 
@@ -1184,6 +1196,12 @@ body.theme-dark .admin-data-table-container {
   background: rgba(255, 255, 255, var(--glass-opacity-panel));
   border: 1px solid var(--border-strength-medium);
   box-shadow: var(--depth-2), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  /* ponytail: #4DD0E1 has no matching semantic token - --accent-teal is a
+     different hue (#4DD4C0) - and the light-theme container a few hundred
+     lines down carries no equivalent accent stripe at all, so retokenising
+     this is a design decision (a real --accent-cyan token, or drop the
+     stripe to match light) rather than a pure migration. Left as the one
+     literal in this rule; cto/AdaptaLabs#141. */
   border-top: 2px solid #4DD0E1;
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
@@ -1193,7 +1211,7 @@ body.theme-dark .admin-data-table-container {
 body.theme-dark .admin-settings-btn {
   background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #FFFFFF;
+  color: var(--color-text-main);
   border-radius: 6px;
   font-weight: 600;
   font-size: 0.85rem;
@@ -1206,7 +1224,7 @@ body.theme-dark .admin-settings-btn:hover {
 }
 
 body.theme-dark .admin-stat-card .stat-value {
-  color: #FFFFFF;
+  color: var(--color-text-main);
 }
 
 body.theme-dark .admin-stat-card .stat-label {
@@ -1238,7 +1256,7 @@ body.theme-dark .cortex-page-title {
 
 /* Admin table text hierarchy - dark mode */
 body.theme-dark .row-title {
-  color: #FFFFFF;
+  color: var(--color-text-main);
 }
 
 body.theme-dark .row-desc {
@@ -1259,7 +1277,7 @@ body.theme-dark .admin-settings-btn {
 
 body.theme-dark .admin-settings-btn:hover {
   background: rgba(255, 255, 255, 0.1);
-  color: #FFFFFF;
+  color: var(--color-text-main);
 }
 
 body.theme-dark .admin-create-btn {
@@ -1603,7 +1621,7 @@ body.theme-dark .admin-dashboard table tbody td small:not(.badge) {
 /* Admin loading and empty states - dark mode */
 body.theme-dark .admin-loading-text,
 body.theme-dark .admin-empty-title {
-  color: #FFFFFF;
+  color: var(--color-text-main);
 }
 
 body.theme-dark .admin-empty-text {
@@ -1624,7 +1642,7 @@ body.theme-dark .custom-tab-button:hover {
 }
 
 body.theme-dark .custom-tab-button.active {
-  color: #FFFFFF;
+  color: var(--color-text-main);
   background: transparent;
   border-bottom: 2px solid var(--color-brand-orange);
 }
@@ -1662,12 +1680,19 @@ body.theme-light .admin-dashboard .card-header-transparent {
   border-bottom: none;
 }
 
+/* cto/AdaptaLabs#141 fix round: same call as the dark block above - this
+   grey scale predates the ticket and was already correct for light, so
+   tokenising onto --text-primary/-secondary/-muted (#14213D/#3D4A5C/#5F6B7A)
+   would shift the rendered colour away from the #1A1A1A/#374151/#4B5563
+   scale these rules render today. --text-on-light is theme-invariant at
+   #1A1A1A, an exact match, so the two headings/titles below route through
+   it instead of staying a bare literal; the rest keep their literal. */
 body.theme-light .admin-dashboard h1,
 body.theme-light .admin-dashboard h2,
 body.theme-light .admin-dashboard h3,
 body.theme-light .admin-dashboard h4,
 body.theme-light .admin-dashboard .admin-dashboard-title {
-  color: #1A1A1A;
+  color: var(--text-on-light);
 }
 
 body.theme-light .admin-dashboard p,
@@ -1685,7 +1710,7 @@ body.theme-light .admin-dashboard small {
 body.theme-light .admin-dashboard table td strong,
 body.theme-light .admin-dashboard .admin-table-title,
 body.theme-light .admin-table-title {
-  color: #1A1A1A;
+  color: var(--text-on-light);
 }
 
 body.theme-light .admin-dashboard table td small {
@@ -1801,7 +1826,7 @@ body.theme-light .admin-data-table tbody tr:hover {
 }
 
 body.theme-light .admin-stat-card .stat-value {
-  color: #1A1A1A;
+  color: var(--text-on-light);
 }
 
 body.theme-light .admin-stat-card .stat-label {
@@ -1854,7 +1879,7 @@ body.theme-light .admin-settings-btn:hover {
 
 /* Admin table text hierarchy - light mode */
 body.theme-light .row-title {
-  color: #1A1A1A;
+  color: var(--text-on-light);
 }
 
 body.theme-light .row-desc {
@@ -1943,7 +1968,7 @@ body.theme-light .admin-create-btn:hover {
 /* Admin loading and empty states - light mode */
 body.theme-light .admin-loading-text,
 body.theme-light .admin-empty-title {
-  color: #1A1A1A;
+  color: var(--text-on-light);
 }
 
 body.theme-light .admin-empty-text {

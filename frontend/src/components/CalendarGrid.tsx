@@ -1176,7 +1176,30 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                       marginBottom: '4px',
                       fontSize: 'var(--font-size-small, 0.875rem)',
                       fontWeight: 600,
-                      color: isToday ? 'var(--color-emerald-500, #10b981)' : undefined
+                      // cto/AdaptaLabs#141: this was an undefined-token fallback on
+                      // --color-emerald-500 - not a token defined nowhere, it is
+                      // Tailwind v4's own theme variable (renders oklch(0.696 0.17
+                      // 162.48)), just one the guard below cannot see: it only reads
+                      // src/**/*.css, so a Tailwind-generated custom property is
+                      // invisible to it. The rule therefore did NOT fall through to
+                      // its literal fallback: it rendered Tailwind's emerald-500,
+                      // oklch(0.696 0.17 162.48) = rgb(0, 188, 125), in both themes -
+                      // measured 2.22:1 on the light cream ground, so it failed AA
+                      // wherever the guard could not see it.
+                      //
+                      // The old value is DESCRIBED rather than quoted on purpose. The
+                      // guard in styles/__tests__/undefined-token-color-fallback.test.ts
+                      // scans raw file content, comments included, so a comment quoting
+                      // the old `var(--token, #hex)` shape reports itself as a live
+                      // offence and keeps the entry pinned in KNOWN_DEBT for ever. Swapping in the one green token that IS
+                      // defined (--color-analytics-green, #10B981, byte-identical to
+                      // the old fallback) would have kept the fix cosmetic but still
+                      // broken: it measures 2.28:1 on the light cream ground, well
+                      // under the 4.5:1 this bold-but-not-large (14px/600) marker
+                      // needs. --status-success-text is the pair actually designed
+                      // for bare text in both themes and clears AA in each
+                      // (11.30:1 dark, 5.30:1 light).
+                      color: isToday ? 'var(--status-success-text)' : undefined
                     }}
                   >
                     {formatDate(date)}

@@ -255,7 +255,11 @@ const ConsentStep: React.FC<ConsentStepProps> = ({
           <blockquote
             className="mt-3 ps-3"
             data-testid="consent-read-only-text"
-            style={{ borderLeft: '3px solid var(--border-color, #ced4da)' }}
+            // cto/AdaptaLabs#141: --border-color is never defined anywhere in
+            // src, so this always rendered the #ced4da fallback in both
+            // themes. --border-card is the token .border-l already uses for
+            // exactly this kind of plain decorative left-border accent.
+            style={{ borderLeft: '3px solid var(--border-card)' }}
           >
             {consentText}
           </blockquote>
@@ -370,7 +374,9 @@ const ConsentStep: React.FC<ConsentStepProps> = ({
           <blockquote
             className="mt-3 ps-3"
             data-testid="consent-locked-text"
-            style={{ borderLeft: '3px solid var(--border-color, #ced4da)' }}
+            // cto/AdaptaLabs#141: see the read-only variant above - same
+            // never-defined --border-color, same --border-card fix.
+            style={{ borderLeft: '3px solid var(--border-card)' }}
           >
             {consentText}
           </blockquote>
