@@ -571,7 +571,7 @@ describe.skipIf(skipDbTests)("the streamed CSV export, against real Postgres", (
    * THE SUPERSEDED FLAG, RULE BY RULE (cto/AdaptaLabs#152).
    *
    * The stream decides which sessions hold a superseded answer in SQL
-   * (`supersededCsvSessions`), because it reads a hundred sessions at a time
+   * (`readSupersededSessions`), because it reads a hundred sessions at a time
    * and a person's other sessions can sit in any batch. The oracle decides it
    * in JavaScript (`supersededAnswers`). Those are two statements of one rule,
    * and this is the test that keeps them one: every arm of the rule has a

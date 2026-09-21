@@ -312,7 +312,7 @@ export function removedQuestionColumns(
  * THE ORACLE'S grouping, over a whole study at once. The stream cannot use
  * it: it reads a hundred SESSIONS at a time - a bound, since a person can
  * hold any number of sessions - so it takes its order from a SQL preflight
- * and its flag from `supersededCsvSessions`, the SQL twin of
+ * and its flag from `readSupersededSessions`, the SQL twin of
  * `supersededAnswers`. survey-csv-export-postgres.test.ts holds the two to
  * the same bytes.
  *

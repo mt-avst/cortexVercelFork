@@ -539,7 +539,7 @@ const countsAsAnswer = (row: StoredResponse): boolean => {
  * built from - which is how both callers use it.
  *
  * HAS A TWIN IN SQL. The streamed CSV export reads a hundred sessions at a
- * time, so it decides the same thing in `supersededCsvSessions`
+ * time, so it decides the same thing in `readSupersededSessions`
  * (survey-results-repository.ts); change this rule there too.
  * survey-csv-export-postgres.test.ts compares the two byte for byte and goes
  * red if they disagree.

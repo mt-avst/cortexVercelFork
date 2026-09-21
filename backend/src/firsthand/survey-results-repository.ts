@@ -677,7 +677,7 @@ export async function surveyCsvColumns(
  * hundred PEOPLE read one such account's ~100MB in a single statement (the
  * security gate measured it on an intermediate version of #152). Whether a
  * session holds a superseded answer needs the person's OTHER sessions, so that
- * is decided in SQL by `supersededCsvSessions` below rather than by reading
+ * is decided in SQL by `readSupersededSessions` below rather than by reading
  * them all into one batch.
  *
  * `MIN(saved_at), MIN(id)` reproduces the unbatched order EXCEPT WHERE TWO

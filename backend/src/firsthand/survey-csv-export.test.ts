@@ -327,6 +327,31 @@ describe("opening and draining a CSV export", () => {
       statusCode: 413
     });
   });
+
+  it("rolls back the preflight transaction when a read throws, rather than leaving it open", async () => {
+    // cto/AdaptaLabs#152. The three preflight reads share ONE checkout inside a
+    // REPEATABLE READ transaction; a read that throws - here the 413 from the
+    // session-list read - must ROLL BACK before the client returns to the pool,
+    // or the next borrower inherits an open transaction (node-pg does not reset
+    // a connection on release). The test above proves the throw; this proves
+    // the cleanup, which nothing else pins.
+    participantRows = Array.from({ length: 200_001 }, (_u, i) => ({
+      session_id: `s${i}`
+    }));
+
+    await expect(openSurveyCsvExport(scope)).rejects.toMatchObject({
+      statusCode: 413
+    });
+
+    const preflight = checkouts.find((entry) =>
+      entry.sql.some((sql) => sql.includes("GROUP BY r.session_id"))
+    );
+    expect(preflight).toBeDefined();
+    const sql = preflight?.sql ?? [];
+    // Ended on the error path: rolled back, never committed.
+    expect(sql).toContain("ROLLBACK");
+    expect(sql).not.toContain("COMMIT");
+  });
 });
 
 /**

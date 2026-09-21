@@ -70,6 +70,17 @@
     "test": "admits a set that exactly fills the bound"
   },
   {
+    "id": "csv-preflight-rolls-back-on-error",
+    "why": "cto/AdaptaLabs#152. The three CSV-export preflight reads share ONE checkout inside a REPEATABLE READ transaction; a read that throws (e.g. the 413 from the session-list read) must ROLL BACK before the client returns to the pool, or the next borrower inherits an open transaction - node-pg does not reset a connection on release. Remove the ROLLBACK and the error path leaves the transaction open. Mirrors the ROLLBACK canary sites in routes/sessions.ts. Proven KILLED before entry.",
+    "file": "backend/src/firsthand/survey-results-repository.ts",
+    "anchor": "        await client.query(\"ROLLBACK\").catch(() => {});",
+    "mutation": "",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-csv-export.test.ts",
+    "test": "rolls back the preflight transaction when a read throws, rather than leaving it open",
+    "needsDatabase": false
+  },
+  {
     "id": "response-row-bound-is-detectable",
     "why": "The same +1 detector on the unbatched reader, which decides the 413 for the aggregate routes. Without it the largest studies are silently truncated into a mean, an NPS and a chart.",
     "file": "backend/src/firsthand/survey-results-repository.ts",
