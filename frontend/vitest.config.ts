@@ -11,16 +11,16 @@ export default defineConfig({
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     // macOS resource-fork files (._*) on the external drive are not tests
     exclude: ['**/node_modules/**', '**/._*'],
-    // The OpportunityForm autosave specs drive the component's REAL timers
-    // (2s debounce, 5s min-interval, retry backoff) by sleeping wall-clock,
-    // so a handful of tests legitimately take 3.5-12s. Against the default
-    // 5000ms the ~3.5s ones sit on a ~1.4s margin; a contended shared CI
-    // runner eats it and they time out by name, reddening test-frontend and
-    // skipping the deploy. 15s gives them real headroom.
+    // Companion to asyncUtilTimeout: 5000 in setupTests.ts. With findBy/waitFor
+    // now allowed to poll for up to 5s, a test that waits on async DOM plus the
+    // autosave specs that sleep real wall-clock (some legitimately run 3.5-12s)
+    // would blow the default 5000ms test budget. 15s covers both.
     testTimeout: 15_000,
-    // Backstop for the wall-clock tests whose own explicit timeouts are still
-    // thin under heavy contention. Only a FAILED test re-runs, so the green
-    // path is unaffected; a genuine logic break fails all attempts.
+    // Backstop for whatever tips first under heavy CI contention. Only a FAILED
+    // test re-runs, so the green path is unaffected; a genuine logic break fails
+    // every attempt. This alone would have rescued the Admin.test.tsx flake that
+    // skipped #149's deploy; asyncUtilTimeout is the root-cause fix, this is the
+    // safety net.
     retry: 2,
   },
   resolve: {
