@@ -496,7 +496,12 @@ describe('the return-from-form banner and forced refresh', () => {
     expect(vi.mocked(getOpportunities)).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      vi.advanceTimersByTime(150);
+      vi.advanceTimersByTime(149);
+    });
+    expect(vi.mocked(getOpportunities)).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
     });
     expect(vi.mocked(getOpportunities)).toHaveBeenCalledTimes(2);
 
@@ -530,12 +535,21 @@ describe('the return-from-form banner and forced refresh', () => {
     const { unmount } = renderReturning('Study saved');
     await act(async () => {});
 
-    // Control: both timers really are armed, so a zero below means cleared,
-    // not never-scheduled.
-    expect(vi.getTimerCount()).toBeGreaterThanOrEqual(2);
+    // Control: the banner is on screen and the reload has not fired yet, so
+    // both timers really are armed and a cleared clock below means cleared,
+    // not never-scheduled. A bare getTimerCount() control would not say that:
+    // the search-debounce timer alone satisfies a >= 2 count.
+    expect(screen.getByRole('alert')).toHaveTextContent('Study saved');
+    expect(vi.mocked(getOpportunities)).toHaveBeenCalledTimes(1);
 
     unmount();
 
     expect(vi.getTimerCount()).toBe(0);
+    // Attributable: past both delays, the reload the 150ms timer would have
+    // fired never runs.
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(vi.mocked(getOpportunities)).toHaveBeenCalledTimes(1);
   });
 });
