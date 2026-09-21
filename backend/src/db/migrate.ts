@@ -327,20 +327,22 @@ export async function runMigrations() {
     // `status === 'published'`, so an author's confirmation vanished the
     // moment the study was reopened. NULL means "never recorded" - every
     // opportunity that predates this column - and stays distinguishable from
-    // an explicit false; no backfill. Does NOT gate publish: see the ponytail
-    // at the publish-validation call sites in routes/opportunities.ts.
+    // an explicit false; no backfill. Deliberately does NOT gate publish
+    // (decided 2026-09-21): see the publish-validation call sites in
+    // routes/opportunities.ts for why.
     //
     // A BARE BOOLEAN, AND THAT IS ALL IT HOLDS. It records that an affirmation
     // stands right now - not who made it, and not when. There is no actor
     // column and no timestamp, and `updated_at` cannot stand in for one
     // because any edit to the row re-stamps it. Whether provenance is needed
-    // is part of the same open compliance decision as the publish gate
-    // (cto/AdaptaLabs#136). Keeping the flag pointed at the destination
-    // CURRENTLY stored is a rule in the application, not a property of the
-    // column: the authoring form clears the tick when the author edits the
-    // link, and the PATCH path resets the column to NULL when the link it is
-    // handed differs from the one on the row. The database enforces neither,
-    // and the PATCH comparison reads the row outside the write's transaction -
+    // is Legal's question for go-live (cto/AdaptaLabs#126): if they need a
+    // record of the attestation, the answer is provenance columns, not a
+    // gate. Keeping the flag pointed at the destination CURRENTLY stored is a
+    // rule in the application, not a property of the column: the authoring
+    // form clears the tick when the author edits the link, and the PATCH path
+    // resets the column to NULL when the link it is handed differs from the
+    // one on the row. The database enforces neither, and the PATCH comparison
+    // reads the row outside the write's transaction -
     // see the ponytail beside it in routes/opportunities.ts.
     //
     // Readable by every admin, not only the owner - the same reach as the
