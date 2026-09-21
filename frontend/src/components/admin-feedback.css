@@ -2,8 +2,9 @@
  * Feedback Inbox (admin).
  *
  * cto/AdaptaLabs#141: this used to live as a `<style>` tag inlined in
- * AdminFeedback.tsx, plus 25 `style={{}}` blocks on the view modal carrying
- * hardcoded dark-baked colour (`#fff`, `rgba(224, 224, 224, *)`,
+ * AdminFeedback.tsx, plus 8 inline style blocks carrying hardcoded
+ * dark-baked colour - 7 on the view modal and 1 on the error alert, out of
+ * 25 inline style blocks in the file overall (`#fff`, `rgba(224, 224, 224, *)`,
  * `rgba(255, 78, 80, *)`) that overrode the token-driven rules below on
  * specificity, since an inline style always wins over an external
  * stylesheet rule regardless of selector weight. Everything here already

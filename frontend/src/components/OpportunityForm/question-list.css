@@ -16,10 +16,12 @@
  *
  * cto/AdaptaLabs#141: border-card is a real, theme-aware token (aliases
  * --fs-line in light) but predates the --border-*-current / --surface-*-
- * current family review-step.css and pending-approvals.css already use, so
- * the border below is converged to --border-subtle-current (identical value
- * in light - both alias --fs-line; a touch more subtle in dark, 0.06 vs the
- * old 0.10 alpha). --bg-card is deliberately NOT converged to
+ * current family review-step.css and pending-approvals.css already use. The
+ * borders below were converged to --border-subtle-current and then converged
+ * BACK: measured in an engine, the two are identical in light, but in dark
+ * the newer token is a 0.06 alpha against border-card's 0.10, which thins
+ * every card outline by 40% in the one theme this ticket exists to fix.
+ * Preserving the rendered value wins over tidying the token name. --bg-card is deliberately NOT converged to
  * --surface-card-current: in dark, --bg-card is a near-transparent white
  * tint (0.05 alpha, a glass sheen over the app background) while
  * --surface-card-current is a near-opaque panel (0.96 alpha) - swapping it
@@ -36,7 +38,7 @@
 }
 
 .question-card {
-  border: 1px solid var(--border-subtle-current);
+  border: 1px solid var(--border-card);
   border-radius: 8px;
   margin-bottom: 0.5rem;
   background: var(--bg-card);
@@ -139,7 +141,7 @@
   min-width: 32px;
   min-height: 32px;
   padding: 0;
-  border: 1px solid var(--border-subtle-current);
+  border: 1px solid var(--border-card);
   border-radius: 6px;
   background: none;
   color: inherit;
@@ -167,7 +169,7 @@
   min-width: 56px;
   min-height: 32px;
   padding: 0 0.25rem;
-  border: 1px solid var(--border-subtle-current);
+  border: 1px solid var(--border-card);
   border-radius: 6px;
   background: none;
   color: inherit;

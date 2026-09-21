@@ -1181,8 +1181,11 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                       // Tailwind v4's own theme variable (renders oklch(0.696 0.17
                       // 162.48)), just one the guard below cannot see: it only reads
                       // src/**/*.css, so a Tailwind-generated custom property is
-                      // invisible to it and the rule always fell through to its
-                      // literal fallback regardless of theme.
+                      // invisible to it. The rule therefore did NOT fall through to
+                      // its literal fallback: it rendered Tailwind's emerald-500,
+                      // oklch(0.696 0.17 162.48) = rgb(0, 188, 125), in both themes -
+                      // measured 2.22:1 on the light cream ground, so it failed AA
+                      // wherever the guard could not see it.
                       //
                       // The old value is DESCRIBED rather than quoted on purpose. The
                       // guard in styles/__tests__/undefined-token-color-fallback.test.ts
