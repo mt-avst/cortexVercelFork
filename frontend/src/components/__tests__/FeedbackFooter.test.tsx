@@ -1,8 +1,8 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 
 import FeedbackFooter from '../FeedbackFooter';
 import { submitFeedback } from '../../api/client';
@@ -76,5 +76,61 @@ describe('FeedbackFooter', () => {
 
       expect(screen.getByLabelText('How we can improve Cortex')).toBeInTheDocument();
     });
+  });
+});
+
+// #146: a successful submit armed a bare setTimeout(() => setSubmitted(false),
+// 3000) with no clearTimeout anywhere. Under React 18 a setState after
+// unmount is a silent no-op, but the timer itself keeps running - if it
+// outlives the vitest file, that file can exit non-zero on `window is not
+// defined`, the failure mode !496 fixed on Admin.tsx.
+describe('the submitted-banner timer', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // Types feedback and submits under real timers, then switches to fake
+  // timers only once the submit is fired, so advanceTimersByTimeAsync can
+  // flush the submit promise and the timer both.
+  const armTheBanner = async () => {
+    const rendered = render(
+      <MemoryRouter>
+        <FeedbackFooter />
+      </MemoryRouter>
+    );
+    fireEvent.change(screen.getByLabelText('How we can improve Cortex'), {
+      target: { value: 'This is broken' },
+    });
+
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByRole('button', { name: 'Send feedback' }));
+    await vi.advanceTimersByTimeAsync(0);
+
+    return rendered;
+  };
+
+  it('hides the submitted banner after 3000ms', async () => {
+    await armTheBanner();
+
+    expect(screen.getByText('Thanks for your feedback!')).toBeInTheDocument();
+
+    await vi.advanceTimersByTimeAsync(2999);
+    expect(screen.getByText('Thanks for your feedback!')).toBeInTheDocument();
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(screen.queryByText('Thanks for your feedback!')).not.toBeInTheDocument();
+  });
+
+  it('leaves no timer pending once FeedbackFooter unmounts', async () => {
+    const { unmount } = await armTheBanner();
+
+    // Control: the banner really is on screen, so the timer is armed and not
+    // merely never-scheduled - a bare getTimerCount() alone would not say that.
+    expect(screen.getByText('Thanks for your feedback!')).toBeInTheDocument();
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+
+    unmount();
+
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

@@ -1,9 +1,16 @@
 import React from 'react';
-import { render, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
-import { beforeEach, vi } from 'vitest';
+import { beforeEach, afterEach, describe, it, expect, vi } from 'vitest';
 
 import Header from '../Header';
+import { requestAdminAccess } from '../../api/client';
+
+vi.mock('../../api/client', () => ({
+  requestAdminAccess: vi.fn(),
+}));
+
+const mockRequestAdminAccess = vi.mocked(requestAdminAccess);
 
 // Header requires the auth and theme contexts. The default is a *resolved*
 // signed-out visitor (user null, initialAuthCheck true) - most existing tests
@@ -463,5 +470,93 @@ describe('Collapsing phone menu', () => {
     expect(
       within(mobile).getByRole('button', { name: /Switch to (dark|light) mode/i })
     ).toBeInTheDocument();
+  });
+});
+
+/**
+ * #146: both request-admin branches (success and error) armed a bare
+ * setTimeout(() => setAdminRequestMessage(null), 5000) with no clearTimeout
+ * anywhere. Under React 18 a setState after unmount is a silent no-op, but the
+ * timer itself keeps running - if it outlives the vitest file, that file can
+ * exit non-zero on `window is not defined`, the failure mode !496 fixed on
+ * Admin.tsx.
+ *
+ * The admin-request message only renders inside the profile dropdown's own
+ * item list, which Dropdown mounts only while open - it auto-closes the menu
+ * the moment the "Request Admin Access" item is clicked (to open the
+ * confirmation modal), so the banner has to be observed by reopening the
+ * dropdown after confirming, not by watching the menu that opened it.
+ */
+describe('the admin-request banner timer', () => {
+  beforeEach(() => {
+    auth.user = { name: 'A Person', role: 'employee' };
+    mockRequestAdminAccess.mockResolvedValue({
+      success: true,
+      request: { id: 'req-1' } as never,
+      message: 'Request submitted',
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const openProfileMenu = (container: HTMLElement) => {
+    const desktop = container.querySelector('.header-actions--desktop') as HTMLElement;
+    fireEvent.click(within(desktop).getByRole('button', { name: 'User profile menu' }));
+    return desktop;
+  };
+
+  // Opens the profile menu, requests admin access and confirms - under real
+  // timers, since only the confirm click itself needs to be intercepted.
+  // Fake timers take over immediately before that click so
+  // advanceTimersByTimeAsync can flush both the request promise and the timer.
+  const armTheBanner = async (container: HTMLElement) => {
+    const desktop = openProfileMenu(container);
+    fireEvent.click(within(desktop).getByRole('menuitem', { name: /Request Admin Access/i }));
+
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByRole('button', { name: 'Request Admin Access' }));
+    await vi.advanceTimersByTimeAsync(0);
+  };
+
+  it('hides the request-admin banner after 5000ms', async () => {
+    const { container } = render(
+      <BrowserRouter>
+        <Header />
+      </BrowserRouter>
+    );
+    await armTheBanner(container);
+
+    // Reopen: the message lives in profileMenuItems(), which Dropdown only
+    // mounts while open, and the item click above closed it.
+    let desktop = openProfileMenu(container);
+    expect(within(desktop).getByText('Request submitted')).toBeInTheDocument();
+
+    await vi.advanceTimersByTimeAsync(4999);
+    desktop = container.querySelector('.header-actions--desktop') as HTMLElement;
+    expect(within(desktop).getByText('Request submitted')).toBeInTheDocument();
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(within(desktop).queryByText('Request submitted')).not.toBeInTheDocument();
+  });
+
+  it('leaves no timer pending once Header unmounts', async () => {
+    const { container, unmount } = render(
+      <BrowserRouter>
+        <Header />
+      </BrowserRouter>
+    );
+    await armTheBanner(container);
+
+    // Control: the banner really is on screen, so the timer is armed and not
+    // merely never-scheduled - a bare getTimerCount() alone would not say that.
+    const desktop = openProfileMenu(container);
+    expect(within(desktop).getByText('Request submitted')).toBeInTheDocument();
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+
+    unmount();
+
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
