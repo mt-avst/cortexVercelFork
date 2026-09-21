@@ -7,9 +7,9 @@ import { defineConfig, devices } from '@playwright/test';
  *
  * `testMatch` is an allow-list, so a spec that is not named here runs in NO
  * pipeline at all. `admin-pill-primitive.test.ts` (#142) sat outside it and
- * was executed by nothing but a developer's own machine - the CI job below
- * (`test-a11y`, `vite preview` on localhost:3100) is the only gate either of
- * these suites has.
+ * was executed by nothing but a developer's own machine - the `test-a11y` job
+ * in `.gitlab-ci.yml`, which serves a real `vite build` through `vite preview`
+ * on localhost:3100, is the only gate either of these suites has.
  */
 export default defineConfig({
   testDir: './e2e',
