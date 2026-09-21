@@ -72,6 +72,8 @@ const Admin: React.FC = () => {
   // table and the snapshot counts to every researcher, together.
   const [showAllResearchers, setShowAllResearchers] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string>('');
+  const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Counts for the tab badges and the "Needs attention" panel. Fetched here so
   // the badge shows a number without opening the tab; the tab components still
   // own their own full fetch.
@@ -262,17 +264,27 @@ const Admin: React.FC = () => {
         setSuccessMessage(location.state.message);
         // Clear success message after delay (longer for draft warnings)
         const isDraftWarning = location.state.message.includes('DRAFT');
-        setTimeout(() => setSuccessMessage(''), isDraftWarning ? 5000 : 3000);
+        if (successTimerRef.current) clearTimeout(successTimerRef.current);
+        successTimerRef.current = setTimeout(() => setSuccessMessage(''), isDraftWarning ? 5000 : 3000);
       }
       // Clear the refresh state first to prevent duplicate calls
       navigate(location.pathname, { replace: true, state: {} });
       // Force refresh without filters to ensure new items are visible
       // Use a small delay to ensure navigation is complete
-      setTimeout(() => {
+      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+      refreshTimerRef.current = setTimeout(() => {
         loadOpportunities(true); // true = force clear filters
       }, 150);
     }
   }, [location.state, user, navigate, location.pathname, loadOpportunities]);
+
+  // Clear the banner and refresh timers on unmount only. They cannot be
+  // cleared from the effect above: its own navigate() changes location.state
+  // and re-runs it, so an effect-scoped cleanup would cancel both at once.
+  useEffect(() => () => {
+    if (successTimerRef.current) clearTimeout(successTimerRef.current);
+    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+  }, []);
 
   const handleDelete = (id: string, title: string) => {
     setDeleteConfirm({ show: true, opportunity: { id, title } });
