@@ -31,8 +31,9 @@ import apiRouter from '../api';
 import authRouter from '../auth';
 import cronRouter from '../cron';
 // The assembled app, imported for its mount table and nothing else. `index.ts`
-// guards `app.listen` and both cron schedules behind `NODE_ENV !== 'test'`
-// precisely so a test can read the real wiring rather than a copy of it.
+// assembles the app with no side effects at all - the cron schedules and
+// `app.listen` live in `server.ts`, the process entrypoint (#153) - precisely so
+// a test can read the real wiring rather than a copy of it.
 import app from '../../index';
 
 /**
@@ -408,7 +409,8 @@ function routersReachedFrom(roots: Router[]): Set<unknown> {
 /**
  * THE THREE ROUTERS `index.ts` MOUNTS ON THE APP, and their URLs.
  *
- * A literal, because importing `index.ts` starts a server and a scheduler.
+ * A literal, not derived from the app itself, so a changed, added or dropped
+ * mount fails this by name.
  *
  * IT IS THE PREFIXES THAT NEEDED THE GUARD, and an earlier version of this
  * docblock claimed one it did not have. It said the literal "is checked twice
@@ -705,24 +707,22 @@ const appLayers = (): Layer[] =>
   (app as unknown as { _router: { stack: Layer[] } })._router.stack;
 
 /**
- * `index.ts` re-evaluated under another NODE_ENV, and BOUNDED.
+ * `index.ts` re-evaluated under another NODE_ENV.
  *
- * Everything `index.ts` guards behind `NODE_ENV !== 'test'` fires here: both
- * cron schedules and `app.listen`. The naive version of this helper hung the
- * runner - a jest job timeout with no named failing test, which is the worst
- * kind of regression to read - so the two side effects are held rather than
- * hoped about. `node-cron` is stubbed, and `applyServerTimeouts` is replaced by
- * a capture so the socket `listen` opens is closed before this returns. PORT 0
- * means an ephemeral port, never a fixed one two suites could contend for.
+ * index.ts assembles the app with NO side effects - the cron schedules and
+ * `app.listen` live in server.ts (#153), which this never imports - so a
+ * re-import binds no socket and schedules no job. It simply re-runs every
+ * assembly branch on `process.env`, which is what `ENABLE_CSRF` is read from.
+ * (Before #153 the listen ran here at module scope; re-importing under a
+ * non-test NODE_ENV bound the real PORT and hung or reddened this file when
+ * anything held that port. That is the whole reason the side effects moved.)
  *
  * WHAT THIS ARM DOES AND DOES NOT REPRODUCE, measured rather than assumed.
  *
- * It re-evaluates every branch on `process.env`, which is what `index.ts` uses
- * for `app.listen` and both cron schedules, and what `ENABLE_CSRF` is read
- * from. So `ENABLE_CSRF=true` is set here to bring up the `if (csrfEnabled)`
- * block and its `GET /api/csrf-token` route - a real conditional endpoint the
- * `test`-time walk cannot see, and the reason this arm found something rather
- * than merely confirming something.
+ * `ENABLE_CSRF=true` is set here to bring up the `if (csrfEnabled)` block and
+ * its `GET /api/csrf-token` route - a real conditional endpoint the `test`-time
+ * walk cannot see, and the reason this arm found something rather than merely
+ * confirming something.
  *
  * It does NOT reproduce a branch on the `config` SINGLETON. `config` is
  * validated and built once at first import, and the file-level
@@ -737,46 +737,22 @@ const appLayers = (): Layer[] =>
  * distinct from `process.env.NODE_ENV` - is still invisible to this file.
  *   -> closing it needs `config` un-mocked in this suite, which means a real
  *      pg Pool at import, or a `getBackendConfig` seam to inject through.
- *
- * One more trap worth recording: `node-cron` stubbed without
- * `__esModule: true` makes the interop helper wrap the mock, leaves
- * `cron.schedule` undefined and fails the import - which would have left this
- * arm red for a reason having nothing to do with routes.
  */
 function appStackUnder(nodeEnv: string): Layer[] {
   const previousEnv = process.env.NODE_ENV;
-  const previousPort = process.env.PORT;
   const previousCsrf = process.env.ENABLE_CSRF;
   process.env.NODE_ENV = nodeEnv;
-  process.env.PORT = '0';
   process.env.ENABLE_CSRF = 'true';
 
-  let server: { close: (cb?: () => void) => void } | undefined;
   try {
     let stack: Layer[] = [];
     jest.isolateModules(() => {
-      // `__esModule` matters: `index.ts` does `import cron from 'node-cron'`,
-      // so without it the interop helper wraps the whole mock as `default` and
-      // `cron.schedule` is undefined at import time.
-      jest.doMock('node-cron', () => ({
-        __esModule: true,
-        default: { schedule: () => undefined }
-      }));
-      jest.doMock('../../server-timeouts', () => ({
-        applyServerTimeouts: (listening: typeof server) => {
-          server = listening;
-          return listening;
-        }
-      }));
       const isolated = (require('../../index') as { default: unknown }).default;
       stack = (isolated as { _router: { stack: Layer[] } })._router.stack;
     });
     return stack;
   } finally {
-    server?.close();
     process.env.NODE_ENV = previousEnv;
-    if (previousPort === undefined) delete process.env.PORT;
-    else process.env.PORT = previousPort;
     if (previousCsrf === undefined) delete process.env.ENABLE_CSRF;
     else process.env.ENABLE_CSRF = previousCsrf;
   }
@@ -981,10 +957,10 @@ describe('the authorisation inventory', () => {
   it('mounts the same four routers when NODE_ENV is production', () => {
     // READING THE REAL APP BOUGHT A DEPENDENCE ON *WHICH* REAL APP. The three
     // checks above import it once, under `NODE_ENV=test`, and `index.ts`
-    // already branches on `NODE_ENV` three times - `app.listen` and both cron
-    // schedules - so a mount inside `if (process.env.NODE_ENV !== 'test')` is
-    // the idiomatic shape in that exact file and was invisible: two variants
-    // both survived 19/19.
+    // already branches on `NODE_ENV` several times during assembly - trust
+    // proxy, helmet, the dev-only DevTools route - so a mount inside a
+    // `NODE_ENV`-gated branch is the idiomatic shape in that exact file and was
+    // invisible: two variants both survived 19/19.
     //
     // Same tool as the dev-login routes below, pointed at `index.ts` instead of
     // `auth.ts`. `production` is the arm that matters; a `test`-only mount is

@@ -43,7 +43,7 @@ function bearerMatches(authHeader: string | undefined, cronSecret: string | unde
 /**
  * GET /api/cron/send-reminders
  * Manual/ops trigger for the daily reminder job (the in-process scheduler in
- * index.ts runs it automatically). Secured by CRON_SECRET via
+ * server.ts runs it automatically). Secured by CRON_SECRET via
  * Authorization: Bearer <CRON_SECRET>.
  */
 router.get(

@@ -58,7 +58,7 @@ export const SERVER_SOCKET_TIMEOUT_MS = 360_000;
 /**
  * Applies all three, and returns the server so a caller can assert on it.
  *
- * Separate from index.ts because index.ts binds a port on import unless
+ * Separate from server.ts because server.ts binds a port on import unless
  * NODE_ENV is 'test' - so the values themselves would be untestable if they
  * lived there, and untestable numbers are how a policy constant drifts.
  */

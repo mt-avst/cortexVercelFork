@@ -81,25 +81,28 @@ describe('server timeouts', () => {
 /**
  * A SOURCE SCAN, because the call site cannot be reached any other way.
  *
- * index.ts binds a port on import unless NODE_ENV is 'test', so no test can
- * import it and watch it listen - which means the function above can be
- * correct, tested and never called. That is the shape of a test that cannot
- * fail, and it is the one defect this repository keeps paying for.
+ * server.ts binds a port on import unless NODE_ENV is 'test' (the listen moved
+ * there from index.ts, #153), so no test can import it and watch it listen -
+ * which means the function above can be correct, tested and never called. That
+ * is the shape of a test that cannot fail, and it is the one defect this
+ * repository keeps paying for.
  *
  * The same technique as __tests__/listening-call-sites.test.ts, for the same
  * reason: the failure being guarded against is a line that is simply absent,
  * and there is nothing absent to instrument.
  */
 describe('the server timeouts are actually wired up', () => {
+  // The listen lives in server.ts, the process entrypoint, not index.ts which
+  // only assembles the app (#153).
   const source = fs.readFileSync(
-    path.resolve(__dirname, '..', 'index.ts'),
+    path.resolve(__dirname, '..', 'server.ts'),
     'utf8'
   );
 
   /** `applyServerTimeouts(app.listen(` with any spacing. */
   const WIRED = /applyServerTimeouts\(\s*app\.listen\(/;
 
-  it('wraps the listen call in index.ts', () => {
+  it('wraps the listen call in server.ts', () => {
     // The control for "the file was read and looks like we think it does". A
     // moved or renamed entry point would make the assertion below fail for a
     // reason that has nothing to do with the timeouts, and this says which.

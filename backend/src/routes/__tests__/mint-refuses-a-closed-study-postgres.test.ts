@@ -86,7 +86,7 @@ let pool: pg.Pool;
 let app: express.Express;
 /**
  * The REAL hourly sweep (cto/AdaptaLabs#129, HIGH-1) - the same function
- * `index.ts` schedules - not a hand-rolled `UPDATE opportunities SET status`.
+ * `server.ts` schedules - not a hand-rolled `UPDATE opportunities SET status`.
  * A fixture that only sets `status: 'closed'` at seed time cannot prove
  * anything about the sweep reaching a study that opened published: this is
  * what proves the resume path survives the ACTUAL state transition, not a
