@@ -270,10 +270,11 @@ describe.skipIf(skipDbTests)("the CSV batch read, against real Postgres", () => 
    * attempt each, `logical_session_id` and `session_id` are equal for every row
    * and that mutation is a no-op no assertion could see.
    *
-   * The second attempt carries NO ANSWERS OF ITS OWN, deliberately.
-   * `surveyCsvParticipantIds` reads from participant_responses, so a session
-   * with no answers adds no participant: the id list stays 150 and the batches
-   * stay 100 and 50. It changes the JOIN's right-hand side and nothing else.
+   * The second attempt carries NO ANSWERS OF ITS OWN, deliberately. The session
+   * list preflight (`readCsvSessions`) reads from participant_responses, so a
+   * session with no answers adds no participant: the id list stays 150 and the
+   * batches stay 100 and 50. It changes the JOIN's right-hand side and nothing
+   * else.
    */
   async function seedParticipants(): Promise<void> {
     await pool.query(

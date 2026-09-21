@@ -63,8 +63,8 @@
     "id": "csv-participant-bound-admits-its-own-boundary",
     "why": "Only the refusing side was pinned, so `>` becoming `>=` survived every test in the repository - and in production that turns the largest legitimate export into a 413 naming a limit it has not reached. A boundary needs both of its sides.",
     "file": "backend/src/firsthand/survey-results-repository.ts",
-    "anchor": "      if (result.rows.length > MAX_CSV_PARTICIPANTS) {",
-    "mutation": "      if (result.rows.length >= MAX_CSV_PARTICIPANTS) {",
+    "anchor": "  if (result.rows.length > MAX_CSV_PARTICIPANTS) {",
+    "mutation": "  if (result.rows.length >= MAX_CSV_PARTICIPANTS) {",
     "runner": "vitest",
     "spec": "src/firsthand/survey-csv-export.test.ts",
     "test": "admits a set that exactly fills the bound"
@@ -2867,9 +2867,9 @@
     "test": "flags superseded sessions exactly as the whole-string builder does, across batches",
     "needsDatabase": true,
     "file": "backend/src/firsthand/survey-results-repository.ts",
-    "why": "cto/AdaptaLabs#152. The SQL twin of the blank-answer rule: a later answer of nothing but whitespace - including non-breaking spaces, which Postgres `[:space:]` would not treat as blank - must not supersede a real one. Without the predicate the CSV flags a row the results page does not treat as replaced. Proven KILLED before entry.",
+    "why": "cto/AdaptaLabs#152. The SQL twin of the blank-answer rule: a later answer of nothing but whitespace - including non-breaking spaces, which Postgres `[:space:]` would not treat as blank - must not supersede a real one. This mutation makes the predicate always true (a whitespace-only later answer then wins in SQL but not in the JS oracle), so the byte comparison reds by the RULE. An earlier mutation that deleted the clause outright killed by a bind-count crash instead - the query lost its only reference to $nonBlankParam - which proved nothing about the rule. Proven KILLED before entry.",
     "anchor": "                AND (r.response_payload ->> 'text') ~ ${nonBlankParam})",
-    "mutation": "                )"
+    "mutation": "                AND (${nonBlankParam}::text IS NOT NULL))"
   },
   {
     "id": "csv-superseded-sql-keeps-to-the-export-scope",
@@ -2892,5 +2892,71 @@
     "why": "cto/AdaptaLabs#152. The partition is what makes the rule per PERSON: without the respondent key, the latest answer to a question by ANYONE supersedes everybody else's, and nearly every row in a study is flagged. Proven KILLED before entry.",
     "anchor": "                     CASE WHEN s.participant_id <> ''\n                          THEN 'p:' || s.participant_id\n                          ELSE 's:' || r.session_id END,\n",
     "mutation": ""
+  },
+  {
+    "id": "csv-superseded-sql-rating-must-be-numeric",
+    "why": "cto/AdaptaLabs#152. The rating arm counts an answer only when the payload holds a numeric rating; an empty {} rating payload is not an answer. Drop the jsonb_typeof='number' check and person_br's empty later payload wins in SQL while the JS oracle still ignores it - the byte comparison reds. The fixture splits rating out from single choice so this arm is observable alone. Proven KILLED before entry.",
+    "file": "backend/src/firsthand/survey-results-repository.ts",
+    "anchor": "                AND jsonb_typeof(r.response_payload -> 'rating') = 'number')",
+    "mutation": "                )",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-csv-export-postgres.test.ts",
+    "test": "flags superseded sessions exactly as the whole-string builder does, across batches",
+    "needsDatabase": true
+  },
+  {
+    "id": "csv-superseded-sql-single-choice-must-be-string",
+    "why": "cto/AdaptaLabs#152. The single-choice arm counts an answer only when selectedOption is a string; a blank {} single choice is not an answer. Drop the jsonb_typeof='string' check and person_k's blank later choice wins in SQL while the JS oracle ignores it. Proven KILLED before entry.",
+    "file": "backend/src/firsthand/survey-results-repository.ts",
+    "anchor": "                AND jsonb_typeof(r.response_payload -> 'selectedOption') = 'string')",
+    "mutation": "                )",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-csv-export-postgres.test.ts",
+    "test": "flags superseded sessions exactly as the whole-string builder does, across batches",
+    "needsDatabase": true
+  },
+  {
+    "id": "csv-superseded-sql-open-text-must-be-string",
+    "why": "cto/AdaptaLabs#152. The open-text arm counts an answer only when text is a JSON string; a numeric {text:5} is blank to JavaScript but Postgres ->> stringifies it to \"5\". Make the type check always-true and person_t's numeric later answer wins in SQL alone, diverging from the JS oracle. Distinct from csv-superseded-sql-ignores-blank-text, which pins the whitespace regex on the next line. Proven KILLED before entry.",
+    "file": "backend/src/firsthand/survey-results-repository.ts",
+    "anchor": "                AND jsonb_typeof(r.response_payload -> 'text') = 'string'",
+    "mutation": "                AND true",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-csv-export-postgres.test.ts",
+    "test": "flags superseded sessions exactly as the whole-string builder does, across batches",
+    "needsDatabase": true
+  },
+  {
+    "id": "csv-superseded-sql-removed-partitions-by-type",
+    "why": "cto/AdaptaLabs#152. A removed question's identity is its type AND its wording, so two removed answers of the SAME wording in DIFFERENT types are two questions. Drop step_type from the partition and person_y's one session (same wording, open_text and single_choice) collapses to one question and the later supersedes the earlier - flagged in SQL, not in the JS oracle. Proven KILLED before entry.",
+    "file": "backend/src/firsthand/survey-results-repository.ts",
+    "anchor": "                     CASE WHEN r.step_id IS NULL THEN r.step_type END,",
+    "mutation": "",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-csv-export-postgres.test.ts",
+    "test": "flags superseded sessions exactly as the whole-string builder does, across batches",
+    "needsDatabase": true
+  },
+  {
+    "id": "csv-superseded-sql-unworded-removed-share-a-partition",
+    "why": "cto/AdaptaLabs#152. Two removed answers with NO recorded wording are answers to the same unknown question, so COALESCE(step_prompt, <unknown>) gives them one partition key. Make the fallback unique per row (r.id) and person_u's two unworded answers stop sharing a partition, so u1 stops flagging in SQL while the JS oracle still flags it. person_d cannot see this because its worded pair flags d1 anyway. Proven KILLED before entry.",
+    "file": "backend/src/firsthand/survey-results-repository.ts",
+    "anchor": "                          THEN COALESCE(r.step_prompt, ${unknownParam}) END",
+    "mutation": "                          THEN COALESCE(r.step_prompt, r.id || ${unknownParam}) END",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-csv-export-postgres.test.ts",
+    "test": "flags superseded sessions exactly as the whole-string builder does, across batches",
+    "needsDatabase": true
+  },
+  {
+    "id": "csv-session-list-orders-people-by-first-answer",
+    "why": "cto/AdaptaLabs#152. The export groups a person's sessions together and orders people by their FIRST answer, so a researcher comparing one person's runs finds them adjacent. The window MIN(MIN(saved_at)) OVER (PARTITION BY participant_id) is what does it. Swap the outer MIN for MAX and people sort by their LATEST session instead: person_a - which holds both the globally first (a1) and, via a4 seeded last, the globally last answer - moves from first to last, so the byte comparison against the JS oracle reds. Without a4 in the fixture this mutation survived. Proven KILLED before entry.",
+    "file": "backend/src/firsthand/survey-results-repository.ts",
+    "anchor": "        ORDER BY MIN(MIN(r.saved_at)) OVER (PARTITION BY s.participant_id) ASC,",
+    "mutation": "        ORDER BY MAX(MIN(r.saved_at)) OVER (PARTITION BY s.participant_id) ASC,",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-csv-export-postgres.test.ts",
+    "test": "flags superseded sessions exactly as the whole-string builder does, across batches",
+    "needsDatabase": true
   }
 ]

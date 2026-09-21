@@ -285,14 +285,19 @@ describe.skipIf(skipDbTests)("the respondent identity, delivered by a real read"
   });
 
   /**
-   * THE BATCH READ'S SCOPE FILTER IS LOAD-BEARING NOW, where it used to be an
-   * equivalent mutant nothing could test.
+   * THE SUPERSEDED PREFLIGHT'S SCOPE FILTER IS LOAD-BEARING, where without a
+   * cross-opportunity fixture nothing could test it.
    *
-   * The batch used to bind session ids, primary keys the scoped preflight had
-   * already chosen. It binds PEOPLE now, and one person can hold sessions in
-   * two opportunities of the same study - so without the scope on the batch
-   * read, a per-opportunity export would pull that person's answers to
-   * somebody else's recruitment, under different consent wording.
+   * The batch read binds session ids, primary keys the scoped preflight already
+   * chose, so its own `${filter}` is defence-in-depth and untestable (see the
+   * comment at that site). What this test pins is a DIFFERENT scope: the
+   * superseded-sessions preflight (`readSupersededSessions`). One person can
+   * hold sessions in two opportunities of the same study, so without `${filter}`
+   * on that preflight, their later answer under ANOTHER researcher's
+   * recruitment would flag a session in this researcher's export - an answer
+   * outside the reader's scope leaking through as a superseded flag, with no
+   * row of data to make it visible. `csv-superseded-sql-keeps-to-the-export-scope`
+   * mutates that filter to `(${filter} OR TRUE)` and this test is what reds.
    */
   it("keeps a per-opportunity export to that opportunity when one person answered in two", async () => {
     await pool.query("TRUNCATE firsthand.runtime_sessions CASCADE");

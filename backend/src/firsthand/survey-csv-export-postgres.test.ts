@@ -608,7 +608,10 @@ describe.skipIf(skipDbTests)("the streamed CSV export, against real Postgres", (
         savedAt
       });
 
-    // A: later answer wins; a still-later BLANK one does not (1 flagged).
+    // A: later answer wins on q0; a still-later BLANK one does not (a1 flagged).
+    // person_a also answers q2 much later - see A4 below, seeded LAST - so it
+    // holds both the globally FIRST and the globally LAST answer, which is what
+    // makes the person-ordering window observable.
     await session("a1", "person_a");
     await session("a2", "person_a");
     await session("a3", "person_a");
@@ -617,20 +620,47 @@ describe.skipIf(skipDbTests)("the streamed CSV export, against real Postgres", (
     await answer("a3", 0, "open_text", { text: "   " }, at());
 
     // E: a later answer of nothing but NON-BREAKING SPACES is blank to
-    // `.trim()`, so it must not win in SQL either (0 flagged).
+    // `.trim()`, so it must not win in SQL either (0 flagged). Pins the
+    // open-text non-blank regex.
     await session("e1", "person_e");
     await session("e2", "person_e");
     await answer("e1", 0, "open_text", { text: "real" }, at());
     await answer("e2", 0, "open_text", { text: "\u00a0\u00a0" }, at());
 
-    // B: a rating then an empty payload (0 flagged by it); a single choice
-    // answered twice (1 flagged).
-    await session("b1", "person_b");
-    await session("b2", "person_b");
-    await answer("b1", 1, "rating", { rating: 3 }, at());
-    await answer("b2", 1, "rating", {}, at());
-    await answer("b1", 2, "single_choice", { selectedOption: "x" }, at());
-    await answer("b2", 2, "single_choice", { selectedOption: "y" }, at());
+    // BR: RATING ONLY. A real rating then an EMPTY payload; the empty one is
+    // not an answer, so nothing is superseded (0 flagged). The rating arm's
+    // `jsonb_typeof = 'number'` check is the ONLY thing stopping the empty
+    // payload counting - drop it and br2 wins and br1 flags. Split out from the
+    // single-choice case below so this arm is observable on its own.
+    await session("br1", "person_br");
+    await session("br2", "person_br");
+    await answer("br1", 1, "rating", { rating: 3 }, at());
+    await answer("br2", 1, "rating", {}, at());
+
+    // BS: SINGLE CHOICE ONLY, answered twice with real options - the later wins
+    // and the earlier flags (1 flagged: bs1). The plain single-choice
+    // supersession, the other half of the split above.
+    await session("bs1", "person_bs");
+    await session("bs2", "person_bs");
+    await answer("bs1", 2, "single_choice", { selectedOption: "x" }, at());
+    await answer("bs2", 2, "single_choice", { selectedOption: "y" }, at());
+
+    // K: a later BLANK single choice ({} - no selectedOption) is not an answer,
+    // so it must not supersede the real earlier one (0 flagged). Pins the
+    // single-choice `jsonb_typeof = 'string'` check.
+    await session("k1", "person_k");
+    await session("k2", "person_k");
+    await answer("k1", 2, "single_choice", { selectedOption: "x" }, at());
+    await answer("k2", 2, "single_choice", {}, at());
+
+    // T: a later answer of `{ text: 5 }` - a NUMBER, not a string. Postgres
+    // `->>` stringifies it to "5" and would count it; JavaScript reads a
+    // non-string as blank. The open-text `jsonb_typeof = 'string'` check is
+    // what keeps the two agreed (0 flagged); drop it and t2 wins in SQL alone.
+    await session("t1", "person_t");
+    await session("t2", "person_t");
+    await answer("t1", 0, "open_text", { text: "real" }, at());
+    await answer("t2", 0, "open_text", { text: 5 }, at());
 
     // C: a multi-choice, then an empty selection, then a selection holding no
     // strings - neither later one is an answer (0 flagged).
@@ -642,13 +672,31 @@ describe.skipIf(skipDbTests)("the streamed CSV export, against real Postgres", (
     await answer("c3", 3, "multi_choice", { selectedOptions: [1] }, at());
 
     // D: a REMOVED question with its wording, and one without, each answered
-    // twice (1 flagged - the earlier session holds both losers).
+    // twice (1 flagged - the earlier session d1 holds both losers).
     await session("d1", "person_d");
     await session("d2", "person_d");
     await answer("d1", null, "open_text", { text: "gone 1" }, at(), { prompt: "Removed twice" });
     await answer("d1", null, "open_text", { text: "unknown 1" }, at(), { prompt: null });
     await answer("d2", null, "open_text", { text: "gone 2" }, at(), { prompt: "Removed twice" });
     await answer("d2", null, "open_text", { text: "unknown 2" }, at(), { prompt: null });
+
+    // U: an UNWORDED removed question ONLY (both answers null-prompt), answered
+    // twice (1 flagged: u1). Unlike D there is no worded pair also flagging the
+    // earlier session, so this is the only fixture that can see the
+    // COALESCE(step_prompt, <unknown>) fallback - make it unique per row and u1
+    // stops flagging.
+    await session("u1", "person_u");
+    await session("u2", "person_u");
+    await answer("u1", null, "open_text", { text: "x1" }, at(), { prompt: null });
+    await answer("u2", null, "open_text", { text: "x2" }, at(), { prompt: null });
+
+    // Y: ONE SESSION answering a removed question of the SAME WORDING in TWO
+    // different types (0 flagged - they are two questions). The partition's
+    // `step_type` term is the only thing keeping them apart; drop it and the
+    // later supersedes the earlier and y1 flags.
+    await session("y1", "person_y");
+    await answer("y1", null, "open_text", { text: "words A" }, at(), { prompt: "Same words", id: "y_open" });
+    await answer("y1", null, "single_choice", { selectedOption: "words B" }, at(), { prompt: "Same words", id: "y_choice" });
 
     // F: two answers on the SAME millisecond - the later id wins in both
     // readers (1 flagged).
@@ -673,6 +721,16 @@ describe.skipIf(skipDbTests)("the streamed CSV export, against real Postgres", (
       await answer(id, 0, "open_text", { text: `g ${n}` }, at());
     }
 
+    // A4: person_a again, a NEW session answering q2, seeded LAST so it is the
+    // globally latest answer. person_a's earliest answer (a1) is still the
+    // globally earliest, so person_a must sort FIRST in the file - which pins
+    // the person-ordering window `MIN(MIN(saved_at)) OVER (PARTITION BY
+    // participant_id)`: swap its MIN for MAX and person_a sorts LAST; delete it
+    // and the person order follows participant_id, not first answer. q2 is
+    // answered once by person_a, so a4 never flags - it only moves rows.
+    await session("a4", "person_a");
+    await answer("a4", 2, "open_text", { text: "a4 latest" }, at());
+
     const { listResponsesForStudy } = await import("./survey-results-repository");
     const { toResponsesCsv } = await import("./survey-csv");
 
@@ -681,14 +739,15 @@ describe.skipIf(skipDbTests)("the streamed CSV export, against real Postgres", (
 
     expect(streamed).toBe(oracle);
 
-    // The literal, so two readers flagging nothing cannot agree their way to
-    // green: A1 + B1 + D1 + F1 + 149 of G.
+    // The literals, so two readers flagging nothing cannot agree their way to
+    // green: a1 + bs1 + d1 + u1 + f1 + 149 of G = 154, over 176 session rows.
+    // Measured against the seeded fixture, not derived from it.
     const flagged = streamed
       .split("\r\n")
       .filter((line) => line.split(",")[2] === "true")
       .map((line) => line.split(",")[0]);
-    expect(flagged).toHaveLength(153);
-    expect(flagged.slice(0, 4)).toEqual(["a1", "b1", "d1", "f1"]);
-    expect(await dataRows(streamed)).toBe(166);
+    expect(flagged).toHaveLength(154);
+    expect(flagged.slice(0, 4)).toEqual(["a1", "bs1", "d1", "u1"]);
+    expect(await dataRows(streamed)).toBe(176);
   }, 180_000);
 });

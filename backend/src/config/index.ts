@@ -132,8 +132,9 @@ const dbTls = applyDbTls(databaseUrl, process.env, 'backend');
  * point lookup", not "that path does not use this pool". Those are different
  * claims and only one of them is true.
  *
- * What is genuinely elsewhere is the LONG work: surveyCsvColumns,
- * surveyCsvParticipantIds and readBatch all run through
+ * What is genuinely elsewhere is the LONG work: the CSV export preflight
+ * (readCsvSessions, readRemovedColumns and readSupersededSessions, in one
+ * checkout) and readBatch all run through
  * withRuntimeDatabaseClient on the runtime pool, which sets its own
  * `statement_timeout` per checkout (15s default, 120s for results reads).
  * Nothing here changes those.
