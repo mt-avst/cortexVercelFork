@@ -12,8 +12,9 @@ import { getOpportunity, getSessions, updateOpportunity } from '../../api/client
  * `StepActions.test.tsx` covers what the row does with `justSaved` once it
  * has it. This file covers where OpportunityForm gets that value from: the
  * literal 1500ms (published) / 3000ms (draft) windows already in the source
- * (`setTimeout(() => setSuccessMessage(''), isDraft ? 3000 : 1500)`), a save
- * that fails, and a save that overlaps a later edit.
+ * (the `successTimerRef` timeout, `isDraft ? 3000 : 1500`), a save that
+ * fails, a save that overlaps a later edit, and the timer's lifetime - a
+ * second save restarts it and unmounting clears it.
  *
  * The windows are asserted as LITERALS here, not derived from an import - a
  * test that reads the constant back from the source cannot see the source
@@ -322,5 +323,104 @@ describe('OpportunityForm - a save that overlaps a later edit', () => {
     // And the confirmation still lands on the control the author actually
     // pressed - the overlap does not silently swallow the acknowledgement.
     await waitFor(() => expect(commitButton()).toHaveTextContent('Saved'));
+  });
+});
+
+describe('OpportunityForm - the Saved confirmation timer dies with the form', () => {
+  /*
+   * The timer that clears the confirmation used to be fire-and-forget. Leave
+   * the page inside its window - or let a test file tear down inside it - and
+   * it still fired, calling a state setter on a form that no longer existed.
+   * In a full vitest run that surfaced as an unhandled `window is not defined`
+   * from this timer after the jsdom environment had gone: every test green,
+   * the run exit 1.
+   *
+   * The control assertion (a timer IS pending while the form is up) is what
+   * stops the zero below passing just because nothing was ever armed.
+   */
+  it.each([
+    ['draft', 3000],
+    ['published', 1500]
+  ])('leaves no timer pending once a %s form unmounts inside its %ims window', async (status, windowMs) => {
+    vi.mocked(getOpportunity).mockResolvedValue(OPPORTUNITY({ status }) as never);
+    vi.mocked(updateOpportunity).mockResolvedValue(
+      OPPORTUNITY({ status, title: 'Renamed' }) as never
+    );
+
+    const { unmount } = renderEdit();
+    await goToBasicInfo();
+    fireEvent.change(screen.getByLabelText(/^Title/i), { target: { value: 'Renamed' } });
+    walkToReview();
+
+    vi.useFakeTimers();
+    try {
+      const armTimer = vi.spyOn(globalThis, 'setTimeout');
+      const clearTimer = vi.spyOn(globalThis, 'clearTimeout');
+
+      fireEvent.click(commitButton());
+      await vi.advanceTimersByTimeAsync(50);
+      expect(commitButton()).toHaveTextContent('Saved');
+
+      // ATTRIBUTABLE control. `vi.getTimerCount()` is global, so "some timer is
+      // pending" is satisfied by any unrelated timer in the tree - a mutation
+      // that never armed THIS timer would sail through a bare count, and the
+      // zero after unmount would mean nothing. So the control names the banner
+      // timer by its own window, and the assertion is that this id was cleared.
+      const armed = armTimer.mock.calls
+        .map((call, i) => ({ delay: call[1], id: armTimer.mock.results[i].value }))
+        .filter((entry) => entry.delay === windowMs);
+      expect(armed).toHaveLength(1);
+
+      unmount();
+
+      expect(clearTimer).toHaveBeenCalledWith(armed[0].id);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a second save inside the window gets its own full 3000ms, not the remainder of the first', async () => {
+    vi.mocked(getOpportunity).mockResolvedValue(OPPORTUNITY({ status: 'draft' }) as never);
+    vi.mocked(updateOpportunity).mockResolvedValue(
+      OPPORTUNITY({ status: 'draft', title: 'Renamed' }) as never
+    );
+
+    renderEdit();
+    await goToBasicInfo();
+    fireEvent.change(screen.getByLabelText(/^Title/i), { target: { value: 'Renamed' } });
+    walkToReview();
+
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(commitButton());
+      await vi.advanceTimersByTimeAsync(50);
+      expect(commitButton()).toHaveTextContent('Saved');
+
+      // An edit re-enables the control (it drops "Saved"), so a second save
+      // can land 1000ms into the first one's window.
+      await vi.advanceTimersByTimeAsync(950);
+      fireEvent.change(document.getElementById('status')!, {
+        target: { value: 'published' }
+      });
+      fireEvent.change(document.getElementById('status')!, {
+        target: { value: 'draft' }
+      });
+      fireEvent.click(commitButton());
+      await vi.advanceTimersByTimeAsync(50);
+      expect(commitButton()).toHaveTextContent('Saved');
+      expect(updateOpportunity).toHaveBeenCalledTimes(2);
+
+      // 3000ms after the FIRST save armed - where its timer would have fired
+      // and cut the second confirmation short.
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(commitButton()).toHaveTextContent('Saved');
+
+      // 3000ms after the second armed.
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(commitButton()).not.toHaveTextContent('Saved');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

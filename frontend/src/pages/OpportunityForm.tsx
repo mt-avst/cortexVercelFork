@@ -966,6 +966,15 @@ const OpportunityForm: React.FC = () => {
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
   const [error, setError] = useState<string>('');
   const [successMessage, setSuccessMessage] = useState<string>('');
+  // The timer that clears `successMessage` after an edit-mode save. Held so it
+  // can be cleared on unmount - leaving the page inside the window used to let
+  // it fire into a form that no longer existed - and so a second save inside
+  // the window restarts it rather than being cut short by the first one's.
+  const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (successTimerRef.current) clearTimeout(successTimerRef.current);
+    successTimerRef.current = null;
+  }, []);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   // Whether a refusal is currently being reported. The banner's TEXT is derived
   // from `validationErrors` on every render rather than stored: a second copy
@@ -4516,7 +4525,11 @@ const OpportunityForm: React.FC = () => {
               : 'Changes saved successfully!'
           );
           // Clear success message after timeout (longer for draft warnings)
-          setTimeout(() => setSuccessMessage(''), isDraft ? 3000 : 1500);
+          if (successTimerRef.current) clearTimeout(successTimerRef.current);
+          successTimerRef.current = setTimeout(
+            () => setSuccessMessage(''),
+            isDraft ? 3000 : 1500
+          );
         }
       }
 
