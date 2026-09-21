@@ -1,5 +1,5 @@
 import React from 'react';
-import { render } from '@testing-library/react';
+import { render, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -50,6 +50,18 @@ const renderDetail = () =>
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 150));
 
+// The load resolves on a microtask, but a loaded machine can push it past any
+// fixed sleep - a bare 150ms `settle()` before counting calls flaked a full
+// suite run. So wait for the load itself, THEN settle, so "exactly once" still
+// gets a window in which a duplicate would have shown up.
+const viewCalls = () =>
+  vi.mocked(trackOpportunityClick).mock.calls.filter(([, kind]) => kind === 'view');
+const loadedAndSettled = async (loads: number) => {
+  await waitFor(() => expect(vi.mocked(getOpportunity)).toHaveBeenCalledTimes(loads));
+  await waitFor(() => expect(viewCalls().length).toBeGreaterThan(0));
+  await settle();
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -57,11 +69,9 @@ beforeEach(() => {
 describe('OpportunityDetail - view tracking', () => {
   it('tracks the view once, against the id of the study actually loaded', async () => {
     renderDetail();
-    await settle();
+    await loadedAndSettled(1);
 
-    const views = vi
-      .mocked(trackOpportunityClick)
-      .mock.calls.filter(([, kind]) => kind === 'view');
+    const views = viewCalls();
     expect(views).toHaveLength(1);
     expect(views[0][0]).toBe('opp-1');
   });
@@ -82,7 +92,7 @@ describe('OpportunityDetail - view tracking', () => {
     now.mockImplementation(() => clock);
 
     renderDetail();
-    await settle();
+    await loadedAndSettled(1);
     expect(vi.mocked(getOpportunity)).toHaveBeenCalledTimes(1);
 
     hidden.mockReturnValue(true);
@@ -91,17 +101,14 @@ describe('OpportunityDetail - view tracking', () => {
     clock += 45_000; // longer than the 30s threshold the handler checks
     hidden.mockReturnValue(false);
     document.dispatchEvent(new Event('visibilitychange'));
-    await settle();
+    await loadedAndSettled(2);
 
     // The reload actually happened - without this the assertion below would
     // pass vacuously, which is exactly how the first version of this test let
     // a real mutation through.
     expect(vi.mocked(getOpportunity)).toHaveBeenCalledTimes(2);
 
-    const views = vi
-      .mocked(trackOpportunityClick)
-      .mock.calls.filter(([, kind]) => kind === 'view');
-    expect(views).toHaveLength(1);
+    expect(viewCalls()).toHaveLength(1);
 
     hidden.mockRestore();
     now.mockRestore();
