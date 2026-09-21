@@ -223,8 +223,19 @@ const slotIsOutsideDrawableHours = (slot: { start: string; end: string }): boole
  * One expression, because selection, confirmation, the manual set and the
  * pruning below all have to agree on what "the same slot" means, and four
  * spellings of it is four chances to disagree.
+ *
+ * Normalised through `toISOString` because the confirmation set is keyed that
+ * way - both the sessions-to-confirmedSlots sync effect and `protectedSlotKeys`
+ * build their keys from `toISOString(session.start_time)`. `CalendarView`
+ * normalised the slot side to match while `isSlotPickable` read the same set
+ * with a raw template, which is two spellings of one key: exactly what this
+ * function exists to prevent. For the `string` the type promises `toISOString`
+ * is the identity, so today's ISO slots key identically either way - it only
+ * begins to matter if a `Date` ever reaches here past the type, which is the
+ * case `toISOString` exists for.
  */
-const slotKeyOf = (slot: { start: string; end: string }): string => `${slot.start}|${slot.end}`;
+const slotKeyOf = (slot: { start: string; end: string }): string =>
+  `${toISOString(slot.start)}|${toISOString(slot.end)}`;
 
 /**
  * Slots the researcher explicitly asked for, which outrank generated ones.
@@ -426,6 +437,111 @@ const slotConflictsWithEvents = (
   });
 };
 
+/**
+ * Whether a generated slot is one a researcher could actually pick right now
+ * (cto/AdaptaLabs#135): not conflicting with a calendar event, not an
+ * existing session at this time (confirmed or otherwise), not overlapped by
+ * a session booked for another study, and not so far in the past the server
+ * would refuse it.
+ *
+ * Module scope, like `slotConflictsWithEvents` above, for the same reason:
+ * the Calendar counter (`drawnSlots`) and the Table counter
+ * (`tableSlotCount`) both call this, so the two views can only ever agree
+ * with each other. Before this, both excluded ONLY a calendar conflict - not
+ * an allocated, confirmed, existing-session or past cell - so either view
+ * could report a count no click could reach.
+ *
+ * NOT shared with `describeSlot` inside `CalendarView`: that computes its own
+ * `isSlotConfirmed`/`isSlotAllocated`/`getSessionForSlot`, deliberately more
+ * lenient (an existing session with capacity left is clickable there, to
+ * deselect it - blocking it entirely would break #95's gutter removal). The
+ * two are independent implementations of an overlapping idea, not one
+ * function - a future change to either has to be walked through the other by
+ * hand. What notices a drift is the mixed-day suite in
+ * `AdminSessionManager.slot-counter-pickability.test.tsx` ("headline, Select
+ * all and chips agree on a mixed day"): on one day carrying a past, a
+ * conflicting, an allocated, a full, a roomy and an odd-length cell, it
+ * asserts the headline equals the Select-all sum AND that the chips a click
+ * could newly select are exactly the counted ones. Dropping `isBusy` or
+ * `isAllocated` from `describeSlot`'s `isBlocked`, or forcing its `isPast`
+ * false, each fails that suite by name.
+ */
+export const isSlotPickable = (
+  slot: { start: string; end: string },
+  events: ReadonlyArray<{ start: string; end: string }>,
+  sessions: ReadonlyArray<{ start_time: string; end_time: string }>,
+  confirmedSlots: ReadonlySet<string>
+): boolean => {
+  if (slotConflictsWithEvents(slot, events)) return false;
+
+  const slotStart = new Date(slot.start);
+  const slotEnd = new Date(slot.end);
+
+  // An existing session at this exact time (within a second's rounding
+  // tolerance, the same allowance `getSessionForSlot` below gives for
+  // timezone/serialisation rounding between what the server stored and what
+  // the client re-parses).
+  //
+  // The tolerance is kept only to mirror `getSessionForSlot`, and for every
+  // input production can produce it changes no answer: a slot within a second
+  // of a session but not exactly on it still overlaps that session, so
+  // `isAllocated` below excludes it anyway.
+  //
+  // It is NOT unobservable in general, which an earlier version of this
+  // comment claimed. A session SHORTER than the tolerance breaks the
+  // overlap argument: for a 500ms session and a sub-second slot ending
+  // exactly at its start, the two merely abut - `isAllocated` is false - so
+  // this function returns false with the tolerance and true at zero. Real
+  // sessions are minutes long, so that case is unreachable here, which is
+  // why no test pins it.
+  const isExistingSession = sessions.some(session => {
+    const sessionStart = new Date(session.start_time);
+    const sessionEnd = new Date(session.end_time);
+    return (
+      Math.abs(slotStart.getTime() - sessionStart.getTime()) <= 1000 &&
+      Math.abs(slotEnd.getTime() - sessionEnd.getTime()) <= 1000
+    );
+  });
+
+  // For a saved study with sessions, `confirmedSlots` is rebuilt from
+  // `sessions` by the sync effect in `AdminSessionManager` (every
+  // exact-match session becomes a confirmed key), so there the two checks
+  // agree. They do NOT always agree: a temporary (new) study has
+  // `sessions` = [] and that same effect restores `confirmedSlots` from
+  // sessionStorage instead, so a confirmed-but-unsaved cell is excluded by
+  // this check alone. `confirmedSlots` can also carry a slot confirmed in
+  // local state before the parent's `sessions` prop catches up. Each check
+  // has its own direct test in
+  // `AdminSessionManager.slot-counter-pickability.test.tsx`, and the
+  // temporary-study path has a rendered one.
+  const isConfirmed = confirmedSlots.has(slotKeyOf(slot));
+  if (isExistingSession || isConfirmed) return false;
+
+  // A session belonging to another study that overlaps this slot without
+  // being it - excludes exact matches, which are handled above as sessions.
+  //
+  // Reachable from `drawnSlots`/`tableSlotCount`/`actionable` only when two
+  // sessions overlap EACH OTHER. `protectedSlotKeys` injects every session's
+  // exact time as a slot `pruneOverlaps` prefers, so a generated slot
+  // overlapping a lone session is pruned before it gets here. But of two
+  // overlapping sessions the prune keeps only the earlier, and a generated
+  // slot that abuts the kept one while overlapping the dropped one survives
+  // to be flagged here - the 14:30 cell in the mixed-day suite of
+  // `AdminSessionManager.slot-counter-pickability.test.tsx`, which fails by
+  // name if this branch is removed. A direct unit test covers it too.
+  const isAllocated = sessions.some(session => {
+    const sessionStart = new Date(session.start_time);
+    const sessionEnd = new Date(session.end_time);
+    const hasOverlap = slotStart < sessionEnd && slotEnd > sessionStart;
+    const isExactMatch =
+      slotStart.getTime() === sessionStart.getTime() && slotEnd.getTime() === sessionEnd.getTime();
+    return hasOverlap && !isExactMatch;
+  });
+  if (isAllocated) return false;
+
+  return !slotIsPast(slot);
+};
+
 const CalendarView: React.FC<CalendarViewProps> = ({
   events,
   availableSlots,
@@ -467,24 +583,16 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   const formatDate = (dateString: string) => formatStudyDate(dateString) ?? '';
 
 
-  const isSlotSelected = (slot: AvailableSlot) => {
-    const slotKey = `${slot.start}|${slot.end}`;
-    return selectedSlots.has(slotKey);
-  };
+  // Both key off `slotKeyOf`, which normalises through `toISOString`. At
+  // 6c73fb57 this pair spelled the same key two different ways - selection
+  // raw (`${slot.start}|${slot.end}`), confirmation normalised - and
+  // `isSlotPickable` was a THIRD SITE reading the confirmation set, already
+  // through `slotKeyOf`, so it matched confirmation and not selection. Two
+  // spellings over three sites, not three spellings. One spelling now, in the
+  // one function whose job that is.
+  const isSlotSelected = (slot: AvailableSlot) => selectedSlots.has(slotKeyOf(slot));
 
-  const isSlotConfirmed = (slot: AvailableSlot) => {
-    // Slot times are ISO strings per type definition
-    // Use toISOString helper to safely handle runtime type inconsistencies
-    const slotStart = toISOString(slot.start);
-    const slotEnd = toISOString(slot.end);
-    const slotKey = `${slotStart}|${slotEnd}`;
-    const isConfirmed = confirmedSlots.has(slotKey);
-    
-    // Check if slot is confirmed
-    // (Debug logging removed for production)
-    
-    return isConfirmed;
-  };
+  const isSlotConfirmed = (slot: AvailableSlot) => confirmedSlots.has(slotKeyOf(slot));
 
   // Delegates to the module-level version so the headline counter in the
   // parent (row 8) agrees with what this grid draws as blocked.
@@ -569,6 +677,36 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   };
 
   type SlotStatus = ReturnType<typeof describeSlot>;
+
+  /**
+   * Whether a click on this slot would do anything - the one spelling of the
+   * rule `clickSlot` below enforces, shared with the three places that have
+   * to DRAW that rule: the timeline tile's and the gutter tile's
+   * `tabIndex`/`aria-disabled`, and the Table chip's `disabled`.
+   *
+   * Three inline copies of `!isBlocked && !isPast` is three chances to drop a
+   * term in one of them, and dropping `!isPast` from the timeline tile alone
+   * passed the whole AdminSessionManager suite as it then stood: the tile
+   * went `tabIndex=0` and un-`aria-disabled` while every counter still
+   * excluded it, and the server refuses a past start (#101), so a keyboard
+   * user could select a slot that can never be created. That is the exact
+   * twin of the chip defect cto/AdaptaLabs#135 already fixed, and it is now
+   * one expression. The GUTTER tile was the third copy and the one with no
+   * test of any kind; the canary entry
+   * `session-management-calendar-gutter-tile-disables-past-cells` pins it.
+   *
+   * NOT `isSlotPickable`: that is the COUNTERS' predicate and is stricter
+   * here on purpose. An existing session with room, or a confirmed slot, is
+   * excluded from "N slots available" but must stay clickable - that click is
+   * the deselect (#95's gutter removal depends on it). Deriving this from
+   * `isSlotPickable` would make every confirmed tile and chip unfocusable,
+   * which is a behaviour change, not a tidy-up - MEASURED, and pinned by
+   * `session-management-calendar-tile-stays-clickable-for-a-session-with-room`.
+   *
+   * `clickSlot` keeps its two refusals spelled apart so each logs its own
+   * reason; they are these two terms and nothing else.
+   */
+  const slotIsActionable = (status: SlotStatus): boolean => !status.isBlocked && !status.isPast;
 
   const slotTooltip = (slot: AvailableSlot, status: SlotStatus): string => {
     try {
@@ -821,12 +959,12 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         // time. Both keys, which is what makes the render-time pass that used to
         // sit below the timeline redundant: that one compared `start|end`
         // strings only, so every duplicate it could catch is caught here first.
-        // Use the same key format as isSlotSelected for consistency
+        // Keyed by `slotKeyOf`, the same function selection and confirmation
+        // key off, so "the same slot" means one thing here and there.
         const seen = new Set<string>();
         const duplicateKeys = new Set<string>();
         nonOverlappingSlots = nonOverlappingSlots.filter(slot => {
-          // Use the same key format as selection tracking for consistency
-          const slotKey = `${slot.start}|${slot.end}`;
+          const slotKey = slotKeyOf(slot);
           
           // Also check by time for extra safety
           const startTime = new Date(slot.start).getTime();
@@ -1102,7 +1240,12 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                         // reader with its full time span, matching the gutter
                         // slots below - the selected state was colour-only and
                         // the tile carried no role at all.
-                        const actionable = !status.isBlocked && !status.isPast;
+                        //
+                        // `slotIsActionable` rather than a fourth inline copy
+                        // of `!isBlocked && !isPast`: see its docblock. A past
+                        // tile must be unfocusable and aria-disabled, the same
+                        // as the Table chip.
+                        const actionable = slotIsActionable(status);
 
                         return (
                           <div
@@ -1240,13 +1383,14 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                             {gutterSlots.map(slot => {
                               const status = describeSlot(slot);
                               const timeLabel = slotTimeLabel(slot);
+                              const actionable = slotIsActionable(status);
                               return (
                                 <div
                                   key={slotKeyOf(slot)}
                                   className={`${status.slotClass} calendar-gutter-slot`}
                                   role="button"
-                                  tabIndex={status.isBlocked || status.isPast ? -1 : 0}
-                                  aria-disabled={status.isBlocked || status.isPast || undefined}
+                                  tabIndex={actionable ? 0 : -1}
+                                  aria-disabled={!actionable || undefined}
                                   title={slotTooltip(slot, status)}
                                   onClick={() => clickSlot(slot, status)}
                                   onKeyDown={(e) => {
@@ -1262,7 +1406,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                                     minHeight: '28px',
                                     padding: '4px 8px',
                                     fontSize: '0.7rem',
-                                    cursor: status.isBlocked || status.isPast ? 'not-allowed' : 'pointer',
+                                    cursor: actionable ? 'pointer' : 'not-allowed',
                                     // Past slots read as unavailable here too (#101).
                                     ...(status.isPast ? { opacity: 0.4 } : {})
                                   }}
@@ -1430,9 +1574,23 @@ const CalendarView: React.FC<CalendarViewProps> = ({
           const dayName = formatDate(day.toISOString());
           // Actionable = a slot the researcher could newly select or has selected
           // (not an existing session, not blocked, not past). Drives select-all.
-          const actionable = decorated.filter(
-            d => !d.status.isBlocked && !d.status.isPast && !d.status.session && !d.status.isConfirmed
-          );
+          //
+          // Derived from `isSlotPickable` (cto/AdaptaLabs#135), the same
+          // predicate the headline counters use, rather than hand-rolled from
+          // `status`.
+          //
+          // This line was NOT the "159 against 129" gap the row-8 docblock
+          // describes - it was the side that produced 129, which was the
+          // correct number; the headline was the liar. What it WAS is an
+          // independent, hand-rolled second copy of the same rule that
+          // happened to agree: measured, restoring the original expression
+          // leaves the whole AdminSessionManager suite green, because
+          // `!isBlocked && !isPast && !session && !isConfirmed` is
+          // set-equivalent to `isSlotPickable` today. Routing it through the
+          // shared predicate removes the second spelling, so the next change
+          // to the rule cannot land on one of them only. That - not a
+          // behaviour fix - is what the canary entry on this line pins.
+          const actionable = decorated.filter(d => isSlotPickable(d.slot, events, sessions, confirmedSlots));
           const notYetSelected = actionable.filter(d => !d.status.isSelected);
           const allSelected = actionable.length > 0 && notYetSelected.length === 0;
 
@@ -1478,7 +1636,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                   // native disabled button carries the same accessible name
                   // and reads as a control - dimmed, not actionable - which is
                   // what this chip actually is.
-                  if (status.isBlocked || status.isPast) {
+                  if (!slotIsActionable(status)) {
                     return (
                       <button
                         key={slotKeyOf(slot)}
@@ -2534,13 +2692,12 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
   /**
    * What the Calendar (grid) view's counter should report, computed with the
    * same functions the grid uses. Originally just "pre-filter, pre-prune vs
-   * post" (21 counted against 20 drawn) - also excludes calendar-conflict
-   * slots now (row 8, follow-up): those chips are still drawn on the grid,
-   * grey and unselectable, but a headline that counts them is the exact same
-   * lie the Table view's counter told before its own fix - "N slots
-   * available" beside a busy chip nobody can click. `slotConflictsWithEvents`
-   * is the SAME predicate `tableSlotCount` below uses, so the two views can
-   * only ever agree with each other and with what a click can actually do.
+   * post" (21 counted against 20 drawn); then extended to exclude
+   * calendar-conflict slots (row 8); now routed through `isSlotPickable`
+   * (cto/AdaptaLabs#135) so it also excludes an allocated, confirmed or past
+   * cell - `drawnSlots` and `tableSlotCount` below share the exact same
+   * predicate, so the two views can only ever agree with each other and with
+   * what a click can actually do.
    */
   const drawnSlots = React.useMemo(() => {
     const onScreen = visibleDayKeys(startDate, endDate, excludeWeekends, currentPage, daysPerPage);
@@ -2549,9 +2706,15 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       return (
         !Number.isNaN(when.getTime()) &&
         onScreen.has(when.toDateString()) &&
-        !slotConflictsWithEvents(slot, calendarEvents)
+        isSlotPickable(slot, calendarEvents, sessions, confirmedSlots)
       );
     });
+    // `sessions` is a prop array whose identity can change on every parent
+    // render even when its contents do not, so this recomputes more often
+    // than strictly necessary - accepted deliberately: the filter is a cheap
+    // pass over a small on-screen slot list, and `confirmedSlots` (the other
+    // input `isSlotPickable` needs) already IS stable, via the `Set` identity
+    // guard in the effect that derives it.
   }, [
     displaySlots,
     durationMinutes,
@@ -2562,6 +2725,8 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
     currentPage,
     daysPerPage,
     calendarEvents,
+    sessions,
+    confirmedSlots,
   ]);
 
   /**
@@ -2570,12 +2735,11 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
    * the table is not paged - reporting the grid's on-screen page there read
    * "20 slots available" beside a table showing every day (review finding).
    *
-   * Also excludes calendar-conflict slots (row 8): this used to count every
-   * generated cell, including ones a click cannot act on, so "159 slots
-   * available" sat beside a Select-all sum of 129 - the 30-slot gap being
-   * exactly the conflicting cells. `slotConflictsWithEvents` is the SAME
-   * predicate the table's own per-day chips use to decide "blocked", so the
-   * headline can only ever agree with what is actually pickable.
+   * Routed through the same `isSlotPickable` predicate as `drawnSlots`
+   * (cto/AdaptaLabs#135): this used to exclude only a calendar conflict, so
+   * "159 slots available" sat beside a Select-all sum of 129, and later an
+   * allocated, confirmed or past cell could still inflate the count the same
+   * way. The headline can now only ever agree with what is actually pickable.
    */
   const tableSlotCount = React.useMemo(() => {
     const inRange = new Set(
@@ -2586,10 +2750,21 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       return (
         !Number.isNaN(when.getTime()) &&
         inRange.has(when.toDateString()) &&
-        !slotConflictsWithEvents(slot, calendarEvents)
+        isSlotPickable(slot, calendarEvents, sessions, confirmedSlots)
       );
     }).length;
-  }, [displaySlots, durationMinutes, protectedSlotKeys, startDate, endDate, excludeWeekends, calendarEvents]);
+    // `sessions` identity churn: see the same note on `drawnSlots` above.
+  }, [
+    displaySlots,
+    durationMinutes,
+    protectedSlotKeys,
+    startDate,
+    endDate,
+    excludeWeekends,
+    calendarEvents,
+    sessions,
+    confirmedSlots,
+  ]);
 
   /**
    * Existing sessions the Calendar view's grid cannot draw at all (row 39),
@@ -2828,7 +3003,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
   ]);
 
   const handleSlotSelect = useCallback((slot: AvailableSlot) => {
-    const slotKey = `${slot.start}|${slot.end}`;
+    const slotKey = slotKeyOf(slot);
     logger.debug('🔵 SLOT SELECTED:', { 
       slotKey, 
       currentSelectedSlots: Array.from(selectedSlots),
@@ -2845,7 +3020,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
   }, [selectedSlots, opportunityId, urlId, isTemporary, persistSelectedSlots]);
 
   const handleSlotDeselect = useCallback(async (slot: AvailableSlot) => {
-    const slotKey = `${slot.start}|${slot.end}`;
+    const slotKey = slotKeyOf(slot);
     logger.debug('handleSlotDeselect called:', { 
       slotKey, 
       currentSelectedSlots: Array.from(selectedSlots),
