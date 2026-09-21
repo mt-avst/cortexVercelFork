@@ -22,6 +22,10 @@ const response = (
   over: Partial<StoredResponse> = {}
 ): StoredResponse => ({
   session_id: sessionId,
+  // Defaulted to the session id, which is what the count used to key on - so
+  // every fixture written before MEDIUM-2 keeps the respondent number it
+  // asserted, and only a test that OVERRIDES this can see the change.
+  participant_id: sessionId,
   step_id: stepId,
   // Spelled out rather than defaulted away, because a fixture that omits a
   // field cannot test what the field does - and this one decides whether an
@@ -287,6 +291,85 @@ describe("the result set as a whole", () => {
     expect(questions).toHaveLength(1);
     expect(questions[0].answered).toBe(0);
   });
+
+  /**
+   * ONE PERSON IS ONE RESPONDENT ACROSS SESSIONS (cto/AdaptaLabs#129, MEDIUM-2).
+   *
+   * A participant can hold more than one answer-carrying `runtime_sessions`
+   * row for the same study: the mint route resumes only an IN-FLIGHT session
+   * (LOW-8), nothing rewrites the payload's `expires_at` on resume, and the
+   * default token is 24 hours - so answering three questions and coming back
+   * tomorrow leaves an expired session behind and mints a fresh one. Both
+   * carry answers and the response read filters on no `session_status`, so
+   * both reach this function. Keyed on `session_id` this reported one person
+   * as two, in the denominator under every percentage on the page.
+   */
+  it("counts two sessions belonging to one participant as one respondent", () => {
+    const { respondents } = aggregateSurveyResults(steps, [
+      response("q2", "expired_session", { text: "yesterday" }, {
+        participant_id: "person_a"
+      }),
+      response("q2", "fresh_session", { text: "today" }, {
+        participant_id: "person_a"
+      })
+    ]);
+
+    expect(respondents).toBe(1);
+  });
+
+  // The control for the test above: the fix must still be able to SEE two
+  // people. An assertion that a count collapsed passes just as well when the
+  // count collapsed everything.
+  it("counts two participants as two respondents", () => {
+    const { respondents } = aggregateSurveyResults(steps, [
+      response("q2", "session_1", { text: "a" }, { participant_id: "person_a" }),
+      response("q2", "session_2", { text: "b" }, { participant_id: "person_b" })
+    ]);
+
+    expect(respondents).toBe(2);
+  });
+
+  /**
+   * PINNED, not incidental. `runtime_sessions.participant_id` is `TEXT NOT
+   * NULL` (migration 0001, never relaxed) and every writer sets it from the
+   * authenticated `req.user.id`, so the database cannot produce this row - but
+   * `aggregateSurveyResults` is a pure function over a plain array and the
+   * fallback decides which way it errs if one ever arrives. It errs by NOT
+   * merging: two unattributable rows from different sessions stay two
+   * respondents, exactly the pre-fix behaviour. Merging them would invent one
+   * respondent out of people who may be different, and a denominator that
+   * hides real respondents overstates every percentage taken against it.
+   */
+  it("falls back to the session id for a row with no participant id", () => {
+    const { respondents } = aggregateSurveyResults(steps, [
+      response("q2", "session_1", { text: "a" }, { participant_id: null }),
+      response("q2", "session_2", { text: "b" }, { participant_id: null })
+    ]);
+
+    expect(respondents).toBe(2);
+  });
+
+  // An empty string identifies nobody, so it takes the same fallback rather
+  // than collapsing every such row onto the one key "".
+  it("treats an empty participant id as absent, not as a shared identity", () => {
+    const { respondents } = aggregateSurveyResults(steps, [
+      response("q2", "session_1", { text: "a" }, { participant_id: "" }),
+      response("q2", "session_2", { text: "b" }, { participant_id: "" })
+    ]);
+
+    expect(respondents).toBe(2);
+  });
+
+  // The prefixes in `respondentKey` exist for this: without them a participant
+  // id equal to another row's session id merges two different people.
+  it("does not merge a participant id with another rows session id", () => {
+    const { respondents } = aggregateSurveyResults(steps, [
+      response("q2", "collide", { text: "a" }, { participant_id: null }),
+      response("q2", "session_2", { text: "b" }, { participant_id: "collide" })
+    ]);
+
+    expect(respondents).toBe(2);
+  });
 });
 
 /**
@@ -542,6 +625,7 @@ describe("grouping every answer the reader will return, all to one question", ()
       { length: MAX_RESPONSE_ROWS },
       (_unused, index) => ({
         session_id: `session_${index % 500}`,
+        participant_id: `participant_${index % 500}`,
         step_id: "step_1",
         step_prompt: "What did you think?",
         step_type: "open_text",

@@ -163,6 +163,18 @@ export function toCsvHeaderRow(
   // column reads as a question that was never asked. Prompts are
   // researcher-authored free text, so they are neutralised like any other
   // human-authored cell; the fixed "Participant" label is ours.
+  //
+  // "PARTICIPANT" IS A SESSION, AND THAT DISAGREES WITH THE RESULTS PAGE
+  // (cto/AdaptaLabs#152). This column carries a `session_id`, and the export
+  // emits one row per session, while the page's "N participants" headline
+  // counts distinct `participant_id` (`respondentKey` in survey-results.ts,
+  // cto/AdaptaLabs#129). Since an expired session now earns a fresh mint
+  // rather than a dead link, one person can hold two answer-carrying sessions
+  // - and reads as 1 participant on the page and 2 "Participant" rows here.
+  // Deliberately NOT reconciled by renaming this cell or regrouping the
+  // export: both need the which-answer-wins rule #152 exists to decide, and
+  // a rename alone would change every researcher's column headings for a
+  // disagreement the numbers would still have.
   return [
     cell("Participant", false),
     ...questions.map((step) => cell(step.prompt, true)),
@@ -173,11 +185,18 @@ export function toCsvHeaderRow(
 }
 
 /**
- * One participant's row, from that participant's answers alone.
+ * One SESSION's row, from that session's answers alone.
  *
- * The unit the streaming export works in: a row needs nothing but this
- * participant's answers plus the column layout, which is why the export can
- * hold one participant in memory instead of two hundred thousand rows.
+ * The unit the streaming export works in: a row needs nothing but one
+ * session's answers plus the column layout, which is why the export can hold
+ * one row in memory instead of two hundred thousand.
+ *
+ * SESSION, NOT PERSON - it was called "one participant's row" and the two
+ * stopped being the same thing (cto/AdaptaLabs#152). The caller keys on
+ * `session_id`, the first cell is a `session_id`, and one person holding two
+ * answer-carrying sessions gets two rows here while the results page counts
+ * them as one. The export's grouping is left as it is on purpose; see the
+ * note on the "Participant" header cell above.
  */
 export function toCsvParticipantRow(
   steps: StudyStep[],
@@ -274,6 +293,11 @@ export function toResponsesCsv(
 ): string {
   const removed = removedQuestionColumns(responses);
 
+  // KEYED ON `session_id`, matching `streamParticipants` exactly - the two
+  // must group identically or the equivalence test this oracle exists for
+  // compares nothing. The name says participant and the key says session, and
+  // those are no longer the same thing: see the "Participant" header cell
+  // above, and cto/AdaptaLabs#152.
   const byParticipant = new Map<string, StoredResponse[]>();
   for (const row of responses) {
     const group = byParticipant.get(row.session_id);

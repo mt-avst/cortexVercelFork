@@ -29,10 +29,22 @@ export const autoCloseOpportunityIfNeeded = async (opportunityId: string): Promi
 /**
  * Closes every published study whose `end_date` is in the past (Decision 3 /
  * WZ ended-studies). A study advertised as live past the date its author set is
- * a study lying to participants; auto-closing at `end_date` makes the participant
- * detail page show the closed state (the 410 OPPORTUNITY_CLOSED path) and drops
- * it out of the participant Home's published list and its "N active studies"
- * count.
+ * a study lying to participants; auto-closing at `end_date` drops it out of the
+ * participant Home's published list and its "N active studies" count, and makes
+ * the participant detail page show the closed state.
+ *
+ * THAT CLOSED STATE IS NO LONGER UNCONDITIONALLY THE 410 OPPORTUNITY_CLOSED
+ * PATH (cto/AdaptaLabs#129). `GET /api/opportunities/:id` exempts exactly one
+ * viewer from it: a signed-in participant holding an IN-FLIGHT runtime session
+ * on a native survey, poll or one-question study, who is served 200 with
+ * `completion.inProgress` so the page can offer Resume instead. This sweep is
+ * what creates that case - it can flip a study to `closed` while somebody is
+ * part-way through - and the survey-session mint route lets that participant
+ * finish rather than refusing them. Everybody else still gets the 410. Note
+ * the participant Home consequence above is NOT similarly exempted: the list
+ * read hard-filters non-admins to `status = 'published'`, so the study leaves
+ * Browse for that participant too and their Resume page is reachable only by
+ * direct URL.
  *
  * A set-based sweep rather than a per-row check because it runs on a schedule
  * over the whole table, and unlike `autoCloseOpportunityIfNeeded` it does NOT

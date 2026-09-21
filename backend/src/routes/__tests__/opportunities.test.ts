@@ -317,13 +317,16 @@ describe('Opportunities API', () => {
     it('marks a native survey the participant has completed, with its date', async () => {
       mockQuery.mockResolvedValueOnce({ rows: [nativeSurveyRow] }); // opportunity row
       // the sessions query falls through to the default { rows: [] }
-      mockFindParticipantCompletions.mockResolvedValueOnce([
-        {
-          opportunityId: 'op-nsv',
-          sessionStatus: 'completed',
-          completedAt: '2026-09-02T09:00:00.000Z'
-        }
-      ]);
+      // The single-opportunity detail read sources its completion trace from
+      // findParticipantSessionForOpportunity (cto/AdaptaLabs#129), not the
+      // batched findParticipantCompletionsForOpportunities the list read
+      // uses - see participantSessionSummaryForOpportunity.
+      mockFindParticipantSession.mockResolvedValueOnce({
+        token: 'fh_done',
+        sessionStatus: 'completed',
+        completedAt: '2026-09-02T09:00:00.000Z',
+        sessionNotExpired: true
+      });
 
       const response = await request(listening(app))
         .get('/api/opportunities/op-nsv')
@@ -331,40 +334,93 @@ describe('Opportunities API', () => {
 
       expect(response.body.completion).toEqual({
         completed: true,
-        completedAt: '2026-09-02T09:00:00.000Z'
+        completedAt: '2026-09-02T09:00:00.000Z',
+        inProgress: false
       });
       // Keyed on the signed-in user and the opportunity's own id.
-      expect(mockFindParticipantCompletions).toHaveBeenCalledWith({
-        participantId: 'test-user-id',
-        opportunityIds: ['op-nsv']
+      expect(mockFindParticipantSession).toHaveBeenCalledWith({
+        opportunityId: 'op-nsv',
+        participantId: 'test-user-id'
       });
     });
 
-    it('reports not-completed when the participant has no answered session', async () => {
+    it('reports not-completed when the participant has no session at all', async () => {
       mockQuery.mockResolvedValueOnce({ rows: [nativeSurveyRow] });
-      // default completions mock returns [] - no row for this opportunity
+      // default findParticipantSessionForOpportunity mock resolves null
 
       const response = await request(listening(app))
         .get('/api/opportunities/op-nsv')
         .expect(200);
 
-      expect(response.body.completion).toEqual({ completed: false, completedAt: null });
+      expect(response.body.completion).toEqual({
+        completed: false,
+        completedAt: null,
+        inProgress: false
+      });
     });
 
-    it('does not treat a still-in-progress session as completed', async () => {
+    it('does not treat a still-in-progress session as completed, and marks it in progress', async () => {
       mockQuery.mockResolvedValueOnce({ rows: [nativeSurveyRow] });
-      mockFindParticipantCompletions.mockResolvedValueOnce([
-        { opportunityId: 'op-nsv', sessionStatus: 'link_opened', completedAt: null }
-      ]);
+      mockFindParticipantSession.mockResolvedValueOnce({
+        token: 'fh_live',
+        sessionStatus: 'link_opened',
+        completedAt: null,
+        sessionNotExpired: true
+      });
 
       const response = await request(listening(app))
         .get('/api/opportunities/op-nsv')
         .expect(200);
 
-      // An unfinished session resumes rather than blocks, so the trace must not
-      // claim completion - otherwise the page would hide the Start button on a
-      // survey the participant can still finish.
-      expect(response.body.completion).toEqual({ completed: false, completedAt: null });
+      // An unfinished, live session resumes rather than blocks, so the trace
+      // must not claim completion - otherwise the page would hide the Start
+      // button on a survey the participant can still finish. `inProgress`
+      // (cto/AdaptaLabs#129) is what lets the page offer Resume instead.
+      expect(response.body.completion).toEqual({
+        completed: false,
+        completedAt: null,
+        inProgress: true
+      });
+    });
+
+    it('does not mark a dead (terminal-unanswered) session as in progress', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [nativeSurveyRow] });
+      mockFindParticipantSession.mockResolvedValueOnce({
+        token: 'fh_abandoned',
+        sessionStatus: 'abandoned',
+        completedAt: null,
+        sessionNotExpired: true
+      });
+
+      const response = await request(listening(app))
+        .get('/api/opportunities/op-nsv')
+        .expect(200);
+
+      expect(response.body.completion).toEqual({
+        completed: false,
+        completedAt: null,
+        inProgress: false
+      });
+    });
+
+    it('does not mark an expired session as in progress', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [nativeSurveyRow] });
+      mockFindParticipantSession.mockResolvedValueOnce({
+        token: 'fh_expired',
+        sessionStatus: 'link_opened',
+        completedAt: null,
+        sessionNotExpired: false
+      });
+
+      const response = await request(listening(app))
+        .get('/api/opportunities/op-nsv')
+        .expect(200);
+
+      expect(response.body.completion).toEqual({
+        completed: false,
+        completedAt: null,
+        inProgress: false
+      });
     });
 
     it('does not attach a completion trace to a bookable study', async () => {
@@ -384,6 +440,7 @@ describe('Opportunities API', () => {
       // A test/interview leaves its trace in bookings, not here, and the runtime
       // read must not even run for it.
       expect(response.body.completion).toBeUndefined();
+      expect(mockFindParticipantSession).not.toHaveBeenCalled();
       expect(mockFindParticipantCompletions).not.toHaveBeenCalled();
     });
 
@@ -425,6 +482,33 @@ describe('Opportunities API', () => {
         participantId: 'test-user-id',
         opportunityIds: ['op-nsv']
       });
+    });
+
+    it('does not treat a still-in-progress session as completed in the listing', async () => {
+      // THE LISTING'S OWN ARM, and it is not a duplicate of the detail read's.
+      // The two derive the flag in different functions - the batched
+      // participantCompletionMap here, participantSessionSummaryForOpportunity
+      // there - and the only completion test the listing had drove a
+      // `completed` session, so hardcoding the flag true passed it. The merge
+      // train caught that: the canary entry on this line reported SURVIVED
+      // once the detail read grew its own helper and took the old test with
+      // it. A row the participant can still finish must not read as done, or
+      // the browse row hides the way back into it.
+      mockQuery.mockResolvedValueOnce({ rows: [nativeSurveyRow] });
+      mockFindParticipantCompletions.mockResolvedValueOnce([
+        {
+          opportunityId: 'op-nsv',
+          sessionStatus: 'link_opened',
+          completedAt: null
+        }
+      ]);
+
+      const response = await request(listening(app))
+        .get('/api/opportunities')
+        .expect(200);
+
+      const survey = response.body.find((o: { id: string }) => o.id === 'op-nsv');
+      expect(survey.completion).toEqual({ completed: false, completedAt: null });
     });
   });
 
@@ -5551,7 +5635,7 @@ describe('Opportunities API', () => {
     it('mints an in-process session and returns a same-origin URL', async () => {
       process.env.FRONTEND_URL = 'https://cortex.example.com';
       mockQuery.mockResolvedValueOnce({
-        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published' }]
+        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published', has_closed: false }]
       });
       mockCreateSession.mockResolvedValueOnce({
         ok: true,
@@ -5567,6 +5651,71 @@ describe('Opportunities API', () => {
         studyId: 'study_abc123',
         participant: expect.objectContaining({ participant_id: 'test-user-id', external_ref: '1' })
       }));
+    });
+
+    /**
+     * MEDIUM-3 (cto/AdaptaLabs#129): a `closed` study - what the hourly sweep
+     * leaves behind - gets the SAME code and sentence the 410 detail read
+     * sends, not the bare "not published" string every other unpublished
+     * status still gets. This route has no resume path at all, so unlike its
+     * survey twin the closed check stays at the top, beside `published`.
+     */
+    it('answers OPPORTUNITY_CLOSED, not the bare not-published error, for a study the sweep has closed', async () => {
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'closed', has_closed: true }]
+      });
+
+      const response = await request(listening(app))
+        .post('/api/opportunities/1/recorded-study-session')
+        .expect(403);
+
+      expect(response.body.error).toBe(
+        'This study has closed and is no longer accepting participants.'
+      );
+      expect(response.body.code).toBe('OPPORTUNITY_CLOSED');
+      expect(mockCreateSession).not.toHaveBeenCalled();
+    });
+
+    it('still answers the bare not-published error for a draft, unaffected by the closed case above it', async () => {
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'draft', has_closed: false }]
+      });
+
+      const response = await request(listening(app))
+        .post('/api/opportunities/1/recorded-study-session')
+        .expect(403);
+
+      expect(response.body.error).toBe('Study is not published');
+      expect(response.body.code).toBeUndefined();
+      expect(mockCreateSession).not.toHaveBeenCalled();
+    });
+
+    /**
+     * FAILS CLOSED WHEN THE PRECONDITION IS MISSING (cto/AdaptaLabs#129).
+     *
+     * Both mint gates read `has_closed === true`, which an ABSENT column
+     * satisfies exactly as a `false` one does - so a rewrite of the mint SELECT
+     * that dropped the projection would disarm both of them in production with
+     * every status test still green. `pg` rows are `any`, so no type can catch
+     * that; `loadMintableOpportunity` asserts the column is there instead, and
+     * this is the only place that assertion can be exercised, because a real
+     * database always returns it.
+     *
+     * The refusal is a 500, not a mint: a route that cannot establish whether
+     * the study has closed refuses everybody rather than starting sessions for
+     * everybody.
+     */
+    it('refuses to mint when the opportunity read returns no closing-time column', async () => {
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published' }]
+      });
+
+      const response = await request(listening(app))
+        .post('/api/opportunities/1/recorded-study-session')
+        .expect(500);
+
+      expect(response.body.code).toBe('MINT_PRECONDITION_MISSING');
+      expect(mockCreateSession).not.toHaveBeenCalled();
     });
 
     it('should reject an unauthenticated request with 401', async () => {
@@ -5589,7 +5738,8 @@ describe('Opportunities API', () => {
           id: '1',
           type: 'survey',
           firsthand_study_id: 'study_questions',
-          status: 'published'
+          status: 'published',
+          has_closed: false
         }]
       });
 
@@ -5606,7 +5756,8 @@ describe('Opportunities API', () => {
           id: '1',
           type: 'interview',
           firsthand_study_id: 'study_abc123',
-          status: 'published'
+          status: 'published',
+          has_closed: false
         }]
       });
 
@@ -5630,7 +5781,8 @@ describe('Opportunities API', () => {
           id: '1',
           type: 'unmoderated',
           firsthand_study_id: 'study_swapped',
-          status: 'published'
+          status: 'published',
+          has_closed: false
         }]
       });
       mockGetStudyById.mockResolvedValueOnce({
@@ -5680,7 +5832,8 @@ describe('Opportunities API', () => {
           id: '97bfe613-4e1f-472c-917e-b90d1c0326b8',
           type: 'unmoderated',
           firsthand_study_id: 'study_abc123',
-          status: 'published'
+          status: 'published',
+          has_closed: false
         }]
       });
       mockCreateSession.mockResolvedValueOnce({
@@ -5706,7 +5859,7 @@ describe('Opportunities API', () => {
 
     it('ignores an opportunity id supplied in the request body', async () => {
       mockQuery.mockResolvedValueOnce({
-        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published' }]
+        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published', has_closed: false }]
       });
       mockCreateSession.mockResolvedValueOnce({
         ok: true,
@@ -5725,7 +5878,7 @@ describe('Opportunities API', () => {
 
     it('maps a study-without-steps result to 400', async () => {
       mockQuery.mockResolvedValueOnce({
-        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published' }]
+        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published', has_closed: false }]
       });
       mockCreateSession.mockResolvedValueOnce({ ok: false, error: 'study_has_no_steps' });
 
@@ -5740,7 +5893,7 @@ describe('Opportunities API', () => {
       ['study_not_found', 404, 'Linked recorded study not found'],
     ])('maps createSession error %s to HTTP %i', async (error, status, message) => {
       mockQuery.mockResolvedValueOnce({
-        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published' }]
+        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published', has_closed: false }]
       });
       mockCreateSession.mockResolvedValueOnce({ ok: false, error });
 
@@ -5754,7 +5907,7 @@ describe('Opportunities API', () => {
 
     it('maps payload_assembly_failed to a 500 with a neutral error code', async () => {
       mockQuery.mockResolvedValueOnce({
-        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published' }]
+        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published', has_closed: false }]
       });
       mockCreateSession.mockResolvedValueOnce({ ok: false, error: 'payload_assembly_failed' });
 
@@ -5769,7 +5922,7 @@ describe('Opportunities API', () => {
 
     it('maps an unmodelled createSession error through the default branch without leaking the raw value', async () => {
       mockQuery.mockResolvedValueOnce({
-        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published' }]
+        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published', has_closed: false }]
       });
       // A value outside the CreateSessionError union drives the exhaustiveness
       // guard. Its message must be static, not the interpolated raw value.
@@ -5792,7 +5945,7 @@ describe('Opportunities API', () => {
     it('still serves the deprecated /:id/firsthand-handoff alias path', async () => {
       process.env.FRONTEND_URL = 'https://cortex.example.com';
       mockQuery.mockResolvedValueOnce({
-        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published' }]
+        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published', has_closed: false }]
       });
       mockCreateSession.mockResolvedValueOnce({
         ok: true,
@@ -5985,12 +6138,17 @@ describe('Opportunities API', () => {
   });
 
   describe('POST /api/opportunities/:id/survey-session', () => {
+    // `has_closed` is what the mint SELECT projects for the deadline gate
+    // (cto/AdaptaLabs#129): false here means "open", and the helper refuses to
+    // mint at all when the key is absent, so a mocked row without it is a row
+    // the route could never receive from the real query.
     const surveyRow = (overrides: Record<string, unknown> = {}) => ({
       id: '1',
       type: 'survey',
       firsthand_study_id: 'study_questions',
       status: 'published',
       delivery_mode: 'native',
+      has_closed: false,
       ...overrides
     });
 
@@ -6142,7 +6300,9 @@ describe('Opportunities API', () => {
       mockGetStudyById.mockResolvedValueOnce(surveyStudy);
       mockFindParticipantSession.mockResolvedValueOnce({
         token: 'fh_existing',
-        sessionStatus: 'link_opened'
+        sessionStatus: 'link_opened',
+        completedAt: null,
+        sessionNotExpired: true
       });
 
       const response = await request(listening(app))
@@ -6158,11 +6318,115 @@ describe('Opportunities API', () => {
       mockGetStudyById.mockResolvedValueOnce(surveyStudy);
       mockFindParticipantSession.mockResolvedValueOnce({
         token: 'fh_done',
-        sessionStatus: 'completed'
+        sessionStatus: 'completed',
+        completedAt: '2026-08-01T00:00:00.000Z',
+        sessionNotExpired: true
       });
 
       await request(listening(app)).post('/api/opportunities/1/survey-session').expect(409);
 
+      expect(mockCreateSession).not.toHaveBeenCalled();
+    });
+
+    /**
+     * LOW-8 (cto/AdaptaLabs#129): the most recent row is not automatically a
+     * live one. A terminal-unanswered session (`abandoned`/`failed`) is a dead
+     * link, not a resumable one - treated as no session at all, so a fresh
+     * mint proceeds exactly as it would for a participant who never started.
+     */
+    it.each(['abandoned', 'failed'])(
+      'mints a fresh session rather than resuming a dead one (%s)',
+      async (sessionStatus) => {
+        mockQuery.mockResolvedValueOnce({ rows: [surveyRow()] });
+        mockGetStudyById.mockResolvedValueOnce(surveyStudy);
+        mockFindParticipantSession.mockResolvedValueOnce({
+          token: 'fh_dead',
+          sessionStatus,
+          completedAt: null,
+          sessionNotExpired: true
+        });
+        mockCreateSession.mockResolvedValueOnce({
+          ok: true,
+          session: { session_id: 's', session_token: 'fh_fresh', expires_at: '2026-09-01T00:00:00.000Z' }
+        });
+
+        const response = await request(listening(app))
+          .post('/api/opportunities/1/survey-session')
+          .expect(200);
+
+        expect(response.body.session_url).toContain('fh_fresh');
+        expect(mockCreateSession).toHaveBeenCalled();
+      }
+    );
+
+    it('mints a fresh session rather than resuming one whose own token has expired', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [surveyRow()] });
+      mockGetStudyById.mockResolvedValueOnce(surveyStudy);
+      mockFindParticipantSession.mockResolvedValueOnce({
+        token: 'fh_expired',
+        sessionStatus: 'link_opened',
+        completedAt: null,
+        sessionNotExpired: false
+      });
+      mockCreateSession.mockResolvedValueOnce({
+        ok: true,
+        session: { session_id: 's', session_token: 'fh_fresh_2', expires_at: '2026-09-01T00:00:00.000Z' }
+      });
+
+      const response = await request(listening(app))
+        .post('/api/opportunities/1/survey-session')
+        .expect(200);
+
+      expect(response.body.session_url).toContain('fh_fresh_2');
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    /**
+     * HIGH-1 / MEDIUM-3 (cto/AdaptaLabs#129): a `closed` opportunity - what the
+     * hourly sweep leaves behind - is neither the single-branch "not
+     * published" refusal every other status gets, nor silently treated as
+     * open. A signed-in participant with no session on it is refused with the
+     * SAME code the 410 detail read uses, not the bare "not published" string.
+     */
+    it('answers OPPORTUNITY_CLOSED, not the bare not-published error, for a closed study with no session', async () => {
+      mockQuery.mockResolvedValueOnce({
+        rows: [surveyRow({ status: 'closed', has_closed: true })]
+      });
+      mockGetStudyById.mockResolvedValueOnce(surveyStudy);
+
+      const response = await request(listening(app))
+        .post('/api/opportunities/1/survey-session')
+        .expect(403);
+
+      expect(response.body.error).toBe(
+        'This study has closed and is no longer accepting participants.'
+      );
+      expect(response.body.code).toBe('OPPORTUNITY_CLOSED');
+      expect(mockCreateSession).not.toHaveBeenCalled();
+    });
+
+    /**
+     * HIGH-1's whole point: `closed` must not refuse at the top, above the
+     * resume lookup, or an in-flight participant can never reach the code
+     * that would let them finish.
+     */
+    it('still resumes an in-flight session on a study the sweep has already closed', async () => {
+      mockQuery.mockResolvedValueOnce({
+        rows: [surveyRow({ status: 'closed', has_closed: true })]
+      });
+      mockGetStudyById.mockResolvedValueOnce(surveyStudy);
+      mockFindParticipantSession.mockResolvedValueOnce({
+        token: 'fh_inflight_closed',
+        sessionStatus: 'link_opened',
+        completedAt: null,
+        sessionNotExpired: true
+      });
+
+      const response = await request(listening(app))
+        .post('/api/opportunities/1/survey-session')
+        .expect(200);
+
+      expect(response.body.session_url).toContain('fh_inflight_closed');
       expect(mockCreateSession).not.toHaveBeenCalled();
     });
 
@@ -6623,8 +6887,8 @@ describe('Opportunities API', () => {
       queueOpportunity('test-user-id');
       mockGetStudyById.mockResolvedValueOnce(storedStudy);
       mockListResponsesForOpportunity.mockResolvedValueOnce([
-        { session_id: 's1', step_id: 'q1', step_prompt: null, step_type: 'rating', response_payload: { rating: 4 }, saved_at: '2026-08-17T10:00:00.000Z' },
-        { session_id: 's2', step_id: 'q1', step_prompt: null, step_type: 'rating', response_payload: { rating: 5 }, saved_at: '2026-08-17T10:01:00.000Z' },
+        { session_id: 's1', participant_id: 'p1', step_id: 'q1', step_prompt: null, step_type: 'rating', response_payload: { rating: 4 }, saved_at: '2026-08-17T10:00:00.000Z' },
+        { session_id: 's2', participant_id: 'p2', step_id: 'q1', step_prompt: null, step_type: 'rating', response_payload: { rating: 5 }, saved_at: '2026-08-17T10:01:00.000Z' },
       ]);
 
       const response = await request(listening(app))
@@ -6837,8 +7101,8 @@ describe('Opportunities API', () => {
       queueOpportunity('test-user-id');
       mockGetStudyById.mockResolvedValueOnce(storedStudy);
       mockListResponsesForOpportunity.mockResolvedValueOnce([
-        { session_id: 'session-1', step_id: 'q1', step_prompt: null, step_type: 'open_text', response_payload: { text: 'Fine' }, saved_at: '2026-08-17T10:00:00.000Z' },
-        { session_id: 'session-2', step_id: 'q1', step_prompt: null, step_type: 'open_text', response_payload: { text: 'Also fine' }, saved_at: '2026-08-17T10:01:00.000Z' },
+        { session_id: 'session-1', participant_id: 'p1', step_id: 'q1', step_prompt: null, step_type: 'open_text', response_payload: { text: 'Fine' }, saved_at: '2026-08-17T10:00:00.000Z' },
+        { session_id: 'session-2', participant_id: 'p2', step_id: 'q1', step_prompt: null, step_type: 'open_text', response_payload: { text: 'Also fine' }, saved_at: '2026-08-17T10:01:00.000Z' },
       ]);
       // First participant writes, second blows up - after the 200 and the
       // headers have already gone out.
@@ -6883,7 +7147,7 @@ describe('Opportunities API', () => {
       queueOpportunity('test-user-id');
       mockGetStudyById.mockResolvedValueOnce(storedStudy);
       mockListResponsesForOpportunity.mockResolvedValueOnce([
-        { session_id: 's1', step_id: 'q1', step_prompt: null, step_type: 'rating', response_payload: { rating: 4 }, saved_at: '2026-08-17T10:00:00.000Z' },
+        { session_id: 's1', participant_id: 'p1', step_id: 'q1', step_prompt: null, step_type: 'rating', response_payload: { rating: 4 }, saved_at: '2026-08-17T10:00:00.000Z' },
       ]);
 
       const response = await request(listening(app))
@@ -7716,6 +7980,130 @@ describe('Opportunities API', () => {
         .expect(200);
 
       expect(response.body).toMatchObject({ id: '1', status: 'closed' });
+    });
+
+    /**
+     * HIGH-2's backend half (cto/AdaptaLabs#129): a `closed` native survey
+     * still opens at 200 for a non-admin who holds an IN-FLIGHT session on it
+     * - the same exemption the survey-session mint route's resume gate grants
+     * - so the Resume button on the frontend has a page to render on. Every
+     * other non-admin on a closed study still gets 410 (the tests above).
+     */
+    const closedSurveyRow = {
+      ...closedRow,
+      type: 'survey',
+      delivery_mode: 'native'
+    };
+
+    it('serves a closed native survey at 200 to a non-admin with an in-flight session', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [closedSurveyRow] });
+      mockFindParticipantSession.mockResolvedValueOnce({
+        token: 'fh_inflight',
+        sessionStatus: 'link_opened',
+        completedAt: null,
+        sessionNotExpired: true
+      });
+      mockQuery.mockResolvedValueOnce({ rows: [] }); // sessions
+
+      const response = await request(listening(employeeApp))
+        .get('/api/opportunities/1')
+        .expect(200);
+
+      expect(response.body.completion).toEqual({
+        completed: false,
+        completedAt: null,
+        inProgress: true
+      });
+    });
+
+    it('still answers 410 for a closed native survey when the participant holds no session', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [closedSurveyRow] });
+      // default findParticipantSessionForOpportunity mock resolves null
+
+      const response = await request(listening(employeeApp))
+        .get('/api/opportunities/1')
+        .expect(410);
+
+      expect(response.body.code).toBe('OPPORTUNITY_CLOSED');
+    });
+
+    it('still answers 410 for a closed native survey when another participant holds the in-flight session', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [closedSurveyRow] });
+      // The mock cannot see WHOSE session it is fed - that is enforced by the
+      // real SQL's WHERE participant_id = $2, proven against a real database
+      // in opportunity-detail-resume-postgres.test.ts. This is the wiring
+      // check only: a null result (no session for THIS viewer) still refuses.
+
+      const response = await request(listening(employeeApp))
+        .get('/api/opportunities/1')
+        .expect(410);
+
+      expect(response.body.code).toBe('OPPORTUNITY_CLOSED');
+    });
+
+    /**
+     * AN UNAVAILABLE STUDY PAYS FOR NO RUNTIME READ (cto/AdaptaLabs#129,
+     * LOW-6).
+     *
+     * The comment above the refusal has always said "decide before the
+     * sessions query so an unavailable study never pays for a second read",
+     * and for a while it was false: the session summary was computed eagerly
+     * above the refusal, so a DRAFT native survey paid for a read on the
+     * five-connection FirstHand runtime pool - shared with live participant
+     * sessions - before being told no. `GET /:id` is `optionalAuth` and
+     * carries no rate limiter, so that read was reachable in a loop.
+     *
+     * The summary is lazy now and the exemption short-circuits on the status
+     * first, so only a `closed` study can reach it. Asserted on the mock's
+     * call count rather than on the status, because the status was already
+     * correct while the read was being paid for - a test on the 404 alone
+     * cannot see this at all.
+     */
+    it('pays for no runtime session read when refusing a draft native survey', async () => {
+      const draftSurveyRow = { ...draftRow, type: 'survey', delivery_mode: 'native' };
+      mockQuery.mockResolvedValueOnce({ rows: [draftSurveyRow] });
+
+      const response = await request(listening(employeeApp))
+        .get('/api/opportunities/1')
+        .expect(404);
+
+      expect(response.body.code).toBe('OPPORTUNITY_NOT_OPEN');
+      expect(mockFindParticipantSession).not.toHaveBeenCalled();
+      // And still only the one opportunity lookup, as the closed twin above
+      // asserts - the sessions query is downstream of the refusal too.
+      expect(mockQuery).toHaveBeenCalledTimes(1);
+    });
+
+    // The control: the SAME read is paid for when it can change the answer.
+    // Without this, the assertion above passes just as well if the lazy read
+    // were never wired up at all.
+    it('does pay for the runtime session read when the study is closed', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [closedSurveyRow] });
+
+      await request(listening(employeeApp))
+        .get('/api/opportunities/1')
+        .expect(410);
+
+      expect(mockFindParticipantSession).toHaveBeenCalledWith({
+        opportunityId: '1',
+        participantId: 'employee-id'
+      });
+    });
+
+    it('still answers 410 for a closed native survey when the held session is dead, not in flight', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [closedSurveyRow] });
+      mockFindParticipantSession.mockResolvedValueOnce({
+        token: 'fh_dead',
+        sessionStatus: 'abandoned',
+        completedAt: null,
+        sessionNotExpired: true
+      });
+
+      const response = await request(listening(employeeApp))
+        .get('/api/opportunities/1')
+        .expect(410);
+
+      expect(response.body.code).toBe('OPPORTUNITY_CLOSED');
     });
 
     it('strips owner fields from the GET / list for anonymous participants', async () => {

@@ -115,6 +115,7 @@ const CSV_STEPS: StudyStep[] = [
 const answersFor = (sessionId: string): StoredResponse[] => [
   {
     session_id: sessionId,
+    participant_id: sessionId,
     step_id: 'q1',
     step_prompt: 'Tell us everything',
     step_type: 'open_text',
