@@ -191,9 +191,12 @@ lint:
 #
 # Not covered here, deliberately: the rest of the e2e suite, which needs
 # postgres and a seeded database, and three of whose specs create and publish
-# studies. e2e/accessibility.test.ts is the exception - it stubs the two API
-# calls it depends on, so it runs against a static build with no backend at
-# all. See test-a11y below.
+# studies. Two specs are the exception - e2e/accessibility.test.ts, which stubs
+# the two API calls it depends on, and e2e/admin-pill-primitive.test.ts (#142),
+# which mocks every route it needs - so both run against a static build with no
+# backend at all. They are the two named in playwright.accessibility.config.ts's
+# testMatch, which is an allow-list: a browser spec left out of it runs nowhere.
+# See test-a11y below.
 #
 # Image pinned to the same Node the apps build on, matching lint and
 # backend/Dockerfile. Root `npm ci` comes first in every job: the suites import

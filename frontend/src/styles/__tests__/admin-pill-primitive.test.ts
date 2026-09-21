@@ -13,17 +13,18 @@ import { join } from 'path';
  * `_components.css` (`td.col-status > *` and `td:not(:first-child) > span`)
  * outranked a bare class selector on specificity and forced `inline-block` on
  * any direct child of those cells - "Auto-closed" clipped to "AUTO-CLO" in a
- * narrow column as a result.
+ * narrow column as a result. The fix does not fight those two rules or except
+ * itself from them; it declares the box on a selector that outranks them
+ * (`td.col-type .admin-pill, td.col-status .admin-pill`, 0,4,3), which is the
+ * one rule pinned below.
  *
  * jsdom does not do real layout, so source-pin assertions here cannot see a
- * computed height, a pixel-clipped label or centred overflow overlapping a
- * neighbouring column - that is what `e2e/admin-table-chrome-layout.test.ts`
- * (`admin studies table pills share one box (#142)`) is for, in a real
- * Chromium. What this file CAN see, and fail by name on, is the shape of the
- * source: the shared class present on all three pills, the bootstrap badge
- * gone, the two legacy overrides now excepting `.admin-pill` rather than
- * fighting it, and the metrics/label-truncation rules that make the visible
- * fix possible.
+ * computed height, a pixel-clipped label, a missing gutter or text spilling
+ * out of a pill - that is what `e2e/admin-pill-primitive.test.ts` is for, in
+ * a real Chromium, run in CI by the `test-a11y` job. What this file CAN see,
+ * and fail by name on, is the shape of the source: the shared class present
+ * on all three pills, the bootstrap badge gone, and the metrics/
+ * label-truncation rules that make the visible fix possible.
  */
 
 const ADMIN_TSX = readFileSync(join(__dirname, '..', '..', 'pages', 'Admin.tsx'), 'utf8');
@@ -49,18 +50,6 @@ describe('admin studies table pill primitive (#142)', () => {
     );
   });
 
-  it('the two legacy col-status/col-type overrides except .admin-pill instead of fighting it', () => {
-    // Code review HIGH 1/MEDIUM 1 (#142): these two rules used to force
-    // `display: inline-block` on every direct child regardless of class,
-    // including a bare `.admin-pill`. They still do real work for other
-    // cells in these columns/table, so they are excepted rather than
-    // deleted - a regression here would mean `display` is back to depending
-    // on which rule happens to win the specificity arms race, which is the
-    // defect #142 was filed against.
-    expect(CSS).toMatch(/\.admin-dashboard table\.admin-data-table tbody td\.col-status > \*:not\(\.admin-pill\) \{/);
-    expect(CSS).toMatch(/\.admin-dashboard table tbody td:not\(:first-child\) > span:not\(\.admin-pill\),/);
-  });
-
   it('the auto-closed pill keeps the uppercase/tracking the other two pills carry', () => {
     // Code review HIGH 1 (#142): the bootstrap badge it replaced had neither,
     // so this was the one pill of the three still visibly a different style
@@ -80,7 +69,7 @@ describe('admin studies table pill primitive (#142)', () => {
     // which does the shrinking and the ellipsis.
     expect(ADMIN_TSX).toMatch(/<span className="admin-study-status__label">/);
     expect(CSS).toMatch(
-      /\.admin-study-status__label \{[^}]*min-width:\s*0;[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap;/
+      /\.admin-study-status__label \{[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap;/
     );
   });
 

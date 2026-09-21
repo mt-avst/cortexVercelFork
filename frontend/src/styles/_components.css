@@ -2757,17 +2757,17 @@ body.admin-page .header .container {
   isolation: isolate;
 }
 
-.admin-dashboard table.admin-data-table tbody td.col-status > *:not(.admin-pill) {
+.admin-dashboard table.admin-data-table tbody td.col-status > * {
   display: inline-block;
   margin-right: 0.25rem;
 }
 
-/* #142: excluding `.admin-pill` above (so its own `display` is no longer
-   fought over by this rule) also excludes it from the margin-right above,
-   so restate the gutter here for a pill on its own. */
-.admin-dashboard table.admin-data-table tbody td.col-status > .admin-pill {
-  margin-right: 0.25rem;
-}
+/* #142: an `.admin-pill` in this cell takes `margin: 0` from the shared
+   primitive's ancestor-scoped rule (search "Shared pill primitive"), which
+   outranks the `margin-right` above - so the gutter for two pills sharing a
+   line is restated in the card-layout block instead (search "gutter"
+   under `@media (max-width: 1219.98px)`), which is the only layout where
+   they ever do share one. */
 
 /* Column alignment */
 .admin-dashboard table thead th:not(:first-child),
@@ -2785,17 +2785,10 @@ body.admin-page .header .container {
   vertical-align: middle;
 }
 
-.admin-dashboard table tbody td:not(:first-child) > span:not(.admin-pill),
+.admin-dashboard table tbody td:not(:first-child) > span,
 .admin-dashboard table tbody td:not(:first-child) > small,
 .admin-dashboard table tbody td:not(:first-child) > div:not(.dropdown):not(.admin-action-group) {
   display: inline-block;
-  text-align: center;
-}
-
-/* #142: an `.admin-pill` still wants its parent cell centred - excluding it
-   from `display: inline-block` above so it keeps the primitive's own
-   `inline-flex` does not exclude it from centring. */
-.admin-dashboard table tbody td:not(:first-child) > span.admin-pill {
   text-align: center;
 }
 
@@ -3185,11 +3178,17 @@ body.admin-page .header .container {
    lozenge in this column now come from the shared `.admin-pill` primitive
    (#142) - see "Shared pill primitive" below, near `.admin-study-status`. */
 
-/* Column 3: Status - centered badges. 10% measured 91.8px wide at common
-   desktop widths, one line short of fitting "Auto-closed" at the shared
-   primitive's own metrics (#142, code review HIGH 1: 28.38px tall over two
-   lines instead of 24px on one). Measured at 12%: 108px, 24.00px tall,
-   86.5px wide, one line. */
+/* Column 3: Status - centered badges. The widest thing this column has to
+   hold is the "Auto-closed" marker, and it is `white-space: nowrap` on one
+   line either way (#142; an earlier note here described a two-line 28.38px
+   pill, which the shared primitive's fixed 24px height and nowrap make
+   impossible now). What 10% loses is not the line count but the ink: the
+   pill is capped at the cell by `td > *`, so at 10% the text escapes its own
+   background. Measured at 1440px: 12% gives a 92.0px pill around 80.7px of
+   ink, 24px tall; 10% gives a 75.8px pill around the same 80.7px, which
+   `justify-content: center` then hangs ~2.5px off each end.
+   `e2e/admin-pill-primitive.test.ts` measures that ink against the pill's
+   box at 1240 and 1440 - a source pin on this number cannot. */
 .admin-data-table .col-status {
   width: 12%;
   min-width: 100px;
@@ -3362,6 +3361,23 @@ body.admin-page .header .container {
   /* Actions: buttons and the kebab left-aligned beneath their label. */
   .admin-data-table td.col-actions .admin-action-group {
     justify-content: flex-start;
+  }
+
+  /* #142: the gutter between a closed study's status pill and its
+     "Auto-closed" marker. This is the only layout where the two share a
+     line: above 1220px the admin content column is max-width capped, so
+     the Status cell measures 92px of content box at 1220, 1440, 1920, 2560
+     and 3200 alike (measured) and the 67px + 92px pair always wraps,
+     centred. Here the cell is as wide as the card and they sit side by
+     side, where `margin: 0` from the shared primitive's ancestor-scoped
+     rule left them touching, 0px apart, with two backgrounds meeting.
+
+     One class more than that rule (0,5,3 against 0,4,3), so it wins on
+     specificity wherever either sits in the file. A margin on the SECOND
+     pill rather than on every pill: the first then still lines up flush
+     with the Type pill in the card row above it. */
+  .admin-dashboard table.admin-data-table tbody td.col-status > .admin-pill + .admin-pill {
+    margin-left: 0.25rem;
   }
 }
 
@@ -14047,35 +14063,34 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
    `.admin-study-status--*`, `.admin-pill--auto-closed`); this only fixes
    the box.
 
-   The second rule restates the metrics scoped to the studies table's own
-   ancestor chain because two legacy rules elsewhere in this file
-   (`.admin-dashboard table.admin-data-table tbody td.col-status > *` and
-   `.admin-dashboard table tbody td:not(:first-child) > span`) used to force
-   `display: inline-block` on any direct child of these cells regardless of
-   its own class, outranking a bare `.admin-pill`/`.admin-study-status`
-   selector on specificity alone. Both now carry a `:not(.admin-pill)`
-   exception (see their own definitions), which removes the root cause; this
-   rule stays because those two legacy rules are not the only source of
-   drift - `.lozenge`'s own base rule and `.admin-study-status`'s own base
-   rule (below) also set height/font-size/line-height, at a specificity a
-   bare `.admin-pill` still cannot reach without this ancestor-scoped
-   restatement.
+   The rule below is ancestor-scoped, and that scoping - specificity 0,4,3 -
+   is the whole mechanism: it is what outranks every other rule that has an
+   opinion about these pills' box. Nothing else in this file reaches it for
+   a `.admin-pill` inside these two cells. Ranked, measured on the served
+   build:
+
+     0,4,3  this rule                                        WINS
+     0,3,3  `td.col-status > *`                  (display, margin-right)
+     0,2,4  `td:not(:first-child) > span`        (display, text-align)
+     0,1,0  `.lozenge`, `.admin-study-status`    (height/font-size/…)
+
+   A bare `.admin-pill { … }` rule would sit at 0,1,0 and lose to all three,
+   so it is not written: it was measured to change nothing at 856/1024/1218/
+   1440 in both themes, which makes it a rule that reads as the mechanism
+   while doing none of the work. For the same reason the two legacy rules
+   above carry no `:not(.admin-pill)` exception - they already lose here.
+   What they must NOT do is get more specific: a future
+   `td.col-status > span.admin-study-status` (0,4,3, later in the file) or
+   anything above 0,4,3 takes the box back, which is what
+   `e2e/admin-pill-primitive.test.ts` measures in a real browser.
+
    ponytail: the concrete height/padding/font-size values are duplicated
    here rather than read from `.admin-pill` once - the next rule this
    ancestor chain adds will win by file order, not by any principled
    priority, same as it did before this fix. Upgrade path: scope the
    `.lozenge`/`.admin-study-status` base rules' own box metrics the same
-   way the two legacy overrides were scoped above, then this whole block
-   collapses into the bare `.admin-pill` class with nothing left to fight. */
-.admin-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  vertical-align: middle;
-  white-space: nowrap;
-  box-sizing: border-box;
-}
-
+   way this rule is scoped, then this whole block collapses into a bare
+   `.admin-pill` class with nothing left to fight. */
 .admin-dashboard table.admin-data-table tbody td.col-type .admin-pill,
 .admin-dashboard table.admin-data-table tbody td.col-status .admin-pill {
   display: inline-flex;
@@ -14104,16 +14119,28 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
    CONTAINER's own overflowing text (tried first - Chrome hard-clips both
    ends with no "…", which is less readable than main's uncentred spill it
    was meant to fix, not more). The label text is wrapped in its own
-   `.admin-study-status__label` flex-item span instead: `min-width: 0`
-   lets that one item shrink below its content size within the pill's
-   constrained width, and the ellipsis then renders correctly on a
-   genuine block-level overflow at the item's own end - the pill itself
-   needs no rule of its own here. Every other status label is short
-   enough that this is a no-op: shrinking and ellipsis only do anything
-   once an item holds more content than its available width allows. */
+   `.admin-study-status__label` flex-item span instead, and `overflow:
+   hidden` below does two jobs: it clips the overflow inside the pill (so
+   the ellipsis renders on a genuine block-level overflow at the item's own
+   end), and, because a flex item whose overflow is not `visible` takes an
+   automatic minimum size of 0, it also lets the item shrink below its
+   content width without a `min-width: 0` of its own - measured: declaring
+   one changes the computed `min-width` string from `auto` to `0px` and
+   nothing else, with identical boxes, scroll widths and text ink at
+   856/1024/1218/1440 in both themes. Every
+   other status label is short enough that all of this is a no-op:
+   shrinking and ellipsis only do anything once an item holds more content
+   than its available width allows.
+
+   The pill itself needs no rule here, and the clip is what makes the ink
+   claim testable: content of an `overflow: hidden` box cannot paint
+   outside it, so the label box sitting inside the pill box is the
+   guarantee - see `e2e/admin-pill-primitive.test.ts`, which asserts
+   exactly that rather than the two pills' boxes (the pill's box is capped
+   at the cell by `td > *`, so it never moves and a box comparison cannot
+   see the text spill at all). */
 .admin-study-status__label {
   display: block;
-  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
