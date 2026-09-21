@@ -4,7 +4,23 @@
  * Scoped to this component, following the two existing component-local
  * stylesheets in this folder. Colours come from the design tokens so the builder
  * follows the theme without a second theme block, and every interactive control
- * is at least 24 x 24 CSS px (WCAG 2.2 SC 2.5.8).
+ * is at least 24 x 24 CSS px (WCAG 2.2 SC 2.5.8). Text colour is unset
+ * throughout and inherits `body { color: var(--text-body); }` (`_base.css`) -
+ * verified, not assumed - which is cto/AdaptaLabs#141's "--text-*" requirement
+ * satisfied by inheritance rather than a redundant per-element declaration.
+ *
+ * cto/AdaptaLabs#141: border-card is a real, theme-aware token but predates
+ * the --border-*-current / --surface-*-current family review-step.css and
+ * pending-approvals.css already use. The borders below were converged to
+ * --border-subtle-current and then converged BACK, because a review gate
+ * measured the two in an engine rather than reading them: identical in
+ * light, but in dark the newer token is a 0.06 alpha against border-card's
+ * 0.10 - a 40% cut to every card outline, in the one theme this ticket
+ * exists to fix. This ticket preserves rendered values, so a token that is
+ * only nearly equal is not an upgrade. Same reasoning, same gate, as the
+ * --bg-card note below: a near-transparent dark tint against a near-opaque
+ * dark panel is a visual-weight change for a repeated card list, not a
+ * pure tokenisation.
  */
 
 .screener-questions__list {
@@ -57,7 +73,12 @@
   border: 1px solid var(--border-card);
   border-radius: 6px;
   background: none;
-  color: var(--status-danger);
+  /* --status-danger-text, not the fill token: this paints an icon (bare
+     text-role use), and --status-danger measures 3.15:1 as text on the dark
+     app ground per the token doc in _tokens.css - --status-danger-text is
+     the pair built for exactly this role (7.12:1 dark, same value as
+     --status-danger in light). cto/AdaptaLabs#141. */
+  color: var(--status-danger-text);
   cursor: pointer;
 }
 
