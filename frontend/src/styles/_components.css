@@ -3145,10 +3145,12 @@ body.admin-page .header .container {
 /* Column 1: Title - generous space for title + description */
 /* NB: under `table-layout: fixed` these percentages are the whole story -
    min-width is not honoured, so a column gets exactly its share and no more.
-   Title gives up the 3% that Status needs for its widest badge, and 2% more
-   to Actions (see there) - a title wraps, a pair of buttons cannot. */
+   Title gives up the 3% that Status needs for its widest badge, and 3% more
+   to Actions and to bringing the set to exactly 100% (see Actions) - a title
+   wraps, a pair of buttons cannot. Recruitment gives 1% too: its ratio and
+   bar need ~65px of a column that was ~117px. */
 .admin-data-table .col-title {
-  width: 15%;
+  width: 14%;
   min-width: 260px;
 }
 
@@ -3223,7 +3225,7 @@ body.admin-page .header .container {
    percentage and a block bar beneath. There is no separate Capacity column: that
    duplicated this cell's denominator. */
 .admin-data-table .col-recruitment {
-  width: 13%;
+  width: 12%;
   min-width: 150px;
 }
 
@@ -3259,8 +3261,14 @@ body.admin-page .header .container {
    is capped at the cell (`max-width: 100%`), so at every width above 1220px
    the cell offered 83px to ~102px of buttons. The kebab's `flex-shrink` gave
    way and its icon was squeezed to 0px - an empty outlined box where the row
-   menu should be (measured on main at 1240 and 1440). 13% fits the pair;
-   `e2e/admin-pill-primitive.test.ts` measures the painted icon. */
+   menu should be (measured on main at 1240 and 1440).
+
+   The columns now sum to EXACTLY 100%, so each number means what it says,
+   and 13% with the kebab's padding trimmed to 8px gives the pair several
+   pixels of slack rather than a fraction of one (13% of the old 102% set
+   fitted by 0.1px on Manrope and overflowed on the fallback font).
+   `e2e/admin-pill-primitive.test.ts` measures the painted icon and both
+   edges of the group, with the web font loaded and without it. */
 .admin-data-table .col-actions {
   width: 13%;
   min-width: 132px;
@@ -5809,7 +5817,7 @@ body.theme-dark .legend-label-past {
 
 /* Admin action button (kebab menu) */
 .admin-action-btn-kebab {
-  padding: 4px 10px;
+  padding: 4px 8px;
   flex: none;
 }
 
@@ -14246,9 +14254,9 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
   color: var(--text-muted);
 }
 
-/* "Published, not working" (cto/AdaptaLabs#149). The label truncates to
-   PUBLISHED... above 1220px, so the mark that says "broken" cannot be the
-   word: it is the draft pill's amber fill plus a warning glyph ahead of the
+/* "Published, not working" (cto/AdaptaLabs#149). The label truncates above
+   1220px - to "PUBLIS..." once the glyph takes its share - so the mark that
+   says "broken" cannot be the word: it is the draft pill's amber fill plus a warning glyph ahead of the
    label. Declared AFTER `--published` so that equal-specificity rule loses -
    the element carries both classes. The column is NOT widened for this; the
    next long label would re-break it. */
@@ -14259,12 +14267,13 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
 }
 
 /* Never shrinks: the label beside it is the flex item that gives way, so the
-   glyph survives every width the label truncates at. `currentColor`, so it
-   takes the pill's AA-checked text colour in both themes. */
+   glyph survives every width the label truncates at. It inherits the pill's
+   text colour - the amber declared above in light, and in dark the grey the
+   themes layer puts on every span in the table (~10:1 on the dark amber
+   fill, measured). */
 .admin-study-status__glyph {
   flex: none;
   margin-right: 0.3rem;
-  color: currentColor;
 }
 
 /* Audit #121: the draft study pill's 80% warning/ink text mix renders #9f6830

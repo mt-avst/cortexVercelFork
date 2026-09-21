@@ -932,11 +932,11 @@ const Admin: React.FC = () => {
                                 >
                                   {/*
                                     The label is clipped to the pill, and above
-                                    1220px the long one renders as PUBLISHED
-                                    followed by an ellipsis - so without more, a
-                                    broken published study and a healthy one
-                                    differ by one glyph in an identically
-                                    coloured pill. The distinction therefore
+                                    1220px the long one truncates - to
+                                    "PUBLIS..." beside the glyph - so without
+                                    more, a broken published study and a
+                                    healthy one differ by a few letters in an
+                                    identically coloured pill. The distinction therefore
                                     lives OUTSIDE the label, where truncation
                                     cannot reach it (cto/AdaptaLabs#149): an
                                     amber fill, and a warning glyph that does
