@@ -70,6 +70,7 @@ const formState = (overrides: Record<string, unknown> = {}): SavePayloadFormStat
   screener_questions: [],
   screener_message: '',
   target_roles: [],
+  external_consent_confirmed: null,
   ...overrides
 });
 

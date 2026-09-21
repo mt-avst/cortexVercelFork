@@ -89,6 +89,9 @@ export interface SavePayloadFormState {
   // Roles/skills wanted: the structured, display-only advertised audience.
   // The chip list as authored; deduped and capped server-side.
   target_roles: string[];
+  // The author's affirmation that the external tool collects its own consent
+  // (row 13, cto/AdaptaLabs#136), as stored. Null is "never recorded".
+  external_consent_confirmed: boolean | null;
 }
 
 export interface SavePayloadInput {
@@ -195,6 +198,34 @@ export const buildSavePayload = ({
      */
     ...(tabs.some((step) => step.key === 'externalLink')
       ? { external_link_optional: formData.external_link_optional.trim() || undefined }
+      : {}),
+    /*
+     * The external-tool consent affirmation (cto/AdaptaLabs#136). Travels with
+     * its control, like the link above: only a shape with the Your link step
+     * has the checkbox to set or repair it.
+     *
+     * Sent only as a boolean. Null - "never recorded" - is omitted, never sent:
+     * it can only become a boolean by the author touching the checkbox, so a
+     * legacy row that is merely re-saved stays unrecorded rather than silently
+     * turning into an explicit "no". On create an absent key stores null too.
+     *
+     * NO RELINK CHECK LIVES HERE, DELIBERATELY - and its absence is what made
+     * the backend reset unreachable from this form until the UI was fixed.
+     * This builder is handed ONE form state, and "the author repointed the
+     * study" is a fact about two: the state before the edit and the state
+     * after it. Comparing against `originalFormData` would answer a different
+     * question - is this the link the SERVER holds - which is the backend's
+     * comparison restated a second time in a place with a worse view of it.
+     * The rule is enforced at the two points that can see what they need:
+     * `handleInputChange` clears the affirmation in state the moment the link
+     * is edited, so a null reaches here and this key drops out; and the PATCH
+     * handler resets the column for any client that sends a changed link and
+     * no affirmation. A third copy in the middle is a rule written three times
+     * and killable in one.
+     */
+    ...(tabs.some((step) => step.key === 'externalLink') &&
+    typeof formData.external_consent_confirmed === 'boolean'
+      ? { external_consent_confirmed: formData.external_consent_confirmed }
       : {}),
     participant_type_required: formData.participant_type_required,
     participant_type_specific_details: formData.participant_type_specific_details.trim() || undefined,
