@@ -842,6 +842,19 @@ const Admin: React.FC = () => {
                             const recruitment = getRecruitment(opportunity);
                             const milestone = getNextMilestone(opportunity, now);
                             const TypeGlyph = getStudyTypeGlyph(opportunity.type);
+                            // One call per row: the status cell renders this and
+                            // also carries it as the label's `title`, and the
+                            // readiness check reads six fields.
+                            const statusLabel = isPublishedButNotWorking(opportunity.status, {
+                              type: opportunity.type,
+                              deliveryMode: opportunity.delivery_mode,
+                              hasLinkedStudy: Boolean(opportunity.firsthand_study_id),
+                              externalLink: opportunity.external_link_optional,
+                              sessionCount: (opportunity.sessions ?? []).length,
+                              meetingLocation: opportunity.meeting_location_optional
+                            })
+                              ? PUBLISHED_NOT_WORKING_LABEL
+                              : getDisplayStatus(opportunity.status);
                             return (
                             <tr
                               key={opportunity.id}
@@ -889,7 +902,7 @@ const Admin: React.FC = () => {
                                 </div>
                               </td>
                               <td className="col-type" data-label="Type">
-                                <span className={`${getTypeBadgeClass(opportunity.type)} badge--${opportunity.type}`}>
+                                <span className={`admin-pill ${getTypeBadgeClass(opportunity.type)} badge--${opportunity.type}`}>
                                   {TypeGlyph && (
                                     <Icon icon={TypeGlyph} size={14} aria-hidden="true" className="lozenge__glyph" />
                                   )}
@@ -911,20 +924,27 @@ const Admin: React.FC = () => {
                                   from these fields alone (a native survey or
                                   unmoderated study with no content).
                                 */}
-                                <span className={`admin-study-status admin-study-status--${opportunity.status}`}>
-                                  {isPublishedButNotWorking(opportunity.status, {
-                                    type: opportunity.type,
-                                    deliveryMode: opportunity.delivery_mode,
-                                    hasLinkedStudy: Boolean(opportunity.firsthand_study_id),
-                                    externalLink: opportunity.external_link_optional,
-                                    sessionCount: (opportunity.sessions ?? []).length,
-                                    meetingLocation: opportunity.meeting_location_optional
-                                  })
-                                    ? PUBLISHED_NOT_WORKING_LABEL
-                                    : getDisplayStatus(opportunity.status)}
+                                <span className={`admin-pill admin-study-status admin-study-status--${opportunity.status}`}>
+                                  {/*
+                                    The label is clipped to the pill, and above
+                                    1220px the long one renders as PUBLISHED
+                                    followed by an ellipsis - so a broken
+                                    published study and a healthy one differ by
+                                    one glyph in an identically coloured pill.
+                                    The full string is in the DOM either way, so
+                                    a screen reader already announces it; the
+                                    `title` closes the hover case for sighted
+                                    users. It is the cheap half of the fix, not
+                                    the whole one: the durable answer is a
+                                    visual distinction that survives truncation,
+                                    which is cto/AdaptaLabs#149.
+                                  */}
+                                  <span className="admin-study-status__label" title={statusLabel}>
+                                    {statusLabel}
+                                  </span>
                                 </span>
                                 {opportunity.status === 'closed' && (
-                                  <span className="badge bg-dark ms-1">Auto-closed</span>
+                                  <span className="admin-pill admin-pill--auto-closed">Auto-closed</span>
                                 )}
                               </td>
                               {/* Recruitment: booked / capacity across the study's sessions, with
