@@ -2969,5 +2969,15 @@
     "spec": "src/firsthand/survey-csv-export-postgres.test.ts",
     "test": "flags superseded sessions exactly as the whole-string builder does, across batches",
     "needsDatabase": true
+  },
+  {
+    "id": "survey-answer-text-length-is-capped",
+    "why": "cto/AdaptaLabs#155 (fix 1 of 2), raised by the security-auditor gate on #152. Before this, `surveyAnswerSchema.text` was a bare `z.string()` bounded only by the 100kb request-body limit, so a single crafted answer could carry megabytes of text; the survey CSV export and aggregate-results readers then read that per session across a 100-session batch, reaching ~510MB on the single-replica 2Gi runtime pod. Dropping `.max(MAX_ANSWER_TEXT_LENGTH)` is the shape a tidy-up of the schema would produce - one string field among several, indistinguishable from the rest - and it leaks nothing, breaks no schema and refuses nobody, so no gate reading for authorisation or validity would flag it. Proven by mutation before entry: reverting to a bare `z.string()` failed only the named test, with the other 10 in the file staying green.",
+    "file": "shared/firsthand/survey-answers.ts",
+    "anchor": "  text: z.string().max(MAX_ANSWER_TEXT_LENGTH).optional(),",
+    "mutation": "  text: z.string().optional(),",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-answers.test.ts",
+    "test": "rejects a text answer one character past the ceiling"
   }
 ]

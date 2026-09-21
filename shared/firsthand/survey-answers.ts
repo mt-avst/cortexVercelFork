@@ -16,16 +16,38 @@ import { NPS_SCALE_MAX, type StudyStep } from "./contract";
  * parses it with `.strict()`. A field added on the client and not here is
  * therefore a 422 the first time it is submitted - never a key that zod
  * silently strips and the aggregate quietly reads as "unanswered".
+ *
+ * Ceilings on a stored answer's free-text fields (cto/AdaptaLabs#155, fix 1 of
+ * 2). Before these, every field below was a bare `z.string()` (or an array of
+ * them) bounded only by the 100kb request-body limit, so a single crafted
+ * answer could carry megabytes of text; the survey CSV export and aggregate
+ * results readers then read that per session across a 100-session batch,
+ * reaching ~510MB on the single-replica 2Gi runtime pod. Policy numbers,
+ * pinned as literals in survey-answers.test.ts - a test that derived its
+ * expectation from the constant could not see the constant move.
+ *
+ * Generous for any real answer, not tight: `text` is a long-form open answer;
+ * `selectedOption` and each `selectedOptions` entry is one of `step.options`,
+ * itself capped at `INLINE_STUDY_LIMITS.maxOptionLength` (500 chars) by
+ * authoring; and `selectedOptions` itself is a participant's selection count,
+ * never larger than the widest native multi_choice's option list
+ * (`INLINE_STUDY_LIMITS.maxOptions`, 20).
+ *
+ * This bounds a single answer at the write boundary. It complements rather
+ * than replaces `MAX_AGGREGATE_RESPONSE_CHARS` (survey-results-repository.ts),
+ * which still bounds the SUM across many small answers in one aggregate body.
  */
+export const MAX_ANSWER_TEXT_LENGTH = 10_000;
+export const MAX_ANSWER_OPTION_LENGTH = 1_000;
+export const MAX_ANSWER_OPTIONS_COUNT = 500;
+
 export const surveyAnswerSchema = z.object({
-  // ponytail: unbounded free text. A single answer is capped only by the 100kb
-  //   request-body limit, so the aggregate results body bounds itself with
-  //   MAX_AGGREGATE_RESPONSE_CHARS instead (survey-results-repository.ts).
-  //   Upgrade path: a `.max()` here, once a sensible per-answer ceiling is
-  //   agreed. -> cto/AdaptaLabs#155
-  text: z.string().optional(),
-  selectedOption: z.string().optional(),
-  selectedOptions: z.array(z.string()).optional(),
+  text: z.string().max(MAX_ANSWER_TEXT_LENGTH).optional(),
+  selectedOption: z.string().max(MAX_ANSWER_OPTION_LENGTH).optional(),
+  selectedOptions: z
+    .array(z.string().max(MAX_ANSWER_OPTION_LENGTH))
+    .max(MAX_ANSWER_OPTIONS_COUNT)
+    .optional(),
   rating: z.number().int().optional()
 });
 
