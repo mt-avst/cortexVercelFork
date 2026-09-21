@@ -36,7 +36,9 @@ describe('admin studies table pill primitive (#142)', () => {
   });
 
   it('the status pill carries the shared .admin-pill class', () => {
-    expect(ADMIN_TSX).toMatch(/className=\{`admin-pill admin-study-status admin-study-status--\$\{opportunity\.status\}`\}/);
+    // Open-ended after the status modifier: a broken published study appends
+    // `admin-study-status--not-working` inside the same template (#149).
+    expect(ADMIN_TSX).toMatch(/className=\{`admin-pill admin-study-status admin-study-status--\$\{opportunity\.status\}/);
   });
 
   it('the auto-closed marker uses the shared primitive, not a bootstrap badge', () => {
