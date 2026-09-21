@@ -257,10 +257,22 @@ const OpportunityDetail: React.FC = () => {
   const closingTime = opportunity ? getClosingTime(opportunity) : null;
   // NO LONGER CLIENT-ONLY (cto/AdaptaLabs#129). Both mint routes derive the
   // same closing time in SQL - `end_date`, else the last session's `end_time` -
-  // and refuse with a 403 past it, so a stale tab, a replayed request or a
-  // script gets a refusal rather than a session. `loadMintableOpportunity` in
-  // backend/src/routes/opportunities.ts mirrors `getClosingTime` arm for arm,
-  // and a change to either belongs in both.
+  // and refuse a FRESH mint with a 403 past it, so a stale tab, a replayed
+  // request or a script gets a refusal rather than a session.
+  // `loadMintableOpportunity` in backend/src/routes/opportunities.ts mirrors
+  // `getClosingTime` arm for arm, and a change to either belongs in both.
+  //
+  // ONE EXEMPTION, AND IT IS THE PRODUCT DECISION (cto/AdaptaLabs#129, Nick's
+  // call). The survey mint route's deadline gate sits BELOW its resume lookup,
+  // so a participant who was part-way through when the deadline passed is
+  // handed back their existing session url and can finish; only a fresh start
+  // is refused. The detail read follows the same split - a `closed` study
+  // answers 410 to a non-admin EXCEPT when that viewer's own session is still
+  // in flight, when it serves the full 200 body with
+  // `completion.inProgress: true`. So `hasEnded` being true no longer implies
+  // "no way in": `hasResumableNativeSurvey` below is this page's half of that
+  // exemption, and it must stay keyed on the server's flag rather than on any
+  // locally-derived guess at who is mid-survey.
   //
   // THIS PAGE agrees with that server rule on both arms, because the detail
   // read serves every session unfiltered. THE BROWSE ROW agrees on `end_date`
@@ -269,7 +281,9 @@ const OpportunityDetail: React.FC = () => {
   // reads as "no deadline" there and still shows its action verb - while this
   // page and the server both call it ended. Pre-existing and the safe
   // direction, the server being the stricter side, but do not read the row as
-  // proof of the sessions arm.
+  // proof of the sessions arm. The row also never carries `inProgress` (the
+  // list read omits it by design), so it cannot show the Resume state either -
+  // the detail page is the only surface that can.
   //
   // The one path this gate still owns alone is the external hand-off, where
   // `window.open` leaves Cortex and the server sees no request at all -
@@ -278,8 +292,28 @@ const OpportunityDetail: React.FC = () => {
   const hasEnded = getTimeRemainingUntil(closingTime).urgency === 'ended';
   const closedOnLabel = formatStudyDate(closingTime?.toISOString());
 
+  /**
+   * This viewer holds a live, unanswered, unexpired session on this native
+   * survey/poll/one-question (cto/AdaptaLabs#129).
+   *
+   * Read straight off the server's `completion.inProgress`, which is the SAME
+   * `isInFlightRuntimeSession` predicate the survey-session mint route's resume
+   * lookup uses - so a page that offers Resume is a page whose click that route
+   * will actually resume, rather than refuse with a fresh-mint 403.
+   *
+   * `firsthand_study_id` is required because `runTakePart`'s native branch is,
+   * and without it the click would fall through to the external hand-off or to
+   * nothing at all.
+   */
+  const hasResumableNativeSurvey = Boolean(
+    isNativeSurvey &&
+    opportunity?.firsthand_study_id &&
+    opportunity?.completion?.inProgress &&
+    !opportunity?.completion?.completed
+  );
+
   const hasStartablePath = Boolean(
-    !hasEnded &&
+    (!hasEnded || hasResumableNativeSurvey) &&
     (opportunity?.type === 'unmoderated' || isNativeSurvey
       ? opportunity?.firsthand_study_id
       : externalLinkIsUsable)
@@ -1753,18 +1787,40 @@ const OpportunityDetail: React.FC = () => {
                             </p>
                           </div>
                         </div>
-                      ) : hasEnded ? (
+                      ) : hasEnded && !hasResumableNativeSurvey ? (
                         // Row 7 (second-pass review): checked ONLY inside the
                         // button branch below, so an EXTERNAL `question` -
                         // the one type that reaches the ExternalHandoff
                         // branch instead of the button - still handed off to
                         // a closed study's external form. Hoisted above the
                         // type branches so nothing downstream can bypass it.
+                        //
+                        // `!hasResumableNativeSurvey` is the #129 exemption:
+                        // a participant the SERVER says is mid-survey falls
+                        // through to the button branch below, which renders
+                        // it as Resume and keeps this closed-on date beside
+                        // it. Everyone else on a closed study still lands
+                        // here, with no control at all.
                         <p className="text-muted mb-0">
                           This study closed on {closedOnLabel}.
                         </p>
                       ) : opportunity.type === 'poll' || opportunity.type === 'survey' || opportunity.type === 'unmoderated' || isNativeSurvey ? (
                         <>
+                        {hasEnded && (
+                          // The closed-on date does not disappear because
+                          // there is a way back in: the participant is being
+                          // told both that the study is over and that the run
+                          // they already started can still be finished.
+                          <p className="text-muted mb-2" data-testid="closed-study-resume-note">
+                            This study closed on {closedOnLabel}. You can still finish the{' '}
+                            {opportunity.type === 'poll'
+                              ? 'poll'
+                              : opportunity.type === 'question'
+                              ? 'question'
+                              : 'survey'}{' '}
+                            you already started.
+                          </p>
+                        )}
                         <button
                           className="btn btn-primary w-100 mission-cta-btn"
                           onClick={handleTakePartClick}
@@ -1772,6 +1828,16 @@ const OpportunityDetail: React.FC = () => {
                             firstHandLoading || !hasStartablePath
                           }
                           aria-label={
+                            // RESUME comes first, on both a closed study and an
+                            // open one (cto/AdaptaLabs#129). The mint route
+                            // resumes an in-flight session either way - the
+                            // deadline gate sits below its resume lookup - so a
+                            // button reading "Start" was already describing a
+                            // resume on the open study too. Same visible words
+                            // in the accessible name (WCAG 2.5.3).
+                            hasResumableNativeSurvey && opportunity.type === 'poll' ? 'Resume poll in Cortex' :
+                            hasResumableNativeSurvey && opportunity.type === 'question' ? 'Resume question in Cortex' :
+                            hasResumableNativeSurvey ? 'Resume survey in Cortex' :
                             isNativeSurvey && opportunity.type === 'question' ? 'Answer question in Cortex' :
                             // A native poll's visible label is "Start poll", so its
                             // accessible name has to contain those words (WCAG 2.5.3
@@ -1792,15 +1858,24 @@ const OpportunityDetail: React.FC = () => {
                             opportunity.firsthand_study_id ? 'Start recorded study' : 'Open study in new tab'
                           }
                           title={
-                            // `hasEnded` is handled by the branch above this
-                            // one, so reaching here already means the study
-                            // is open; `!hasStartablePath` is only ever a
-                            // missing/invalid link at this point.
+                            // A study that has ENDED only reaches this branch
+                            // through the #129 resume exemption, which requires
+                            // a linked study - so `!hasStartablePath` here is
+                            // still only ever a missing/invalid link, on an
+                            // open study, exactly as before.
                             !hasStartablePath ? 'Not available yet' : undefined
                           }
                         >
                           {firstHandLoading
-                            ? 'Starting session...'
+                            ? hasResumableNativeSurvey
+                              ? 'Resuming session...'
+                              : 'Starting session...'
+                            : hasResumableNativeSurvey
+                            ? opportunity.type === 'poll'
+                              ? 'Resume poll'
+                              : opportunity.type === 'question'
+                              ? 'Resume question'
+                              : 'Resume survey'
                             : isNativeSurvey
                             ? opportunity.type === 'poll'
                               ? 'Start poll'
