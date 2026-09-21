@@ -245,11 +245,17 @@ describe.skipIf(skipDbTests)("external-delivery consent affirmation against real
    * The affirmation is about ONE external destination. Left alone across a
    * change of `external_link_optional`, a `true` made about tool A silently
    * reads as an affirmation about tool B - and becomes a compliance hole the
-   * moment the deferred publish gate consults it. The reset lives in the PATCH
-   * write path so the form cannot route round it: the save payload omits the
-   * key whenever the shape has no Your link step, so external -> native ->
-   * external would otherwise carry the stored `true` back into a re-ticked box
-   * for a link the author has since replaced.
+   * moment the deferred publish gate consults it.
+   *
+   * This reset is the FLOOR, not the whole fix. Cortex's own form clears the
+   * tick in state when the author edits the link, so a relink saved from the
+   * UI arrives with the link changed and the affirmation absent - the shape
+   * the reset is waiting for. Without that clear the form sent the new link
+   * and the stale `true` together and the exception below honoured it, so
+   * these arms were green while the bug was reachable through the UI; the
+   * clear is pinned in OpportunityForm.external-consent.test.tsx. What the
+   * reset still covers on its own is every other client: a direct API caller
+   * cannot leave a `true` about tool A on a row pointing at tool B.
    *
    * Reset to NULL - "never recorded" - rather than false, because the author
    * has said nothing about the new destination, not no.
@@ -370,6 +376,50 @@ describe.skipIf(skipDbTests)("external-delivery consent affirmation against real
       expect(read.body.external_link_optional).toBe(
         CREATE_BODY.external_link_optional
       );
+    });
+  });
+
+  /**
+   * WHO CAN READ IT, MEASURED RATHER THAN ASSERTED IN A COMMENT.
+   *
+   * The column's comments in migrate.ts and shared/types say it reaches every
+   * admin, not only the owner - and until this arm existed that claim rested
+   * on an ad-hoc probe run once by hand. `GET /:id` branches on
+   * `isAdminRole(req.user?.role)` alone: ownership does not narrow the payload
+   * and neither does status, so a researcher_admin who did not create the
+   * study reads the affirmation in full. Under CORTEX_BETA_ALL_ADMIN that is
+   * every signed-in employee, which is why the claim is worth pinning.
+   */
+  describe("the admin payload's reach", () => {
+    it("serves the affirmation to an admin who does not own the study", async () => {
+      const owner = await seedUser();
+      const otherAdmin = await seedUser();
+      const created = await create(owner, {
+        ...CREATE_BODY,
+        external_consent_confirmed: true,
+      }).expect(201);
+
+      const read = await getAsAdmin(created.body.id, otherAdmin).expect(200);
+      expect(read.body.external_consent_confirmed).toBe(true);
+      // The control: this really is the owner/admin payload and not the
+      // participant one, which strips owner identity by the same destructure.
+      expect(read.body.owner_user_id).toBe(owner);
+    });
+
+    it("serves it to a non-owning admin on a published study too", async () => {
+      // The arm above reads a DRAFT, which only an admin can see at all. This
+      // one covers the other side of that branch, so the claim is about the
+      // admin payload rather than about drafts being special.
+      const owner = await seedUser();
+      const otherAdmin = await seedUser();
+      const opportunity = await seedPublishedOpportunity({
+        ownerId: owner,
+        externalConsentConfirmed: false,
+      });
+
+      const read = await getAsAdmin(opportunity, otherAdmin).expect(200);
+      expect(read.body.external_consent_confirmed).toBe(false);
+      expect(read.body.owner_user_id).toBe(owner);
     });
   });
 

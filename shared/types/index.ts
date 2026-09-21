@@ -220,9 +220,14 @@ export interface Opportunity {
    * A bare boolean: it says an affirmation stands, not who made it or when.
    * `updated_at` is re-stamped by any edit, so it is not a proxy for either.
    * NULL means "never recorded": every opportunity that predates this column,
-   * and it stays distinct from an explicit false. The PATCH path resets it to
-   * NULL when `external_link_optional` changes, so a stored `true` is always
-   * about the destination currently on the row.
+   * and it stays distinct from an explicit false. Two application rules work
+   * to keep a stored `true` about the destination currently on the row: the
+   * authoring form clears the tick the moment the author edits the link, and
+   * the PATCH path resets the column to NULL when the link it is handed
+   * differs from the stored one. Neither is a database constraint, and the
+   * PATCH comparison reads the row outside the write's transaction, so two
+   * concurrent saves can still land a link and an affirmation out of step -
+   * see the ponytail beside that comparison.
    *
    * Does not gate publish, and carries no provenance columns - both are part
    * of one open compliance decision (see the ponytail beside the publish

@@ -2521,5 +2521,16 @@
     "runner": "jest",
     "spec": "src/utils/__tests__/publicOpportunity.test.ts",
     "test": "removes the external consent affirmation in all three of its states"
+  },
+  {
+    "id": "external-consent-tick-cleared-when-the-author-repoints-the-link",
+    "why": "The affirmation (cto/AdaptaLabs#136) is about ONE external destination, and the backend resets the column on a relink. That reset was UNREACHABLE from Cortex's own form: buildSavePayload gates external_link_optional and external_consent_confirmed on the same externalLink step and sends the affirmation whenever the hydrated value is a boolean, so a relink saved from the UI carried the new link AND the stale true - which the deliberate-re-affirmation exception then honoured, correctly, because nothing on the wire tells a fresh tick from a stale one. Reproduced end to end against real Postgres before the fix: PATCH of the exact UI payload left stored=true against the NEW link. This line is the whole of the UI half - it clears the tick in form state the moment the author edits the link, which is both what the author sees and what makes the omitted key reach the backend. Proven by mutation: making the comparison trivially true restores the shipped defect and reds the named test alone.",
+    "file": "frontend/src/pages/OpportunityForm.tsx",
+    "anchor": "            normaliseExternalLink(nextLink) === normaliseExternalLink(prev.external_link_optional)",
+    "mutation": "            normaliseExternalLink(nextLink) === normaliseExternalLink(nextLink)",
+    "runner": "vitest",
+    "project": "frontend",
+    "spec": "src/pages/__tests__/OpportunityForm.external-consent.test.tsx",
+    "test": "clears the tick as soon as the author edits the link"
   }
 ]

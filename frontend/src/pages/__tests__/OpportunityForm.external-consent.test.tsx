@@ -106,6 +106,17 @@ const consentCheckbox = async () => {
   )) as HTMLInputElement;
 };
 
+/** The External Link box, on the same step as the affirmation. */
+const linkInput = async () => {
+  goToStep('Your link');
+  return (await screen.findByLabelText('External Link *')) as HTMLInputElement;
+};
+
+/** Type a whole URL into the link box, as one edit. */
+const typeLink = async (url: string) => {
+  fireEvent.change(await linkInput(), { target: { value: url } });
+};
+
 /** Review's Consent line: its value and whether it is flagged as missing. */
 const reviewConsent = () => {
   goToStep('Review');
@@ -402,6 +413,161 @@ describe('the dirty check right after loading the affirmation', () => {
     await awaitLoaded();
 
     fireEvent.click(await consentCheckbox());
+    expect(leavingWouldAsk()).toBe(true);
+  });
+});
+
+/**
+ * REPOINTING THE STUDY CLEARS THE TICK, IN FRONT OF THE AUTHOR.
+ *
+ * The affirmation is about ONE destination. The backend resets the column on a
+ * relink, and that reset was unreachable from this form: `buildSavePayload`
+ * gates the link and the affirmation on the SAME `externalLink` step and sends
+ * the affirmation whenever the hydrated value is a boolean, so a relink saved
+ * from here carried the new link AND the stale `true`, which the deliberate-
+ * re-affirmation exception then honoured. Verbatim, against real Postgres:
+ * `stored=true link=https://tool-b...`.
+ *
+ * No test changed the link and looked at what happened to the tick, so the arm
+ * that would have caught it was never planned. These are that arm: the
+ * checkbox the author is looking at, and the body that leaves the form.
+ *
+ * The clear only ever clears. Typing the stored link back within one session
+ * leaves the tick off and the author re-ticks - pinned below, because
+ * restoring it would mean re-ticking a box on the author's behalf, which is
+ * the thing this fix exists to stop.
+ */
+describe('repointing the study at a different external tool', () => {
+  const TOOL_B = 'https://tool-b.example.com/survey';
+
+  it('clears the tick as soon as the author edits the link', async () => {
+    vi.mocked(getOpportunity).mockResolvedValue(
+      EXTERNAL_ROW({ external_consent_confirmed: true }) as never
+    );
+    renderEdit();
+    await awaitLoaded();
+
+    expect((await consentCheckbox()).checked).toBe(true);
+
+    await typeLink(TOOL_B);
+
+    expect((await consentCheckbox()).checked).toBe(false);
+    expect((await linkInput()).value).toBe(TOOL_B);
+  });
+
+  it('sends the new link and no affirmation when the author does not re-tick', async () => {
+    // The payload half of the same bug. Before the clear, this body carried
+    // `external_consent_confirmed: true` beside the new link and the server's
+    // reset stood down for it.
+    vi.mocked(getOpportunity).mockResolvedValue(
+      EXTERNAL_ROW({ external_consent_confirmed: true }) as never
+    );
+    renderEdit();
+    await awaitLoaded();
+
+    await typeLink(TOOL_B);
+    goToStep('Review');
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(updateOpportunity).toHaveBeenCalled());
+    const body = lastUpdateBody();
+    expect(body.external_link_optional).toBe(TOOL_B);
+    expect(Object.keys(body)).not.toContain('external_consent_confirmed');
+  });
+
+  it('sends true beside the new link when the author re-ticks for it', async () => {
+    // The control, and the one correct way to relink. Without it the arm above
+    // passes just as well against a form that has stopped sending the field.
+    vi.mocked(getOpportunity).mockResolvedValue(
+      EXTERNAL_ROW({ external_consent_confirmed: true }) as never
+    );
+    renderEdit();
+    await awaitLoaded();
+
+    await typeLink(TOOL_B);
+    fireEvent.click(await consentCheckbox());
+    expect((await consentCheckbox()).checked).toBe(true);
+
+    goToStep('Review');
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(updateOpportunity).toHaveBeenCalled());
+    const body = lastUpdateBody();
+    expect(body.external_link_optional).toBe(TOOL_B);
+    expect(body.external_consent_confirmed).toBe(true);
+  });
+
+  it('treats a stored link holding stray whitespace as the same tool when it is retyped bare', async () => {
+    // The form normalises the way the server does - the PATCH column loop
+    // stores every string trimmed - so a stray space is not a different tool.
+    //
+    // MEASURED, because the obvious arm cannot fail: typing a PADDED value
+    // into the box does not exercise the trim at all. `external_link_optional`
+    // is an `<input type="url">`, whose value sanitisation strips surrounding
+    // whitespace before React's onChange ever runs - probed in jsdom, which
+    // handed the handler `"https://a.example.com/x"` for an input of
+    // `"  https://a.example.com/x  "`. A test that pads the box therefore
+    // passes with the trim removed. The reachable side is the STORED one: a
+    // row written before the column loop trimmed hydrates padded, and retyping
+    // the same URL bare must not read as a relink.
+    const bare = 'https://forms.example.com/one-question';
+    vi.mocked(getOpportunity).mockResolvedValue(
+      EXTERNAL_ROW({
+        external_consent_confirmed: true,
+        external_link_optional: `  ${bare}  `
+      }) as never
+    );
+    renderEdit();
+    await awaitLoaded();
+
+    await typeLink(bare);
+
+    expect((await consentCheckbox()).checked).toBe(true);
+  });
+
+  it('leaves the tick off when the author types the stored link back in the same session', async () => {
+    // KNOWN AND DELIBERATE. The clear never un-clears, so an edit away and
+    // back costs the author one re-tick. What the save does in that state is
+    // the part that matters and is asserted here: the link is unchanged, the
+    // affirmation key is omitted, so the stored `true` - which was made about
+    // this very link - survives on the row.
+    const stored = EXTERNAL_ROW({ external_consent_confirmed: true });
+    vi.mocked(getOpportunity).mockResolvedValue(stored as never);
+    renderEdit();
+    await awaitLoaded();
+
+    await typeLink(TOOL_B);
+    await typeLink(stored.external_link_optional);
+
+    expect((await consentCheckbox()).checked).toBe(false);
+
+    goToStep('Review');
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(updateOpportunity).toHaveBeenCalled());
+    const body = lastUpdateBody();
+    expect(body.external_link_optional).toBe(stored.external_link_optional);
+    expect(Object.keys(body)).not.toContain('external_consent_confirmed');
+  });
+
+  it('does not clear a tick the author never had, and offers a save either way', async () => {
+    // The dirty check after a relink, and the null case: clearing null is a
+    // no-op, and the link change alone must still offer Save Changes on the
+    // first steps rather than leaving the author with unsaved work and no
+    // button.
+    vi.mocked(getOpportunity).mockResolvedValue(EXTERNAL_ROW() as never);
+    renderEdit();
+    await awaitLoaded();
+
+    await typeLink(TOOL_B);
+
+    expect((await consentCheckbox()).checked).toBe(false);
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'Form steps' })).getAllByRole(
+        'button'
+      )[1]
+    );
+    expect(screen.getByRole('button', { name: 'Save Changes' })).toBeInTheDocument();
     expect(leavingWouldAsk()).toBe(true);
   });
 });

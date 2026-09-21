@@ -335,9 +335,13 @@ export async function runMigrations() {
     // column and no timestamp, and `updated_at` cannot stand in for one
     // because any edit to the row re-stamps it. Whether provenance is needed
     // is part of the same open compliance decision as the publish gate
-    // (cto/AdaptaLabs#136). What the column does guarantee is that the flag is
-    // about the destination CURRENTLY stored: the PATCH path resets it to NULL
-    // when external_link_optional changes.
+    // (cto/AdaptaLabs#136). Keeping the flag pointed at the destination
+    // CURRENTLY stored is a rule in the application, not a property of the
+    // column: the authoring form clears the tick when the author edits the
+    // link, and the PATCH path resets the column to NULL when the link it is
+    // handed differs from the one on the row. The database enforces neither,
+    // and the PATCH comparison reads the row outside the write's transaction -
+    // see the ponytail beside it in routes/opportunities.ts.
     //
     // Readable by every admin, not only the owner - the same reach as the
     // owner-identity fields - and redacted from the participant payload in

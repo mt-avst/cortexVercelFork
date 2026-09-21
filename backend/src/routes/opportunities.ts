@@ -2394,11 +2394,46 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
   // the one correct way to relink. Only a request SILENT about the affirmation
   // has it cleared.
   //
-  // Compared on the value the column loop below would actually store (trimmed,
-  // empty read as absent), so whitespace, '' and NULL are not "a different
-  // tool".
+  // THIS IS THE FLOOR UNDER THE FORM, NOT THE WHOLE FIX. Cortex's own authoring
+  // form clears the tick in state the moment the author edits the link
+  // (`handleInputChange` in frontend/src/pages/OpportunityForm.tsx), so a
+  // relink saved from the UI arrives here with the link changed and the
+  // affirmation absent - the shape this reset is waiting for. Without that, the
+  // form sent the new link AND the stale `true` in one body and the exception
+  // above honoured it, because nothing on the wire distinguishes a deliberate
+  // re-affirmation from a stale one. The reset stays regardless: it is the only
+  // thing standing between a direct API caller and a `true` about tool A on a
+  // row pointing at tool B.
+  //
+  // Compared on normalised values rather than raw ones. Of the "empty" spellings
+  // an INCOMING link could take, only whitespace PADDING is reachable:
+  // `externalLinkSchema` is `z.string().url()`, which refuses `null`, `''` and
+  // `'   '` at the boundary, but the URL constructor strips surrounding spaces,
+  // so `'  https://a/x  '` is accepted and arrives padded. The column loop below
+  // stores `value.trim()`, so the padded form and the bare form are one stored
+  // value and must not read as two tools. The `|| null` arm is about the STORED
+  // side, where a row genuinely holds NULL or `''` for "no link".
   const normaliseExternalLink = (value: unknown): string | null =>
     typeof value === 'string' ? value.trim() || null : null;
+  // ponytail: `existingLink` is read outside the write's transaction
+  //   The SELECT that produced it and the UPDATE that ends this handler are
+  //   two separate `pool.query` calls with no transaction and no row lock
+  //   between them, so the comparison can be made against a row that has
+  //   already moved. Two concurrent PATCHes on one opportunity interleave:
+  //   A relinks to tool B and clears the affirmation; B, holding a snapshot
+  //   taken before A landed, sees the link unchanged, skips the reset and
+  //   writes `external_consent_confirmed = true` over it. The row ends as
+  //   link=B with an affirmation made about tool A - the exact state this
+  //   reset exists to prevent, reached by racing it. Narrow (it needs two
+  //   admins saving the same study at once) but it is a correctness ceiling,
+  //   not a taste one, so it gets an issue as well as this comment.
+  //   -> #NNN, upgrade path: take one client from the pool for the whole
+  //      handler, re-read this row with `SELECT ... FOR UPDATE` inside the
+  //      same transaction as the UPDATE, and commit both together. Not done
+  //      here because it rethreads every query in a handler of this size, and
+  //      the same ceiling applies to the other stored-vs-incoming decisions
+  //      above (the type/consent strip, the publish guard), so it is one
+  //      change for all of them rather than a special case for this field.
   if (
     data.external_link_optional !== undefined &&
     data.external_consent_confirmed === undefined &&

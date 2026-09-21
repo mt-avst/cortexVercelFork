@@ -208,6 +208,20 @@ export const buildSavePayload = ({
      * it can only become a boolean by the author touching the checkbox, so a
      * legacy row that is merely re-saved stays unrecorded rather than silently
      * turning into an explicit "no". On create an absent key stores null too.
+     *
+     * NO RELINK CHECK LIVES HERE, DELIBERATELY - and its absence is what made
+     * the backend reset unreachable from this form until the UI was fixed.
+     * This builder is handed ONE form state, and "the author repointed the
+     * study" is a fact about two: the state before the edit and the state
+     * after it. Comparing against `originalFormData` would answer a different
+     * question - is this the link the SERVER holds - which is the backend's
+     * comparison restated a second time in a place with a worse view of it.
+     * The rule is enforced at the two points that can see what they need:
+     * `handleInputChange` clears the affirmation in state the moment the link
+     * is edited, so a null reaches here and this key drops out; and the PATCH
+     * handler resets the column for any client that sends a changed link and
+     * no affirmation. A third copy in the middle is a rule written three times
+     * and killable in one.
      */
     ...(tabs.some((step) => step.key === 'externalLink') &&
     typeof formData.external_consent_confirmed === 'boolean'

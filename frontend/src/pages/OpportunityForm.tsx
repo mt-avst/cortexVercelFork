@@ -688,6 +688,35 @@ const resolveSourceTitle = async (studyId: string): Promise<string> => {
 const HEADER_STATUS_REGION_MIN_HEIGHT = '7.5rem';
 
 /**
+ * Two external links, compared the way the SERVER compares them.
+ *
+ * `external_link_optional` is stored trimmed - the PATCH column loop calls
+ * `.trim()` on every string it writes - and an absent link is NULL on the row
+ * and `''` in this form, which are the same destination: none. Normalising to
+ * `null` here keeps the form's idea of "a different tool" the same as the
+ * backend's, so padding a URL with spaces does not clear an affirmation the
+ * server would have kept.
+ *
+ * The trim is reachable from the STORED side only. The link box is an
+ * `<input type="url">`, whose value sanitisation strips surrounding
+ * whitespace before React's onChange runs - measured in jsdom - so a padded
+ * value never reaches the handler from the control, and a test that pads the
+ * box cannot kill the trim. What can is a row written before the column loop
+ * trimmed: it hydrates padded, and retyping the same URL bare must not read
+ * as a relink. Pinned on that in OpportunityForm.external-consent.test.tsx.
+ *
+ * It is a string comparison and nothing more: no URL parsing, no host
+ * lowercasing, no trailing-slash folding. Two spellings of the same
+ * destination therefore read as different tools, which errs towards asking
+ * the author to re-affirm rather than towards carrying an affirmation across
+ * a change nobody checked. See the call site in `handleInputChange`, and
+ * `normaliseExternalLink` in backend/src/routes/opportunities.ts, which this
+ * mirrors.
+ */
+const normaliseExternalLink = (value: string | null | undefined): string | null =>
+  typeof value === 'string' ? value.trim() || null : null;
+
+/**
  * The admin authoring form, and only the admin one.
  *
  * It used to take `allowUserSubmission`, a non-admin submission mode threaded
@@ -4992,6 +5021,55 @@ const OpportunityForm: React.FC = () => {
           ...clearedSource,
           type: value,
           firsthand_study_id: '',
+        };
+      }
+
+      // REPOINTING THE STUDY AT A DIFFERENT TOOL CLEARS THE AFFIRMATION, HERE,
+      // IN FRONT OF THE AUTHOR (cto/AdaptaLabs#136).
+      //
+      // The tick means "the tool I am sending participants to collects its own
+      // consent". It is about ONE destination, so it cannot outlive that
+      // destination. The backend resets the column on a relink, but that reset
+      // is unreachable from this form on its own: `buildSavePayload` gates the
+      // link and the affirmation on the SAME `externalLink` step and sends the
+      // affirmation whenever the hydrated value is a boolean, so a relink saved
+      // from here carries the new link AND the stale `true` - which the
+      // explicit-boolean exception then honours, correctly, because it cannot
+      // tell a deliberate re-affirmation from a stale one. Clearing it in form
+      // state is what makes the two distinguishable: after this, a `true` on
+      // the wire is one the author ticked for the destination now in the box.
+      //
+      // Cleared to null, not false: the author has said nothing about the new
+      // tool, not no - and the payload omits null, so a relink saved without a
+      // fresh tick reaches the backend as a link change with no affirmation,
+      // which is exactly the shape its reset is waiting for.
+      //
+      // This fires on an EDIT only. Hydrating a loaded study never routes
+      // through `handleInputChange`, so opening a study with a stored tick
+      // leaves it ticked.
+      //
+      // Compared against the value in state a keystroke ago, normalised the
+      // same way the backend normalises it, so a stored link that still holds
+      // stray whitespace is not a new tool when it is retyped bare. A host or
+      // path that differs by a trailing slash or by letter case IS treated as
+      // new - the strings differ and nothing here parses URLs - and the author
+      // sees that immediately, because the tick disappears from the box they
+      // are looking at.
+      //
+      // It only ever clears. Typing a link away and back within one session
+      // leaves the tick cleared and the author re-ticks: restoring it would
+      // mean remembering whether the null was ours or theirs, and getting that
+      // wrong would silently re-tick a box the author had deliberately
+      // cleared. Pinned by name in OpportunityForm.external-consent.test.tsx.
+      if (field === 'external_link_optional') {
+        const nextLink = value as string;
+        return {
+          ...prev,
+          external_link_optional: nextLink,
+          external_consent_confirmed:
+            normaliseExternalLink(nextLink) === normaliseExternalLink(prev.external_link_optional)
+              ? prev.external_consent_confirmed
+              : null
         };
       }
 
