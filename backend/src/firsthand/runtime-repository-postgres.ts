@@ -311,8 +311,8 @@ export async function resetRuntimeSession(payload: SessionPayload) {
  * than the `runtime_sessions.expires_at` ROW COLUMN. The column is written
  * once at INSERT and never revisited by anything afterwards; session-store.ts
  * (`isExpired`) documents a real case where the column and the payload
- * disagreed and settled on the payload as the only authoritative copy for
- * this exact question. Reading the column here would be a SECOND, looser
+ * disagreed and settled on the payload as the authoritative copy for this
+ * exact question. Reading the column here would be a SECOND, looser
  * definition of the same fact, exactly the kind of drift this function exists
  * to prevent. Compared against `NOW()` - the DATABASE clock, matching
  * `loadMintableOpportunity`'s `has_closed`, so neither an app server's drift
@@ -320,6 +320,30 @@ export async function resetRuntimeSession(payload: SessionPayload) {
  * `expires_at` at all (pre-dates the field) reads as expired, matching
  * `isExpired`'s fail-closed default: a token with no stated lifetime is
  * refused, not honoured forever.
+ *
+ * THE TWO COPIES OF THAT DEFINITION DO NOT AGREE ON A CORRUPT VALUE, and it
+ * is worth saying so rather than claiming one authoritative copy with no
+ * looser twin (cto/AdaptaLabs#129, LOW-5). Measured, not remembered:
+ *
+ *   - HERE, a value that is not a timestamp used to RAISE. `->>` hands back
+ *     whatever text is stored and `::timestamptz` refused it - measured on
+ *     postgres 15.19 for "not-a-date", an empty string, `12345` and the
+ *     well-shaped but out-of-range `2026-02-31T00:00:00.000Z`. The mint route
+ *     calls this outside any try, so that was a 500 where the participant
+ *     previously resumed; the detail read caught it and degraded to no trace.
+ *     One row, two answers. `try_timestamptz` (migration 0016) now answers
+ *     NULL for all four, so a corrupt payload reads as EXPIRED - fail closed,
+ *     the same direction as the absent-value case above.
+ *   - THERE, `isExpired` would read the same value as NOT expired:
+ *     `new Date("not-a-date").getTime()` is NaN and `NaN < Date.now()` is
+ *     false. That divergence is not reachable on the live path, because
+ *     `sessionPayloadSchema` types `expires_at` as `z.string().datetime()`
+ *     and `interpretRawPayload` refuses the whole payload as
+ *     `invalid_contract` first - also fail closed, so the OUTCOMES agree even
+ *     though the two expressions do not. Measured: zod rejects all three
+ *     malformed forms above. The guarantee rests on the schema, not on
+ *     `isExpired`, which is the part a reader should know before relaxing
+ *     that field.
  */
 export async function findParticipantSessionForOpportunity(input: {
   opportunityId: string;
@@ -340,8 +364,8 @@ export async function findParticipantSessionForOpportunity(input: {
       `
         SELECT token, session_status, completed_at,
                (
-                 (session_payload->'session'->>'expires_at') IS NOT NULL
-                 AND (session_payload->'session'->>'expires_at')::timestamptz > NOW()
+                 try_timestamptz(session_payload->'session'->>'expires_at') > NOW()
+                 IS TRUE
                ) AS session_not_expired
         FROM runtime_sessions
         WHERE opportunity_id = $1

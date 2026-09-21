@@ -172,6 +172,11 @@ async function seedSession(opportunityId: string, startOffset: string, endOffset
  * omit `expires_at` entirely - a payload minted before the field existed,
  * which reads as expired for the same fail-closed reason `isExpired` in
  * session-store.ts does.
+ *
+ * `corruptExpiresAt` (LOW-5) writes an arbitrary string into that same field.
+ * `session_payload` is `jsonb`, so nothing at the database boundary requires
+ * it to be a timestamp, and `->>` hands back whatever is there - which is why
+ * the read casts it and why that cast has to be guarded.
  */
 async function seedInFlightSurveySession(opts: {
   opportunityId: string;
@@ -179,10 +184,13 @@ async function seedInFlightSurveySession(opts: {
   token: string;
   sessionStatus?: string;
   expiresInHours?: number | null;
+  corruptExpiresAt?: string;
 }): Promise<void> {
   const expiresInHours = opts.expiresInHours === undefined ? 24 : opts.expiresInHours;
   const sessionPayload =
-    expiresInHours === null
+    opts.corruptExpiresAt !== undefined
+      ? JSON.stringify({ session: { expires_at: opts.corruptExpiresAt } })
+      : expiresInHours === null
       ? null
       : JSON.stringify({
           session: {
@@ -845,6 +853,57 @@ describe.skipIf(skipDbTests)("mint routes refuse a study that has closed", () =>
       const response = await mintSurvey(opportunity, participant).expect(200);
       expect(response.body.session_url).toBe("https://cortex.example.com/survey/tok_minted");
     });
+
+    /**
+     * A CORRUPT EXPIRY READS AS EXPIRED, IT DOES NOT 500 (cto/AdaptaLabs#129,
+     * LOW-5).
+     *
+     * `session_payload` is `jsonb`, so `->>'expires_at'` returns whatever
+     * text is stored and the read's `::timestamptz` raised on anything that
+     * is not a timestamp. THIS route calls
+     * `findParticipantSessionForOpportunity` outside any try, so one such row
+     * turned an ordinary resume into a 500 and the participant had no way
+     * forward at all; the participant detail read caught the same error and
+     * degraded, so one row produced two different answers depending on which
+     * route asked. `try_timestamptz` (migration 0016) answers NULL instead,
+     * so the session reads as EXPIRED - fail closed, the same direction as a
+     * payload with no `expires_at` at all - and this participant gets the
+     * fresh mint a dead session earns them.
+     *
+     * The four cases are the four ways the cast could raise, measured
+     * directly against postgres 15.19: text that is not a date at all, the
+     * empty string, a bare number, and a well-shaped date whose fields are
+     * out of range - the last being the one no regex guard could have caught.
+     */
+    it.each([
+      ["text that is not a date", "not-a-date"],
+      ["an empty string", ""],
+      ["a bare number", "12345"],
+      ["a well-shaped but impossible date", "2026-02-31T00:00:00.000Z"],
+    ])(
+      "mints a fresh session rather than erroring when the held session carries %s as its expiry",
+      async (_label, corruptExpiresAt) => {
+        const owner = await seedUser("researcher_admin");
+        const participant = await seedUser();
+        const study = await seedStudy("survey");
+        const opportunity = await seedOpportunity({
+          ownerId: owner,
+          type: "survey",
+          deliveryMode: "native",
+          studyId: study,
+          endDateOffset: "1 day",
+        });
+        await seedInFlightSurveySession({
+          opportunityId: opportunity,
+          participantId: participant,
+          token: "tok_corrupt",
+          corruptExpiresAt,
+        });
+
+        const response = await mintSurvey(opportunity, participant).expect(200);
+        expect(response.body.session_url).toBe("https://cortex.example.com/survey/tok_minted");
+      }
+    );
 
     it("refuses a fresh mint on a study the deadline has already closed, even though the held session is dead", async () => {
       // The two intended consequences of LOW-8 side by side: a dead session

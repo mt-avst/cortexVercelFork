@@ -2634,6 +2634,17 @@
     "test": "offers Resume when the server says this participant is mid-survey"
   },
   {
+    "id": "detail-read-exemption-is-closed-only",
+    "why": "Thirteen entries from cto/AdaptaLabs#129 grade the MINT side and none graded the one line that widens who may READ a study (MEDIUM-4). `GET /api/opportunities/:id` answers 410 to a non-admin for any non-published study; this clause is the single exception, serving a `closed` study at 200 - with its full participant payload - to a participant holding an in-flight session, so the Resume button the mint route honours is on a page that renders. Widened to `!== 'published'` it reads as a tidier spelling of the test one line above it and is not: a study can go published -> draft by PATCH while somebody holds a live session, and the same participant would then be served the DRAFT's participant payload - unfinished question wording, unannounced dates - instead of the 404 that says it is not open yet. Measured: before `answers 404 for a draft study even when the participant holds an in-flight session` existed, that mutation survived the whole suite, because every other case in the spec seeds `closed` or `published` and nothing exercised a third status with a live session behind it. With the test, the mutation reds it by name and nothing else in the spec - 1 failed, 10 passed of 11, measured on postgres 15.19.",
+    "file": "backend/src/routes/opportunities.ts",
+    "anchor": "      result.rows[0].status === 'closed' && (await readCompletionSummary())?.inProgress === true;",
+    "mutation": "      result.rows[0].status !== 'published' && (await readCompletionSummary())?.inProgress === true;",
+    "runner": "vitest",
+    "spec": "src/routes/__tests__/opportunity-detail-resume-postgres.test.ts",
+    "test": "answers 404 for a draft study even when the participant holds an in-flight session",
+    "needsDatabase": true
+  },
+  {
     "id": "detail-page-says-closed-when-a-survey-mint-is-refused",
     "why": "The two 403s a mint route sends mean opposite things: OPPORTUNITY_CLOSED is terminal, a bare not-published 403 is a study that may yet open. Both used to render 'not yet available, please try again later', which for a study that has ENDED is the one sentence on the page that is actively false. This branch keys on the code and must sit ABOVE the bare 403 arm to be reachable at all. Proven by mutation before entry: disabling it drops the page back to the false sentence and reds the named test.",
     "file": "frontend/src/pages/OpportunityDetail.tsx",
@@ -2646,7 +2657,7 @@
   },
   {
     "id": "detail-page-says-closed-when-a-recorded-mint-is-refused",
-    "why": "The recorded twin of the survey arm above, and it gets its own entry for the reason the mint-route pair does: two near-identical branches in one file are the shape where a fix applied to one reads as a fix applied to both. This arm also sits below two other code-keyed branches, so its position is part of what is graded. Proven by mutation before entry: disabling it reds the named test and nothing else.",
+    "why": "The recorded twin of the survey arm above, and it gets its own entry for the reason the mint-route pair does: two near-identical branches in one file are the shape where a fix applied to one reads as a fix applied to both. This arm also sits below two other code-keyed branches, so its position is part of what is graded. Proven by mutation before entry, and RE-MEASURED after the first count was wrong: disabling it reds TWO tests in its own spec, not one - the named test and `falls back to its own closed wording when the recorded refusal carries no sentence`, which reaches the same branch through the no-sentence arm. Both are this branch, so the entry is sound; the earlier \"and nothing else\" was an unmeasured claim about a mutation that had only been run under `-t`, which is the one shape that cannot see a second failure.",
     "file": "frontend/src/pages/OpportunityDetail.tsx",
     "anchor": "        } else if (status === 503) {\n          setError('This study is not yet configured. Please contact your research team.');\n        } else if (closedResponse) {\n",
     "mutation": "        } else if (status === 503) {\n          setError('This study is not yet configured. Please contact your research team.');\n        } else if (closedResponse && false) {\n",

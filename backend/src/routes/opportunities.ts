@@ -1754,15 +1754,38 @@ router.get('/:id', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req:
     throw new NotFoundError('Study');
   }
 
-  // The signed-in participant's own session summary for this opportunity,
-  // computed once and used twice below: to decide whether a `closed` study
-  // still opens for THIS viewer, and to attach `completion` further down.
-  // Only meaningful for the three types that leave a runtime session rather
-  // than a booking - see participantSessionSummaryForOpportunity.
-  const completionSummary =
-    req.user && runsNativeSurvey(result.rows[0].type, result.rows[0].delivery_mode)
-      ? await participantSessionSummaryForOpportunity(String(result.rows[0].id), req.user.id)
-      : null;
+  /**
+   * The signed-in participant's own session summary for this opportunity,
+   * read AT MOST ONCE and only once something asks for it.
+   *
+   * Two callers: the closed-study exemption immediately below, which decides
+   * whether a `closed` study still opens for THIS viewer, and the `completion`
+   * block attached to the payload further down. Both must read the SAME row,
+   * or the page could offer Resume on a study the same request decided to
+   * refuse - hence memoised rather than queried twice.
+   *
+   * LAZY rather than computed above the refusal, which is what keeps the
+   * "an unavailable study never pays for a second read" property below
+   * honest. Eager, a draft or archived study paid for a read on the
+   * five-connection FirstHand runtime pool - shared with live participant
+   * sessions - before being refused, on a route reachable without signing in
+   * and with no rate limiter on it. The exemption short-circuits on the
+   * status first, so only a `closed` study (or one that is being served
+   * anyway) spends that read.
+   *
+   * Only meaningful for the three types that leave a runtime session rather
+   * than a booking - see participantSessionSummaryForOpportunity.
+   */
+  let completionSummaryRead:
+    | Promise<{ completed: boolean; completedAt: string | null; inProgress: boolean } | null>
+    | undefined;
+  const readCompletionSummary = () => {
+    completionSummaryRead ??=
+      req.user && runsNativeSurvey(result.rows[0].type, result.rows[0].delivery_mode)
+        ? participantSessionSummaryForOpportunity(String(result.rows[0].id), req.user.id)
+        : Promise.resolve(null);
+    return completionSummaryRead;
+  };
 
   // Non-admin users can only VIEW published opportunities, but a non-published
   // row that exists is a different fact from one that does not. Decide before
@@ -1775,13 +1798,25 @@ router.get('/:id', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req:
   // finish (see that route). A detail page that still answered 410 for the
   // same participant would strand the Resume button behind a page that never
   // renders it - the fix on the mint side would exist and nothing could reach
-  // it. `completionSummary.inProgress` is the SAME query and the SAME
+  // it. `inProgress` is the SAME query and the SAME
   // `isInFlightRuntimeSession` definition the mint route's resume lookup
   // uses, so the two cannot disagree about who counts. Everyone else - not
   // signed in, no session, a different opportunity type, or a session that is
   // answered/dead/expired - gets the 410 exactly as before.
+  //
+  // `=== 'closed'` IS LOAD-BEARING and is not a tidier spelling of the
+  // `!== 'published'` above it (cto/AdaptaLabs#129, MEDIUM-3). A study can go
+  // published -> draft by PATCH while a participant holds an in-flight
+  // session; widened to any non-published status, this exemption would serve
+  // that participant the DRAFT's full participant payload - unfinished
+  // wording, unannounced dates - instead of the 404 that says it is not open
+  // yet. Pinned by name in opportunity-detail-resume-postgres.test.ts and
+  // graded in the mutation canary.
   if (!isAdmin && result.rows[0].status !== 'published') {
-    if (!(result.rows[0].status === 'closed' && completionSummary?.inProgress)) {
+    const exemptAsInFlightParticipant =
+      result.rows[0].status === 'closed' && (await readCompletionSummary())?.inProgress === true;
+
+    if (!exemptAsInFlightParticipant) {
       throw unavailableOpportunityError(result.rows[0].status);
     }
   }
@@ -1824,9 +1859,10 @@ router.get('/:id', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req:
   // row 10) - plus `inProgress`, so it can offer Resume instead
   // (cto/AdaptaLabs#129, HIGH-2). Attached for any signed-in user - see
   // participantCompletionMap on why role is not the gate during the beta.
-  // Sourced from `completionSummary`, computed once above - not a second
+  // Sourced from `readCompletionSummary`, memoised above - not a second
   // query, so this can never disagree with the closed-study exemption that
   // already read it.
+  const completionSummary = await readCompletionSummary();
   const withCompletion = completionSummary
     ? {
         ...opportunity,

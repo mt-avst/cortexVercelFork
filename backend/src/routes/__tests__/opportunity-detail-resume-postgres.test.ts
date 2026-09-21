@@ -37,6 +37,7 @@ const skipDbTests = process.env.FIRSTHAND_SKIP_DB_TESTS === "1";
 const migrateScript = path.resolve(__dirname, "../../../scripts/firsthand-migrate.mjs");
 
 const CLOSED_CODE = "OPPORTUNITY_CLOSED";
+const NOT_OPEN_CODE = "OPPORTUNITY_NOT_OPEN";
 
 let postgres: TestPostgres;
 let pool: pg.Pool;
@@ -280,6 +281,92 @@ describe.skipIf(skipDbTests)("participant detail read exempts an in-flight parti
     // ticket - a pre-existing, unchanged behaviour this pins as a control.
     const response = await getDetail(opportunity, participant).expect(410);
     expect(response.body.code).toBe(CLOSED_CODE);
+  });
+
+  /**
+   * THE EXEMPTION IS FOR `closed` AND NOTHING ELSE (cto/AdaptaLabs#129,
+   * MEDIUM-3).
+   *
+   * Widening it to any non-published status - which reads as a tidier
+   * spelling of the `!== 'published'` test one line above it - serves an
+   * in-flight participant the DRAFT's full participant payload instead of the
+   * 404 that says the study is not open yet. A study can go published ->
+   * draft by PATCH while somebody holds a live session on it, so that is not
+   * a hypothetical row: unfinished question wording and unannounced dates
+   * reach a participant who never saw them published.
+   *
+   * Without this test the widening survived the whole suite - every other
+   * case here seeds `closed` or `published`, so nothing exercised a third
+   * status with a live session behind it.
+   */
+  it("answers 404 for a draft study even when the participant holds an in-flight session", async () => {
+    const owner = await seedUser("researcher_admin");
+    const participant = await seedUser();
+    const study = await seedStudy();
+    const opportunity = await seedOpportunity({ ownerId: owner, studyId: study, status: "draft" });
+    await seedSurveySession({ opportunityId: opportunity, participantId: participant });
+
+    const response = await getDetail(opportunity, participant).expect(404);
+    expect(response.body.code).toBe(NOT_OPEN_CODE);
+  });
+
+  // The control for the test above: the same seeded session DOES open a
+  // `closed` study, so the 404 is the status being refused rather than the
+  // fixture failing to produce an in-flight session at all.
+  it("opens the same in-flight session when the study is closed rather than draft", async () => {
+    const owner = await seedUser("researcher_admin");
+    const participant = await seedUser();
+    const study = await seedStudy();
+    const opportunity = await seedOpportunity({ ownerId: owner, studyId: study, status: "closed" });
+    await seedSurveySession({ opportunityId: opportunity, participantId: participant });
+
+    const response = await getDetail(opportunity, participant).expect(200);
+    expect(response.body.completion.inProgress).toBe(true);
+  });
+
+  /**
+   * `completed` AND `inProgress` ARE MUTUALLY EXCLUSIVE, pinned here because
+   * the frontend now relies on it (cto/AdaptaLabs#129, LOW-8).
+   *
+   * `participantSessionSummaryForOpportunity` builds the pair as
+   * `inProgress: !completed && isInFlightRuntimeSession(...)`. OpportunityDetail
+   * used to re-test `!completion.completed` beside `completion.inProgress`
+   * when deciding whether to offer Resume; that term was inert and has been
+   * removed, so the page now trusts this invariant outright.
+   *
+   * TWO SERVER-SIDE GUARDS PRODUCE IT, and this asserts the OUTCOME rather
+   * than either of them, which is what the frontend actually depends on.
+   * All three arms measured, so nobody reads a single surviving mutant as
+   * this test being weak:
+   *   - drop `!completed &&` in the summary alone: PASSES, because
+   *     `isInFlightRuntimeSession` already returns false for an answered
+   *     status;
+   *   - drop the `isAnsweredRuntimeStatus` early return inside
+   *     `isInFlightRuntimeSession` alone: PASSES, because `!completed &&`
+   *     still holds it;
+   *   - drop BOTH: this test REDS by name.
+   * The redundancy is deliberate defence in depth over a correctness-critical
+   * flag. What this pins is that removing all of it cannot go unseen.
+   *
+   * Asserted on a PUBLISHED study, because a closed one is refused before the
+   * trace is visible at all.
+   */
+  it("never reports a completed session as in progress", async () => {
+    const owner = await seedUser("researcher_admin");
+    const participant = await seedUser();
+    const study = await seedStudy();
+    const opportunity = await seedOpportunity({ ownerId: owner, studyId: study, status: "published" });
+    await seedSurveySession({
+      opportunityId: opportunity,
+      participantId: participant,
+      sessionStatus: "completed",
+      completedAt: "2026-08-01T00:00:00.000Z",
+    });
+
+    const response = await getDetail(opportunity, participant).expect(200);
+
+    expect(response.body.completion.completed).toBe(true);
+    expect(response.body.completion.inProgress).toBe(false);
   });
 
   it("attaches no completion trace at all to an anonymous request", async () => {

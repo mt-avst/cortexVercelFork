@@ -14,6 +14,14 @@ import { AppError } from "../../../shared/types";
 
 type ResponseRow = {
   session_id: string;
+  /**
+   * WHO answered, from the joined session row - the key the respondent count
+   * is taken over, so two sessions belonging to one person are one respondent
+   * (cto/AdaptaLabs#129, MEDIUM-2). `TEXT NOT NULL` in migration 0001, so it
+   * is not nullable HERE; `StoredResponse` widens it for the pure function's
+   * own fallback.
+   */
+  participant_id: string;
   /** NULL once the question this answer was given against has been removed. */
   step_id: string | null;
   /** The prompt the participant was shown. NULL for rows written before 0015. */
@@ -119,6 +127,7 @@ function payloadTextLength(payload: Record<string, unknown>): number {
 function toStoredResponse(row: ResponseRow): StoredResponse {
   return {
     session_id: row.session_id,
+    participant_id: row.participant_id,
     step_id: row.step_id,
     step_prompt: row.step_prompt,
     step_type: row.step_type,
@@ -152,7 +161,7 @@ async function listResponsesWhere(
     async (client) => {
       const result = await client.query<ResponseRow>(
         `
-        SELECT r.session_id, r.step_id, r.step_prompt, r.step_type,
+        SELECT r.session_id, s.participant_id, r.step_id, r.step_prompt, r.step_type,
                r.response_payload, r.saved_at
         FROM participant_responses AS r
         JOIN runtime_sessions AS s ON s.session_id = r.session_id
@@ -714,7 +723,7 @@ async function readBatch(
         async (client) => {
           const result = await client.query<ResponseRow>(
             `
-        SELECT r.session_id, r.step_id, r.step_prompt, r.step_type,
+        SELECT r.session_id, s.participant_id, r.step_id, r.step_prompt, r.step_type,
                r.response_payload, r.saved_at
         FROM participant_responses AS r
         JOIN runtime_sessions AS s ON s.session_id = r.session_id

@@ -14,6 +14,21 @@ import { NPS_SCALE_MAX } from "../../../shared/firsthand/contract";
 export type StoredResponse = {
   session_id: string;
   /**
+   * WHO answered, as distinct from WHICH RUN the answer was given in.
+   *
+   * `runtime_sessions.participant_id`, carried through the join so the
+   * respondent count can be taken over people rather than over sessions - see
+   * `respondentKey` for why those stopped being the same number.
+   *
+   * Typed nullable although the column is `TEXT NOT NULL` (migration 0001,
+   * never relaxed) and every writer sets it from the authenticated
+   * `req.user.id`. This is the input type of a pure function over a plain
+   * array, not the row type, and the identity fallback the nullability forces
+   * a reader to decide is the point - `respondentKey` pins which way an
+   * unattributable row errs.
+   */
+  participant_id: string | null;
+  /**
    * NULL once the question this answer was given against has been REMOVED.
    *
    * Deleting a question detaches its answers rather than destroying them
@@ -384,6 +399,52 @@ const removedQuestionsFrom = (detached: StoredResponse[]): QuestionResult[] => {
   );
 };
 
+/**
+ * The identity one respondent is counted under.
+ *
+ * `participant_id`, NOT `session_id` (cto/AdaptaLabs#129, MEDIUM-2). Those
+ * were the same number for as long as a participant could only ever hold one
+ * `runtime_sessions` row per opportunity, which is the reason
+ * `findParticipantSessionForOpportunity` exists - before it, three extra mints
+ * took a rating question from 3 respondents to 6.
+ *
+ * They stopped being the same number when that helper narrowed to resuming an
+ * IN-FLIGHT session only (LOW-8 of the same ticket). An EXPIRED session is now
+ * left behind and a fresh one minted beside it, nothing rewrites
+ * `session_payload->session->expires_at` on resume, and the default token is
+ * 24 hours - so "answer three questions, come back tomorrow" leaves one person
+ * holding two answer-carrying sessions. The response read
+ * (`survey-results-repository.ts`) filters on no `session_status`, so both
+ * sessions' answers reach this function, and counting sessions reported that
+ * one person as two respondents in the denominator under every percentage on
+ * the page.
+ *
+ * A row with no `participant_id` falls back to its own `session_id` rather
+ * than collapsing every such row into a single respondent. The column is
+ * `TEXT NOT NULL` (migration 0001, never relaxed) and every writer sets it
+ * from the authenticated `req.user.id`, so the database cannot produce one;
+ * the fallback decides which way the pure function errs if one ever arrives.
+ * It errs by NOT merging - two unattributable rows from different sessions
+ * stay two respondents, exactly the pre-fix behaviour - because merging would
+ * invent one respondent out of people who may be different, and a denominator
+ * that hides real respondents overstates every percentage taken against it.
+ * An empty string is treated as absent for the same reason: it identifies
+ * nobody.
+ *
+ * Prefixed, so a `participant_id` equal to some other row's `session_id`
+ * cannot collide with it.
+ *
+ * ponytail: the PER-QUESTION tallies below still count one answer row as one
+ *   answer, so the same participant answering the same question in both
+ *   sessions counts twice in `answered`, in a choice option's count and in a
+ *   scale's mean and NPS. Fixing that needs a which-answer-wins rule
+ *   (latest `saved_at`? the completed session's?) that changes the CSV export
+ *   too - a researcher-facing decision, not a refactor. Needs a GitLab issue:
+ *   production can hit it, because the two-session flow above is ordinary.
+ */
+const respondentKey = (row: StoredResponse): string =>
+  row.participant_id ? `p:${row.participant_id}` : `s:${row.session_id}`;
+
 export function aggregateSurveyResults(
   steps: StudyStep[],
   responses: StoredResponse[]
@@ -395,7 +456,7 @@ export function aggregateSurveyResults(
   const respondents = new Set<string>();
 
   for (const row of responses) {
-    respondents.add(row.session_id);
+    respondents.add(respondentKey(row));
 
     if (row.step_id === null) {
       detached.push(row);
@@ -423,8 +484,10 @@ export function aggregateSurveyResults(
   );
 
   return {
-    // Distinct participants, so someone answering six questions is one
-    // respondent rather than six. Detached answers COUNT: the person answered,
+    // Distinct PEOPLE (`respondentKey`), so someone answering six questions is
+    // one respondent rather than six, and someone who came back after their
+    // session token expired is one rather than two. Detached answers COUNT:
+    // the person answered,
     // and excluding them would make the denominator move because a researcher
     // edited the form. Collected in the loop above rather than by mapping the
     // whole set again, which allocated a second array of every row.

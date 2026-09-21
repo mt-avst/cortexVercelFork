@@ -75,10 +75,33 @@ export function isAnsweredRuntimeStatus(status: string): boolean {
 /**
  * The runtime statuses that mean the participant's session died WITHOUT
  * being answered: `abandoned` (the participant walked away) and `failed`
- * (the runtime gave up). Neither has a transition back to `completed` -
- * `applyRuntimeMutationToSession` carries none - so a session in either of
- * these is not a candidate to resume, only a fact that a previous attempt did
- * not finish.
+ * (the runtime gave up). A session in either of these is not a candidate to
+ * resume, only a fact that a previous attempt did not finish.
+ *
+ * WHAT MAKES THAT TRUE is `refuseAnswerToFinishedSession`
+ * (runtime-repository-postgres.ts), which 409s any RESPONSE mutation on a
+ * session whose status is `completed`, `abandoned` or `failed` - inside the
+ * row lock, so two submissions arriving together cannot both read "not
+ * finished" and both write. No ANSWER can be added to a session in one of
+ * these states, which is the property the resume gate actually needs. Pinned
+ * by name in runtime-answer-immutability.test.ts, which drives the real
+ * repository against a mocked pool: `refuses an answer to a completed /
+ * abandoned / failed session with a 409`.
+ *
+ * NOT THE STATUS GRAPH, which does not forbid the transition
+ * (cto/AdaptaLabs#129, MEDIUM-1 - this docblock used to claim it did).
+ * `applyDerivedStatusFromEvent` (runtime-session-model.ts) is a flat switch
+ * on the event type with no from-state guard, so a `session_completed` event
+ * lands an `abandoned` or `failed` session on an ANSWERED status. Measured by
+ * driving that function directly: with `uploadStatus` `not_started` - which
+ * is every native survey, since a survey records nothing - or `complete`,
+ * both `abandoned` and `failed` become `completed`; with an upload in
+ * progress they become `uploading`, which `answeredRuntimeStates` also counts
+ * as answered. That openness is deliberate rather than an oversight: EVENTS
+ * must keep being accepted or the terminal states would be unreachable in the
+ * first place, as `refuseAnswerToFinishedSession`'s own docblock says. It is
+ * why the answer refusal, and not the transition table, is the thing to point
+ * a reader at.
  *
  * Distinct from `answeredRuntimeStates`: those are DONE (refuse a fresh
  * attempt outright, 409); these are DEAD (a fresh attempt is exactly right,

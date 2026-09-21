@@ -6857,8 +6857,8 @@ describe('Opportunities API', () => {
       queueOpportunity('test-user-id');
       mockGetStudyById.mockResolvedValueOnce(storedStudy);
       mockListResponsesForOpportunity.mockResolvedValueOnce([
-        { session_id: 's1', step_id: 'q1', step_prompt: null, step_type: 'rating', response_payload: { rating: 4 }, saved_at: '2026-08-17T10:00:00.000Z' },
-        { session_id: 's2', step_id: 'q1', step_prompt: null, step_type: 'rating', response_payload: { rating: 5 }, saved_at: '2026-08-17T10:01:00.000Z' },
+        { session_id: 's1', participant_id: 'p1', step_id: 'q1', step_prompt: null, step_type: 'rating', response_payload: { rating: 4 }, saved_at: '2026-08-17T10:00:00.000Z' },
+        { session_id: 's2', participant_id: 'p2', step_id: 'q1', step_prompt: null, step_type: 'rating', response_payload: { rating: 5 }, saved_at: '2026-08-17T10:01:00.000Z' },
       ]);
 
       const response = await request(listening(app))
@@ -7071,8 +7071,8 @@ describe('Opportunities API', () => {
       queueOpportunity('test-user-id');
       mockGetStudyById.mockResolvedValueOnce(storedStudy);
       mockListResponsesForOpportunity.mockResolvedValueOnce([
-        { session_id: 'session-1', step_id: 'q1', step_prompt: null, step_type: 'open_text', response_payload: { text: 'Fine' }, saved_at: '2026-08-17T10:00:00.000Z' },
-        { session_id: 'session-2', step_id: 'q1', step_prompt: null, step_type: 'open_text', response_payload: { text: 'Also fine' }, saved_at: '2026-08-17T10:01:00.000Z' },
+        { session_id: 'session-1', participant_id: 'p1', step_id: 'q1', step_prompt: null, step_type: 'open_text', response_payload: { text: 'Fine' }, saved_at: '2026-08-17T10:00:00.000Z' },
+        { session_id: 'session-2', participant_id: 'p2', step_id: 'q1', step_prompt: null, step_type: 'open_text', response_payload: { text: 'Also fine' }, saved_at: '2026-08-17T10:01:00.000Z' },
       ]);
       // First participant writes, second blows up - after the 200 and the
       // headers have already gone out.
@@ -7117,7 +7117,7 @@ describe('Opportunities API', () => {
       queueOpportunity('test-user-id');
       mockGetStudyById.mockResolvedValueOnce(storedStudy);
       mockListResponsesForOpportunity.mockResolvedValueOnce([
-        { session_id: 's1', step_id: 'q1', step_prompt: null, step_type: 'rating', response_payload: { rating: 4 }, saved_at: '2026-08-17T10:00:00.000Z' },
+        { session_id: 's1', participant_id: 'p1', step_id: 'q1', step_prompt: null, step_type: 'rating', response_payload: { rating: 4 }, saved_at: '2026-08-17T10:00:00.000Z' },
       ]);
 
       const response = await request(listening(app))
@@ -8009,6 +8009,55 @@ describe('Opportunities API', () => {
         .expect(410);
 
       expect(response.body.code).toBe('OPPORTUNITY_CLOSED');
+    });
+
+    /**
+     * AN UNAVAILABLE STUDY PAYS FOR NO RUNTIME READ (cto/AdaptaLabs#129,
+     * LOW-6).
+     *
+     * The comment above the refusal has always said "decide before the
+     * sessions query so an unavailable study never pays for a second read",
+     * and for a while it was false: the session summary was computed eagerly
+     * above the refusal, so a DRAFT native survey paid for a read on the
+     * five-connection FirstHand runtime pool - shared with live participant
+     * sessions - before being told no. `GET /:id` is `optionalAuth` and
+     * carries no rate limiter, so that read was reachable in a loop.
+     *
+     * The summary is lazy now and the exemption short-circuits on the status
+     * first, so only a `closed` study can reach it. Asserted on the mock's
+     * call count rather than on the status, because the status was already
+     * correct while the read was being paid for - a test on the 404 alone
+     * cannot see this at all.
+     */
+    it('pays for no runtime session read when refusing a draft native survey', async () => {
+      const draftSurveyRow = { ...draftRow, type: 'survey', delivery_mode: 'native' };
+      mockQuery.mockResolvedValueOnce({ rows: [draftSurveyRow] });
+
+      const response = await request(listening(employeeApp))
+        .get('/api/opportunities/1')
+        .expect(404);
+
+      expect(response.body.code).toBe('OPPORTUNITY_NOT_OPEN');
+      expect(mockFindParticipantSession).not.toHaveBeenCalled();
+      // And still only the one opportunity lookup, as the closed twin above
+      // asserts - the sessions query is downstream of the refusal too.
+      expect(mockQuery).toHaveBeenCalledTimes(1);
+    });
+
+    // The control: the SAME read is paid for when it can change the answer.
+    // Without this, the assertion above passes just as well if the lazy read
+    // were never wired up at all.
+    it('does pay for the runtime session read when the study is closed', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [closedSurveyRow] });
+
+      await request(listening(employeeApp))
+        .get('/api/opportunities/1')
+        .expect(410);
+
+      expect(mockFindParticipantSession).toHaveBeenCalledWith({
+        opportunityId: '1',
+        participantId: 'employee-id'
+      });
     });
 
     it('still answers 410 for a closed native survey when the held session is dead, not in flight', async () => {

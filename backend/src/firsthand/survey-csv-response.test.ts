@@ -37,6 +37,7 @@ const steps: StudyStep[] = [
 
 const answer = (sessionId: string): StoredResponse => ({
   session_id: sessionId,
+  participant_id: sessionId,
   step_id: "q1",
   step_prompt: null,
   step_type: "open_text",

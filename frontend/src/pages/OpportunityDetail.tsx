@@ -281,9 +281,22 @@ const OpportunityDetail: React.FC = () => {
   // reads as "no deadline" there and still shows its action verb - while this
   // page and the server both call it ended. Pre-existing and the safe
   // direction, the server being the stricter side, but do not read the row as
-  // proof of the sessions arm. The row also never carries `inProgress` (the
-  // list read omits it by design), so it cannot show the Resume state either -
-  // the detail page is the only surface that can.
+  // proof of the sessions arm.
+  //
+  // THE ROW CANNOT SHOW RESUME, AND ONCE THE SWEEP RUNS THERE IS NO ROW. Two
+  // separate facts, and the second is the one that bounds this feature. The
+  // list read never carries `inProgress` - it omits it by design - so the row
+  // could not render the Resume state in any case. But it also hard-filters
+  // non-admins to `o.status = 'published'` (opportunities.ts), so the moment
+  // autoClosePublishedStudiesPastEndDate flips the study to `closed` the study
+  // disappears from Browse and from the participant Home count altogether.
+  // A participant mid-survey therefore reaches their Resume button only by a
+  // direct URL - a bookmark, the browser's history, or the invitation link
+  // they were sent. That is a real limit of the closed-study exemption rather
+  // than an oversight in this component: the server-side fix keeps the door
+  // unlocked, and nothing in the product walks them back to it. Widening the
+  // list read to carry a participant's own in-flight closed studies would be
+  // the fix, and it is not this ticket.
   //
   // The one path this gate still owns alone is the external hand-off, where
   // `window.open` leaves Cortex and the server sees no request at all -
@@ -304,12 +317,21 @@ const OpportunityDetail: React.FC = () => {
    * `firsthand_study_id` is required because `runTakePart`'s native branch is,
    * and without it the click would fall through to the external hand-off or to
    * nothing at all.
+   *
+   * NO `!completion.completed` TERM (cto/AdaptaLabs#129, LOW-8). It was here
+   * and it was inert twice over: the server builds the two flags as
+   * `inProgress: !completed && isInFlightRuntimeSession(...)`, so they are
+   * mutually exclusive before this component sees them (pinned by name in
+   * opportunity-detail-resume-postgres.test.ts), and `hasCompletedNativeSurvey`
+   * renders above the button branch anyway. Deleting it removed nothing - all
+   * 17 tests in this file stayed green when it was removed, which is exactly
+   * why it could not stay: a term that cannot fail reads to the next person as
+   * the guard against a state it never guarded.
    */
   const hasResumableNativeSurvey = Boolean(
     isNativeSurvey &&
     opportunity?.firsthand_study_id &&
-    opportunity?.completion?.inProgress &&
-    !opportunity?.completion?.completed
+    opportunity?.completion?.inProgress
   );
 
   const hasStartablePath = Boolean(
