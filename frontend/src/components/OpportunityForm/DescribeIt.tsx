@@ -135,7 +135,11 @@ const DescribeIt: React.FC<DescribeItProps> = ({ hints, onApply }) => {
     <div
       className="form-section mb-3 p-3"
       data-testid="front-door-ai-prompt"
-      style={{ border: '1px solid var(--fs-border, #d0d0d0)', borderRadius: '4px' }}
+      // cto/AdaptaLabs#141: --fs-border is never defined anywhere in src, so
+      // this always rendered the #d0d0d0 fallback in both themes.
+      // --border-card is the theme-aware token already used for this kind
+      // of plain section/card border elsewhere (ConsentStep, admin-feedback.css).
+      style={{ border: '1px solid var(--border-card)', borderRadius: '4px' }}
     >
       <label
         htmlFor="ai_study_prompt"

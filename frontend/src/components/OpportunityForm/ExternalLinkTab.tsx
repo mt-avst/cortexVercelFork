@@ -80,7 +80,11 @@ const ExternalLinkTab: React.FC<ExternalLinkTabProps> = ({
             collects consent, and Cortex records only that a participant followed
             the link. The author affirms the tool has its own consent wording in
             place; the affirmation is shown on Review. */}
-        <div className="mt-4 pt-3" style={{ borderTop: '1px solid var(--fs-border, #d0d0d0)' }}>
+        {/* cto/AdaptaLabs#141: --fs-border is never defined anywhere in src,
+            so this always rendered the #d0d0d0 fallback in both themes.
+            --border-card is the theme-aware token used for this kind of
+            plain section divider elsewhere (ConsentStep, DescribeIt). */}
+        <div className="mt-4 pt-3" style={{ borderTop: '1px solid var(--border-card)' }}>
           <h3 className="h6 mb-1" style={{ fontSize: '1.1rem', fontWeight: '600' }}>
             Consent
           </h3>
