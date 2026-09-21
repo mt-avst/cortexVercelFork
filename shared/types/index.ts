@@ -582,17 +582,18 @@ export interface OpportunityFormData {
   external_link_optional?: string;
   start_date?: string;
   end_date?: string;
-  // The author's affirmation that the external tool collects consent (row 13).
-  // A client-side confirmation folded into the External Link step - not
-  // persisted (the save payload is a typed whitelist that omits it), shown on
-  // Review. Defaults true when loading an already-published study.
+  // The author's affirmation that the external tool collects consent (row 13),
+  // folded into the External Link step and shown on Review. Tri-state, as the
+  // row holds it (Opportunity.external_consent_confirmed): null is "never
+  // recorded", and the form keeps it null until the author touches the box.
   //
-  // ponytail: client-only affirmation, not persisted -> lost on reload, and a
-  //   reopened published study is assumed confirmed (Review shows the neutral
-  //   "Handled by the external tool" for it, never "confirmed by the author").
-  //   Upgrade path: persist it as an opportunity column + a publish gate.
-  //   -> cto/AdaptaLabs#136
-  external_consent_confirmed?: boolean;
+  // ponytail: persisted and round-tripped (loaded from the row, sent on save as
+  //   a boolean, null omitted so a re-save never turns "never recorded" into
+  //   "no"), but it does NOT gate publish - an unconfirmed external study can
+  //   still go live. Whether it should is an open compliance decision for Nick.
+  //   Upgrade path: a publish-problem code for an unconfirmed hand-off, enforced
+  //   server-side beside the publish guards. -> cto/AdaptaLabs#136
+  external_consent_confirmed?: boolean | null;
 
   // Task List tab (unmoderated type)
   firsthand_study_id?: string;

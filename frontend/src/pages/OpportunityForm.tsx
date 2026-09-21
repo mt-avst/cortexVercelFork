@@ -715,9 +715,10 @@ const OpportunityForm: React.FC = () => {
     meeting_location_optional: '',
     default_duration_minutes: 30,
     external_link_optional: '',
-    // Row 13: the external-tool consent affirmation starts unconfirmed on a new
-    // study; an author confirms it on the External Link step before publishing.
-    external_consent_confirmed: false,
+    // Row 13: the external-tool consent affirmation. Null is "never recorded"
+    // (cto/AdaptaLabs#136): a new study starts there, the checkbox reads it as
+    // unticked, and the save omits it until the author touches the box.
+    external_consent_confirmed: null as boolean | null,
     participant_type_required: 'any' as 'any' | 'internal' | 'external' | 'specific',
     participant_type_specific_details: '',
     status: 'draft' as 'draft' | 'published',
@@ -1687,12 +1688,12 @@ const OpportunityForm: React.FC = () => {
         meeting_location_optional: opportunity.meeting_location_optional || '',
         default_duration_minutes: opportunity.default_duration_minutes,
         external_link_optional: opportunity.external_link_optional || '',
-        // Row 13: not persisted, so an already-published external study is
-        // treated as already affirmed for Review's sake (shown neutrally, not as
-        // an author action); a draft loads unconfirmed.
-        // ponytail: client-only, lost on reload, published assumed-confirmed
-        //   -> cto/AdaptaLabs#136 (persist + publish-gate)
-        external_consent_confirmed: opportunity.status === 'published',
+        // Row 13: the affirmation as the ROW holds it (cto/AdaptaLabs#136),
+        // tri-state. Null stays null - never recorded, which predates the
+        // column - rather than being guessed from the status: the checkbox
+        // shows it unticked, and Review keeps a legacy published study neutral
+        // instead of claiming the author confirmed it.
+        external_consent_confirmed: opportunity.external_consent_confirmed ?? null,
         firsthand_study_id: opportunity.firsthand_study_id || '',
         participant_type_required: opportunity.participant_type_required || 'any',
         participant_type_specific_details: opportunity.participant_type_specific_details || '',
@@ -1740,12 +1741,9 @@ const OpportunityForm: React.FC = () => {
         meeting_location_optional: opportunity.meeting_location_optional || '',
         default_duration_minutes: opportunity.default_duration_minutes,
         external_link_optional: opportunity.external_link_optional || '',
-        // Row 13: not persisted, so an already-published external study is
-        // treated as already affirmed for Review's sake (shown neutrally, not as
-        // an author action); a draft loads unconfirmed.
-        // ponytail: client-only, lost on reload, published assumed-confirmed
-        //   -> cto/AdaptaLabs#136 (persist + publish-gate)
-        external_consent_confirmed: opportunity.status === 'published',
+        // Baseline for the dirty check - the same read as the live hydrate
+        // above, or opening a study reads as an unsaved change.
+        external_consent_confirmed: opportunity.external_consent_confirmed ?? null,
         firsthand_study_id: opportunity.firsthand_study_id || '',
         participant_type_required: opportunity.participant_type_required || 'any' as const,
         participant_type_specific_details: opportunity.participant_type_specific_details || '',
@@ -2668,7 +2666,9 @@ const OpportunityForm: React.FC = () => {
     startDate: formData.start_date,
     endDate: formData.end_date,
     externalLink: formData.external_link_optional,
-    externalConsentConfirmed: Boolean(formData.external_consent_confirmed),
+    externalConsentConfirmed: formData.external_consent_confirmed,
+    // The STORED status, not the live choice - see ReviewSummaryInput.
+    publishedWhenLoaded: originalFormData?.status === 'published',
     deliveryMode,
     questionCount: formData.inline_survey_questions.length,
     taskCount: formData.inline_study_steps.length,
@@ -3033,6 +3033,9 @@ const OpportunityForm: React.FC = () => {
       // message, or changing any question/answer must all offer a save from the
       // first two tabs, the same as the study fields above. Questions compared
       // without their client ids, for the reason the two arrays above are.
+      // The external consent affirmation (#136). Ticking it on the Your link
+      // step is a change worth offering a save for.
+      formData.external_consent_confirmed !== originalFormData.external_consent_confirmed ||
       formData.has_screener !== originalFormData.has_screener ||
       formData.screener_message.trim() !== originalFormData.screener_message.trim() ||
       JSON.stringify(withoutClientIds(formData.screener_questions)) !==
