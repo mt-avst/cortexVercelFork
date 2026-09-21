@@ -4,7 +4,14 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import OpportunityForm from '../OpportunityForm';
-import { getOpportunity, updateOpportunity } from '../../api/client';
+import {
+  draftOpportunityFromBrief,
+  getAiDraftingAvailable,
+  getOpportunity,
+  updateOpportunity,
+  type DraftedOpportunity
+} from '../../api/client';
+import { chooseStudyType } from './helpers/study-type-picker';
 
 /**
  * The external-tool consent affirmation, loaded from and saved to the server
@@ -40,7 +47,13 @@ vi.mock('../../api/client', () => ({
   updateOpportunity: vi.fn().mockResolvedValue({ id: 'opp-1' }),
   getOpportunity: vi.fn(),
   getSessions: vi.fn().mockResolvedValue([]),
-  getFirstHandStudies: vi.fn().mockResolvedValue([])
+  getFirstHandStudies: vi.fn().mockResolvedValue([]),
+  // D13: StudyTypePicker mounts DescribeIt on the NEW-study route only, and
+  // it asks this on mount. Off by default - the panel then renders null and
+  // the edit-route blocks above see exactly the form they always did; the
+  // apply-a-draft block below turns it on for itself.
+  getAiDraftingAvailable: vi.fn().mockResolvedValue(false),
+  draftOpportunityFromBrief: vi.fn()
 }));
 
 vi.mock('../../api/firsthand-studies', () => ({
@@ -77,6 +90,19 @@ const renderEdit = () =>
     <MemoryRouter initialEntries={['/admin/opportunities/opp-1/edit']}>
       <Routes>
         <Route path="/admin/opportunities/:id/edit" element={<OpportunityForm />} />
+      </Routes>
+    </MemoryRouter>
+  );
+
+/**
+ * The NEW-study route, which is the only one that mounts the Describe it
+ * panel (`onApplyDraft={isEdit ? undefined : handleApplyDraft}`).
+ */
+const renderNew = () =>
+  render(
+    <MemoryRouter initialEntries={['/admin/opportunities/new']}>
+      <Routes>
+        <Route path="/admin/opportunities/new" element={<OpportunityForm />} />
       </Routes>
     </MemoryRouter>
   );
@@ -569,5 +595,156 @@ describe('repointing the study at a different external tool', () => {
     );
     expect(screen.getByRole('button', { name: 'Save Changes' })).toBeInTheDocument();
     expect(leavingWouldAsk()).toBe(true);
+  });
+});
+
+/**
+ * THE OTHER TWO SITES THAT WRITE THE LINK.
+ *
+ * The rule is a property of the FIELD, not of one handler: wherever
+ * `external_link_optional` is written to a different destination, the
+ * affirmation about the old one goes. The block above pins the handler the
+ * author types into. A review gate then found the same shape twice more, and
+ * both are unreachable from that block's arms because neither goes through the
+ * `field === 'external_link_optional'` branch:
+ *
+ *  1. the `type -> unmoderated` arm of the same reducer, which sets
+ *     `external_link_optional: ''` directly. MEASURED before the fix:
+ *     switching the type to Recorded session and back to One question left the
+ *     box ticked over an EMPTY link box - an affirmation about a destination
+ *     the form no longer held.
+ *  2. `handleApplyDraft`, which spreads `appliedDraftFields(draft)` into state
+ *     and can therefore carry a drafted `external_link_optional` over a link
+ *     the author already ticked for.
+ *
+ * Both are driven through the real controls - the type pods and the Describe
+ * it panel - rather than by poking the reducer, because "the reducer arm is
+ * right" is what was already true of the site this whole fix is about: it was
+ * the UI's inability to reach it that made it a bug.
+ */
+describe('switching the study type away from the external hand-off', () => {
+  it('clears the tick when the type switch empties the link', async () => {
+    vi.mocked(getOpportunity).mockResolvedValue(
+      EXTERNAL_ROW({ external_consent_confirmed: true }) as never
+    );
+    renderEdit();
+    await awaitLoaded();
+
+    expect((await consentCheckbox()).checked).toBe(true);
+
+    // Recorded session is FirstHand-only, so the arm drops the link; One
+    // question brings the hand-off shape - and the link box - back. This round
+    // trip is the reachable case: the author has to return to a shape with a
+    // Your link step to see what the switch left behind.
+    goToStep('Study type');
+    chooseStudyType('unmoderated');
+    chooseStudyType('question');
+
+    expect((await linkInput()).value).toBe('');
+    expect((await consentCheckbox()).checked).toBe(false);
+  });
+
+  it('leaves the tick alone when the type switch keeps the link', async () => {
+    // The control. Without it the arm above passes just as well against a form
+    // that clears the affirmation on ANY edit - which would cost the author
+    // their tick for renaming the study.
+    const stored = EXTERNAL_ROW({ external_consent_confirmed: true });
+    vi.mocked(getOpportunity).mockResolvedValue(stored as never);
+    renderEdit();
+    await awaitLoaded();
+
+    fireEvent.change(screen.getByLabelText(/^Title/i), {
+      target: { value: 'One question with a new title' }
+    });
+    expect((await consentCheckbox()).checked).toBe(true);
+
+    // Survey is the other external hand-off shape: the link survives the
+    // switch, so the affirmation must too.
+    goToStep('Study type');
+    chooseStudyType('survey');
+
+    expect((await linkInput()).value).toBe(stored.external_link_optional);
+    expect((await consentCheckbox()).checked).toBe(true);
+  });
+});
+
+describe('applying a drafted study over a ticked affirmation', () => {
+  const TOOL_A = 'https://tool-a.example.com/survey';
+  const TOOL_B = 'https://tool-b.example.com/survey';
+
+  const draftCarrying = (link: string): DraftedOpportunity => ({
+    type: 'question',
+    delivery_mode: 'external',
+    title: 'A drafted one-question study',
+    purpose_one_liner: 'A drafted purpose long enough to pass validation',
+    status: 'draft',
+    external_link_optional: link
+  });
+
+  /**
+   * The Describe it panel, once its availability check has resolved. The step
+   * strip is withheld until a type is chosen (WZ-18), so the Study type step
+   * is navigated to only when there is a strip to navigate with - before that
+   * the picker, and the panel above it, are already the body on screen.
+   */
+  const describeItPanel = async () => {
+    if (screen.queryByRole('navigation', { name: 'Form steps' })) {
+      goToStep('Study type');
+    }
+    return screen.findByTestId('front-door-ai-prompt');
+  };
+
+  /**
+   * Brief -> Suggest -> Apply to form, through the panel's own controls. The
+   * brief only has to clear the 20-character minimum that enables the button.
+   */
+  const applyDraftCarrying = async (link: string) => {
+    vi.mocked(draftOpportunityFromBrief).mockResolvedValue({
+      draft: draftCarrying(link),
+      assumptions: [],
+      gaps: [],
+      filled: ['external_link_optional']
+    });
+    const panel = await describeItPanel();
+    fireEvent.change(within(panel).getByLabelText(/What do you want to find out/), {
+      target: { value: 'Can first-time admins set up a board view without help?' }
+    });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Suggest a type' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Apply to form' }));
+  };
+
+  /** A new hand-off study with a link typed and the box ticked for it. */
+  const tickedForToolA = async () => {
+    renderNew();
+    await describeItPanel();
+    chooseStudyType('question');
+    await typeLink(TOOL_A);
+    fireEvent.click(await consentCheckbox());
+    expect((await consentCheckbox()).checked).toBe(true);
+  };
+
+  beforeEach(() => {
+    vi.mocked(getAiDraftingAvailable).mockResolvedValue(true);
+  });
+
+  it('clears the tick when an applied draft repoints the link', async () => {
+    await tickedForToolA();
+
+    await applyDraftCarrying(TOOL_B);
+
+    expect((await linkInput()).value).toBe(TOOL_B);
+    expect((await consentCheckbox()).checked).toBe(false);
+  });
+
+  it('leaves the tick alone when an applied draft carries the same link', async () => {
+    // The control, and the reason the check compares links rather than simply
+    // clearing whenever a draft is applied: a draft that names the tool the
+    // author already affirmed has repointed nothing.
+    await tickedForToolA();
+
+    await applyDraftCarrying(TOOL_A);
+
+    expect((await linkInput()).value).toBe(TOOL_A);
+    expect((await consentCheckbox()).checked).toBe(true);
   });
 });

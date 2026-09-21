@@ -4817,7 +4817,22 @@ const OpportunityForm: React.FC = () => {
    * anything.
    */
   const handleApplyDraft = (draft: DraftedOpportunity) => {
-    setFormData((prev) => ({ ...prev, ...appliedDraftFields(draft) }));
+    setFormData((prev) => {
+      const applied = appliedDraftFields(draft);
+      // A draft can carry its own external link, so applying one can repoint
+      // the study - and the affirmation is about a destination, not a study.
+      // Same rule as the link field's own branch; new-study route only today,
+      // so nothing stored is at risk, but the rule should not depend on that.
+      const repoints =
+        'external_link_optional' in applied &&
+        normaliseExternalLink(applied.external_link_optional ?? '') !==
+          normaliseExternalLink(prev.external_link_optional);
+      return {
+        ...prev,
+        ...applied,
+        ...(repoints ? { external_consent_confirmed: null } : {})
+      };
+    });
   };
 
   const handleQuestionsChange = (questions: WithClientId<SurveyQuestion>[]) => {
@@ -5014,6 +5029,13 @@ const OpportunityForm: React.FC = () => {
           ...clearedSource,
           type: 'unmoderated' as const,
           external_link_optional: '',
+          // The affirmation goes with the link it was about. This arm writes
+          // the link too, so it obeys the same rule as the link field's own
+          // branch below - a gate caught the two disagreeing, which is the
+          // shape that put the reset out of the UI's reach in the first
+          // place. Measured before the fix: switching type away and back left
+          // the box ticked with the link box empty.
+          external_consent_confirmed: null,
           participant_type_required:
             prev.participant_type_required === 'external' ? 'any' : prev.participant_type_required,
         };
@@ -5075,7 +5097,9 @@ const OpportunityForm: React.FC = () => {
       // wrong would silently re-tick a box the author had deliberately
       // cleared. Pinned by name in OpportunityForm.external-consent.test.tsx.
       if (field === 'external_link_optional') {
-        const nextLink = value as string;
+        // Narrowed rather than cast: `value` is the reducer's union, and a
+        // non-string reaching a string field would be stored as one.
+        const nextLink = typeof value === 'string' ? value : '';
         return {
           ...prev,
           external_link_optional: nextLink,
