@@ -44,6 +44,18 @@ An unusable value for either throws at boot rather than being quietly coerced, s
 `CORS_ORIGIN` must be an absolute `http://` or `https://` URL, and surrounding whitespace is trimmed; `PORT` must be an integer no greater than 65535.
 Leaving either unset is fine and gives the defaults (3001 and `http://localhost:3000`), but setting either to an empty string is refused.
 
+**A path on `CORS_ORIGIN` is normalised away, and this can move your OAuth callback base.**
+A browser `Origin` header is `scheme://host[:port]` and carries no path, so a value like `https://your-app.example.com/app` matched no origin and CORS was broken.
+That value is now reduced to its bare origin, `https://your-app.example.com`, which fixes the matching.
+It also changes what the backend builds redirect targets and OAuth callback URLs from, because those are concatenated onto `CORS_ORIGIN` - so `https://your-app.example.com/app/auth/google-callback` becomes `https://your-app.example.com/auth/google-callback`.
+If you had a path there and your identity provider has the longer callback registered, either register the new one or set `GOOGLE_OAUTH_REDIRECT_URI` explicitly, which overrides the concatenation entirely.
+The backend logs both the written value and the normalised one at boot whenever it actually drops something, so this never happens silently.
+The value must have the shape `http(s)://host[:port]` with an optional path, query or fragment, and anything else is refused at boot rather than normalised.
+The scheme must be lower-case `http` or `https`, the host may contain only ASCII letters, digits, dots and hyphens, and the port, if present, must be numeric.
+No backslash, whitespace, `@` or comma may appear inside the value (surrounding whitespace is still trimmed), so a value carrying userinfo or a comma-separated list of origins is refused, and the host rule refuses a wildcard such as `https://*.example.com`.
+This is deliberate: the URL parser would otherwise silently repair such a value into a different, well-formed origin - `http://evil.com\@good.com` would become `http://evil.com` - and the backend sends that origin to browsers with credentials allowed.
+An IPv6 literal, an underscore in the host and a non-ASCII host are refused too; write a non-ASCII host in its punycode (`xn--`) form.
+
 ### Required for real SSO (e.g. Okta)
 
 | Variable | Purpose |
