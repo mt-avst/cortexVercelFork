@@ -175,6 +175,10 @@ export const CreateOpportunitySchema = z.object({
   // screenerSchema (at least one question, a way to pass each, a screen-out
   // somewhere). The handler stores it as JSONB on the opportunity.
   screener: screenerSchema.optional(),
+  // The author's affirmation that the external tool handling a hand-off
+  // collects its own consent (cto/AdaptaLabs#136). Absent stores null -
+  // "never recorded". Boolean only; does not gate publish.
+  external_consent_confirmed: z.boolean().optional(),
   status: z.enum(['draft', 'published']).optional(),
   start_date: z.string().datetime().optional().nullable(),
   end_date: z.string().datetime().optional().nullable(),
@@ -240,6 +244,10 @@ export const UpdateOpportunitySchema = z.object({
   // Eligibility screener. Null clears it (removes the screener); an object
   // replaces it wholesale after passing screenerSchema.
   screener: screenerSchema.optional().nullable(),
+  // External-delivery consent affirmation (cto/AdaptaLabs#136). Null resets it
+  // to "never recorded"; a boolean replaces it wholesale. Boolean only; does
+  // not gate publish.
+  external_consent_confirmed: z.boolean().optional().nullable(),
   status: OpportunityStatusSchema.optional(),
   start_date: z.string().datetime().optional().nullable(),
   end_date: z.string().datetime().optional().nullable(),

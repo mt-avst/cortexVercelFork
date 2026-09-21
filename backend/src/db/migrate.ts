@@ -320,6 +320,36 @@ export async function runMigrations() {
       ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS target_roles JSONB
     `);
 
+    // External-delivery consent affirmation (cto/AdaptaLabs#136). The author's
+    // checkbox affirming the external tool handling a hand-off study collects
+    // its own consent - previously CLIENT-ONLY (OpportunityFormData in
+    // shared/types), dropped from every save payload and defaulted on load to
+    // `status === 'published'`, so an author's confirmation vanished the
+    // moment the study was reopened. NULL means "never recorded" - every
+    // opportunity that predates this column - and stays distinguishable from
+    // an explicit false; no backfill. Does NOT gate publish: see the ponytail
+    // at the publish-validation call sites in routes/opportunities.ts.
+    //
+    // A BARE BOOLEAN, AND THAT IS ALL IT HOLDS. It records that an affirmation
+    // stands right now - not who made it, and not when. There is no actor
+    // column and no timestamp, and `updated_at` cannot stand in for one
+    // because any edit to the row re-stamps it. Whether provenance is needed
+    // is part of the same open compliance decision as the publish gate
+    // (cto/AdaptaLabs#136). Keeping the flag pointed at the destination
+    // CURRENTLY stored is a rule in the application, not a property of the
+    // column: the authoring form clears the tick when the author edits the
+    // link, and the PATCH path resets the column to NULL when the link it is
+    // handed differs from the one on the row. The database enforces neither,
+    // and the PATCH comparison reads the row outside the write's transaction -
+    // see the ponytail beside it in routes/opportunities.ts.
+    //
+    // Readable by every admin, not only the owner - the same reach as the
+    // owner-identity fields - and redacted from the participant payload in
+    // utils/publicOpportunity.ts. Idempotent add for existing databases.
+    await client.query(`
+      ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS external_consent_confirmed BOOLEAN
+    `);
+
     // Per-participant screener verdicts - the enforcement key. The three apply
     // chokepoints refuse anyone without a 'qualified' row here. questions_snapshot
     // records the screener as it was evaluated, so editing the opportunity's
