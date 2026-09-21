@@ -2427,7 +2427,7 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
   //   reset exists to prevent, reached by racing it. Narrow (it needs two
   //   admins saving the same study at once) but it is a correctness ceiling,
   //   not a taste one, so it gets an issue as well as this comment.
-  //   -> #NNN, upgrade path: take one client from the pool for the whole
+  //   -> #151, upgrade path: take one client from the pool for the whole
   //      handler, re-read this row with `SELECT ... FOR UPDATE` inside the
   //      same transaction as the UPDATE, and commit both together. Not done
   //      here because it rethreads every query in a handler of this size, and
