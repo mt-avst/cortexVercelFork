@@ -41,6 +41,22 @@ const config: BackendEnvironment = getBackendConfig();
  *      FRONTEND_URL first - so that change is a decision, not a rename.
  */
 if (process.env.CORS_ORIGIN !== undefined) {
+  // #64 normalises a path away (`https://x.com/app` -> `https://x.com`), which
+  // is right for the `cors()` comparison and is ALSO a behaviour change for the
+  // eleven readers above, because they concatenate onto this value. An operator
+  // who set a path gets a different callback base than they got before. Their
+  // CORS matched nothing either way, so this is a fix rather than a regression,
+  // but it is a fix to a value set in an environment this repository cannot
+  // see - so it is named at boot rather than applied silently. Whitespace-only
+  // normalisation stays quiet: trimming is not something an operator needs to
+  // act on.
+  if (process.env.CORS_ORIGIN.trim() !== config.CORS_ORIGIN) {
+    console.warn(
+      `[config] CORS_ORIGIN normalised to its origin: ${JSON.stringify(process.env.CORS_ORIGIN)} -> ${JSON.stringify(config.CORS_ORIGIN)}. ` +
+        'A browser Origin header is scheme://host[:port] and nothing else, so whatever was dropped here was never matched. ' +
+        'Readers that build redirect and OAuth callback URLs from CORS_ORIGIN now use the normalised value.'
+    );
+  }
   process.env.CORS_ORIGIN = config.CORS_ORIGIN;
 }
 
