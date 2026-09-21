@@ -127,3 +127,59 @@ describe('AdminFeedback header accessibility (row 13)', () => {
     expect(feedbackHeader).toHaveAttribute('scope', 'col');
   });
 });
+
+/**
+ * THE LOAD-ERROR ALERT, RENDERED - not grepped.
+ *
+ * cto/AdaptaLabs#141 moved this component's colour out of a `<style>` tag and
+ * out of 25 inline style blocks into `admin-feedback.css`. The rule that
+ * paints the load-error message is a DESCENDANT selector, written in that
+ * stylesheet as the `admin-feedback` wrapper class followed by the
+ * `feedback-error-text` class. During the first pass the alert lost its
+ * wrapper: the element still carried `feedback-error-text`, the stylesheet
+ * still carried the rule, and the words rendered in body ink because the two
+ * never met in the DOM.
+ *
+ * The sibling `admin-feedback-styles.test.ts` stayed green through all of
+ * that, because it reads the two files as text and a descendant selector is
+ * satisfied on paper by both halves merely existing. Only a render can see
+ * whether they are actually nested, so this arm renders.
+ *
+ * Both halves are load-bearing and each is mutated separately in the round's
+ * mutation table: drop the wrapper, or drop the class, and this fails.
+ */
+describe('AdminFeedback load-error alert sits where its colour rule can reach it', () => {
+  const SCOPED_ERROR = '.admin-feedback .feedback-error-text';
+
+  it('renders the load-error text inside the admin feedback scope', async () => {
+    mockGetFeedback.mockRejectedValue(new Error('network down'));
+
+    const { container } = render(<AdminFeedback />);
+
+    await waitFor(() => {
+      expect(container.querySelector(SCOPED_ERROR)).not.toBeNull();
+    });
+
+    const scoped = container.querySelector(SCOPED_ERROR);
+    // The same element the admin reads the failure from, so the assertion
+    // cannot be satisfied by some other empty node that happens to nest right.
+    expect(scoped).toHaveTextContent('Failed to load feedback');
+    expect(scoped).toHaveTextContent('Retry');
+  });
+
+  it('keeps the error alert element itself carrying the error text class', async () => {
+    mockGetFeedback.mockRejectedValue(new Error('network down'));
+
+    const { container } = render(<AdminFeedback />);
+
+    await waitFor(() => {
+      expect(container.querySelector('.admin-feedback')).not.toBeNull();
+    });
+
+    // Named separately from the arm above so a failure says WHICH half broke:
+    // this one goes red when the class is dropped but the nesting survives.
+    const alert = container.querySelector('.admin-feedback .alert');
+    expect(alert).not.toBeNull();
+    expect(alert?.classList.contains('feedback-error-text')).toBe(true);
+  });
+});
