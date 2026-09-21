@@ -229,9 +229,10 @@ export interface Opportunity {
    * concurrent saves can still land a link and an affirmation out of step -
    * see the ponytail beside that comparison.
    *
-   * Does not gate publish, and carries no provenance columns - both are part
-   * of one open compliance decision (see the ponytail beside the publish
-   * guards in backend/src/routes/opportunities.ts).
+   * Deliberately does not gate publish (decided 2026-09-21), and carries no
+   * provenance columns - whether Legal need those is a go-live question
+   * (cto/AdaptaLabs#126). The reasoning sits beside the publish guards in
+   * backend/src/routes/opportunities.ts.
    */
   external_consent_confirmed?: boolean | null;
   created_at: string;
@@ -611,12 +612,12 @@ export interface OpportunityFormData {
   // row holds it (Opportunity.external_consent_confirmed): null is "never
   // recorded", and the form keeps it null until the author touches the box.
   //
-  // ponytail: persisted and round-tripped (loaded from the row, sent on save as
-  //   a boolean, null omitted so a re-save never turns "never recorded" into
-  //   "no"), but it does NOT gate publish - an unconfirmed external study can
-  //   still go live. Whether it should is an open compliance decision for Nick.
-  //   Upgrade path: a publish-problem code for an unconfirmed hand-off, enforced
-  //   server-side beside the publish guards. -> cto/AdaptaLabs#136
+  // Persisted and round-tripped (loaded from the row, sent on save as a
+  // boolean, null omitted so a re-save never turns "never recorded" into
+  // "no"). It deliberately does NOT gate publish - an unconfirmed external
+  // study can still go live, decided 2026-09-21 (cto/AdaptaLabs#136): the tick
+  // is self-attestation, and a gate would buy no assurance while blocking a
+  // legacy republish. Do not add a publish-problem code for it.
   external_consent_confirmed?: boolean | null;
 
   // Task List tab (unmoderated type)
