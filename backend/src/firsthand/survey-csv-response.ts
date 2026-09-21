@@ -8,10 +8,10 @@ import type { StudyStep } from '../../../shared/firsthand/contract';
 import {
   CSV_LINE_ENDING,
   toCsvHeaderRow,
-  toCsvParticipantRow,
+  toCsvSessionRow,
+  type CsvSessionRow,
   type RemovedQuestion
 } from './survey-csv';
-import type { StoredResponse } from './survey-results';
 import { logger } from '../utils/logger';
 
 /*
@@ -153,7 +153,7 @@ export async function writeSurveyCsv(
   removedQuestions: RemovedQuestion[],
   openParticipants: (
     signal: AbortSignal
-  ) => AsyncGenerator<{ sessionId: string; answers: StoredResponse[] }>,
+  ) => AsyncGenerator<CsvSessionRow>,
   context: { studyId: string }
 ): Promise<void> {
   /**
@@ -266,12 +266,7 @@ export async function writeSurveyCsv(
       }
 
       await write(
-        toCsvParticipantRow(
-          steps,
-          removedQuestions,
-          participant.sessionId,
-          participant.answers
-        ) + CSV_LINE_ENDING
+        toCsvSessionRow(steps, removedQuestions, participant) + CSV_LINE_ENDING
       );
     }
 

@@ -5,7 +5,8 @@ import {
   CSV_LINE_ENDING,
   removedQuestionColumns,
   toCsvHeaderRow,
-  toCsvParticipantRow,
+  toCsvSessionRow,
+  toCsvSessionRows,
   toResponsesCsv
 } from "./survey-csv";
 import type { StoredResponse } from "./survey-results";
@@ -58,16 +59,9 @@ function assembleStreamed(
 ): string {
   const removed = removedQuestionColumns(responses);
 
-  const byParticipant = new Map<string, StoredResponse[]>();
-  for (const row of responses) {
-    const group = byParticipant.get(row.session_id);
-    if (group) group.push(row);
-    else byParticipant.set(row.session_id, [row]);
-  }
-
   let out = toCsvHeaderRow(steps, removed) + CSV_LINE_ENDING;
-  for (const [sessionId, answers] of byParticipant) {
-    out += toCsvParticipantRow(steps, removed, sessionId, answers) + CSV_LINE_ENDING;
+  for (const row of toCsvSessionRows(responses)) {
+    out += toCsvSessionRow(steps, removed, row) + CSV_LINE_ENDING;
   }
   return out;
 }

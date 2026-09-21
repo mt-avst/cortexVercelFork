@@ -270,10 +270,11 @@ describe.skipIf(skipDbTests)("the CSV batch read, against real Postgres", () => 
    * attempt each, `logical_session_id` and `session_id` are equal for every row
    * and that mutation is a no-op no assertion could see.
    *
-   * The second attempt carries NO ANSWERS OF ITS OWN, deliberately.
-   * `surveyCsvParticipantIds` reads from participant_responses, so a session
-   * with no answers adds no participant: the id list stays 150 and the batches
-   * stay 100 and 50. It changes the JOIN's right-hand side and nothing else.
+   * The second attempt carries NO ANSWERS OF ITS OWN, deliberately. The session
+   * list preflight (`readCsvSessions`) reads from participant_responses, so a
+   * session with no answers adds no participant: the id list stays 150 and the
+   * batches stay 100 and 50. It changes the JOIN's right-hand side and nothing
+   * else.
    */
   async function seedParticipants(): Promise<void> {
     await pool.query(
@@ -415,5 +416,73 @@ describe.skipIf(skipDbTests)("the CSV batch read, against real Postgres", () => 
     expect(
       overRead({ values: [STUDY_ID], rows: widened.rows })
     ).toHaveLength(150);
+  }, 120_000);
+
+  /**
+   * ONE PERSON, MANY SESSIONS, STILL BOUNDED READS (cto/AdaptaLabs#152).
+   *
+   * An abandoned session earns a fresh mint, so one account can hold any
+   * number of answer-carrying sessions. An intermediate version of #152
+   * batched by PERSON and read all of one such account in a single statement
+   * (~100MB, measured by the security gate). Batches are cut from SESSIONS,
+   * so the reads below stay a hundred sessions each however many one person
+   * holds - literals, like the test above.
+   */
+  it("reads one person's many sessions a hundred at a time", async () => {
+    await pool.query(
+      `INSERT INTO firsthand.studies (id, title, intro_text, consent_text, status)
+       VALUES ($1, 'Batch scope', 'Intro', 'Consent', 'launched')`,
+      [STUDY_ID]
+    );
+    await pool.query(
+      `INSERT INTO firsthand.study_steps (id, study_id, step_order, type, prompt)
+       VALUES ($1, $2, 1, 'open_text', 'Question 0')`,
+      [`${STUDY_ID}_q0`, STUDY_ID]
+    );
+    await pool.query(
+      `INSERT INTO firsthand.runtime_sessions
+         (session_id, token, study_id, study_title, participant_id,
+          participant_display_name, session_status, transcript_status,
+          microphone_permission, screen_permission, recording_status,
+          upload_status, created_at, updated_at, opportunity_id, steps,
+          logical_session_id, attempt_number)
+       SELECT 'many_' || n, 'tok_many_' || n, $1, 'Batch scope', 'user_many', 'P',
+              'abandoned', 'none', 'granted', 'granted', 'idle', 'idle',
+              NOW(), NOW(), $2, '[]'::jsonb, 'many_' || n, 1
+       FROM generate_series(1, 250) AS n`,
+      [STUDY_ID, OPPORTUNITY_ID]
+    );
+    await pool.query(
+      `INSERT INTO firsthand.participant_responses
+         (id, session_id, step_id, step_type, response_payload, saved_at,
+          study_id, step_prompt)
+       SELECT 'r_many_' || n, 'many_' || n, $1, 'open_text',
+              jsonb_build_object('text', 'answer ' || n),
+              TIMESTAMPTZ '2026-09-21 09:00:00+00' + n * INTERVAL '1 second',
+              $2, 'Question 0'
+       FROM generate_series(1, 250) AS n`,
+      [`${STUDY_ID}_q0`, STUDY_ID]
+    );
+
+    const { openSurveyCsvExport } = await import("./survey-results-repository");
+    const csvExport = await openSurveyCsvExport({ kind: "study", studyId: STUDY_ID });
+    recorded.length = 0;
+
+    let flagged = 0;
+    let rows = 0;
+    for await (const row of csvExport.participants(new AbortController().signal)) {
+      rows += 1;
+      if (row.superseded) flagged += 1;
+    }
+
+    expect(readShapes(recorded)).toEqual([
+      { asked: 100, returned: 100, rows: 100, overRead: 0 },
+      { asked: 100, returned: 100, rows: 100, overRead: 0 },
+      { asked: 50, returned: 50, rows: 50, overRead: 0 }
+    ]);
+    // And the flag still sees across the batches it was not read in: every
+    // session but the latest holds a superseded answer.
+    expect(rows).toBe(250);
+    expect(flagged).toBe(249);
   }, 120_000);
 });

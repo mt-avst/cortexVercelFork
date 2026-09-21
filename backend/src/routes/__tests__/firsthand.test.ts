@@ -57,20 +57,10 @@ jest.mock('../../firsthand/survey-results-repository', () => {
     openSurveyCsvExport: async (...args: unknown[]) => {
       scopeSpy(args[0]);
       const rows = ((await listed(...args)) ?? []) as import('../../firsthand/survey-results').StoredResponse[];
-      const { removedQuestionColumns } =
+      const { removedQuestionColumns, toCsvSessionRows } =
         jest.requireActual<typeof import('../../firsthand/survey-csv')>(
           '../../firsthand/survey-csv'
         );
-
-      const byParticipant = new Map<
-        string,
-        import('../../firsthand/survey-results').StoredResponse[]
-      >();
-      for (const row of rows) {
-        const group = byParticipant.get(row.session_id) ?? [];
-        group.push(row);
-        byParticipant.set(row.session_id, group);
-      }
 
       return {
         removedQuestions: removedQuestionColumns(rows),
@@ -83,9 +73,7 @@ jest.mock('../../firsthand/survey-results-repository', () => {
         // caller passing NOTHING; it cannot stop them passing something ELSE.
         participants: async function* (signal: AbortSignal) {
           signalSpy(signal);
-          for (const [sessionId, answers] of byParticipant) {
-            yield { sessionId, answers };
-          }
+          yield* toCsvSessionRows(rows);
         },
       };
     },

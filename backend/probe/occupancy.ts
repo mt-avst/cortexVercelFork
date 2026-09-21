@@ -85,9 +85,10 @@ type Shape = 'csv' | 'aggregate' | 'slowwork';
 /**
  * How long the `slowwork` shape holds the permit doing SERVER-side work.
  *
- * Stands in for a preflight-heavy export - `surveyCsvParticipantIds` and
- * `surveyCsvColumns` run serially, each up to 10s of admission plus a 120s
- * statement - and it is the shape that shows what
+ * Stands in for a preflight-heavy export - the three preflight reads (session
+ * list, removed columns, superseded sessions) now share ONE checkout inside a
+ * REPEATABLE READ transaction, up to 10s of admission plus a 120s statement -
+ * and it is the shape that shows what
  * MAX_IN_FLIGHT_RESULTS_READS_PER_USER is for. A hold no client can shorten,
  * but a FINITE one: shorter than RESULTS_READ_QUEUE_TIMEOUT_MS, so a victim
  * queued behind ONE of them is served and a victim queued behind twenty is not.
@@ -111,6 +112,14 @@ const ANSWER_TEXT = 'x'.repeat(2048);
 const CSV_STEPS: StudyStep[] = [
   { step_id: 'q1', order: 1, type: 'open_text', prompt: 'Tell us everything' }
 ];
+
+/** One CSV row's worth of answers, in the shape the export's generator yields. */
+const sessionRow = (sessionId: string, answers: StoredResponse[]) => ({
+  sessionId,
+  participantId: sessionId,
+  superseded: false,
+  answers
+});
 
 const answersFor = (sessionId: string): StoredResponse[] => [
   {
@@ -196,7 +205,7 @@ async function startServer() {
 
     const participants = async function* () {
       for (let index = 0; index < rows; index += 1) {
-        yield { sessionId: `s${index}`, answers: answersFor(`s${index}`) };
+        yield sessionRow(`s${index}`, answersFor(`s${index}`));
       }
     };
 
