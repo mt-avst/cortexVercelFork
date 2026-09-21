@@ -61,7 +61,7 @@ export const backendEnvSchema = z.object({
   // value at all, because `transform(Number)` RETURNS NaN rather than throwing -
   // there was nothing for the `.catch` to catch. Measured on this schema before
   // the change: `PORT=abc` parsed to NaN and `PORT=''` parsed to 0. Live consumer
-  // is `app.listen(config.PORT)` in backend/src/index.ts, and `listen(NaN)` binds
+  // is `app.listen(config.PORT)` in backend/src/server.ts, and `listen(NaN)` binds
   // an EPHEMERAL port, so on Kubera the readiness probe on 3001 fails, the pod
   // never goes Ready, and nothing in the logs names the cause.
   //

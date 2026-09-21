@@ -104,7 +104,7 @@ describe('backend NODE_ENV validation', () => {
    * AT BOOT, NOT ON FIRST REQUEST.
    *
    * backend/src/config/index.ts calls getBackendConfig() at module scope, so the
-   * throw lands on import - before index.ts binds a port and before the Kubera
+   * throw lands on import - before server.ts binds a port and before the Kubera
    * initContainer's migrate/seed touches the database. A pod that never starts is a
    * visible CrashLoopBackOff. A pod that starts and then 500s every request gets
    * rolled out over the healthy one.

@@ -17,7 +17,8 @@ const probe = jest.fn() as jest.MockedFunction<any>;
 mockCreateProbe.mockReturnValue(probe);
 
 // Imports the REAL app - its real middleware chain and its real route order.
-// index.ts guards app.listen behind NODE_ENV !== 'test' so this binds no port.
+// index.ts assembles the app with no side effects (listen lives in server.ts,
+// #153), so importing it here binds no port.
 // Testing a hand-built copy of the app would not pin what this file exists to
 // pin: that /api/health is registered before the /api router.
 import app from '../index';
