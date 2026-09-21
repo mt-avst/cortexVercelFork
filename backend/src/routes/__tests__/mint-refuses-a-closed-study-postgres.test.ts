@@ -870,16 +870,37 @@ describe.skipIf(skipDbTests)("mint routes refuse a study that has closed", () =>
      * payload with no `expires_at` at all - and this participant gets the
      * fresh mint a dead session earns them.
      *
-     * The four cases are the four ways the cast could raise, measured
-     * directly against postgres 15.19: text that is not a date at all, the
-     * empty string, a bare number, and a well-shaped date whose fields are
-     * out of range - the last being the one no regex guard could have caught.
+     * ONE CASE PER SQLSTATE THE CAST CAN RAISE, plus extra inputs for the
+     * commonest one.
+     *
+     * The first version of this docblock called its four cases "the four ways
+     * the cast could raise". They were four inputs across TWO SQLSTATEs, so
+     * the two the function did not catch had no case here at all and the gap
+     * read as coverage (cto/AdaptaLabs#129, MEDIUM-1 of the review pass).
+     * Re-measured by fuzzing 55 inputs against BOTH versions we run, postgres
+     * 15.19 and postgres 17.11, with identical results on each: the cast
+     * raises FOUR SQLSTATEs, and the last two rows below are the ones that
+     * were still answering 500 on this route.
+     *
+     *   22007 invalid_datetime_format        'not-a-date', '', '12345'
+     *   22008 datetime_field_overflow        '2026-02-31T00:00:00.000Z'
+     *   22009 invalid_time_zone_displacement_value
+     *                                        '...T10:00:00.000+99:00'
+     *   22023 invalid_parameter_value        '...T10:00:00 Nowhere/Land'
+     *
+     * `2026-02-31T00:00:00.000Z` is the one no regex guard could have caught;
+     * the `+99:00` displacement is the one no "does it carry a zone" check
+     * could; and `Nowhere/Land` reaches the only 22023 the timestamptz parser
+     * produces at all, which is why catching that broad-sounding SQLSTATE is
+     * safe here - migration 0016's own comment carries the measurement.
      */
     it.each([
       ["text that is not a date", "not-a-date"],
       ["an empty string", ""],
       ["a bare number", "12345"],
       ["a well-shaped but impossible date", "2026-02-31T00:00:00.000Z"],
+      ["a time zone displacement out of range", "2026-09-21T10:00:00.000+99:00"],
+      ["a time zone name that does not exist", "2026-09-21T10:00:00 Nowhere/Land"],
     ])(
       "mints a fresh session rather than erroring when the held session carries %s as its expiry",
       async (_label, corruptExpiresAt) => {

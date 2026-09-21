@@ -290,11 +290,19 @@ export async function resetRuntimeSession(payload: SessionPayload) {
  * The session this participant already has for this opportunity, if any.
  *
  * Exists because minting is otherwise a multiplier on the results. Every mint
- * creates a runtime_sessions row, and the results aggregation counts one
+ * creates a runtime_sessions row, and the results aggregation COUNTED one
  * respondent per session - so an ordinary employee pressing Start repeatedly
  * could move a poll's numbers as far as they liked, with each fake respondent
  * indistinguishable from a real one. Proven end to end before this existed:
  * three extra mints took a rating question from 3 respondents to 6.
+ *
+ * PAST TENSE ON PURPOSE. The aggregation counts one respondent per
+ * PARTICIPANT now, not per session - `respondentKey` in survey-results.ts,
+ * cto/AdaptaLabs#129. That is a second line of defence over the same defect
+ * rather than a replacement for this function: the per-question tallies
+ * still count one answer ROW as one answer (cto/AdaptaLabs#152), so repeated
+ * mints would still move a question's own numbers even with the respondent
+ * headline holding at one.
  *
  * That is a survey problem specifically. Sixty junk recorded sessions are
  * obvious to whoever reviews them; sixty junk poll votes are just a number.
@@ -326,13 +334,16 @@ export async function resetRuntimeSession(payload: SessionPayload) {
  * looser twin (cto/AdaptaLabs#129, LOW-5). Measured, not remembered:
  *
  *   - HERE, a value that is not a timestamp used to RAISE. `->>` hands back
- *     whatever text is stored and `::timestamptz` refused it - measured on
- *     postgres 15.19 for "not-a-date", an empty string, `12345` and the
- *     well-shaped but out-of-range `2026-02-31T00:00:00.000Z`. The mint route
+ *     whatever text is stored and `::timestamptz` refused it - re-measured
+ *     across postgres 15.19 AND 17.11, identically on both, for six forms
+ *     spanning all four SQLSTATEs the cast can raise: "not-a-date", an empty
+ *     string, `12345` (22007), the well-shaped but out-of-range
+ *     `2026-02-31T00:00:00.000Z` (22008), `2026-09-21T10:00:00.000+99:00`
+ *     (22009) and `2026-09-21T10:00:00 Nowhere/Land` (22023). The mint route
  *     calls this outside any try, so that was a 500 where the participant
  *     previously resumed; the detail read caught it and degraded to no trace.
  *     One row, two answers. `try_timestamptz` (migration 0016) now answers
- *     NULL for all four, so a corrupt payload reads as EXPIRED - fail closed,
+ *     NULL for all six, so a corrupt payload reads as EXPIRED - fail closed,
  *     the same direction as the absent-value case above.
  *   - THERE, `isExpired` would read the same value as NOT expired:
  *     `new Date("not-a-date").getTime()` is NaN and `NaN < Date.now()` is
@@ -340,10 +351,26 @@ export async function resetRuntimeSession(payload: SessionPayload) {
  *     `sessionPayloadSchema` types `expires_at` as `z.string().datetime()`
  *     and `interpretRawPayload` refuses the whole payload as
  *     `invalid_contract` first - also fail closed, so the OUTCOMES agree even
- *     though the two expressions do not. Measured: zod rejects all three
- *     malformed forms above. The guarantee rests on the schema, not on
+ *     though the two expressions do not. Measured on zod 3.25.76 rather than
+ *     assumed from the regex: it rejects all SIX malformed forms above,
+ *     including `2026-02-31T00:00:00.000Z`, whose shape a `\d{2}` day pattern
+ *     would have admitted. The guarantee rests on the schema, not on
  *     `isExpired`, which is the part a reader should know before relaxing
  *     that field.
+ *
+ * `IS TRUE`, NOT A BARE COMPARISON, and it is load-bearing rather than
+ * decorative. `try_timestamptz` answers NULL for both a payload with no
+ * `expires_at` and a corrupt one, and `NULL > NOW()` is SQL NULL, not false -
+ * so without it this projection returns NULL for exactly the two cases the
+ * fail-closed design is about. `session_not_expired: boolean` above would
+ * then be a lie about the runtime row, `isInFlightRuntimeSession` would hand
+ * back that NULL unchanged, and the participant detail read would ship
+ * `completion.inProgress: null` in its JSON to a frontend that tests the flag
+ * for `true`. It reads as false today by accident of falsiness, one `===`
+ * away from not. Pinned by name in opportunity-detail-resume-postgres.test.ts
+ * by `reports inProgress as boolean false rather than null when the session
+ * carries no expiry`, which is the only test in either DB suite that can see
+ * this word: dropping it left all 40 green before that test existed.
  */
 export async function findParticipantSessionForOpportunity(input: {
   opportunityId: string;

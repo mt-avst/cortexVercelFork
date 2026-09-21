@@ -369,6 +369,51 @@ describe.skipIf(skipDbTests)("participant detail read exempts an in-flight parti
     expect(response.body.completion.inProgress).toBe(false);
   });
 
+  /**
+   * `IS TRUE` IS LOAD-BEARING, AND NOTHING COULD SEE IT (cto/AdaptaLabs#129,
+   * LOW-1 of the review pass).
+   *
+   * `findParticipantSessionForOpportunity` projects
+   * `try_timestamptz(...) > NOW() IS TRUE AS session_not_expired`. Drop the
+   * two words and the expression is SQL NULL whenever `try_timestamptz`
+   * answers NULL - which is BOTH fail-closed cases: a payload with no
+   * `expires_at`, and a corrupt one. Measured before this test existed:
+   * dropping `IS TRUE` left all 40 tests across both DB suites green.
+   *
+   * What it actually breaks is a declared type. `session_not_expired:
+   * boolean` becomes a lie about the runtime row, `isInFlightRuntimeSession`
+   * returns that NULL unchanged, and this route ships
+   * `"inProgress": null` to a frontend whose `hasResumableNativeSurvey`
+   * tests the flag for truthiness. It reads as false today by accident of
+   * falsiness and is one `=== false` away from not.
+   *
+   * So this asserts the TYPE as well as the value, on a PUBLISHED study so
+   * the trace is visible at all, with a session carrying no
+   * `session_payload` - the case a pre-expiry-field row presents, and the
+   * cheapest way to make `try_timestamptz` answer NULL without seeding
+   * corruption.
+   */
+  it("reports inProgress as boolean false rather than null when the session carries no expiry", async () => {
+    const owner = await seedUser("researcher_admin");
+    const participant = await seedUser();
+    const study = await seedStudy();
+    const opportunity = await seedOpportunity({ ownerId: owner, studyId: study, status: "published" });
+    await seedSurveySession({
+      opportunityId: opportunity,
+      participantId: participant,
+      expiresInHours: null,
+    });
+
+    const response = await getDetail(opportunity, participant).expect(200);
+
+    expect(response.body.completion).toEqual({
+      completed: false,
+      completedAt: null,
+      inProgress: false,
+    });
+    expect(typeof response.body.completion.inProgress).toBe("boolean");
+  });
+
   it("attaches no completion trace at all to an anonymous request", async () => {
     const owner = await seedUser("researcher_admin");
     const study = await seedStudy();

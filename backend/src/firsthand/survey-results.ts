@@ -416,8 +416,25 @@ const removedQuestionsFrom = (detached: StoredResponse[]): QuestionResult[] => {
  * holding two answer-carrying sessions. The response read
  * (`survey-results-repository.ts`) filters on no `session_status`, so both
  * sessions' answers reach this function, and counting sessions reported that
- * one person as two respondents in the denominator under every percentage on
- * the page.
+ * one person as two respondents.
+ *
+ * WHERE THAT WRONG NUMBER WAS ACTUALLY SEEN - written down precisely, because
+ * the first version of this docblock said it sat "in the denominator under
+ * every percentage on the page" and that is measured false (cto/AdaptaLabs#129,
+ * MEDIUM-3 of the review pass). `respondents` is a denominator NOWHERE. Every
+ * percentage on the results page divides by the PER-QUESTION `answered` count
+ * (`share(..., answered)` in `tallyChoice` above, and the two
+ * `point.count / question.answered` expressions in
+ * `frontend/src/components/survey/SurveyResults.tsx`), and `respondents` is
+ * read in exactly one place in the whole tree: the "N participants" headline
+ * in that component's header.
+ *
+ * So the defect was a headline overstating the turnout, not inflated
+ * percentages - and the researcher-visible shape it leaves BEHIND is the
+ * mirror image, which is the thing to know when reading this page today: a
+ * study can now say "1 participant" above a chart whose own total is 2,
+ * because the headline counts people while every question still counts answer
+ * rows. That is cto/AdaptaLabs#152, the ponytail at the foot of this block.
  *
  * A row with no `participant_id` falls back to its own `session_id` rather
  * than collapsing every such row into a single respondent. The column is
@@ -426,10 +443,10 @@ const removedQuestionsFrom = (detached: StoredResponse[]): QuestionResult[] => {
  * the fallback decides which way the pure function errs if one ever arrives.
  * It errs by NOT merging - two unattributable rows from different sessions
  * stay two respondents, exactly the pre-fix behaviour - because merging would
- * invent one respondent out of people who may be different, and a denominator
- * that hides real respondents overstates every percentage taken against it.
- * An empty string is treated as absent for the same reason: it identifies
- * nobody.
+ * invent one respondent out of people who may be different, and a headline
+ * that hides real respondents understates the turnout a researcher is about
+ * to draw conclusions from. An empty string is treated as absent for the same
+ * reason: it identifies nobody.
  *
  * Prefixed, so a `participant_id` equal to some other row's `session_id`
  * cannot collide with it.
@@ -437,10 +454,21 @@ const removedQuestionsFrom = (detached: StoredResponse[]): QuestionResult[] => {
  * ponytail: the PER-QUESTION tallies below still count one answer row as one
  *   answer, so the same participant answering the same question in both
  *   sessions counts twice in `answered`, in a choice option's count and in a
- *   scale's mean and NPS. Fixing that needs a which-answer-wins rule
- *   (latest `saved_at`? the completed session's?) that changes the CSV export
- *   too - a researcher-facing decision, not a refactor. Needs a GitLab issue:
- *   production can hit it, because the two-session flow above is ordinary.
+ *   scale's mean and NPS. The page can therefore read "1 participant" over a
+ *   chart totalling 2.
+ *   -> cto/AdaptaLabs#152, reachable whenever a participant lets a 24-hour
+ *      token lapse and re-answers a question
+ *
+ *   The CSV EXPORT DISAGREES WITH THIS PAGE, and the export is deliberately
+ *   left alone (same issue). It groups by `session_id` under a column headed
+ *   "Participant", so one person holding two sessions is 1 respondent here
+ *   and 2 "Participant" rows there. Changing the export's grouping to match
+ *   needs the same which-answer-wins rule the tallies need - latest
+ *   `saved_at`? the completed session's? - and that is a researcher-facing
+ *   decision about what a study's results mean, not a refactor. Both export
+ *   sites say so at the grouping itself: `toResponsesCsv` and
+ *   `toCsvHeaderRow` in `survey-csv.ts`, and `streamParticipants` in
+ *   `survey-results-repository.ts`.
  */
 const respondentKey = (row: StoredResponse): string =>
   row.participant_id ? `p:${row.participant_id}` : `s:${row.session_id}`;

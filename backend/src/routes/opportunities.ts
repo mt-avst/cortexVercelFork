@@ -3864,11 +3864,18 @@ router.post('/:id/survey-session', requireAuth, participantSessionMintLimiter, p
    * One session per participant per opportunity.
    *
    * Minting is otherwise a multiplier on the results: every mint is a new
-   * runtime_sessions row and the aggregation counts one respondent per session,
-   * so pressing Start repeatedly moves a poll's numbers as far as the
-   * participant likes, with each fake respondent indistinguishable from a real
+   * runtime_sessions row and the aggregation COUNTED one respondent per
+   * session, so pressing Start repeatedly moved a poll's numbers as far as the
+   * participant liked, with each fake respondent indistinguishable from a real
    * one. Demonstrated end to end as an ordinary employee before this existed -
    * three extra mints took a rating question from 3 respondents to 6.
+   *
+   * The aggregation counts one respondent per PARTICIPANT now
+   * (`respondentKey` in survey-results.ts, cto/AdaptaLabs#129). That is a
+   * second line of defence over the same defect, not a reason to relax this
+   * one: the per-question tallies still count one answer ROW as one answer
+   * (cto/AdaptaLabs#152), so repeated mints would still move a question's own
+   * numbers with the respondent headline holding at one.
    *
    * An unfinished session is RESUMED rather than replaced, so closing the tab
    * and coming back does not lose the answers already given. A finished one is

@@ -319,14 +319,28 @@ const OpportunityDetail: React.FC = () => {
    * nothing at all.
    *
    * NO `!completion.completed` TERM (cto/AdaptaLabs#129, LOW-8). It was here
-   * and it was inert twice over: the server builds the two flags as
-   * `inProgress: !completed && isInFlightRuntimeSession(...)`, so they are
-   * mutually exclusive before this component sees them (pinned by name in
-   * opportunity-detail-resume-postgres.test.ts), and `hasCompletedNativeSurvey`
+   * and it was inert twice over: `completed` and `inProgress` are mutually
+   * exclusive before this component sees them, and `hasCompletedNativeSurvey`
    * renders above the button branch anyway. Deleting it removed nothing - all
    * 17 tests in this file stayed green when it was removed, which is exactly
    * why it could not stay: a term that cannot fail reads to the next person as
    * the guard against a state it never guarded.
+   *
+   * WHAT CARRIES THE EXCLUSION, stated exactly, because the first version of
+   * this comment pointed at one half of it and called it pinned (LOW-2 of
+   * the review pass on the same ticket). TWO redundant server guards produce
+   * it, either of which holds alone:
+   *   - `inProgress: !completed && isInFlightRuntimeSession(...)` in
+   *     `participantSessionSummaryForOpportunity`, and
+   *   - `isInFlightRuntimeSession`'s OWN `isAnsweredRuntimeStatus` early
+   *     return, which answers false for a completed session whatever the
+   *     caller did.
+   * `never reports a completed session as in progress` in
+   * opportunity-detail-resume-postgres.test.ts asserts the OUTCOME rather
+   * than either guard, so - measured, all three arms - it survives the
+   * removal of either one and reds only when both go. It pins that the
+   * invariant cannot be dismantled entirely, not that either guard is
+   * individually load-bearing.
    */
   const hasResumableNativeSurvey = Boolean(
     isNativeSurvey &&

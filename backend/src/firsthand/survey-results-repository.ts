@@ -806,6 +806,18 @@ async function* streamParticipants(
     // parameters, by `asks each batch for ITS OWN hundred ids`.
     const rows = await readBatch(filter, params, batch, signal);
 
+    // GROUPED BY `session_id`, WHICH THE RESULTS PAGE NO LONGER DOES
+    // (cto/AdaptaLabs#152). `respondentKey` in survey-results.ts counts
+    // distinct `participant_id`, so one person holding two answer-carrying
+    // sessions - ordinary since an expired session started earning a fresh
+    // mint rather than a dead link, cto/AdaptaLabs#129 - reads as 1
+    // participant on the page and 2 rows in this export, under a column
+    // headed "Participant". Left as it is deliberately: regrouping on
+    // `participant_id` needs a which-answer-wins rule for the same question
+    // answered in both sessions, and that is #152's decision to make.
+    // `toResponsesCsv` is the oracle this path is checked against and groups
+    // the same way, so the two cannot drift apart while the disagreement
+    // stands.
     const byParticipant = new Map<string, StoredResponse[]>();
     for (const row of rows) {
       const group = byParticipant.get(row.session_id);

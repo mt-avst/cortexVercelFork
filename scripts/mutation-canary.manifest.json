@@ -2775,5 +2775,27 @@
     "project": "frontend",
     "spec": "src/components/__tests__/AdminSessionManager.slot-counter-pickability.test.tsx",
     "test": "Calendar view: a session with room stays clickable and the gutter obeys the same rule"
+  },
+  {
+    "id": "survey-aggregate-projection-delivers-participant-id",
+    "why": "The DELIVERY half of the respondent fix, which nothing could see. `respondentKey` counts one respondent per `participant_id` (cto/AdaptaLabs#129), and every other test of it feeds `aggregateSurveyResults` a fixture array - so the arithmetic was pinned everywhere and the read that supplies the column nowhere. Measured before this entry: deleting `s.participant_id,` from BOTH projections in this file left the whole backend suite green, 67 files and 942 tests including all 29 real-Postgres specs, and typecheck passed too. SQL is a string and `pg` rows are `any`, so `ResponseRow.participant_id: string` just becomes a false statement about the runtime row; at runtime the field is undefined, `respondentKey` falls back to `s:${session_id}`, and the double count is silently back. Same shape as closing-time-projection-is-present, one file over. Proven by mutation before entry: dropping the column from THIS projection reds the named test, which reads 2 respondents instead of 1, and reds nothing else in the real-Postgres set (1 file, 2 tests of 200).",
+    "file": "backend/src/firsthand/survey-results-repository.ts",
+    "anchor": "        SELECT r.session_id, s.participant_id, r.step_id, r.step_prompt, r.step_type,\n               r.response_payload, r.saved_at\n        FROM participant_responses AS r\n        JOIN runtime_sessions AS s ON s.session_id = r.session_id\n        WHERE ${filter}\n",
+    "mutation": "        SELECT r.session_id, r.step_id, r.step_prompt, r.step_type,\n               r.response_payload, r.saved_at\n        FROM participant_responses AS r\n        JOIN runtime_sessions AS s ON s.session_id = r.session_id\n        WHERE ${filter}\n",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-respondent-identity-postgres.test.ts",
+    "test": "counts one participant holding two answered sessions as a single respondent",
+    "needsDatabase": true
+  },
+  {
+    "id": "survey-csv-batch-projection-delivers-participant-id",
+    "why": "THE SECOND COPY of the projection above, in `readBatch`, which can lose the column while the first keeps it. Nothing about the CSV bytes depends on it: the export groups by `session_id` and prints `session_id` in its first cell, deliberately and by researcher-facing decision (cto/AdaptaLabs#152), so no output assertion in any CSV suite can see this column vanish. What breaks is the contract - `StoredResponse.participant_id` is populated by this path and declared non-optional on the row type, and the first consumer to group the export by person, which is #152's likely shape, would find it undefined from one of the two reads that produce it. The named test therefore asserts the delivered field rather than an outcome, on rows a real Postgres returned. Proven by mutation before entry: dropping the column from THIS projection reds the named test alone, 1 test of 200 in the real-Postgres set, while the aggregate entry's test stays green.",
+    "file": "backend/src/firsthand/survey-results-repository.ts",
+    "anchor": "        SELECT r.session_id, s.participant_id, r.step_id, r.step_prompt, r.step_type,\n               r.response_payload, r.saved_at\n        FROM participant_responses AS r\n        JOIN runtime_sessions AS s ON s.session_id = r.session_id\n        WHERE ${filter} AND r.session_id = ANY($${params.length + 1}::text[])\n",
+    "mutation": "        SELECT r.session_id, r.step_id, r.step_prompt, r.step_type,\n               r.response_payload, r.saved_at\n        FROM participant_responses AS r\n        JOIN runtime_sessions AS s ON s.session_id = r.session_id\n        WHERE ${filter} AND r.session_id = ANY($${params.length + 1}::text[])\n",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-respondent-identity-postgres.test.ts",
+    "test": "delivers the participant id on every row the csv batch read returns",
+    "needsDatabase": true
   }
 ]
