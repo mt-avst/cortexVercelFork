@@ -243,12 +243,11 @@ describe.skipIf(skipDbTests)("the respondent identity, delivered by a real read"
    * THE CSV BATCH PROJECTION, which is a SECOND copy of the same SELECT.
    *
    * `readBatch` repeats the projection verbatim, so the column can be lost
-   * from one and kept in the other. Before cto/AdaptaLabs#152 that was
-   * invisible in the CSV bytes; now the export groups by person, so losing it
-   * also empties the Participant cell and drops the superseded flag - which
-   * the export test below sees. This one stays because it names the CAUSE, so
-   * a failure pair reads "the column is missing" rather than "something about
-   * the flag".
+   * from one and kept in the other - and no CSV byte shows it, because the
+   * export takes each session's person from its preflight list and its
+   * superseded flag from SQL (cto/AdaptaLabs#152). What breaks is the
+   * declared contract: `StoredResponse.participant_id` becomes undefined on
+   * rows this path returns. So the pin is on the delivered field.
    */
   it("delivers the participant id on every row the csv batch read returns", async () => {
     const { openSurveyCsvExport } = await import("./survey-results-repository");
@@ -274,11 +273,6 @@ describe.skipIf(skipDbTests)("the respondent identity, delivered by a real read"
    * THE CSV KEEPS BOTH ANSWERS AND FLAGS THE ONE THAT LOST
    * (cto/AdaptaLabs#152), through the real streamed path on rows a real
    * Postgres returned.
-   *
-   * This is also what the batch projection's `s.participant_id` is FOR now:
-   * the export batches and groups by person, so without the column the two
-   * sessions stop being one person, neither is flagged and the Participant
-   * cell is empty.
    */
   it("exports both sessions under one person, with the earlier one flagged superseded", async () => {
     const lines = await streamedCsv({ kind: "study", studyId: STUDY_ID });

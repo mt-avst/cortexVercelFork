@@ -537,6 +537,12 @@ const countsAsAnswer = (row: StoredResponse): boolean => {
  *
  * Keyed by object identity, so it only means anything for the array it was
  * built from - which is how both callers use it.
+ *
+ * HAS A TWIN IN SQL. The streamed CSV export reads a hundred sessions at a
+ * time, so it decides the same thing in `supersededCsvSessions`
+ * (survey-results-repository.ts); change this rule there too.
+ * survey-csv-export-postgres.test.ts compares the two byte for byte and goes
+ * red if they disagree.
  */
 export function supersededAnswers(
   responses: readonly StoredResponse[]

@@ -91,20 +91,20 @@
   },
   {
     "id": "csv-batch-asks-for-its-own-ids",
-    "why": "The output is identical whether a batch fetched its hundred participants or all of them, so deleting the predicate AND its bind parameter together changes nothing anybody can see - while loading the study's whole answer set once per batch, which is the exact heap streaming exists to remove. It survived every test in four files, including the real-Postgres one, because they all compare output. ANCHOR UPDATED when !214 moved this query into `readBatch` and reindented its parameter list - the canary reported ANCHOR_MISSING rather than quietly dropping the entry, which is the whole point of requiring an exact single match. THE PARAMETER HALF, and only that half: it asserts what the statement BOUND. What it RETURNED is now pinned separately by csv-batch-read-takes-only-what-it-asked-for, which is what closes cto/AdaptaLabs#20 - this entry used to say that gap was open, and it no longer is. ANCHOR UPDATED for cto/AdaptaLabs#152: the batch binds participant ids now, not session ids. Re-anchored again when the batch read gained its `LIMIT ${CSV_BATCH_ROW_BUDGET + 1}` row budget (same ticket).",
+    "why": "The output is identical whether a batch fetched its hundred participants or all of them, so deleting the predicate AND its bind parameter together changes nothing anybody can see - while loading the study's whole answer set once per batch, which is the exact heap streaming exists to remove. It survived every test in four files, including the real-Postgres one, because they all compare output. ANCHOR UPDATED when !214 moved this query into `readBatch` and reindented its parameter list - the canary reported ANCHOR_MISSING rather than quietly dropping the entry, which is the whole point of requiring an exact single match. THE PARAMETER HALF, and only that half: it asserts what the statement BOUND. What it RETURNED is now pinned separately by csv-batch-read-takes-only-what-it-asked-for, which is what closes cto/AdaptaLabs#20 - this entry used to say that gap was open, and it no longer is.",
     "file": "backend/src/firsthand/survey-results-repository.ts",
-    "anchor": "        WHERE ${filter} AND s.participant_id = ANY($${params.length + 1}::text[])\n        ORDER BY r.saved_at ASC, r.id ASC\n        LIMIT ${CSV_BATCH_ROW_BUDGET + 1}\n      `,\n            [...params, batch]",
-    "mutation": "        WHERE ${filter}\n        ORDER BY r.saved_at ASC, r.id ASC\n        LIMIT ${CSV_BATCH_ROW_BUDGET + 1}\n      `,\n            [...params]",
+    "anchor": "        WHERE ${filter} AND r.session_id = ANY($${params.length + 1}::text[])\n        ORDER BY r.saved_at ASC, r.id ASC\n      `,\n            [...params, batch]",
+    "mutation": "        WHERE ${filter}\n        ORDER BY r.saved_at ASC, r.id ASC\n      `,\n            [...params]",
     "runner": "vitest",
     "spec": "src/firsthand/survey-csv-export.test.ts",
     "test": "asks each batch for ITS OWN hundred ids, and never for everything"
   },
   {
     "id": "csv-batch-read-takes-only-what-it-asked-for",
-    "why": "The other half of the batch predicate, and the half nothing could see. Widening the statement while leaving the bind parameter in place - `AND (r.session_id = ANY(...) OR TRUE)` - keeps every parameter assertion satisfied and the substring present while every batch reads the study's ENTIRE answer set: the heap defect streaming exists to remove, restored in full. Measured on this branch's base: 62 tests across the four files covering this path, the real-Postgres one included, exit 0. Nothing downstream can see it and nothing downstream is at fault - `streamParticipants` yields from the id list, so the surplus rows are grouped, ignored and dropped, and the CSV bytes are identical. So the new test asserts on the ROWS: what each batch bound, against what Postgres handed back. Not a tighter string match on the WHERE clause, which would be prefix-fragile in the way `clock_timestamp()` proved to be. cto/AdaptaLabs#20. ANCHOR UPDATED for cto/AdaptaLabs#152, which moved the batch from session ids to participant ids so one person's sessions land in one read; the widening mutation and the row-level assertion carry over unchanged, now keyed on participant_id.",
+    "why": "The other half of the batch predicate, and the half nothing could see. Widening the statement while leaving the bind parameter in place - `AND (r.session_id = ANY(...) OR TRUE)` - keeps every parameter assertion satisfied and the substring present while every batch reads the study's ENTIRE answer set: the heap defect streaming exists to remove, restored in full. Measured on this branch's base: 62 tests across the four files covering this path, the real-Postgres one included, exit 0. Nothing downstream can see it and nothing downstream is at fault - `streamParticipants` yields from the id list, so the surplus rows are grouped, ignored and dropped, and the CSV bytes are identical. So the new test asserts on the ROWS: what each batch bound, against what Postgres handed back. Not a tighter string match on the WHERE clause, which would be prefix-fragile in the way `clock_timestamp()` proved to be. cto/AdaptaLabs#20.",
     "file": "backend/src/firsthand/survey-results-repository.ts",
-    "anchor": "        WHERE ${filter} AND s.participant_id = ANY($${params.length + 1}::text[])\n        ORDER BY r.saved_at ASC, r.id ASC",
-    "mutation": "        WHERE ${filter} AND (s.participant_id = ANY($${params.length + 1}::text[]) OR TRUE)\n        ORDER BY r.saved_at ASC, r.id ASC",
+    "anchor": "        WHERE ${filter} AND r.session_id = ANY($${params.length + 1}::text[])\n        ORDER BY r.saved_at ASC, r.id ASC",
+    "mutation": "        WHERE ${filter} AND (r.session_id = ANY($${params.length + 1}::text[]) OR TRUE)\n        ORDER BY r.saved_at ASC, r.id ASC",
     "runner": "vitest",
     "spec": "src/firsthand/survey-csv-batch-scope-postgres.test.ts",
     "test": "reads only the participants each batch asked for",
@@ -2810,10 +2810,10 @@
   },
   {
     "id": "survey-csv-batch-projection-delivers-participant-id",
-    "why": "THE SECOND COPY of the projection above, in `readBatch`, which can lose the column while the first keeps it. Since cto/AdaptaLabs#152 the export batches, groups and flags by person, so losing it is total: every row's participant id is undefined, the per-person lookup misses for every id in the batch, and the export yields NO data rows at all - a header-only 200 CSV (the #152 code gate measured 8 tests red across the CSV suites). The named test asserts the delivered field itself, on rows a real Postgres returned, so the failure names the cause rather than a symptom.",
+    "why": "THE SECOND COPY of the projection above, in `readBatch`, which can lose the column while the first keeps it. No CSV byte depends on it: the export takes each session's person from its preflight session list, and its superseded flag from SQL (cto/AdaptaLabs#152), so the rows a batch reads only need their answers. What breaks is the contract - `StoredResponse.participant_id` is declared non-optional and populated by this path, and a consumer reading it from these rows would find it undefined from one of the two reads that produce it. The named test asserts the delivered field on rows a real Postgres returned. Proven by mutation before entry: dropping the column from THIS projection reds the named test alone.",
     "file": "backend/src/firsthand/survey-results-repository.ts",
-    "anchor": "        SELECT r.session_id, s.participant_id, r.step_id, r.step_prompt, r.step_type,\n               r.response_payload, r.saved_at\n        FROM participant_responses AS r\n        JOIN runtime_sessions AS s ON s.session_id = r.session_id\n        WHERE ${filter} AND s.participant_id = ANY($${params.length + 1}::text[])\n",
-    "mutation": "        SELECT r.session_id, r.step_id, r.step_prompt, r.step_type,\n               r.response_payload, r.saved_at\n        FROM participant_responses AS r\n        JOIN runtime_sessions AS s ON s.session_id = r.session_id\n        WHERE ${filter} AND s.participant_id = ANY($${params.length + 1}::text[])\n",
+    "anchor": "        SELECT r.session_id, s.participant_id, r.step_id, r.step_prompt, r.step_type,\n               r.response_payload, r.saved_at\n        FROM participant_responses AS r\n        JOIN runtime_sessions AS s ON s.session_id = r.session_id\n        WHERE ${filter} AND r.session_id = ANY($${params.length + 1}::text[])\n",
+    "mutation": "        SELECT r.session_id, r.step_id, r.step_prompt, r.step_type,\n               r.response_payload, r.saved_at\n        FROM participant_responses AS r\n        JOIN runtime_sessions AS s ON s.session_id = r.session_id\n        WHERE ${filter} AND r.session_id = ANY($${params.length + 1}::text[])\n",
     "runner": "vitest",
     "spec": "src/firsthand/survey-respondent-identity-postgres.test.ts",
     "test": "delivers the participant id on every row the csv batch read returns",
@@ -2840,17 +2840,6 @@
     "test": "keeps both rows, names the person on each and flags the one that lost"
   },
   {
-    "id": "csv-batch-read-keeps-the-export-scope",
-    "why": "cto/AdaptaLabs#152 moved the batch from session ids (primary keys the scoped preflight had chosen) to participant ids (people). One person can hold sessions in two opportunities of the same study, so the scope filter on the batch read stopped being an untestable equivalent mutant and became the thing keeping a per-opportunity export from pulling that person's answers to another researcher's recruitment, under different consent wording. `OR TRUE` keeps every bind parameter referenced, so the statement still runs. Proven KILLED before entry.",
-    "file": "backend/src/firsthand/survey-results-repository.ts",
-    "anchor": "        WHERE ${filter} AND s.participant_id = ANY($${params.length + 1}::text[])\n",
-    "mutation": "        WHERE (${filter} OR TRUE) AND s.participant_id = ANY($${params.length + 1}::text[])\n",
-    "runner": "vitest",
-    "spec": "src/firsthand/survey-respondent-identity-postgres.test.ts",
-    "test": "keeps a per-opportunity export to that opportunity when one person answered in two",
-    "needsDatabase": true
-  },
-  {
     "id": "superseded-rule-ignores-blank-answers",
     "why": "cto/AdaptaLabs#152, the code gate's MEDIUM. The API accepts partial saves, so a blank row can be stored after a real answer. The tallies drop blanks; if a blank could still WIN the latest-answer rule, the person stays in the respondent headline while their real answer vanishes from every chart. This mutation lets any answerable-type row take part, blank or not. Proven KILLED before entry.",
     "file": "backend/src/firsthand/survey-results.ts",
@@ -2861,33 +2850,47 @@
     "test": "does not let a blank later answer replace a real earlier one"
   },
   {
-    "id": "csv-batch-row-budget-is-a-literal",
-    "why": "cto/AdaptaLabs#152, the security gate's MEDIUM. A batch is a hundred PEOPLE, and one account can hold thousands of answer-carrying sessions, so the per-read heap bound is this budget and nothing else - measured without it: one read of ~100MB for a single such person on the pod every live session shares. Pinned as a literal in the test, which a derived expectation could not do. Proven KILLED before entry.",
-    "file": "backend/src/firsthand/survey-results-repository.ts",
-    "anchor": "export const CSV_BATCH_ROW_BUDGET = 10_000;",
-    "mutation": "export const CSV_BATCH_ROW_BUDGET = 20_000;",
+    "id": "csv-superseded-sql-takes-the-latest",
     "runner": "vitest",
-    "spec": "src/firsthand/survey-csv-export.test.ts",
-    "test": "caps a batch read at 10001 rows, one more than the budget of 10000"
+    "spec": "src/firsthand/survey-csv-export-postgres.test.ts",
+    "test": "flags superseded sessions exactly as the whole-string builder does, across batches",
+    "needsDatabase": true,
+    "file": "backend/src/firsthand/survey-results-repository.ts",
+    "why": "cto/AdaptaLabs#152. The export decides which sessions hold a superseded answer in SQL, because it reads a hundred sessions at a time and a person's other sessions can sit in any batch; the results page decides it in JavaScript. `DESC` is what makes the SQL keep the LATEST answer. Reversed, it flags the winners instead of the losers, and only a byte comparison against the JavaScript oracle can see that. Proven KILLED before entry.",
+    "anchor": "                   ORDER BY r.saved_at DESC, r.id DESC",
+    "mutation": "                   ORDER BY r.saved_at ASC, r.id ASC"
   },
   {
-    "id": "csv-person-past-budget-is-refused-before-first-byte",
-    "why": "cto/AdaptaLabs#152. A person is never split across reads (their superseded flags need all their answers at once), so one person past the budget cannot be packed - they must be refused while the status can still be a 413. Without this check the planner puts them in a batch of their own and the read carries everything they have. Proven KILLED before entry.",
-    "file": "backend/src/firsthand/survey-results-repository.ts",
-    "anchor": "    if (!(person.answers <= CSV_BATCH_ROW_BUDGET)) {",
-    "mutation": "    if (false) {",
+    "id": "csv-superseded-sql-ignores-blank-text",
     "runner": "vitest",
-    "spec": "src/firsthand/survey-csv-export.test.ts",
-    "test": "refuses before the first byte when one participant alone passes the row budget"
+    "spec": "src/firsthand/survey-csv-export-postgres.test.ts",
+    "test": "flags superseded sessions exactly as the whole-string builder does, across batches",
+    "needsDatabase": true,
+    "file": "backend/src/firsthand/survey-results-repository.ts",
+    "why": "cto/AdaptaLabs#152. The SQL twin of the blank-answer rule: a later answer of nothing but whitespace - including non-breaking spaces, which Postgres `[:space:]` would not treat as blank - must not supersede a real one. Without the predicate the CSV flags a row the results page does not treat as replaced. Proven KILLED before entry.",
+    "anchor": "                AND (r.response_payload ->> 'text') ~ ${nonBlankParam})",
+    "mutation": "                )"
   },
   {
-    "id": "csv-batch-read-refuses-past-budget",
-    "why": "cto/AdaptaLabs#152. The HARD half of the row budget: batches are planned from preflight counts, and a person answering in between can push a read past them. The read is refused - destroying the socket mid-export - rather than truncated into a CSV that parses. Proven KILLED before entry.",
-    "file": "backend/src/firsthand/survey-results-repository.ts",
-    "anchor": "          if (result.rows.length > CSV_BATCH_ROW_BUDGET) {",
-    "mutation": "          if (false) {",
+    "id": "csv-superseded-sql-keeps-to-the-export-scope",
     "runner": "vitest",
-    "spec": "src/firsthand/survey-csv-export.test.ts",
-    "test": "throws rather than truncating when a batch read returns more than its budget"
+    "spec": "src/firsthand/survey-respondent-identity-postgres.test.ts",
+    "test": "keeps a per-opportunity export to that opportunity when one person answered in two",
+    "needsDatabase": true,
+    "file": "backend/src/firsthand/survey-results-repository.ts",
+    "why": "cto/AdaptaLabs#152. One person can hold sessions in two opportunities of the same study. Without the scope filter on the superseded preflight, their answer to ANOTHER researcher's recruitment would flag a row in this researcher's export - an answer outside the reader's scope leaking through as a flag. `OR TRUE` keeps every bind parameter referenced. Proven KILLED before entry.",
+    "anchor": "          WHERE ${filter}\n            AND r.step_type = ANY(${typesParam}::text[])",
+    "mutation": "          WHERE (${filter} OR TRUE)\n            AND r.step_type = ANY(${typesParam}::text[])"
+  },
+  {
+    "id": "csv-superseded-sql-ranks-within-a-person",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-csv-export-postgres.test.ts",
+    "test": "flags superseded sessions exactly as the whole-string builder does, across batches",
+    "needsDatabase": true,
+    "file": "backend/src/firsthand/survey-results-repository.ts",
+    "why": "cto/AdaptaLabs#152. The partition is what makes the rule per PERSON: without the respondent key, the latest answer to a question by ANYONE supersedes everybody else's, and nearly every row in a study is flagged. Proven KILLED before entry.",
+    "anchor": "                     CASE WHEN s.participant_id <> ''\n                          THEN 'p:' || s.participant_id\n                          ELSE 's:' || r.session_id END,\n",
+    "mutation": ""
   }
 ]

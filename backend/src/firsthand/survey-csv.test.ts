@@ -401,8 +401,11 @@ describe("one person answering in two sessions", () => {
     // An instruction is not an answer, so two of them cannot disagree - a
     // flag here would mark a row superseded with nothing on it that lost.
     const csv = toResponsesCsv(steps, [
-      response("intro", "monday", {}, { participant_id: "person", step_type: "instruction", saved_at: "2026-09-21T09:00:00.000Z" }),
-      response("intro", "tuesday", {}, { participant_id: "person", step_type: "instruction", saved_at: "2026-09-22T09:00:00.000Z" })
+      // Carrying a SELECTION, so only the type check can keep them out: with
+      // empty payloads they were rejected as blank and the test could not
+      // fail with the type guard deleted (measured by the review gate).
+      response("intro", "monday", { selectedOption: "x" }, { participant_id: "person", step_type: "instruction", saved_at: "2026-09-21T09:00:00.000Z" }),
+      response("intro", "tuesday", { selectedOption: "x" }, { participant_id: "person", step_type: "instruction", saved_at: "2026-09-22T09:00:00.000Z" })
     ]);
 
     expect(rows(csv).slice(1)).toEqual(["monday,person,false,,", "tuesday,person,false,,"]);

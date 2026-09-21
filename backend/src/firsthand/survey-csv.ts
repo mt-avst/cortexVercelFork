@@ -309,13 +309,12 @@ export function removedQuestionColumns(
  * A set of answers as CSV rows: grouped by PERSON, then by session, each in
  * first-appearance order, with every session holding a lost answer flagged.
  *
- * THE ONE GROUPING, used by the oracle below over a whole study and by
- * `streamParticipants` over one batch of people at a time. Those agree because
- * a batch holds every answer its people gave: the flag depends only on one
- * person's own answers, so computing it per batch or per study is the same
- * computation. That is why the stream batches by person, not by session - a
- * session-sized batch could split one person across two reads and never see
- * that their earlier answer lost.
+ * THE ORACLE'S grouping, over a whole study at once. The stream cannot use
+ * it: it reads a hundred SESSIONS at a time - a bound, since a person can
+ * hold any number of sessions - so it takes its order from a SQL preflight
+ * and its flag from `supersededCsvSessions`, the SQL twin of
+ * `supersededAnswers`. survey-csv-export-postgres.test.ts holds the two to
+ * the same bytes.
  *
  * A person's sessions sit together, so the rows a researcher needs to compare
  * are adjacent rather than scattered through the file by date.

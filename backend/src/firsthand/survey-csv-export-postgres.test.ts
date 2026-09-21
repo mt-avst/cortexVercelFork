@@ -104,6 +104,8 @@ async function seedSession(input: {
   sessionId: string;
   studyId: string;
   opportunityId: string;
+  /** Defaults to a person of this session's own - one session each. */
+  participantId?: string;
 }) {
   await pool.query(
     `INSERT INTO firsthand.runtime_sessions
@@ -115,7 +117,8 @@ async function seedSession(input: {
      VALUES ($1, $2, $3, 'Export', $4, 'P', 'active', 'none', 'granted',
              'granted', 'idle', 'idle', NOW(), NOW(), $5, $6::jsonb, $1, 1)`,
     [input.sessionId, `tok_${input.sessionId}`, input.studyId,
-     `user_${input.sessionId}`, input.opportunityId, JSON.stringify([])]
+     input.participantId ?? `user_${input.sessionId}`, input.opportunityId,
+     JSON.stringify([])]
   );
 }
 
@@ -563,4 +566,129 @@ describe.skipIf(skipDbTests)("the streamed CSV export, against real Postgres", (
     // `expect(250).toBeGreaterThan(100)` would assert a fact about two
     // literals rather than about the code, so it is not restated.
   }, 120_000);
+
+  /**
+   * THE SUPERSEDED FLAG, RULE BY RULE (cto/AdaptaLabs#152).
+   *
+   * The stream decides which sessions hold a superseded answer in SQL
+   * (`supersededCsvSessions`), because it reads a hundred sessions at a time
+   * and a person's other sessions can sit in any batch. The oracle decides it
+   * in JavaScript (`supersededAnswers`). Those are two statements of one rule,
+   * and this is the test that keeps them one: every arm of the rule has a
+   * person below built to exercise it, and the bytes must match.
+   *
+   * The count of flagged rows is asserted as a LITERAL as well, because two
+   * implementations that both flagged nothing would agree perfectly.
+   */
+  it("flags superseded sessions exactly as the whole-string builder does, across batches", async () => {
+    await seedStudy(STUDY_ID);
+
+    let clock = 1_700_000_000_000;
+    const at = (bump = 1_000) => new Date((clock += bump)).toISOString();
+    let answerIndex = 0;
+
+    const session = async (sessionId: string, participantId: string) =>
+      seedSession({ sessionId, participantId, studyId: STUDY_ID, opportunityId: OPPORTUNITY_ID });
+    const answer = async (
+      sessionId: string,
+      q: number | null,
+      stepType: string,
+      payload: unknown,
+      savedAt: string,
+      extra: { prompt?: string | null; id?: string } = {}
+    ) =>
+      seedAnswer({
+        id: extra.id ?? `sup_${(answerIndex += 1)}`,
+        sessionId,
+        studyId: q === null ? null : STUDY_ID,
+        stepId: q === null ? null : `${STUDY_ID}_q${q}`,
+        stepType,
+        prompt: q === null ? (extra.prompt ?? null) : `Question ${q}`,
+        payload,
+        savedAt
+      });
+
+    // A: later answer wins; a still-later BLANK one does not (1 flagged).
+    await session("a1", "person_a");
+    await session("a2", "person_a");
+    await session("a3", "person_a");
+    await answer("a1", 0, "open_text", { text: "first" }, at());
+    await answer("a2", 0, "open_text", { text: "second" }, at());
+    await answer("a3", 0, "open_text", { text: "   " }, at());
+
+    // E: a later answer of nothing but NON-BREAKING SPACES is blank to
+    // `.trim()`, so it must not win in SQL either (0 flagged).
+    await session("e1", "person_e");
+    await session("e2", "person_e");
+    await answer("e1", 0, "open_text", { text: "real" }, at());
+    await answer("e2", 0, "open_text", { text: "\u00a0\u00a0" }, at());
+
+    // B: a rating then an empty payload (0 flagged by it); a single choice
+    // answered twice (1 flagged).
+    await session("b1", "person_b");
+    await session("b2", "person_b");
+    await answer("b1", 1, "rating", { rating: 3 }, at());
+    await answer("b2", 1, "rating", {}, at());
+    await answer("b1", 2, "single_choice", { selectedOption: "x" }, at());
+    await answer("b2", 2, "single_choice", { selectedOption: "y" }, at());
+
+    // C: a multi-choice, then an empty selection, then a selection holding no
+    // strings - neither later one is an answer (0 flagged).
+    await session("c1", "person_c");
+    await session("c2", "person_c");
+    await session("c3", "person_c");
+    await answer("c1", 3, "multi_choice", { selectedOptions: ["a"] }, at());
+    await answer("c2", 3, "multi_choice", { selectedOptions: [] }, at());
+    await answer("c3", 3, "multi_choice", { selectedOptions: [1] }, at());
+
+    // D: a REMOVED question with its wording, and one without, each answered
+    // twice (1 flagged - the earlier session holds both losers).
+    await session("d1", "person_d");
+    await session("d2", "person_d");
+    await answer("d1", null, "open_text", { text: "gone 1" }, at(), { prompt: "Removed twice" });
+    await answer("d1", null, "open_text", { text: "unknown 1" }, at(), { prompt: null });
+    await answer("d2", null, "open_text", { text: "gone 2" }, at(), { prompt: "Removed twice" });
+    await answer("d2", null, "open_text", { text: "unknown 2" }, at(), { prompt: null });
+
+    // F: two answers on the SAME millisecond - the later id wins in both
+    // readers (1 flagged).
+    await session("f1", "person_f");
+    await session("f2", "person_f");
+    const tie = at();
+    await answer("f1", 4, "open_text", { text: "tie a" }, tie, { id: "tie_a" });
+    await answer("f2", 4, "open_text", { text: "tie b" }, tie, { id: "tie_b" });
+
+    // H: instruction rows are not answers, whatever they carry (0 flagged).
+    await session("h1", "person_h");
+    await session("h2", "person_h");
+    await answer("h1", 5, "instruction", { selectedOption: "x" }, at());
+    await answer("h2", 5, "instruction", { selectedOption: "x" }, at());
+
+    // G: ONE PERSON, 150 SESSIONS, the same question in each - so this
+    // person's sessions span two batches of 100 and only the SQL flag can see
+    // across them (149 flagged).
+    for (let n = 0; n < 150; n += 1) {
+      const id = `g${String(n).padStart(3, "0")}`;
+      await session(id, "person_g");
+      await answer(id, 0, "open_text", { text: `g ${n}` }, at());
+    }
+
+    const { listResponsesForStudy } = await import("./survey-results-repository");
+    const { toResponsesCsv } = await import("./survey-csv");
+
+    const oracle = toResponsesCsv(steps, await listResponsesForStudy(STUDY_ID));
+    const streamed = await streamedCsv({ kind: "study", studyId: STUDY_ID });
+
+    expect(streamed).toBe(oracle);
+
+    // The literal, so two readers flagging nothing cannot agree their way to
+    // green: A1 + B1 + D1 + F1 + 149 of G.
+    const flagged = streamed
+      .split("\r\n")
+      .filter((line) => line.split(",")[2] === "true")
+      .map((line) => line.split(",")[0]);
+    expect(flagged).toHaveLength(153);
+    expect(flagged.slice(0, 4)).toEqual(["a1", "b1", "d1", "f1"]);
+    expect(await dataRows(streamed)).toBe(166);
+  }, 180_000);
 });

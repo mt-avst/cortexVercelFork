@@ -16,7 +16,7 @@ import { startTestPostgres, type TestPostgres } from "../__tests__/helpers/postg
  * the blunt mutation where the predicate and its bind parameter are deleted
  * together. It cannot see the statement widen underneath them:
  *
- *     WHERE ${filter} AND (s.participant_id = ANY($n::text[]) OR TRUE)
+ *     WHERE ${filter} AND (r.session_id = ANY($n::text[]) OR TRUE)
  *
  * keeps the parameter bound and the substring present while every batch reads
  * the study's ENTIRE answer set. Measured on the base of this branch, across
@@ -163,15 +163,13 @@ let postgres: TestPostgres;
 /**
  * The ids a read RECEIVED, deduplicated.
  *
- * Reads `participant_id` - the key the batch binds since cto/AdaptaLabs#152
- * moved the export from batching sessions to batching people - defensively
- * rather than asserting a shape, so a mutation that changes the projection
- * fails on the count below rather than throwing here with a stack trace nobody
- * can read.
+ * Reads `session_id` defensively rather than asserting a shape, so a mutation
+ * that changes the projection fails on the count below rather than throwing
+ * here with a stack trace nobody can read.
  */
 function returnedParticipants(rows: readonly Record<string, unknown>[]): string[] {
   const ids = rows
-    .map((row) => row.participant_id)
+    .map((row) => row.session_id)
     .filter((id): id is string => typeof id === "string");
   return [...new Set(ids)];
 }
@@ -387,18 +385,18 @@ describe.skipIf(skipDbTests)("the CSV batch read, against real Postgres", () => 
     // against the same rows. WITHOUT THIS the assertion above is satisfied by
     // a detector that returns an empty array for everything - the shape of
     // absence-assertion this repository has been caught by before.
-    const asked = ["user_b000", "user_b001"];
+    const asked = ["b000", "b001"];
     const from = `FROM firsthand.participant_responses AS r
       JOIN firsthand.runtime_sessions AS s ON s.session_id = r.session_id`;
 
     const narrow = await pool.query<Record<string, unknown>>(
-      `SELECT s.participant_id ${from}
-       WHERE s.study_id = $1 AND s.participant_id = ANY($2::text[])`,
+      `SELECT r.session_id ${from}
+       WHERE s.study_id = $1 AND r.session_id = ANY($2::text[])`,
       [STUDY_ID, asked]
     );
     const widened = await pool.query<Record<string, unknown>>(
-      `SELECT s.participant_id ${from}
-       WHERE s.study_id = $1 AND (s.participant_id = ANY($2::text[]) OR TRUE)`,
+      `SELECT r.session_id ${from}
+       WHERE s.study_id = $1 AND (r.session_id = ANY($2::text[]) OR TRUE)`,
       [STUDY_ID, asked]
     );
 
@@ -420,14 +418,16 @@ describe.skipIf(skipDbTests)("the CSV batch read, against real Postgres", () => 
   }, 120_000);
 
   /**
-   * THE ROW BUDGET, on a real database (cto/AdaptaLabs#152, the security
-   * gate's MEDIUM). A batch is a hundred PEOPLE, and one person can hold
-   * thousands of answer-carrying sessions - so without a budget a single read
-   * carried everything that person had. Seeded with one answer per session,
-   * which is the shape the abuse takes: many abandoned sessions, each minted
-   * fresh.
+   * ONE PERSON, MANY SESSIONS, STILL BOUNDED READS (cto/AdaptaLabs#152).
+   *
+   * An abandoned session earns a fresh mint, so one account can hold any
+   * number of answer-carrying sessions. An intermediate version of #152
+   * batched by PERSON and read all of one such account in a single statement
+   * (~100MB, measured by the security gate). Batches are cut from SESSIONS,
+   * so the reads below stay a hundred sessions each however many one person
+   * holds - literals, like the test above.
    */
-  async function seedOnePersonWith(answers: number): Promise<void> {
+  it("reads one person's many sessions a hundred at a time", async () => {
     await pool.query(
       `INSERT INTO firsthand.studies (id, title, intro_text, consent_text, status)
        VALUES ($1, 'Batch scope', 'Intro', 'Consent', 'launched')`,
@@ -448,8 +448,8 @@ describe.skipIf(skipDbTests)("the CSV batch read, against real Postgres", () => 
        SELECT 'many_' || n, 'tok_many_' || n, $1, 'Batch scope', 'user_many', 'P',
               'abandoned', 'none', 'granted', 'granted', 'idle', 'idle',
               NOW(), NOW(), $2, '[]'::jsonb, 'many_' || n, 1
-       FROM generate_series(1, $3::int) AS n`,
-      [STUDY_ID, OPPORTUNITY_ID, answers]
+       FROM generate_series(1, 250) AS n`,
+      [STUDY_ID, OPPORTUNITY_ID]
     );
     await pool.query(
       `INSERT INTO firsthand.participant_responses
@@ -459,44 +459,29 @@ describe.skipIf(skipDbTests)("the CSV batch read, against real Postgres", () => 
               jsonb_build_object('text', 'answer ' || n),
               TIMESTAMPTZ '2026-09-21 09:00:00+00' + n * INTERVAL '1 second',
               $2, 'Question 0'
-       FROM generate_series(1, $3::int) AS n`,
-      [`${STUDY_ID}_q0`, STUDY_ID, answers]
+       FROM generate_series(1, 250) AS n`,
+      [`${STUDY_ID}_q0`, STUDY_ID]
     );
-  }
-
-  it("refuses one participant whose answers pass the row budget, before any batch read", async () => {
-    await seedOnePersonWith(10_001);
-
-    const { openSurveyCsvExport } = await import("./survey-results-repository");
-
-    await expect(
-      openSurveyCsvExport({ kind: "study", studyId: STUDY_ID })
-    ).rejects.toMatchObject({ statusCode: 413 });
-    // Refused in the preflight - nothing was read in a batch. The preflight
-    // itself IS recorded (it binds no id list, so `asked` is null), which is
-    // also the control that the recorder was listening at all.
-    const shapes = readShapes(recorded);
-    expect(shapes.length).toBeGreaterThan(0);
-    expect(shapes.filter((shape) => shape.asked !== null)).toEqual([]);
-  }, 120_000);
-
-  it("reads a participant who exactly fills the row budget in one read of 10000 rows", async () => {
-    // The CONTROL for the refusal above: a budget that refused everything, or
-    // a preflight that miscounted, would pass that test and fail this one.
-    await seedOnePersonWith(10_000);
 
     const { openSurveyCsvExport } = await import("./survey-results-repository");
     const csvExport = await openSurveyCsvExport({ kind: "study", studyId: STUDY_ID });
     recorded.length = 0;
 
-    let sessions = 0;
-    for await (const _row of csvExport.participants(new AbortController().signal)) {
-      sessions += 1;
+    let flagged = 0;
+    let rows = 0;
+    for await (const row of csvExport.participants(new AbortController().signal)) {
+      rows += 1;
+      if (row.superseded) flagged += 1;
     }
 
     expect(readShapes(recorded)).toEqual([
-      { asked: 1, returned: 1, rows: 10_000, overRead: 0 }
+      { asked: 100, returned: 100, rows: 100, overRead: 0 },
+      { asked: 100, returned: 100, rows: 100, overRead: 0 },
+      { asked: 50, returned: 50, rows: 50, overRead: 0 }
     ]);
-    expect(sessions).toBe(10_000);
+    // And the flag still sees across the batches it was not read in: every
+    // session but the latest holds a superseded answer.
+    expect(rows).toBe(250);
+    expect(flagged).toBe(249);
   }, 120_000);
 });

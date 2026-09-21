@@ -825,18 +825,22 @@ describe("one person answering the same question in two sessions", () => {
     // drop blanks; if a blank could still WIN, the person would stay in the
     // headline with their real answer gone from every chart.
     const open = step({ step_id: "t1", type: "open_text" });
+    const rating = step({ step_id: "r1", type: "rating", config: { scale_max: 5 } });
 
     const results = aggregateSurveyResults(
-      [choice, open],
+      [choice, open, rating],
       [
         answer("q1", "monday", { selectedOption: "Left" }, "2026-09-21T09:00:00.000Z"),
         answer("t1", "monday", { text: "It was great" }, "2026-09-21T09:00:00.000Z", { step_type: "open_text" }),
+        answer("r1", "monday", { rating: 4 }, "2026-09-21T09:00:00.000Z", { step_type: "rating" }),
         answer("q1", "tuesday", {}, "2026-09-22T09:00:00.000Z"),
-        answer("t1", "tuesday", { text: "   " }, "2026-09-22T09:00:00.000Z", { step_type: "open_text" })
+        answer("t1", "tuesday", { text: "   " }, "2026-09-22T09:00:00.000Z", { step_type: "open_text" }),
+        answer("r1", "tuesday", {}, "2026-09-22T09:00:00.000Z", { step_type: "rating" })
       ]
     );
 
-    expect(results.questions.map((q) => q.answered)).toEqual([1, 1]);
+    expect(results.questions.map((q) => q.answered)).toEqual([1, 1, 1]);
+    expect(results.questions[2].mean).toBe(4);
     expect(results.questions[0].options?.map((o) => o.count)).toEqual([1, 0]);
     expect(results.questions[1].answers).toEqual([{ session_id: "monday", text: "It was great" }]);
   });
