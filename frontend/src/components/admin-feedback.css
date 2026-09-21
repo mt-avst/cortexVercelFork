@@ -113,8 +113,15 @@
 .admin-feedback .feedback-modal-header h5 {
   color: var(--text-primary);
 }
+/* cto/AdaptaLabs#141 fix round: this text sits on the translucent
+   `.feedback-modal-content` surface (--bg-card, 90% alpha in light) over the
+   0.85 black view-modal scrim, which composites to ~rgb(234, 230, 225) in
+   light. --text-muted (rgb(95, 107, 122)) on that composite measures 4.35:1,
+   below AA for normal text. --text-secondary (rgb(61, 74, 92) in light)
+   measures 7.21:1 on the same composite and stays well clear of AA in dark
+   too, so the modal's secondary text uses it instead of --text-muted. */
 .admin-feedback .feedback-modal-header small {
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 .admin-feedback .feedback-modal-header button {
   color: var(--text-muted);
@@ -123,16 +130,16 @@
   color: var(--text-primary);
 }
 .admin-feedback .feedback-modal-placeholder {
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-style: italic;
 }
 .admin-feedback .feedback-modal-meta {
   border-top: 1px solid var(--border-table-row);
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: 0.85rem;
 }
 .admin-feedback .feedback-modal-meta-item {
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 .admin-feedback .feedback-modal-meta-icon {
   color: var(--brand-headline);
@@ -155,10 +162,16 @@
 }
 
 /* Phone: reflow to stacked cards, matching the admin dashboard tables
-   (audit row 14 / #122). Lives here rather than in _components.css
-   because the tbody td rule above sets padding:16px !important in the
-   document body, which an !important rule in a shared stylesheet cannot
-   beat on source order. Below 768px each row is a card with its column
+   (audit row 14 / #122). Lives here, alongside the tbody td rule above that
+   sets padding:16px !important, rather than in _components.css: this file
+   is unlayered (a plain `import` in AdminFeedback.tsx, not routed through
+   one of main.css's `@layer` imports), while _components.css sits in the
+   `components` layer. For normal declarations unlayered wins over any
+   layer, but `!important` reverses that priority - a layered `!important`
+   in _components.css would in fact BEAT an unlayered `!important` here, not
+   lose to it. Kept local anyway, so the override sits next to the rule it
+   overrides rather than depending on a fact about layer order neither file
+   otherwise needs to know. Below 768px each row is a card with its column
    name inline above the value, so the table no longer scrolls sideways
    inside .table-responsive. */
 @media (max-width: 767.98px) {

@@ -1177,8 +1177,12 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                       fontSize: 'var(--font-size-small, 0.875rem)',
                       fontWeight: 600,
                       // cto/AdaptaLabs#141: this was an undefined-token fallback on
-                      // --color-emerald-500, a token defined nowhere, so it always
-                      // rendered its literal fallback whatever the theme.
+                      // --color-emerald-500 - not a token defined nowhere, it is
+                      // Tailwind v4's own theme variable (renders oklch(0.696 0.17
+                      // 162.48)), just one the guard below cannot see: it only reads
+                      // src/**/*.css, so a Tailwind-generated custom property is
+                      // invisible to it and the rule always fell through to its
+                      // literal fallback regardless of theme.
                       //
                       // The old value is DESCRIBED rather than quoted on purpose. The
                       // guard in styles/__tests__/undefined-token-color-fallback.test.ts

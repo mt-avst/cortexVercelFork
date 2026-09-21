@@ -223,12 +223,14 @@ const AdminFeedback: React.FC = () => {
 
   if (error) {
     return (
-      <div className="alert feedback-error-text feedback-alert feedback-alert--danger">
-        <AlertTriangle size={18} className="me-2" />
-        {error}
-        <button className="btn btn-outline-danger btn-sm ms-3" onClick={loadFeedback}>
-          Retry
-        </button>
+      <div className="admin-feedback">
+        <div className="alert feedback-error-text feedback-alert feedback-alert--danger">
+          <AlertTriangle size={18} className="me-2" />
+          {error}
+          <button className="btn btn-outline-danger btn-sm ms-3" onClick={loadFeedback}>
+            Retry
+          </button>
+        </div>
       </div>
     );
   }

@@ -3364,10 +3364,12 @@ body.admin-page .header .container {
    768px each row becomes a card with its column name inline above the
    value; the old `:nth-child` column-hide + sideways-scroll treatment
    this table used to share is dropped below (it hid Status on a phone).
-   The Feedback table gets the same reflow, but from inside its own
-   scoped <style> in AdminFeedback.tsx: that block sets `td { padding:
-   16px !important }` in the document body, which an !important rule in
-   this head stylesheet cannot beat on source order.
+   The Feedback table gets the same reflow, but from its own unlayered
+   admin-feedback.css (cto/AdaptaLabs#141 moved it out of a scoped <style>
+   inside AdminFeedback.tsx) rather than from here: that stylesheet's own
+   `td { padding: 16px !important }` sits outside any `@layer`, and this
+   file is loaded into the `components` layer, so a normal declaration here
+   would still lose to it regardless of !important.
    ============================================================ */
 @media (max-width: 767.98px) {
   .admin-dashboard table.admin-cards-phone,
