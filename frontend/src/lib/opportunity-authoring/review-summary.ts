@@ -91,8 +91,20 @@ export interface ReviewSummaryInput {
   startDate?: string;
   endDate?: string;
   externalLink: string;
-  /** Row 13: the author's affirmation that the external tool collects consent. */
-  externalConsentConfirmed: boolean;
+  /**
+   * Row 13: the author's affirmation that the external tool collects consent,
+   * as stored (cto/AdaptaLabs#136). Null is "never recorded" - every study that
+   * predates the column - and is not the same as an explicit false.
+   */
+  externalConsentConfirmed: boolean | null;
+  /**
+   * Whether the study was ALREADY published when the form loaded it - the
+   * stored status, not the live Status choice. It decides how a never-recorded
+   * affirmation reads: a legacy published study keeps the neutral wording, but
+   * a draft being published now still owes the author's confirmation, so the
+   * live choice must not be able to switch the nag off.
+   */
+  publishedWhenLoaded: boolean;
   deliveryMode: string;
   /** Authored survey questions. */
   questionCount: number;
@@ -317,6 +329,40 @@ const consentFieldId = (steps: readonly ReviewStepRef[]): string | undefined => 
   return undefined;
 };
 
+/**
+ * The external hand-off's consent line (row 13, cto/AdaptaLabs#136).
+ *
+ * Three stored states, and only one of them may name the author:
+ *  - true is a recorded author action, so it says so
+ *  - false is an unmet requirement, wherever the study stands
+ *  - null is "never recorded". On a study that was already published when it
+ *    loaded - every one that predates the column - the line stays NEUTRAL and
+ *    unflagged: its tool may well collect consent, but nobody recorded saying
+ *    so, and attributing it to the author would claim what never happened. On
+ *    a draft it is the same unmet requirement as false.
+ */
+const consentAffirmationItem = (
+  confirmed: boolean | null,
+  publishedWhenLoaded: boolean
+): ReviewItem => {
+  const note = 'Cortex records only that a participant followed the link.';
+  if (confirmed === true) {
+    return {
+      label: 'Consent',
+      value: 'Handled by the external tool, confirmed by the author',
+      note
+    };
+  }
+  if (confirmed === null && publishedWhenLoaded) {
+    return {
+      label: 'Consent',
+      value: 'Handled by the external tool',
+      note: `Published before Cortex recorded this confirmation. ${note}`
+    };
+  }
+  return { label: 'Consent', value: 'Not yet confirmed', note, missing: true };
+};
+
 /** One section's items, keyed on the step's own `key`. */
 const itemsForStep = (step: ReviewStepRef, input: ReviewSummaryInput): ReviewItem[] => {
   switch (step.key) {
@@ -414,19 +460,7 @@ const itemsForStep = (step: ReviewStepRef, input: ReviewSummaryInput): ReviewIte
         },
         // Row 13: consent folds into this step, so its affirmation is summarised
         // here rather than on a Consent step the hand-off no longer has.
-        //
-        // The confirmed line is NEUTRAL and factual (row 14's wording), not "confirmed
-        // by the author": the affirmation is client-only and never persisted, and
-        // a reopened published study defaults to confirmed, so attributing the
-        // action to the author would claim something that may not have happened.
-        {
-          label: 'Consent',
-          value: input.externalConsentConfirmed
-            ? 'Handled by the external tool'
-            : 'Not yet confirmed',
-          note: 'Cortex records only that a participant followed the link.',
-          missing: !input.externalConsentConfirmed
-        }
+        consentAffirmationItem(input.externalConsentConfirmed, input.publishedWhenLoaded)
       ];
     }
 

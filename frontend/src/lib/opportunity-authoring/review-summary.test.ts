@@ -41,6 +41,7 @@ const completeInput = (
   endDate: '',
   externalLink: '',
   externalConsentConfirmed: false,
+  publishedWhenLoaded: false,
   deliveryMode: 'native',
   questionCount: 0,
   taskCount: 0,
@@ -919,28 +920,68 @@ describe('buildReviewSummary', () => {
         { id: 5, key: 'review', title: 'Review' }
       ];
 
-      const confirmed = buildReviewSummary(
-        completeInput({ steps: externalSteps, externalConsentConfirmed: true })
-      );
-      // No consent section exists on the external shape.
-      expect(findSection(confirmed, 'consent')).toBeUndefined();
-      // Neutral and factual, NOT "confirmed by the author": the affirmation is
-      // client-only and a reopened published study defaults to confirmed, so
-      // attributing the action to the author could claim what never happened.
-      const confirmedItem = findItem(findSection(confirmed, 'externalLink'), 'Consent');
-      expect(confirmedItem?.value).toBe('Handled by the external tool');
-      expect(confirmedItem?.value).not.toMatch(/confirmed by the author/i);
-      expect(confirmedItem?.missing).not.toBe(true);
+      const consentOn = (overrides: Partial<ReviewSummaryInput>) =>
+        findItem(
+          findSection(
+            buildReviewSummary(completeInput({ steps: externalSteps, ...overrides })),
+            'externalLink'
+          ),
+          'Consent'
+        );
 
-      // Unconfirmed reads as an unmet requirement.
-      const unconfirmed = findSection(
-        buildReviewSummary(
-          completeInput({ steps: externalSteps, externalConsentConfirmed: false })
+      // No consent section exists on the external shape.
+      expect(
+        findSection(
+          buildReviewSummary(
+            completeInput({ steps: externalSteps, externalConsentConfirmed: true })
+          ),
+          'consent'
+        )
+      ).toBeUndefined();
+
+      // A stored true is a recorded author action (#136), so Review may say so.
+      const confirmed = consentOn({ externalConsentConfirmed: true });
+      expect(confirmed?.value).toBe('Handled by the external tool, confirmed by the author');
+      expect(confirmed?.missing).not.toBe(true);
+
+      // An explicit false reads as an unmet requirement, published or not.
+      for (const publishedWhenLoaded of [false, true]) {
+        const unconfirmed = consentOn({ externalConsentConfirmed: false, publishedWhenLoaded });
+        expect(unconfirmed?.value).toBe('Not yet confirmed');
+        expect(unconfirmed?.missing).toBe(true);
+      }
+
+      // Never recorded, on a draft: still something the author has to do.
+      const unrecordedDraft = consentOn({ externalConsentConfirmed: null });
+      expect(unrecordedDraft?.value).toBe('Not yet confirmed');
+      expect(unrecordedDraft?.missing).toBe(true);
+    });
+
+    it('a never-recorded affirmation on an already-published study stays neutral', () => {
+      // Every study published before #136 holds null. Its tool may well collect
+      // consent, but nobody recorded saying so - Review must neither nag it as
+      // missing nor attribute a confirmation to the author.
+      const externalSteps: ReviewStepRef[] = [
+        { id: 1, key: 'basics', title: 'The study' },
+        { id: 3, key: 'externalLink', title: 'Your link' },
+        { id: 5, key: 'review', title: 'Review' }
+      ];
+      const legacy = findItem(
+        findSection(
+          buildReviewSummary(
+            completeInput({
+              steps: externalSteps,
+              externalConsentConfirmed: null,
+              publishedWhenLoaded: true
+            })
+          ),
+          'externalLink'
         ),
-        'externalLink'
+        'Consent'
       );
-      expect(findItem(unconfirmed, 'Consent')?.value).toBe('Not yet confirmed');
-      expect(findItem(unconfirmed, 'Consent')?.missing).toBe(true);
+      expect(legacy?.value).toBe('Handled by the external tool');
+      expect(legacy?.value).not.toContain('confirmed by the author');
+      expect(legacy?.missing).not.toBe(true);
     });
 
     it('does not truncate exactly 160 characters', () => {

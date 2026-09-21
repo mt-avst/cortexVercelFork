@@ -50,6 +50,12 @@ import { logger } from './logger';
 //     by default; these three are the first added since that property was
 //     documented, and they pass deliberately. Pinned by a test in
 //     opportunities.moderated-consent.test.ts.
+//
+// EXTERNAL_CONSENT_CONFIRMED (cto/AdaptaLabs#136) is stripped for the same
+// reason as owner identity: it is authoring metadata - who confirmed the
+// external tool's own consent handling - not a fact the participant page
+// renders or needs. Unlike the screener it has no partial shape to preserve,
+// so it is a plain destructure below rather than a redaction function.
 
 /**
  * What this serialiser can accept.
@@ -66,6 +72,7 @@ interface PublicSerialisable {
   owner_email?: unknown;
   sessions?: unknown;
   screener?: unknown;
+  external_consent_confirmed?: unknown;
 }
 
 /**
@@ -107,7 +114,10 @@ type PublicSession<S> = S extends object ? Omit<S, 'location_or_meet_link_option
  * idiom (`session.location_or_meet_link_optional.length > 30`), compiles green
  * and throws `Cannot read properties of undefined` in the participant browser.
  */
-type PublicView<T> = Omit<T, 'owner_user_id' | 'owner_name' | 'owner_email'> &
+type PublicView<T> = Omit<
+  T,
+  'owner_user_id' | 'owner_name' | 'owner_email' | 'external_consent_confirmed'
+> &
   (T extends { sessions: infer S extends readonly unknown[] }
     ? { sessions: { [K in keyof S]: PublicSession<S[K]> } }
     : unknown);
@@ -134,6 +144,7 @@ export function toPublicOpportunity<T extends PublicSerialisable>(opportunity: T
     owner_user_id: _ownerUserId,
     owner_name: _ownerName,
     owner_email: _ownerEmail,
+    external_consent_confirmed: _externalConsentConfirmed,
     ...publicView
   } = opportunity;
 

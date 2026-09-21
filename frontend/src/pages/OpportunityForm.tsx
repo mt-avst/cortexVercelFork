@@ -688,6 +688,35 @@ const resolveSourceTitle = async (studyId: string): Promise<string> => {
 const HEADER_STATUS_REGION_MIN_HEIGHT = '7.5rem';
 
 /**
+ * Two external links, compared the way the SERVER compares them.
+ *
+ * `external_link_optional` is stored trimmed - the PATCH column loop calls
+ * `.trim()` on every string it writes - and an absent link is NULL on the row
+ * and `''` in this form, which are the same destination: none. Normalising to
+ * `null` here keeps the form's idea of "a different tool" the same as the
+ * backend's, so padding a URL with spaces does not clear an affirmation the
+ * server would have kept.
+ *
+ * The trim is reachable from the STORED side only. The link box is an
+ * `<input type="url">`, whose value sanitisation strips surrounding
+ * whitespace before React's onChange runs - measured in jsdom - so a padded
+ * value never reaches the handler from the control, and a test that pads the
+ * box cannot kill the trim. What can is a row written before the column loop
+ * trimmed: it hydrates padded, and retyping the same URL bare must not read
+ * as a relink. Pinned on that in OpportunityForm.external-consent.test.tsx.
+ *
+ * It is a string comparison and nothing more: no URL parsing, no host
+ * lowercasing, no trailing-slash folding. Two spellings of the same
+ * destination therefore read as different tools, which errs towards asking
+ * the author to re-affirm rather than towards carrying an affirmation across
+ * a change nobody checked. See the call site in `handleInputChange`, and
+ * `normaliseExternalLink` in backend/src/routes/opportunities.ts, which this
+ * mirrors.
+ */
+const normaliseExternalLink = (value: string | null | undefined): string | null =>
+  typeof value === 'string' ? value.trim() || null : null;
+
+/**
  * The admin authoring form, and only the admin one.
  *
  * It used to take `allowUserSubmission`, a non-admin submission mode threaded
@@ -715,9 +744,10 @@ const OpportunityForm: React.FC = () => {
     meeting_location_optional: '',
     default_duration_minutes: 30,
     external_link_optional: '',
-    // Row 13: the external-tool consent affirmation starts unconfirmed on a new
-    // study; an author confirms it on the External Link step before publishing.
-    external_consent_confirmed: false,
+    // Row 13: the external-tool consent affirmation. Null is "never recorded"
+    // (cto/AdaptaLabs#136): a new study starts there, the checkbox reads it as
+    // unticked, and the save omits it until the author touches the box.
+    external_consent_confirmed: null as boolean | null,
     participant_type_required: 'any' as 'any' | 'internal' | 'external' | 'specific',
     participant_type_specific_details: '',
     status: 'draft' as 'draft' | 'published',
@@ -1696,12 +1726,12 @@ const OpportunityForm: React.FC = () => {
         meeting_location_optional: opportunity.meeting_location_optional || '',
         default_duration_minutes: opportunity.default_duration_minutes,
         external_link_optional: opportunity.external_link_optional || '',
-        // Row 13: not persisted, so an already-published external study is
-        // treated as already affirmed for Review's sake (shown neutrally, not as
-        // an author action); a draft loads unconfirmed.
-        // ponytail: client-only, lost on reload, published assumed-confirmed
-        //   -> cto/AdaptaLabs#136 (persist + publish-gate)
-        external_consent_confirmed: opportunity.status === 'published',
+        // Row 13: the affirmation as the ROW holds it (cto/AdaptaLabs#136),
+        // tri-state. Null stays null - never recorded, which predates the
+        // column - rather than being guessed from the status: the checkbox
+        // shows it unticked, and Review keeps a legacy published study neutral
+        // instead of claiming the author confirmed it.
+        external_consent_confirmed: opportunity.external_consent_confirmed ?? null,
         firsthand_study_id: opportunity.firsthand_study_id || '',
         participant_type_required: opportunity.participant_type_required || 'any',
         participant_type_specific_details: opportunity.participant_type_specific_details || '',
@@ -1749,12 +1779,9 @@ const OpportunityForm: React.FC = () => {
         meeting_location_optional: opportunity.meeting_location_optional || '',
         default_duration_minutes: opportunity.default_duration_minutes,
         external_link_optional: opportunity.external_link_optional || '',
-        // Row 13: not persisted, so an already-published external study is
-        // treated as already affirmed for Review's sake (shown neutrally, not as
-        // an author action); a draft loads unconfirmed.
-        // ponytail: client-only, lost on reload, published assumed-confirmed
-        //   -> cto/AdaptaLabs#136 (persist + publish-gate)
-        external_consent_confirmed: opportunity.status === 'published',
+        // Baseline for the dirty check - the same read as the live hydrate
+        // above, or opening a study reads as an unsaved change.
+        external_consent_confirmed: opportunity.external_consent_confirmed ?? null,
         firsthand_study_id: opportunity.firsthand_study_id || '',
         participant_type_required: opportunity.participant_type_required || 'any' as const,
         participant_type_specific_details: opportunity.participant_type_specific_details || '',
@@ -2677,7 +2704,18 @@ const OpportunityForm: React.FC = () => {
     startDate: formData.start_date,
     endDate: formData.end_date,
     externalLink: formData.external_link_optional,
-    externalConsentConfirmed: Boolean(formData.external_consent_confirmed),
+    externalConsentConfirmed: formData.external_consent_confirmed,
+    // The STORED status, not the live choice - see ReviewSummaryInput.
+    //
+    // It gates an AMNESTY FOR THE PAST: the neutral "Published before Cortex
+    // recorded this confirmation" line, for studies that were already live
+    // when the column arrived and could not have had the box ticked. Pass
+    // `formData.status` here and the amnesty covers the present - setting
+    // Status to Published on a never-recorded draft would drop the nag and
+    // excuse a study being published for the first time in this session.
+    // Pinned by name in OpportunityForm.external-consent.test.tsx; the pure
+    // review-summary tests take this as an argument and cannot see it.
+    publishedWhenLoaded: originalFormData?.status === 'published',
     deliveryMode,
     questionCount: formData.inline_survey_questions.length,
     taskCount: formData.inline_study_steps.length,
@@ -3049,6 +3087,21 @@ const OpportunityForm: React.FC = () => {
       (formData.end_date || '') !== (originalFormData.end_date || '') ||
       formData.study_source !== originalFormData.study_source ||
       formData.copied_from_study_id !== originalFormData.copied_from_study_id ||
+      // The external-delivery consent affirmation (cto/AdaptaLabs#136).
+      //
+      // THIS CLAUSE IS ABOUT THE SAVE BUTTON, not the exit warning.
+      // `hasUnsavedWork()` is `hasChanges() || hasUnsavedChanges(...)` and the
+      // second half spreads the form rather than enumerating it, so the
+      // "Leave without saving?" prompt fired on this field before the clause
+      // existed and fires with it removed - no beforeunload test can kill a
+      // mutation here. What only `hasChanges()` gates is `onSave` on the step
+      // footers, so without this line an author who ticks the box on Your link
+      // and changes nothing else is told they have unsaved work and offered no
+      // Save Changes button on the first two steps. Same disagreement the
+      // roles/skills chips had above, and pinned the same way: a Save-button
+      // test in OpportunityForm.external-consent.test.tsx that asserts both
+      // halves together.
+      formData.external_consent_confirmed !== originalFormData.external_consent_confirmed ||
       // The screener (MR2). Turning it on or off, editing the not-a-match
       // message, or changing any question/answer must all offer a save from the
       // first two tabs, the same as the study fields above. Questions compared
@@ -4764,7 +4817,22 @@ const OpportunityForm: React.FC = () => {
    * anything.
    */
   const handleApplyDraft = (draft: DraftedOpportunity) => {
-    setFormData((prev) => ({ ...prev, ...appliedDraftFields(draft) }));
+    setFormData((prev) => {
+      const applied = appliedDraftFields(draft);
+      // A draft can carry its own external link, so applying one can repoint
+      // the study - and the affirmation is about a destination, not a study.
+      // Same rule as the link field's own branch; new-study route only today,
+      // so nothing stored is at risk, but the rule should not depend on that.
+      const repoints =
+        'external_link_optional' in applied &&
+        normaliseExternalLink(applied.external_link_optional ?? '') !==
+          normaliseExternalLink(prev.external_link_optional);
+      return {
+        ...prev,
+        ...applied,
+        ...(repoints ? { external_consent_confirmed: null } : {})
+      };
+    });
   };
 
   const handleQuestionsChange = (questions: WithClientId<SurveyQuestion>[]) => {
@@ -4961,6 +5029,13 @@ const OpportunityForm: React.FC = () => {
           ...clearedSource,
           type: 'unmoderated' as const,
           external_link_optional: '',
+          // The affirmation goes with the link it was about. This arm writes
+          // the link too, so it obeys the same rule as the link field's own
+          // branch below - a gate caught the two disagreeing, which is the
+          // shape that put the reset out of the UI's reach in the first
+          // place. Measured before the fix: switching type away and back left
+          // the box ticked with the link box empty.
+          external_consent_confirmed: null,
           participant_type_required:
             prev.participant_type_required === 'external' ? 'any' : prev.participant_type_required,
         };
@@ -4981,6 +5056,57 @@ const OpportunityForm: React.FC = () => {
           ...clearedSource,
           type: value,
           firsthand_study_id: '',
+        };
+      }
+
+      // REPOINTING THE STUDY AT A DIFFERENT TOOL CLEARS THE AFFIRMATION, HERE,
+      // IN FRONT OF THE AUTHOR (cto/AdaptaLabs#136).
+      //
+      // The tick means "the tool I am sending participants to collects its own
+      // consent". It is about ONE destination, so it cannot outlive that
+      // destination. The backend resets the column on a relink, but that reset
+      // is unreachable from this form on its own: `buildSavePayload` gates the
+      // link and the affirmation on the SAME `externalLink` step and sends the
+      // affirmation whenever the hydrated value is a boolean, so a relink saved
+      // from here carries the new link AND the stale `true` - which the
+      // explicit-boolean exception then honours, correctly, because it cannot
+      // tell a deliberate re-affirmation from a stale one. Clearing it in form
+      // state is what makes the two distinguishable: after this, a `true` on
+      // the wire is one the author ticked for the destination now in the box.
+      //
+      // Cleared to null, not false: the author has said nothing about the new
+      // tool, not no - and the payload omits null, so a relink saved without a
+      // fresh tick reaches the backend as a link change with no affirmation,
+      // which is exactly the shape its reset is waiting for.
+      //
+      // This fires on an EDIT only. Hydrating a loaded study never routes
+      // through `handleInputChange`, so opening a study with a stored tick
+      // leaves it ticked.
+      //
+      // Compared against the value in state a keystroke ago, normalised the
+      // same way the backend normalises it, so a stored link that still holds
+      // stray whitespace is not a new tool when it is retyped bare. A host or
+      // path that differs by a trailing slash or by letter case IS treated as
+      // new - the strings differ and nothing here parses URLs - and the author
+      // sees that immediately, because the tick disappears from the box they
+      // are looking at.
+      //
+      // It only ever clears. Typing a link away and back within one session
+      // leaves the tick cleared and the author re-ticks: restoring it would
+      // mean remembering whether the null was ours or theirs, and getting that
+      // wrong would silently re-tick a box the author had deliberately
+      // cleared. Pinned by name in OpportunityForm.external-consent.test.tsx.
+      if (field === 'external_link_optional') {
+        // Narrowed rather than cast: `value` is the reducer's union, and a
+        // non-string reaching a string field would be stored as one.
+        const nextLink = typeof value === 'string' ? value : '';
+        return {
+          ...prev,
+          external_link_optional: nextLink,
+          external_consent_confirmed:
+            normaliseExternalLink(nextLink) === normaliseExternalLink(prev.external_link_optional)
+              ? prev.external_consent_confirmed
+              : null
         };
       }
 

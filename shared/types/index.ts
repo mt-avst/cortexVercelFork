@@ -209,6 +209,31 @@ export interface Opportunity {
    * screener, or on an unauthenticated request.
    */
   screenerStatus?: ScreenerStatus;
+  /**
+   * The author's affirmation that the external tool handling this study's
+   * hand-off collects its own consent (cto/AdaptaLabs#136). Present for every
+   * admin, not only the owner - the same reach as the owner-identity fields
+   * below - and stripped from the participant payload the same way they are
+   * (see publicOpportunity.ts), because it is authoring metadata, not a fact
+   * a participant needs.
+   *
+   * A bare boolean: it says an affirmation stands, not who made it or when.
+   * `updated_at` is re-stamped by any edit, so it is not a proxy for either.
+   * NULL means "never recorded": every opportunity that predates this column,
+   * and it stays distinct from an explicit false. Two application rules work
+   * to keep a stored `true` about the destination currently on the row: the
+   * authoring form clears the tick the moment the author edits the link, and
+   * the PATCH path resets the column to NULL when the link it is handed
+   * differs from the stored one. Neither is a database constraint, and the
+   * PATCH comparison reads the row outside the write's transaction, so two
+   * concurrent saves can still land a link and an affirmation out of step -
+   * see the ponytail beside that comparison.
+   *
+   * Does not gate publish, and carries no provenance columns - both are part
+   * of one open compliance decision (see the ponytail beside the publish
+   * guards in backend/src/routes/opportunities.ts).
+   */
+  external_consent_confirmed?: boolean | null;
   created_at: string;
   updated_at: string;
   /**
@@ -286,6 +311,10 @@ export interface CreateOpportunityRequest {
   // The eligibility screener. Absent means no screener. Validated by
   // screenerSchema (shared/screener.ts) wired into the create schema.
   screener?: Screener;
+  // The author's affirmation for an external hand-off (see
+  // Opportunity.external_consent_confirmed). Absent stores null - "never
+  // recorded" - matching the update schema's default.
+  external_consent_confirmed?: boolean;
 }
 
 export interface UpdateOpportunityRequest {
@@ -317,6 +346,10 @@ export interface UpdateOpportunityRequest {
   // replaces it wholesale. Validated by screenerSchema wired into the update
   // schema.
   screener?: Screener | null;
+  // The author's affirmation for an external hand-off (see
+  // Opportunity.external_consent_confirmed). Null resets it back to "never
+  // recorded"; a boolean replaces it.
+  external_consent_confirmed?: boolean | null;
 }
 
 // ============================================================================
@@ -573,17 +606,18 @@ export interface OpportunityFormData {
   external_link_optional?: string;
   start_date?: string;
   end_date?: string;
-  // The author's affirmation that the external tool collects consent (row 13).
-  // A client-side confirmation folded into the External Link step - not
-  // persisted (the save payload is a typed whitelist that omits it), shown on
-  // Review. Defaults true when loading an already-published study.
+  // The author's affirmation that the external tool collects consent (row 13),
+  // folded into the External Link step and shown on Review. Tri-state, as the
+  // row holds it (Opportunity.external_consent_confirmed): null is "never
+  // recorded", and the form keeps it null until the author touches the box.
   //
-  // ponytail: client-only affirmation, not persisted -> lost on reload, and a
-  //   reopened published study is assumed confirmed (Review shows the neutral
-  //   "Handled by the external tool" for it, never "confirmed by the author").
-  //   Upgrade path: persist it as an opportunity column + a publish gate.
-  //   -> cto/AdaptaLabs#136
-  external_consent_confirmed?: boolean;
+  // ponytail: persisted and round-tripped (loaded from the row, sent on save as
+  //   a boolean, null omitted so a re-save never turns "never recorded" into
+  //   "no"), but it does NOT gate publish - an unconfirmed external study can
+  //   still go live. Whether it should is an open compliance decision for Nick.
+  //   Upgrade path: a publish-problem code for an unconfirmed hand-off, enforced
+  //   server-side beside the publish guards. -> cto/AdaptaLabs#136
+  external_consent_confirmed?: boolean | null;
 
   // Task List tab (unmoderated type)
   firsthand_study_id?: string;

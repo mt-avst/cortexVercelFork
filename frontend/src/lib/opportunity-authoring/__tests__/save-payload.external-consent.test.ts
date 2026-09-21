@@ -7,17 +7,16 @@ import {
 } from '../save-payload';
 
 /**
- * Roles/skills wanted in the save payload.
+ * The external-tool consent affirmation in the save payload
+ * (cto/AdaptaLabs#136).
  *
- * The field lives on the Screener/Audience step (D6), but the payload builder
- * reads it straight from formData, so it is sent unconditionally regardless of
- * the rendered shape. The chip list travels as authored; deduping and the caps
- * are the server's job. An empty list is sent as [] so an author who clears
- * every chip on an edit has it cleared (the backend stores null for an empty
- * list).
+ * The form-level round trip lives in OpportunityForm.external-consent.test.tsx;
+ * this pins the builder's own rules, including the create path that one does
+ * not drive: sent only as a boolean, only on a shape with the Your link step,
+ * and never as null - "never recorded" is left for the server to default.
  */
 const formState = (overrides: Record<string, unknown> = {}): SavePayloadFormState => ({
-  type: 'test',
+  type: 'question',
   title: 'A study worth booking',
   purpose_one_liner: 'Ten characters at the very least',
   description_optional: '',
@@ -59,8 +58,9 @@ const formState = (overrides: Record<string, unknown> = {}): SavePayloadFormStat
 
 const TABS = [
   { key: 'basics' },
-  { key: 'content' },
-  { key: 'sessions' },
+  { key: 'basicInfo' },
+  { key: 'screener' },
+  { key: 'externalLink' },
   { key: 'review' }
 ];
 
@@ -80,26 +80,33 @@ const input = (
   ...over
 });
 
-describe('roles/skills wanted in the save payload', () => {
-  it('sends the chip list as authored', () => {
-    const payload = buildSavePayload(
-      input(formState({ target_roles: ['Product Manager', 'ScriptRunner admin'] }))
-    );
-    expect(payload.target_roles).toEqual(['Product Manager', 'ScriptRunner admin']);
+describe('the external consent affirmation in the save payload', () => {
+  it('a create with the box ticked sends true', () => {
+    const payload = buildSavePayload(input(formState({ external_consent_confirmed: true })));
+    expect(payload.external_consent_confirmed).toBe(true);
   });
 
-  it('sends an empty array when there are no roles', () => {
-    const payload = buildSavePayload(input(formState()));
-    expect(payload.target_roles).toEqual([]);
-  });
-
-  it('sends [] on an edit that clears every chip, so the server clears the field', () => {
+  it('an edit that unticks the box sends an explicit false', () => {
     const payload = buildSavePayload(
-      input(formState({ target_roles: [] }), {
+      input(formState({ external_consent_confirmed: false }), {
         isEdit: true,
-        originalFormData: formState({ target_roles: ['Product Manager'] })
+        originalFormData: formState({ external_consent_confirmed: true })
       })
     );
-    expect(payload.target_roles).toEqual([]);
+    expect(payload.external_consent_confirmed).toBe(false);
+  });
+
+  it('a never-recorded affirmation is omitted, not sent as null or false', () => {
+    const payload = buildSavePayload(input(formState({ external_consent_confirmed: null })));
+    expect(Object.keys(payload)).not.toContain('external_consent_confirmed');
+  });
+
+  it('a shape without the Your link step never carries it', () => {
+    const payload = buildSavePayload(
+      input(formState({ type: 'test', external_consent_confirmed: true }), {
+        tabs: [{ key: 'basics' }, { key: 'sessions' }, { key: 'review' }]
+      })
+    );
+    expect(Object.keys(payload)).not.toContain('external_consent_confirmed');
   });
 });

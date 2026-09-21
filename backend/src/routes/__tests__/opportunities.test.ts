@@ -1191,7 +1191,10 @@ describe('Opportunities API', () => {
         // No screener in the request body, so the create binds null for it.
         screener: null,
         // No roles/skills wanted in the request body, so the create binds null.
-        target_roles: null
+        target_roles: null,
+        // No external_consent_confirmed in the request body, so the create
+        // binds null - "never recorded" (cto/AdaptaLabs#136).
+        external_consent_confirmed: null
       };
 
       for (const [column, value] of Object.entries(expected)) {
