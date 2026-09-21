@@ -239,6 +239,140 @@ describe.skipIf(skipDbTests)("external-delivery consent affirmation against real
     });
   });
 
+  /**
+   * RELINKING RESETS THE AFFIRMATION.
+   *
+   * The affirmation is about ONE external destination. Left alone across a
+   * change of `external_link_optional`, a `true` made about tool A silently
+   * reads as an affirmation about tool B - and becomes a compliance hole the
+   * moment the deferred publish gate consults it. The reset lives in the PATCH
+   * write path so the form cannot route round it: the save payload omits the
+   * key whenever the shape has no Your link step, so external -> native ->
+   * external would otherwise carry the stored `true` back into a re-ticked box
+   * for a link the author has since replaced.
+   *
+   * Reset to NULL - "never recorded" - rather than false, because the author
+   * has said nothing about the new destination, not no.
+   *
+   * The one exception is a deliberate re-affirmation: a PATCH carrying BOTH a
+   * new link and an explicit boolean is the author confirming the new tool in
+   * the same breath, and the explicit value wins.
+   */
+  describe("relinking an external study", () => {
+    it("resets a recorded affirmation to null when the link changes", async () => {
+      const admin = await seedUser();
+      const created = await create(admin, {
+        ...CREATE_BODY,
+        external_consent_confirmed: true,
+      }).expect(201);
+      expect(created.body.external_consent_confirmed).toBe(true);
+
+      await patch(created.body.id, admin, {
+        external_link_optional: "https://other.example.com/different-survey",
+      }).expect(200);
+
+      const read = await getAsAdmin(created.body.id, admin).expect(200);
+      expect(read.body.external_consent_confirmed).toBeNull();
+      expect(read.body.external_link_optional).toBe(
+        "https://other.example.com/different-survey"
+      );
+    });
+
+    it("keeps an explicit affirmation sent in the same patch as the new link", async () => {
+      const admin = await seedUser();
+      const created = await create(admin, {
+        ...CREATE_BODY,
+        external_consent_confirmed: true,
+      }).expect(201);
+
+      await patch(created.body.id, admin, {
+        external_link_optional: "https://other.example.com/different-survey",
+        external_consent_confirmed: true,
+      }).expect(200);
+
+      const read = await getAsAdmin(created.body.id, admin).expect(200);
+      expect(read.body.external_consent_confirmed).toBe(true);
+    });
+
+    it("honours an explicit false sent alongside a new link", async () => {
+      // The other half of "the explicit boolean wins". Without this arm, a
+      // reset that ran unconditionally would be indistinguishable from the
+      // rule, because null and false both read as unconfirmed on Review.
+      const admin = await seedUser();
+      const created = await create(admin, {
+        ...CREATE_BODY,
+        external_consent_confirmed: true,
+      }).expect(201);
+
+      await patch(created.body.id, admin, {
+        external_link_optional: "https://other.example.com/different-survey",
+        external_consent_confirmed: false,
+      }).expect(200);
+
+      const read = await getAsAdmin(created.body.id, admin).expect(200);
+      expect(read.body.external_consent_confirmed).toBe(false);
+    });
+
+    it("leaves the affirmation alone when the patch sets the same link again", async () => {
+      // The form re-sends the whole shape on every save, so the common case is
+      // a link field that is present and unchanged. A reset that fired on mere
+      // PRESENCE would clear the affirmation on every ordinary save.
+      const admin = await seedUser();
+      const created = await create(admin, {
+        ...CREATE_BODY,
+        external_consent_confirmed: true,
+      }).expect(201);
+
+      await patch(created.body.id, admin, {
+        external_link_optional: CREATE_BODY.external_link_optional,
+        title: "A study handed off to an external tool, retitled",
+      }).expect(200);
+
+      const read = await getAsAdmin(created.body.id, admin).expect(200);
+      expect(read.body.external_consent_confirmed).toBe(true);
+      expect(read.body.title).toBe(
+        "A study handed off to an external tool, retitled"
+      );
+    });
+
+    it("leaves the affirmation alone on a patch that never mentions the link", async () => {
+      const admin = await seedUser();
+      const created = await create(admin, {
+        ...CREATE_BODY,
+        external_consent_confirmed: true,
+      }).expect(201);
+
+      await patch(created.body.id, admin, {
+        title: "A study handed off to an external tool, renamed",
+      }).expect(200);
+
+      const read = await getAsAdmin(created.body.id, admin).expect(200);
+      expect(read.body.external_consent_confirmed).toBe(true);
+    });
+
+    it("treats the same link with surrounding whitespace as unchanged", async () => {
+      // `.url()` accepts a padded string - the URL constructor strips leading
+      // and trailing spaces - and the column loop stores it trimmed. Comparing
+      // the raw request value against the stored one would therefore call a
+      // stray space "a different tool" and clear a good affirmation.
+      const admin = await seedUser();
+      const created = await create(admin, {
+        ...CREATE_BODY,
+        external_consent_confirmed: true,
+      }).expect(201);
+
+      await patch(created.body.id, admin, {
+        external_link_optional: `  ${CREATE_BODY.external_link_optional}  `,
+      }).expect(200);
+
+      const read = await getAsAdmin(created.body.id, admin).expect(200);
+      expect(read.body.external_consent_confirmed).toBe(true);
+      expect(read.body.external_link_optional).toBe(
+        CREATE_BODY.external_link_optional
+      );
+    });
+  });
+
   describe("the participant payload", () => {
     it("redacts the field entirely from a participant read", async () => {
       const owner = await seedUser();

@@ -2668,6 +2668,15 @@ const OpportunityForm: React.FC = () => {
     externalLink: formData.external_link_optional,
     externalConsentConfirmed: formData.external_consent_confirmed,
     // The STORED status, not the live choice - see ReviewSummaryInput.
+    //
+    // It gates an AMNESTY FOR THE PAST: the neutral "Published before Cortex
+    // recorded this confirmation" line, for studies that were already live
+    // when the column arrived and could not have had the box ticked. Pass
+    // `formData.status` here and the amnesty covers the present - setting
+    // Status to Published on a never-recorded draft would drop the nag and
+    // excuse a study being published for the first time in this session.
+    // Pinned by name in OpportunityForm.external-consent.test.tsx; the pure
+    // review-summary tests take this as an argument and cannot see it.
     publishedWhenLoaded: originalFormData?.status === 'published',
     deliveryMode,
     questionCount: formData.inline_survey_questions.length,
@@ -3040,13 +3049,25 @@ const OpportunityForm: React.FC = () => {
       (formData.end_date || '') !== (originalFormData.end_date || '') ||
       formData.study_source !== originalFormData.study_source ||
       formData.copied_from_study_id !== originalFormData.copied_from_study_id ||
+      // The external-delivery consent affirmation (cto/AdaptaLabs#136).
+      //
+      // THIS CLAUSE IS ABOUT THE SAVE BUTTON, not the exit warning.
+      // `hasUnsavedWork()` is `hasChanges() || hasUnsavedChanges(...)` and the
+      // second half spreads the form rather than enumerating it, so the
+      // "Leave without saving?" prompt fired on this field before the clause
+      // existed and fires with it removed - no beforeunload test can kill a
+      // mutation here. What only `hasChanges()` gates is `onSave` on the step
+      // footers, so without this line an author who ticks the box on Your link
+      // and changes nothing else is told they have unsaved work and offered no
+      // Save Changes button on the first two steps. Same disagreement the
+      // roles/skills chips had above, and pinned the same way: a Save-button
+      // test in OpportunityForm.external-consent.test.tsx that asserts both
+      // halves together.
+      formData.external_consent_confirmed !== originalFormData.external_consent_confirmed ||
       // The screener (MR2). Turning it on or off, editing the not-a-match
       // message, or changing any question/answer must all offer a save from the
       // first two tabs, the same as the study fields above. Questions compared
       // without their client ids, for the reason the two arrays above are.
-      // The external consent affirmation (#136). Ticking it on the Your link
-      // step is a change worth offering a save for.
-      formData.external_consent_confirmed !== originalFormData.external_consent_confirmed ||
       formData.has_screener !== originalFormData.has_screener ||
       formData.screener_message.trim() !== originalFormData.screener_message.trim() ||
       JSON.stringify(withoutClientIds(formData.screener_questions)) !==

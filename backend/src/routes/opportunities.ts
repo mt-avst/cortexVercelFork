@@ -195,9 +195,12 @@ export const UPDATABLE_OPPORTUNITY_COLUMNS: ReadonlySet<string> = new Set([
   'target_roles',
   // External-delivery consent affirmation (cto/AdaptaLabs#136): a plain
   // boolean, so it needs no special branch in the PATCH loop below - null
-  // resets it to "never recorded", a boolean replaces it. Owner/admin-only,
-  // redacted from the participant payload like owner identity (see
-  // publicOpportunity.ts).
+  // resets it to "never recorded", a boolean replaces it. The handler ALSO
+  // writes this key itself, resetting it to null when the request changes
+  // external_link_optional to a different destination and says nothing about
+  // the affirmation; see the reset beside `newLink`. Readable by every admin,
+  // not only the owner, and redacted from the participant payload like the
+  // owner-identity fields (see publicOpportunity.ts).
   'external_consent_confirmed',
   // Moderated consent (#79): live sessions and interviews only. Allow-listed
   // here - which both enforcement sites read - and additionally type-gated by
@@ -1821,9 +1824,9 @@ router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOp
       target_roles:
         data.target_roles && data.target_roles.length > 0 ? data.target_roles : null,
       // External-delivery consent affirmation (cto/AdaptaLabs#136). Absent
-      // stores null - "never recorded" - matching the database path.
-      external_consent_confirmed:
-        data.external_consent_confirmed === undefined ? null : data.external_consent_confirmed,
+      // stores null - "never recorded". Written as the same expression as the
+      // SQL path's $22 bind below, so the two cannot be read as two rules.
+      external_consent_confirmed: data.external_consent_confirmed ?? null,
       start_date: data.start_date || null,
       end_date: data.end_date || null,
       created_at: new Date(),
@@ -2129,7 +2132,8 @@ router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOp
       : null,
     // External-delivery consent affirmation ($22, cto/AdaptaLabs#136). A plain
     // boolean column - no jsonb cast needed. Absent in the request binds null,
-    // the honest "never recorded" value.
+    // the honest "never recorded" value. Same expression as the mock path
+    // above, deliberately: one rule, spelled one way.
     data.external_consent_confirmed ?? null
   ];
 
@@ -2365,6 +2369,44 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
   const existingFirstHandStudyId = existingOpp.rows[0].firsthand_study_id;
   const newLink = data.external_link_optional !== undefined ? data.external_link_optional : existingLink;
   const newFirstHandStudyId = data.firsthand_study_id !== undefined ? data.firsthand_study_id : existingFirstHandStudyId;
+
+  // AN AFFIRMATION IS ABOUT ONE DESTINATION, SO IT CANNOT OUTLIVE IT.
+  //
+  // `external_consent_confirmed` (cto/AdaptaLabs#136) records the author
+  // saying "the tool I am sending participants to collects its own consent".
+  // Repoint the study at a DIFFERENT tool and that sentence is about something
+  // nobody affirmed: the stored `true` reads as an affirmation about tool B
+  // that was only ever made about tool A. Silent today, and a compliance hole
+  // the moment the deferred publish gate lands, because the gate would then
+  // pass on the strength of it.
+  //
+  // The form reaches this without anybody touching the box: the save payload
+  // omits the key when the shape has no Your link step, so external -> native
+  // -> external round-trips the stored `true` back into a re-ticked checkbox
+  // for a link the author has since replaced.
+  //
+  // Reset to NULL - "never recorded" - not false: the author has not said no,
+  // they have said nothing yet about this destination.
+  //
+  // WHEN BOTH FIELDS ARRIVE IN ONE PATCH THE EXPLICIT BOOLEAN WINS. That is a
+  // deliberate re-affirmation - a new link and, in the same breath, the author
+  // confirming the new tool - and clobbering it would leave no way to express
+  // the one correct way to relink. Only a request SILENT about the affirmation
+  // has it cleared.
+  //
+  // Compared on the value the column loop below would actually store (trimmed,
+  // empty read as absent), so whitespace, '' and NULL are not "a different
+  // tool".
+  const normaliseExternalLink = (value: unknown): string | null =>
+    typeof value === 'string' ? value.trim() || null : null;
+  if (
+    data.external_link_optional !== undefined &&
+    data.external_consent_confirmed === undefined &&
+    normaliseExternalLink(data.external_link_optional) !== normaliseExternalLink(existingLink)
+  ) {
+    data.external_consent_confirmed = null;
+  }
+
   const newParticipantType = data.participant_type_required !== undefined
     ? data.participant_type_required
     : existingOpp.rows[0].participant_type_required;
@@ -2951,7 +2993,12 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
 
   // Build dynamic update query
   const updateFields: string[] = [];
-  const values: (string | number | Date | null)[] = [];
+  // `boolean` is in the union because `external_consent_confirmed`
+  // (cto/AdaptaLabs#136) is the first boolean column in the allow-list. Without
+  // it the cast in the else-branch below would launder a real boolean through
+  // `as string | number | Date | null` and the compiler would stop being able
+  // to see the next type that does not belong here.
+  const values: (string | number | boolean | Date | null)[] = [];
   let paramCount = 0;
 
   Object.entries(data).forEach(([key, value]) => {
@@ -3014,8 +3061,14 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
         // `screener` and `target_roles` (the non-primitive JSONB columns) are
         // handled in the branches above, so every value reaching here is a
         // primitive; the cast records that the key guard narrows what TypeScript
-        // on its own cannot.
-        values.push(typeof value === 'string' ? value.trim() : (value as string | number | Date | null));
+        // on its own cannot. The cast names `boolean` too, because
+        // `external_consent_confirmed` is a real boolean column and laundering
+        // it through a narrower cast would hide the next value that is not.
+        values.push(
+          typeof value === 'string'
+            ? value.trim()
+            : (value as string | number | boolean | Date | null)
+        );
       }
     }
   });
@@ -4105,7 +4158,19 @@ router.post('/:id/duplicate', requireAdmin, opportunityWriteLimiter, asyncHandle
 
   const opp = original.rows[0];
 
-  // Create duplicate as draft
+  // Create duplicate as draft.
+  //
+  // `external_consent_confirmed` (cto/AdaptaLabs#136) is DELIBERATELY ABSENT
+  // from this column list, so a copy starts at NULL - "never recorded" - and
+  // the author has to re-affirm. That looks inconsistent beside `consent_text`
+  // three lines down, which this same statement does copy, and the difference
+  // is the point: the moderated consent WORDING is a property of the study
+  // being copied and travels with it, while this affirmation is a statement
+  // about one specific external destination. The copy's link is editable from
+  // the moment it exists, so carrying the tick across would hand the author a
+  // pre-affirmed study and let them point it anywhere - exactly the drift the
+  // PATCH path resets for. Failing to "never recorded" also matches how
+  // `screener` and `target_roles` are left out here.
   const query = `
     INSERT INTO opportunities (
       type, title, purpose_one_liner, description_optional,

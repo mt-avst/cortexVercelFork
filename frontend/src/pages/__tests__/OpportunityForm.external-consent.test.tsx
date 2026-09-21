@@ -246,6 +246,120 @@ describe('loading the external consent affirmation', () => {
   });
 });
 
+/**
+ * REVIEW READS THE STORED STATUS, NOT THE ONE BEING CHOSEN RIGHT NOW.
+ *
+ * The neutral "Published before Cortex recorded this confirmation" line is an
+ * amnesty for the past: studies that were ALREADY live when the column arrived
+ * could not have had a box ticked that did not exist, so Review declines to
+ * flag them. It is keyed on `publishedWhenLoaded`.
+ *
+ * Feed it the LIVE status instead and the amnesty covers the present. An
+ * author opens a never-recorded draft, sets Status to Published without
+ * ticking, and Review drops the nag and explains that the study was published
+ * before Cortex recorded the confirmation - about a study being published for
+ * the first time, in this session, seconds from now.
+ *
+ * The pure review-summary tests cannot see this: they take
+ * `publishedWhenLoaded` as an argument and are green whichever value the page
+ * passes. The wiring is in the page, so the test has to be too.
+ */
+describe('the Review consent line while the author is publishing', () => {
+  const statusControl = () => screen.getByRole('combobox', { name: 'Status' });
+
+  it('a never-recorded draft set to Published still reads not yet confirmed', async () => {
+    vi.mocked(getOpportunity).mockResolvedValue(EXTERNAL_ROW() as never);
+    renderEdit();
+    await awaitLoaded();
+
+    expect(reviewConsent().text).toContain('Not yet confirmed');
+
+    goToStep('Review');
+    fireEvent.change(statusControl(), { target: { value: 'published' } });
+    expect(statusControl()).toHaveValue('published');
+
+    const review = reviewConsent();
+    expect(review.text).toContain('Not yet confirmed');
+    expect(review.text).not.toContain('Handled by the external tool');
+    expect(review.missing).toBe(true);
+  });
+
+  it('a never-recorded draft set to Published and then ticked names the author', async () => {
+    // The control. Without it the assertion above passes just as well against
+    // a Review line that has stopped reacting to this field at all.
+    vi.mocked(getOpportunity).mockResolvedValue(EXTERNAL_ROW() as never);
+    renderEdit();
+    await awaitLoaded();
+
+    goToStep('Review');
+    fireEvent.change(statusControl(), { target: { value: 'published' } });
+    fireEvent.click(await consentCheckbox());
+
+    const review = reviewConsent();
+    expect(review.text).toContain('confirmed by the author');
+    expect(review.missing).toBe(false);
+  });
+});
+
+/**
+ * THE SAVE CHANGES BUTTON ON THE FIRST STEPS.
+ *
+ * `hasUnsavedWork()` is `hasChanges() || hasUnsavedChanges(...)`, and the
+ * second half is spread-based, so the exit warning sees this field with or
+ * without the `hasChanges` clause - the beforeunload control in the block
+ * below is satisfied by the signature alone and cannot kill a mutation on it.
+ *
+ * The clause's real job is the one asserted here: `hasChanges()` ALONE gates
+ * `onSave` on the step footers, so an author who ticks the box and changes
+ * nothing else gets a Save Changes button on the first two steps rather than
+ * being told they have unsaved work with no way to save it. That is the same
+ * disagreement the roles/skills chips had (9bb3164e on main), pinned the same
+ * way: both halves in one test, because either half alone passes against it.
+ */
+describe('the Save Changes button when only the affirmation changed', () => {
+  const goToBasicInfo = () =>
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'Form steps' })).getAllByRole(
+        'button'
+      )[1]
+    );
+
+  it('appears on the first steps when only the box was ticked, and the exit warning agrees', async () => {
+    vi.mocked(getOpportunity).mockResolvedValue(EXTERNAL_ROW() as never);
+    renderEdit();
+    await awaitLoaded();
+
+    fireEvent.click(await consentCheckbox());
+
+    // Back to Basic Information, which is where the author is standing when
+    // the button goes missing - Your link is not one of the first two steps.
+    goToBasicInfo();
+    expect(screen.getByRole('button', { name: 'Save Changes' })).toBeInTheDocument();
+
+    // The other half of the disagreement, asserted alongside it.
+    expect(leavingWouldAsk()).toBe(true);
+  });
+
+  it('stays away on the first steps when a stored affirmation is opened and nothing is touched', async () => {
+    vi.mocked(getOpportunity).mockResolvedValue(
+      EXTERNAL_ROW({ external_consent_confirmed: true }) as never
+    );
+    renderEdit();
+    await awaitLoaded();
+
+    goToBasicInfo();
+    expect(
+      screen.queryByRole('button', { name: 'Save Changes' })
+    ).not.toBeInTheDocument();
+
+    // Unticking the stored true does offer one, so the control above is not
+    // simply a button that never renders on this step.
+    fireEvent.click(await consentCheckbox());
+    goToBasicInfo();
+    expect(screen.getByRole('button', { name: 'Save Changes' })).toBeInTheDocument();
+  });
+});
+
 describe('the dirty check right after loading the affirmation', () => {
   it('a stored true does not read as unsaved work on load', async () => {
     vi.mocked(getOpportunity).mockResolvedValue(

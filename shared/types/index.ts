@@ -211,14 +211,22 @@ export interface Opportunity {
   screenerStatus?: ScreenerStatus;
   /**
    * The author's affirmation that the external tool handling this study's
-   * hand-off collects its own consent (cto/AdaptaLabs#136). Owner/admin-only -
-   * stripped from the participant payload the same way owner identity is (see
-   * publicOpportunity.ts), because it is authoring metadata about who
-   * confirmed what, not a fact a participant needs. NULL means "never
-   * recorded": every opportunity that predates this column, and stays
-   * distinct from an explicit false. Does not gate publish - that remains an
-   * open compliance decision (see the ponytail beside the publish guards in
-   * backend/src/routes/opportunities.ts).
+   * hand-off collects its own consent (cto/AdaptaLabs#136). Present for every
+   * admin, not only the owner - the same reach as the owner-identity fields
+   * below - and stripped from the participant payload the same way they are
+   * (see publicOpportunity.ts), because it is authoring metadata, not a fact
+   * a participant needs.
+   *
+   * A bare boolean: it says an affirmation stands, not who made it or when.
+   * `updated_at` is re-stamped by any edit, so it is not a proxy for either.
+   * NULL means "never recorded": every opportunity that predates this column,
+   * and it stays distinct from an explicit false. The PATCH path resets it to
+   * NULL when `external_link_optional` changes, so a stored `true` is always
+   * about the destination currently on the row.
+   *
+   * Does not gate publish, and carries no provenance columns - both are part
+   * of one open compliance decision (see the ponytail beside the publish
+   * guards in backend/src/routes/opportunities.ts).
    */
   external_consent_confirmed?: boolean | null;
   created_at: string;

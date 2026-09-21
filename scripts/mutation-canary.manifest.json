@@ -2511,5 +2511,15 @@
     "spec": "src/routes/__tests__/screener-enforcement-postgres.test.ts",
     "test": "refuses to mint a native survey session when the participant has no verdict",
     "needsDatabase": true
+  },
+  {
+    "id": "external-consent-affirmation-stripped-from-the-participant-payload",
+    "why": "The external-delivery consent affirmation (cto/AdaptaLabs#136) is authoring metadata: it records that the study's author affirmed the external tool collects its own consent, and it is readable by every admin but by no participant. This destructure is the whole redaction - publicOpportunity.ts is a deny-list serialiser, so a column it does not name is published to every participant on the browse and detail pages, which select the whole row. Deleting the line left the ENTIRE backend jest suite green before this entry existed; only the real-Postgres route suite caught it, and that suite does not run on the fast gate. The named jest test asserts the key is absent for all three stored states - true, false and null - because the redaction is about the key being gone, not its value being falsy. Proven by mutation before entry: deleting this line reds the named test alone, 1 failed of 9 in the file.",
+    "file": "backend/src/utils/publicOpportunity.ts",
+    "anchor": "    external_consent_confirmed: _externalConsentConfirmed,",
+    "mutation": "",
+    "runner": "jest",
+    "spec": "src/utils/__tests__/publicOpportunity.test.ts",
+    "test": "removes the external consent affirmation in all three of its states"
   }
 ]

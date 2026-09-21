@@ -328,9 +328,20 @@ export async function runMigrations() {
     // moment the study was reopened. NULL means "never recorded" - every
     // opportunity that predates this column - and stays distinguishable from
     // an explicit false; no backfill. Does NOT gate publish: see the ponytail
-    // at the publish-validation call sites in routes/opportunities.ts. Owner/
-    // admin-only, like owner identity - redacted from the participant payload
-    // in utils/publicOpportunity.ts. Idempotent add for existing databases.
+    // at the publish-validation call sites in routes/opportunities.ts.
+    //
+    // A BARE BOOLEAN, AND THAT IS ALL IT HOLDS. It records that an affirmation
+    // stands right now - not who made it, and not when. There is no actor
+    // column and no timestamp, and `updated_at` cannot stand in for one
+    // because any edit to the row re-stamps it. Whether provenance is needed
+    // is part of the same open compliance decision as the publish gate
+    // (cto/AdaptaLabs#136). What the column does guarantee is that the flag is
+    // about the destination CURRENTLY stored: the PATCH path resets it to NULL
+    // when external_link_optional changes.
+    //
+    // Readable by every admin, not only the owner - the same reach as the
+    // owner-identity fields - and redacted from the participant payload in
+    // utils/publicOpportunity.ts. Idempotent add for existing databases.
     await client.query(`
       ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS external_consent_confirmed BOOLEAN
     `);
