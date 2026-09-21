@@ -2035,12 +2035,20 @@ router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOp
   // refusal by asking the same function rather than restating it. `linkedStudyId`
   // is already trimmed above, which is why the boolean is safe to pass straight in.
   //
-  // ponytail: external_consent_confirmed (cto/AdaptaLabs#136) is persisted but
-  //   does NOT gate this publish check, whatever its value. Whether an
-  //   external-delivery study should be refused publication without it is an
-  //   open compliance decision for Nick, not a call this fix makes.
-  //   -> cto/AdaptaLabs#136, add a `PublishReadinessInput` field and a branch
-  //      here (and at the PATCH call site below) if that decision lands as yes.
+  // `external_consent_confirmed` (cto/AdaptaLabs#136) DELIBERATELY DOES NOT
+  // GATE this publish check, whatever its value - decided 2026-09-21, not
+  // pending. The tick is self-attestation: it proves the author clicked a box,
+  // not that the external tool actually carries consent text, so refusing
+  // publication without it would add a hard stop that buys no assurance - and
+  // would block a researcher republishing a legacy external study that
+  // predates the column. Do not add a `PublishReadinessInput` field for it.
+  //
+  // ponytail: the affirmation is a bare nullable boolean - no actor, no
+  //   timestamp of its own - so it cannot say who affirmed or when. If Legal
+  //   need a RECORD of the attestation, the upgrade is provenance columns
+  //   (`external_consent_confirmed_by`, `external_consent_confirmed_at`),
+  //   still not a gate. Deliberately not built during the beta.
+  //   -> cto/AdaptaLabs#126, the go-live bucket that carries the question
   const createPublishProblem = findPublishProblem({
     willBePublished: data.status === 'published',
     type: data.type,
@@ -2502,9 +2510,10 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
   // saying "the tool I am sending participants to collects its own consent".
   // Repoint the study at a DIFFERENT tool and that sentence is about something
   // nobody affirmed: the stored `true` reads as an affirmation about tool B
-  // that was only ever made about tool A. Silent today, and a compliance hole
-  // the moment the deferred publish gate lands, because the gate would then
-  // pass on the strength of it.
+  // that was only ever made about tool A. It gates nothing (decided
+  // 2026-09-21, see the publish guards), but Review would still tell the
+  // author "confirmed" for a tool they never confirmed, and any provenance
+  // added later (cto/AdaptaLabs#126) would record an attestation nobody made.
   //
   // The form reaches this without anybody touching the box: the save payload
   // omits the key when the shape has no Your link step, so external -> native
@@ -2712,9 +2721,11 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
       hasBookableSlot = slotCount.rowCount ? slotCount.rowCount > 0 : false;
     }
 
-    // ponytail: external_consent_confirmed (cto/AdaptaLabs#136) is not
-    //   consulted here either - see the create call site's ponytail above for
-    //   why, and for the upgrade path if that decision lands as yes.
+    // `external_consent_confirmed` (cto/AdaptaLabs#136) deliberately does not
+    // gate this check either - self-attestation buys no assurance and a gate
+    // would block republishing a legacy external study. The reasoning, and the
+    // provenance question left for go-live (cto/AdaptaLabs#126), are at the
+    // create call site above.
     const updatePublishProblem = findPublishProblem({
       willBePublished: true,
       type: existingType,

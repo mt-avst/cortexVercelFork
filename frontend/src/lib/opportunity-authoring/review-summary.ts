@@ -340,6 +340,10 @@ const consentFieldId = (steps: readonly ReviewStepRef[]): string | undefined => 
  *    unflagged: its tool may well collect consent, but nobody recorded saying
  *    so, and attributing it to the author would claim what never happened. On
  *    a draft it is the same unmet requirement as false.
+ *
+ * "Unmet requirement" is flagged on Review and NOT enforced: publish does not
+ * consult the affirmation (cto/AdaptaLabs#136, see the publish guards in
+ * backend/src/routes/opportunities.ts).
  */
 const consentAffirmationItem = (
   confirmed: boolean | null,
