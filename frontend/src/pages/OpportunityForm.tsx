@@ -2985,6 +2985,17 @@ const OpportunityForm: React.FC = () => {
         originalFormData.inline_survey_consent_template_version ||
       formData.participant_type_required !== originalFormData.participant_type_required ||
       formData.participant_type_specific_details.trim() !== originalFormData.participant_type_specific_details.trim() ||
+      // Roles/skills wanted, the other half of the audience the author
+      // describes. A saved field - the payload carries it and the row stores
+      // it - that this list omitted, so adding or removing a chip and nothing
+      // else left the Save buttons hidden on the first two steps while the
+      // exit warning fired on the way out: the form said there was unsaved
+      // work and offered no way to save it. `dirtySignature` saw it all along,
+      // because it spreads the form rather than enumerating it.
+      //
+      // Stringified rather than length-compared: renaming a chip, or
+      // reordering them, changes what a save sends and the lengths agree.
+      JSON.stringify(formData.target_roles) !== JSON.stringify(originalFormData.target_roles) ||
       formData.status !== originalFormData.status ||
       // The seven fields this comparison omitted, plus the two reuse flags.
       //

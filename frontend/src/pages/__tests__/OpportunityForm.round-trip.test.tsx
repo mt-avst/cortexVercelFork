@@ -226,6 +226,17 @@ beforeEach(() => {
  * A test that needs to submit calls `walkToReview` (or `submitFromLastStep`,
  * which does that for it) instead.
  */
+/**
+ * Open the Screener/Audience step, which since the D6 move is where the study
+ * period, the participant type and the roles/skills chips all live.
+ */
+const goToAudienceStep = () => {
+  fireEvent.click(
+    within(screen.getByRole('navigation', { name: 'Form steps' }))
+      .getByRole('button', { name: /Audience/i })
+  );
+};
+
 const goToConsentStep = () => {
   // Since the D1/D3 reshape, Audience sits BEFORE the experience body, so from
   // the experience step the next step is Consent directly.
@@ -2140,6 +2151,120 @@ describe('the Save button appearing for a change that only touches authored cont
       });
     });
     expect(save).toBeInTheDocument();
+  });
+
+  /**
+   * Roles/skills wanted (target_roles), the display-only advertised audience.
+   *
+   * It is a real saved field - the payload carries it and the row stores it -
+   * but it was omitted from `hasChanges`, so an author who added or removed a
+   * chip and nothing else got no Save Changes button on the first two steps.
+   * `dirtySignature` DID see it, because it spreads the form rather than
+   * enumerating it, so the exit warning fired on the same edit: the form told
+   * the author they had unsaved work and offered them no way to save it.
+   * That disagreement is asserted here in one test, both halves together,
+   * because either half alone passes against the bug.
+   */
+  it('appears when only the roles/skills chips changed, and the exit warning agrees', async () => {
+    vi.mocked(getOpportunity).mockResolvedValue(recordedOpportunity as never);
+    vi.mocked(getFirstHandStudy).mockResolvedValue(study() as never);
+
+    renderEdit('/admin/opportunities/opp-1/edit');
+    await goToBasicInfo();
+    await screen.findByDisplayValue('Checkout walkthrough');
+
+    goToAudienceStep();
+    fireEvent.change(screen.getByLabelText(/Roles or skills/i), {
+      target: { value: 'Product Manager' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^Add$/ }));
+    expect(
+      within(screen.getByRole('list', { name: /Selected roles or skills/i }))
+        .getByText('Product Manager')
+    ).toBeInTheDocument();
+
+    expect(screen.getByRole('button', { name: /Save Changes/i })).toBeInTheDocument();
+
+    // Back to Basic Information, which is where the author was standing when
+    // the button went missing - the Audience step is not one of the two.
+    await goToBasicInfo();
+    expect(screen.getByRole('button', { name: /Save Changes/i })).toBeInTheDocument();
+
+    // The other half of the disagreement. The exit warning has always fired on
+    // this edit; the point is that the Save button now fires on the same one.
+    fireEvent.click(screen.getByRole('button', { name: /Exit to dashboard/i }));
+    expect(await screen.findByText(/Leave without saving\?/i)).toBeInTheDocument();
+  });
+
+  /**
+   * And the other direction: a stored roles list is not an unsaved change.
+   *
+   * A baseline that omitted the field where the live form carries it would
+   * make the comparison read dirty the instant the form opened - the failure
+   * this form has had before, on the authored steps. Both hydrate sites carry
+   * `target_roles`, and this is what says so.
+   */
+  it('stays away when a study with roles stored is opened and nothing is touched', async () => {
+    vi.mocked(getOpportunity).mockResolvedValue({
+      ...recordedOpportunity,
+      target_roles: ['Product Manager', 'Designer']
+    } as never);
+    vi.mocked(getFirstHandStudy).mockResolvedValue(study() as never);
+
+    renderEdit('/admin/opportunities/opp-1/edit');
+    await goToBasicInfo();
+    await screen.findByDisplayValue('Checkout walkthrough');
+
+    goToAudienceStep();
+    expect(
+      within(screen.getByRole('list', { name: /Selected roles or skills/i }))
+        .getByText('Designer')
+    ).toBeInTheDocument();
+
+    await goToBasicInfo();
+    expect(screen.queryByRole('button', { name: /Save Changes/i })).not.toBeInTheDocument();
+
+    // Removing a stored chip is a change, so the control above is not simply
+    // a Save button that never appears on this step.
+    goToAudienceStep();
+    fireEvent.click(screen.getByRole('button', { name: /Remove Designer/i }));
+    await goToBasicInfo();
+    expect(screen.getByRole('button', { name: /Save Changes/i })).toBeInTheDocument();
+  });
+
+  /**
+   * The same length, different chips.
+   *
+   * A length comparison would pass both tests above - one adds a chip, the
+   * other removes one - so this is the case that says the comparison is on the
+   * CONTENT. Renaming a chip is remove-then-add, and it lands back on the count
+   * it started from.
+   */
+  it('appears when a roles chip is swapped for a different one, leaving the count unchanged', async () => {
+    vi.mocked(getOpportunity).mockResolvedValue({
+      ...recordedOpportunity,
+      target_roles: ['Designer']
+    } as never);
+    vi.mocked(getFirstHandStudy).mockResolvedValue(study() as never);
+
+    renderEdit('/admin/opportunities/opp-1/edit');
+    await goToBasicInfo();
+    await screen.findByDisplayValue('Checkout walkthrough');
+
+    goToAudienceStep();
+    fireEvent.click(screen.getByRole('button', { name: /Remove Designer/i }));
+    fireEvent.change(screen.getByLabelText(/Roles or skills/i), {
+      target: { value: 'Product Manager' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^Add$/ }));
+
+    const chips = within(
+      screen.getByRole('list', { name: /Selected roles or skills/i })
+    ).getAllByRole('listitem');
+    expect(chips).toHaveLength(1);
+
+    await goToBasicInfo();
+    expect(screen.getByRole('button', { name: /Save Changes/i })).toBeInTheDocument();
   });
 
   it('appears when only the study period changed', async () => {

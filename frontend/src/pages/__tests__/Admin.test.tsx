@@ -1,7 +1,7 @@
 import React from 'react';
-import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, within, waitFor, act } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import Admin from '../Admin';
 import { getDashboardStats, getOpportunities } from '../../api/client';
@@ -461,5 +461,95 @@ describe('the Show all researchers toggle (Decision 2)', () => {
       'true'
     );
     expect(screen.getByText('Across every researcher on Cortex')).toBeInTheDocument();
+  });
+});
+
+// Returning from the study form lands on /admin with router state
+// { refresh, message }. The dashboard shows the banner, clears the state with a
+// navigate(), then arms two timers: one to hide the banner and one to force a
+// filter-free reload. Those timers must survive the navigate() that re-runs the
+// effect, and must not outlive the component.
+describe('the return-from-form banner and forced refresh', () => {
+  const renderReturning = (message: string) =>
+    render(
+      <MemoryRouter initialEntries={[{ pathname: '/admin', state: { refresh: true, message } }]}>
+        <Routes>
+          <Route path="/admin" element={<Admin />} />
+          <Route path="/" element={<div>HOME SENTINEL</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('hides the banner after 3000ms and forces a reload after 150ms', async () => {
+    renderReturning('Study saved');
+    await act(async () => {});
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Study saved');
+    expect(vi.mocked(getOpportunities)).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      vi.advanceTimersByTime(149);
+    });
+    expect(vi.mocked(getOpportunities)).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(vi.mocked(getOpportunities)).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      vi.advanceTimersByTime(3000 - 150 - 1);
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent('Study saved');
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(screen.queryByText('Study saved')).not.toBeInTheDocument();
+  });
+
+  it('holds a DRAFT warning for 5000ms', async () => {
+    renderReturning('Saved as DRAFT - not yet visible');
+    await act(async () => {});
+
+    await act(async () => {
+      vi.advanceTimersByTime(5000 - 1);
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent('Saved as DRAFT');
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(screen.queryByText(/Saved as DRAFT/)).not.toBeInTheDocument();
+  });
+
+  it('leaves no timer pending once the dashboard unmounts', async () => {
+    const { unmount } = renderReturning('Study saved');
+    await act(async () => {});
+
+    // Control: the banner is on screen and the reload has not fired yet, so
+    // both timers really are armed and a cleared clock below means cleared,
+    // not never-scheduled. A bare getTimerCount() control would not say that:
+    // the search-debounce timer alone satisfies a >= 2 count.
+    expect(screen.getByRole('alert')).toHaveTextContent('Study saved');
+    expect(vi.mocked(getOpportunities)).toHaveBeenCalledTimes(1);
+
+    unmount();
+
+    expect(vi.getTimerCount()).toBe(0);
+    // Attributable: past both delays, the reload the 150ms timer would have
+    // fired never runs.
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(vi.mocked(getOpportunities)).toHaveBeenCalledTimes(1);
   });
 });
