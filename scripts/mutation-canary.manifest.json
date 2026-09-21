@@ -2621,5 +2621,38 @@
     "spec": "src/routes/__tests__/mint-refuses-a-closed-study-postgres.test.ts",
     "test": "mints a fresh session rather than resuming a abandoned one, before the deadline",
     "needsDatabase": true
+  },
+  {
+    "id": "detail-page-offers-resume-on-a-closed-study",
+    "why": "cto/AdaptaLabs#129 and Nick's decision that a participant part-way through a survey may come back and finish. The server keeps the exemption open - the survey mint route resumes an in-flight session past the deadline, and the detail read serves 200 instead of 410 for that one viewer - but the participant can only reach it if this page offers a control. Without the exemption the closed branch renders the closed-on date and no button, so the whole server-side exemption is unreachable through the UI and nothing else fails. The mutation restores that branch, which is what a tidy-up of a long ternary would do.",
+    "file": "frontend/src/pages/OpportunityDetail.tsx",
+    "anchor": ") : hasEnded && !hasResumableNativeSurvey ? (",
+    "mutation": ") : hasEnded ? (",
+    "runner": "vitest",
+    "project": "frontend",
+    "spec": "src/pages/__tests__/OpportunityDetail.closed-study-resume.test.tsx",
+    "test": "offers Resume when the server says this participant is mid-survey"
+  },
+  {
+    "id": "detail-page-says-closed-when-a-survey-mint-is-refused",
+    "why": "The two 403s a mint route sends mean opposite things: OPPORTUNITY_CLOSED is terminal, a bare not-published 403 is a study that may yet open. Both used to render 'not yet available, please try again later', which for a study that has ENDED is the one sentence on the page that is actively false. This branch keys on the code and must sit ABOVE the bare 403 arm to be reachable at all. Proven by mutation before entry: disabling it drops the page back to the false sentence and reds the named test.",
+    "file": "frontend/src/pages/OpportunityDetail.tsx",
+    "anchor": "        if (status === 404) {\n          setError('This survey is not available. Please contact your research team.');\n        } else if (closedResponse) {\n",
+    "mutation": "        if (status === 404) {\n          setError('This survey is not available. Please contact your research team.');\n        } else if (closedResponse && false) {\n",
+    "runner": "vitest",
+    "project": "frontend",
+    "spec": "src/pages/__tests__/OpportunityDetail.closed-study-resume.test.tsx",
+    "test": "renders the servers closed sentence when the survey mint is refused"
+  },
+  {
+    "id": "detail-page-says-closed-when-a-recorded-mint-is-refused",
+    "why": "The recorded twin of the survey arm above, and it gets its own entry for the reason the mint-route pair does: two near-identical branches in one file are the shape where a fix applied to one reads as a fix applied to both. This arm also sits below two other code-keyed branches, so its position is part of what is graded. Proven by mutation before entry: disabling it reds the named test and nothing else.",
+    "file": "frontend/src/pages/OpportunityDetail.tsx",
+    "anchor": "        } else if (status === 503) {\n          setError('This study is not yet configured. Please contact your research team.');\n        } else if (closedResponse) {\n",
+    "mutation": "        } else if (status === 503) {\n          setError('This study is not yet configured. Please contact your research team.');\n        } else if (closedResponse && false) {\n",
+    "runner": "vitest",
+    "project": "frontend",
+    "spec": "src/pages/__tests__/OpportunityDetail.closed-study-resume.test.tsx",
+    "test": "renders the servers closed sentence when the recorded mint is refused"
   }
 ]
