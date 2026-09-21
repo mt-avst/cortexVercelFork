@@ -338,10 +338,11 @@ export async function runMigrations() {
     // is Legal's question for go-live (cto/AdaptaLabs#126): if they need a
     // record of the attestation, the answer is provenance columns, not a
     // gate. Keeping the flag pointed at the destination CURRENTLY stored is a
-    // rule in the application, not a property of the column: the authoring form clears the tick when the author edits the
-    // link, and the PATCH path resets the column to NULL when the link it is
-    // handed differs from the one on the row. The database enforces neither,
-    // and the PATCH comparison reads the row outside the write's transaction -
+    // rule in the application, not a property of the column: the authoring
+    // form clears the tick when the author edits the link, and the PATCH path
+    // resets the column to NULL when the link it is handed differs from the
+    // one on the row. The database enforces neither, and the PATCH comparison
+    // reads the row outside the write's transaction -
     // see the ponytail beside it in routes/opportunities.ts.
     //
     // Readable by every admin, not only the owner - the same reach as the
