@@ -53,7 +53,7 @@ if (process.env.CORS_ORIGIN !== undefined) {
   if (process.env.CORS_ORIGIN.trim() !== config.CORS_ORIGIN) {
     console.warn(
       `[config] CORS_ORIGIN normalised to its origin: ${JSON.stringify(process.env.CORS_ORIGIN)} -> ${JSON.stringify(config.CORS_ORIGIN)}. ` +
-        'A browser Origin header carries no path, so the path was never matched. ' +
+        'A browser Origin header is scheme://host[:port] and nothing else, so whatever was dropped here was never matched. ' +
         'Readers that build redirect and OAuth callback URLs from CORS_ORIGIN now use the normalised value.'
     );
   }

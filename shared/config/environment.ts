@@ -285,6 +285,14 @@ export const backendEnvSchema = z.object({
     // an optional path, query or fragment with no backslash, whitespace, `@`
     // or comma in it.
     //
+    // It does NOT make the parser's output character-identical to what was
+    // written: an IPv4 address in shorthand or hex still gets rewritten into
+    // dotted form (measured: `https://127.1` and `https://0x7f000001` both
+    // come out as `https://127.0.0.1`). That is the SAME host written another
+    // way - a browser serialises its own Origin the same way - so it is not
+    // the class of repair this refine exists to stop, which is a value coming
+    // out as a DIFFERENT host from the one written between the slashes.
+    //
     // WHAT THIS NARROWS, because unlike the transform it is not free. It
     // refuses some values origin/main booted: an IPv6 literal (`http://[::1]`),
     // an underscore in the host, and a non-ASCII host. None is a shape a

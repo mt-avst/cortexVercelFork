@@ -563,7 +563,15 @@ describe('backend CORS_ORIGIN validation', () => {
     ['https://good.com/', 'https://good.com'],
     ['https://good.com:8443/app?x#y', 'https://good.com:8443'],
     ['http://localhost:3000', 'http://localhost:3000'],
-    ['https://adaptalabs.kubera-playground.adaptavist.net', 'https://adaptalabs.kubera-playground.adaptavist.net']
+    ['https://adaptalabs.kubera-playground.adaptavist.net', 'https://adaptalabs.kubera-playground.adaptavist.net'],
+    // The punycode form the deployment doc tells an operator to write for a
+    // non-ASCII host. Pinned so tightening the host class cannot invalidate
+    // the documented workaround in silence.
+    ['https://xn--nxasmq6b.com', 'https://xn--nxasmq6b.com'],
+    // An IPv4 address in shorthand: accepted, and rewritten into dotted form
+    // by the parser rather than refused. The same host written another way,
+    // pinned so the rewrite is a decision rather than a surprise.
+    ['https://127.1', 'https://127.0.0.1']
   ])('still accepts the well-shaped CORS_ORIGIN %p as %p', (value, expected) => {
     setVar('CORS_ORIGIN', value);
     expect(validateBackendEnvironment().CORS_ORIGIN).toBe(expected);
