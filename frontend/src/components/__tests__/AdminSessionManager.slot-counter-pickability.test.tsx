@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -26,15 +26,19 @@ import { getAvailability, getMyCalendarEvents } from '../../api/client';
  * `AdminSessionManager*` suite. Confirmed by a code-reviewer gate that
  * removed each exclusion in turn and ran the suite.
  *
- * `isAllocated` gets a DIRECT unit test rather than a full-render arm like
- * the other three: a full render cannot reach that branch at all (see the
- * comment on `isAllocated` itself), because `protectedSlotKeys` injects every
- * session's own exact time as a slot `pruneOverlaps` prefers, and the
- * overlapping generated cell `isAllocated` would have flagged is the exact
- * one `pruneOverlaps` already dropped in favour of it - proven by hand below
- * (a full-render arm claiming to isolate `isAllocated` kept passing with that
- * branch mutated away, because the fixture's "allocated" session was silently
- * excluding the cell via `isExistingSession` instead).
+ * `isAllocated` gets a DIRECT unit test, and a full-render arm only in the
+ * mixed-day suite at the bottom. A lone session cannot reach that branch in
+ * a full render: `protectedSlotKeys` injects every session's own exact time
+ * as a slot `pruneOverlaps` prefers, so the overlapping generated cell is
+ * pruned first (an earlier full-render arm here kept passing with the branch
+ * mutated away, because its "allocated" session was excluding the cell via
+ * `isExistingSession` instead). Two sessions overlapping each other DO reach
+ * it - see the 14:00/14:15 pair in the mixed-day fixture.
+ *
+ * `isExistingSession` and `confirmedSlots` also get direct arms each: in a
+ * saved study one is derived from the other, so a full render with sessions
+ * cannot tell them apart. The temporary-study suite is the rendered path
+ * where only `confirmedSlots` excludes a cell.
  *
  * System time is pinned (`Date` only - real timers stay real) so a slot's
  * past/future-ness does not depend on the wall-clock hour the suite runs at.
@@ -281,5 +285,200 @@ describe('AdminSessionManager - all four exclusions together, and the two views 
     await settle();
 
     expect(await readHeadlineCount()).toBe(1);
+  });
+});
+
+describe('isSlotPickable - the existing-session and confirmed exclusions, each alone (#135)', () => {
+  // In a full render with a saved study, `confirmedSlots` is derived from
+  // `sessions`, so the two checks agree and either one masks the other's
+  // removal. Direct calls give each its own arm.
+  const events: never[] = [];
+
+  it('excludes a slot that exactly matches a session, with confirmedSlots empty', () => {
+    const slot = slotAt(day, 12, 0);
+    const session = sessionRow('exact-1', slot.start, slot.end);
+
+    expect(isSlotPickable(slot, events, [session], new Set<string>())).toBe(false);
+  });
+
+  it('excludes a slot held only in confirmedSlots, with no session anywhere', () => {
+    const slot = slotAt(day, 12, 0);
+
+    expect(isSlotPickable(slot, events, [], new Set([`${slot.start}|${slot.end}`]))).toBe(false);
+  });
+});
+
+describe('AdminSessionManager - a temporary study restores confirmed slots with no sessions (#135)', () => {
+  // The one real path where `confirmedSlots` and `sessions` disagree: a new
+  // (temporary) study has sessions=[] and restores its confirmed slots from
+  // sessionStorage, so only the `confirmedSlots` check can exclude the cell.
+  it('Table view: a confirmed-but-unsaved cell is neither counted nor offered by Select all', async () => {
+    const confirmedCell = slotAt(day, 12, 0);
+    mockAvailability([confirmedCell, slotAt(day, 12, 30)]);
+    sessionStorage.setItem(
+      'confirmedSlots_opp-1',
+      JSON.stringify([`${confirmedCell.start}|${confirmedCell.end}`])
+    );
+    renderManager({ isTemporary: true, sessions: [] });
+    await settle();
+    await setStartDateToFixedDay();
+    await settle();
+
+    expect(await readHeadlineCount()).toBe(1);
+    expect(screen.getByRole('button', { name: 'Select all (1)' })).toBeInTheDocument();
+  });
+});
+
+/**
+ * One day carrying every kind of cell at once, so the headline, the per-day
+ * Select-all and the chips themselves have to agree on all of them together.
+ * `now` is 09:00 and the duration is 30 minutes.
+ *
+ *   08:00        past                                  - disabled chip
+ *   10:00        calendar conflict                     - disabled chip
+ *   11:00        session with room                     - "created" chip, not a button
+ *   12:00        full session                          - disabled chip
+ *   13:10-13:40  odd-length session (the generated
+ *                13:00 and 13:30 cells are pruned)     - "created" chip
+ *   14:00-14:30  session, overlapped by the next one   - disabled chip (allocated)
+ *   14:15-14:45  session overlapping 14:00 - pruned, never drawn
+ *   14:30        generated cell overlapped by 14:15    - disabled chip (allocated)
+ *   15:00, 15:30 genuinely free                        - the only two pickable
+ *
+ * The 14:00/14:15 pair is what makes the allocated branch reachable in a full
+ * render: both are protected, the prune keeps the earlier one, and the 14:30
+ * cell abuts 14:00 (kept) while overlapping 14:15 (dropped).
+ */
+const mixedDayFixture = () => {
+  mockAvailability([
+    slotAt(day, 8, 0),
+    slotAt(day, 10, 0),
+    slotAt(day, 11, 0),
+    slotAt(day, 12, 0),
+    slotAt(day, 13, 0),
+    slotAt(day, 13, 30),
+    slotAt(day, 14, 30),
+    slotAt(day, 15, 0),
+    slotAt(day, 15, 30),
+  ]);
+  vi.mocked(getMyCalendarEvents).mockResolvedValue([
+    {
+      id: 'evt-1',
+      title: 'Team standup',
+      start: at(day, 10, 0).toISOString(),
+      end: at(day, 10, 30).toISOString(),
+      startTime: at(day, 10, 0),
+      endTime: at(day, 10, 30),
+      status: 'confirmed',
+      attendees: [],
+    },
+  ] as never);
+  const iso = (hour: number, minute = 0) => at(day, hour, minute).toISOString();
+  const full = { ...sessionRow('full-1', iso(12), iso(12, 30)), booked_count: 2, remaining: 0 };
+  return [
+    sessionRow('room-1', iso(11), iso(11, 30)),
+    full,
+    sessionRow('odd-1', iso(13, 10), iso(13, 40)),
+    sessionRow('pair-a', iso(14), iso(14, 30)),
+    sessionRow('pair-b', iso(14, 15), iso(14, 45)),
+  ];
+};
+
+const selectAllSum = () =>
+  screen
+    .queryAllByRole('button', { name: /^Select all/i })
+    .reduce((n, b) => n + Number(b.textContent!.match(/\((\d+)\)/)![1]), 0);
+
+const chipGroups = () => screen.getAllByRole('group', { name: /^Slots on/ });
+
+/** Chips a click would newly select: enabled, not already on. */
+const offeredChips = () =>
+  chipGroups().flatMap(group =>
+    within(group)
+      .queryAllByRole('button')
+      .filter(b => !(b as HTMLButtonElement).disabled && b.getAttribute('aria-pressed') === 'false')
+  );
+
+const renderMixedTable = async () => {
+  renderManager({ sessions: mixedDayFixture() });
+  await settle();
+  await setStartDateToFixedDay();
+  await settle();
+};
+
+describe('AdminSessionManager - headline, Select all and chips agree on a mixed day (#135)', () => {
+  it('Table view: the headline equals the sum of the per-day Select all counts', async () => {
+    await renderMixedTable();
+
+    const headline = await readHeadlineCount();
+    expect(headline).toBe(2);
+    expect(selectAllSum()).toBe(headline);
+  });
+
+  it('Table view: every counted slot is an enabled chip and every uncounted chip is not offered', async () => {
+    await renderMixedTable();
+
+    const headline = await readHeadlineCount();
+    const offered = offeredChips();
+    expect(offered).toHaveLength(headline);
+    offered.forEach(chip => expect(chip.getAttribute('title')).toMatch(/Available time slot$/));
+
+    // Every other chip is either a disabled button or a non-interactive
+    // created-session marker - nothing uncounted is clickable.
+    const allChips = chipGroups().flatMap(group => [
+      ...within(group).queryAllByRole('button'),
+      ...within(group).queryAllByRole('img'),
+    ]);
+    const rest = allChips.filter(chip => !offered.includes(chip));
+    rest.forEach(chip => {
+      const isDisabledButton = chip.tagName === 'BUTTON' && (chip as HTMLButtonElement).disabled;
+      const isCreatedMarker = chip.getAttribute('role') === 'img';
+      expect(isDisabledButton || isCreatedMarker).toBe(true);
+    });
+
+    // The five blocked cells by kind, so a failure says which one drifted:
+    // past, conflict, the 14:30 allocated cell, the full 12:00 session and
+    // the 14:00 session (room left, but overlapped by 14:15 - its tooltip
+    // leads with the session, so it reads as one).
+    const disabledTitles = rest
+      .filter(chip => chip.tagName === 'BUTTON')
+      .map(chip => chip.getAttribute('title') ?? '');
+    expect(disabledTitles).toHaveLength(5);
+    expect(disabledTitles.filter(t => /in the past/.test(t))).toHaveLength(1);
+    expect(disabledTitles.filter(t => /conflicts with existing calendar events/.test(t))).toHaveLength(1);
+    expect(disabledTitles.filter(t => /allocated to another study/.test(t))).toHaveLength(1);
+    expect(disabledTitles.filter(t => / 0 remaining$/.test(t))).toHaveLength(1);
+    expect(disabledTitles.filter(t => / 2 remaining$/.test(t))).toHaveLength(1);
+  });
+
+  it('Table view: the counters follow a sessions change after first render', async () => {
+    mockAvailability([slotAt(day, 12, 0), slotAt(day, 12, 30), slotAt(day, 13, 0)]);
+    const props = {
+      opportunityId: 'opp-1',
+      onSessionsChange: vi.fn(),
+      defaultDurationMinutes: 30,
+    };
+    const { rerender } = render(
+      <MemoryRouter>
+        <AdminSessionManager {...props} sessions={[]} />
+      </MemoryRouter>
+    );
+    await settle();
+    await setStartDateToFixedDay();
+    await settle();
+    expect(await readHeadlineCount()).toBe(3);
+    expect(selectAllSum()).toBe(3);
+
+    const added = sessionRow('late-1', at(day, 12, 30).toISOString(), at(day, 13, 0).toISOString());
+    rerender(
+      <MemoryRouter>
+        <AdminSessionManager {...props} sessions={[added]} />
+      </MemoryRouter>
+    );
+    await settle();
+
+    expect(await readHeadlineCount()).toBe(2);
+    expect(selectAllSum()).toBe(2);
+    expect(offeredChips()).toHaveLength(2);
   });
 });

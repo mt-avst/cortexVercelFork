@@ -446,9 +446,14 @@ const slotConflictsWithEvents = (
  * deselect it - blocking it entirely would break #95's gutter removal). The
  * two are independent implementations of an overlapping idea, not one
  * function - a future change to either has to be walked through the other by
- * hand, and the `AdminSessionManager.slot-counter-pickability` and
- * `AdminSessionManager.out-of-range-sessions` suites are what would notice a
- * drift.
+ * hand. What notices a drift is the mixed-day suite in
+ * `AdminSessionManager.slot-counter-pickability.test.tsx` ("headline, Select
+ * all and chips agree on a mixed day"): on one day carrying a past, a
+ * conflicting, an allocated, a full, a roomy and an odd-length cell, it
+ * asserts the headline equals the Select-all sum AND that the chips a click
+ * could newly select are exactly the counted ones. Dropping `isBusy` or
+ * `isAllocated` from `describeSlot`'s `isBlocked`, or forcing its `isPast`
+ * false, each fails that suite by name.
  */
 export const isSlotPickable = (
   slot: { start: string; end: string },
@@ -465,6 +470,12 @@ export const isSlotPickable = (
   // tolerance, the same allowance `getSessionForSlot` below gives for
   // timezone/serialisation rounding between what the server stored and what
   // the client re-parses).
+  //
+  // The tolerance is unobservable in this function's result, deliberately
+  // kept only to mirror `getSessionForSlot`: a slot within a second of a
+  // session but not exactly on it still overlaps that session, so
+  // `isAllocated` below excludes it anyway. Narrowing the tolerance
+  // to zero changes no answer, which is why no test pins it.
   const isExistingSession = sessions.some(session => {
     const sessionStart = new Date(session.start_time);
     const sessionEnd = new Date(session.end_time);
@@ -474,35 +485,32 @@ export const isSlotPickable = (
     );
   });
 
-  // `confirmedSlots` is kept in lockstep with `sessions` by the effect that
-  // calls `persistConfirmedSlots` below (every exact-match session is added
-  // to it on every render where `sessions` changes) - so in this app's real
-  // data flow, `isExistingSession` and this check are ALWAYS either both true
-  // or both false for the same slot, and either alone is a redundant, inert
-  // guard against the other today. Both stay: `confirmedSlots` can carry a
-  // slot optimistically confirmed in local state before the parent's
-  // `sessions` prop catches up, which `isExistingSession` alone would miss. A
-  // mutation test proving either exclusion has to remove BOTH checks, or the
-  // surviving one silently covers for the one removed.
+  // For a saved study with sessions, `confirmedSlots` is rebuilt from
+  // `sessions` by the sync effect in `AdminSessionManager` (every
+  // exact-match session becomes a confirmed key), so there the two checks
+  // agree. They do NOT always agree: a temporary (new) study has
+  // `sessions` = [] and that same effect restores `confirmedSlots` from
+  // sessionStorage instead, so a confirmed-but-unsaved cell is excluded by
+  // this check alone. `confirmedSlots` can also carry a slot confirmed in
+  // local state before the parent's `sessions` prop catches up. Each check
+  // has its own direct test in
+  // `AdminSessionManager.slot-counter-pickability.test.tsx`, and the
+  // temporary-study path has a rendered one.
   const isConfirmed = confirmedSlots.has(slotKeyOf(slot));
   if (isExistingSession || isConfirmed) return false;
 
   // A session belonging to another study that overlaps this slot without
   // being it - excludes exact matches, which are handled above as sessions.
   //
-  // UNREACHABLE from `drawnSlots`/`tableSlotCount`/`actionable` as things
-  // stand: `protectedSlotKeys` (built from this same `sessions` array)
-  // injects every session's own exact time as a slot `pruneOverlaps` prefers,
-  // and by the identical overlap test used here, ANY generated slot this
-  // branch would flag is one `pruneOverlaps` has already dropped in favour of
-  // that exact-match slot - which then hits the `isExistingSession` check
-  // above instead. Kept for `isSlotPickable` callers that do NOT run their
-  // input through that pruning (a direct unit test is the only place this
-  // branch is provably exercised today; see
-  // `AdminSessionManager.slot-counter-pickability.test.tsx`), and because
-  // `describeSlot`'s own separate `isSlotAllocated` copy inside
-  // `CalendarView` has the same reachability question and is out of scope
-  // here (cto/AdaptaLabs#135 is the two counters, not that audit).
+  // Reachable from `drawnSlots`/`tableSlotCount`/`actionable` only when two
+  // sessions overlap EACH OTHER. `protectedSlotKeys` injects every session's
+  // exact time as a slot `pruneOverlaps` prefers, so a generated slot
+  // overlapping a lone session is pruned before it gets here. But of two
+  // overlapping sessions the prune keeps only the earlier, and a generated
+  // slot that abuts the kept one while overlapping the dropped one survives
+  // to be flagged here - the 14:30 cell in the mixed-day suite of
+  // `AdminSessionManager.slot-counter-pickability.test.tsx`, which fails by
+  // name if this branch is removed. A direct unit test covers it too.
   const isAllocated = sessions.some(session => {
     const sessionStart = new Date(session.start_time);
     const sessionEnd = new Date(session.end_time);

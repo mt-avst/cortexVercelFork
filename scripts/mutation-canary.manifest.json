@@ -2474,7 +2474,7 @@
   },
   {
     "id": "session-management-slot-counter-excludes-allocated-cells",
-    "why": "cto/AdaptaLabs#135: drawnSlots and tableSlotCount used to exclude only a calendar-conflict cell, so a researcher on the Calendar or Table view could see an inflated \"N slots available\" that counted a cell overlapped by a session for another study - one no click could turn into a new session. isAllocated is the one exclusion inside isSlotPickable a full component render structurally cannot reach (protectedSlotKeys injects every session's own exact time as a slot pruneOverlaps prefers, so any generated cell this branch would flag is the one pruning already dropped in favour of it) - a code-reviewer gate proved this by removing the line and watching the whole 17-file, 116-test AdminSessionManager suite stay green, including a full-render test that CLAIMED to isolate it. The named test calls isSlotPickable directly, bypassing that pipeline, which is the only way this line is provably exercised.",
+    "why": "cto/AdaptaLabs#135: drawnSlots and tableSlotCount used to exclude only a calendar-conflict cell, so a researcher on the Calendar or Table view could see an inflated \"N slots available\" that counted a cell overlapped by a session for another study - one no click could turn into a new session. A lone session cannot reach this branch in a full render (protectedSlotKeys injects its exact time as a slot pruneOverlaps prefers, so the overlapping generated cell is pruned first); only two sessions overlapping each other can, which the mixed-day suite also covers. The named test calls isSlotPickable directly, bypassing that pipeline, so it isolates this line without depending on the fixture.",
     "file": "frontend/src/components/AdminSessionManager.tsx",
     "anchor": "  if (isAllocated) return false;",
     "mutation": "  if (false) return false;",
@@ -2482,5 +2482,71 @@
     "project": "frontend",
     "spec": "src/components/__tests__/AdminSessionManager.slot-counter-pickability.test.tsx",
     "test": "excludes a slot overlapped by another session at a non-exact boundary, and nothing else"
+  },
+  {
+    "id": "session-management-select-all-uses-the-pickable-predicate",
+    "why": "cto/AdaptaLabs#135: the per-day Select all (N) in the Table view counted every slot that did not conflict with a calendar event, while the headline counted only pickable ones - the original \"159 slots available against a Select-all sum of 129\" gap, the other way round. Reverting `actionable` to conflicts-only kept all 116 AdminSessionManager tests green before the mixed-day suite existed; the named test asserts headline === sum of Select all counts on a day carrying a past, a session, a full, an odd-length and an allocated cell.",
+    "file": "frontend/src/components/AdminSessionManager.tsx",
+    "anchor": "          const actionable = decorated.filter(d => isSlotPickable(d.slot, events, sessions, confirmedSlots));",
+    "mutation": "          const actionable = decorated.filter(d => !d.status.isBusy);",
+    "runner": "vitest",
+    "project": "frontend",
+    "spec": "src/components/__tests__/AdminSessionManager.slot-counter-pickability.test.tsx",
+    "test": "Table view: the headline equals the sum of the per-day Select all counts"
+  },
+  {
+    "id": "session-management-slot-counter-excludes-confirmed-only-cells",
+    "why": "cto/AdaptaLabs#135: a temporary (new) study has sessions=[] and restores confirmedSlots from sessionStorage, so a confirmed-but-unsaved cell is excluded by this check alone - `isExistingSession` cannot see it. In a saved study the two are derived from each other and a full render masks the removal of either; the named test calls isSlotPickable with only confirmedSlots set.",
+    "file": "frontend/src/components/AdminSessionManager.tsx",
+    "anchor": "  if (isExistingSession || isConfirmed) return false;",
+    "mutation": "  if (isExistingSession) return false;",
+    "runner": "vitest",
+    "project": "frontend",
+    "spec": "src/components/__tests__/AdminSessionManager.slot-counter-pickability.test.tsx",
+    "test": "excludes a slot held only in confirmedSlots, with no session anywhere"
+  },
+  {
+    "id": "session-management-slot-counter-excludes-existing-session-cells",
+    "why": "cto/AdaptaLabs#135: the existing-session exclusion. In a saved study confirmedSlots is rebuilt from sessions, so a full render masks deleting this check (confirmedSlots still excludes the cell) - it survived the whole AdminSessionManager suite. The named test calls isSlotPickable with only sessions set, so it fails the moment the check is gone.",
+    "file": "frontend/src/components/AdminSessionManager.tsx",
+    "anchor": "  if (isExistingSession || isConfirmed) return false;",
+    "mutation": "  if (isConfirmed) return false;",
+    "runner": "vitest",
+    "project": "frontend",
+    "spec": "src/components/__tests__/AdminSessionManager.slot-counter-pickability.test.tsx",
+    "test": "excludes a slot that exactly matches a session, with confirmedSlots empty"
+  },
+  {
+    "id": "session-management-chip-blocks-allocated-cells",
+    "why": "cto/AdaptaLabs#135: describeSlot is a separate implementation from isSlotPickable, so the chips can drift from the counters. Without isAllocated in isBlocked, a generated cell overlapped by a session drops out of the counters but its chip becomes a clickable free slot. Survived every suite before the mixed-day chip test, which asserts the chips a click could newly select are exactly the counted ones.",
+    "file": "frontend/src/components/AdminSessionManager.tsx",
+    "anchor": "    const isBlocked = isBusy || (!!session && session.remaining <= 0) || isAllocated;",
+    "mutation": "    const isBlocked = isBusy || (!!session && session.remaining <= 0);",
+    "runner": "vitest",
+    "project": "frontend",
+    "spec": "src/components/__tests__/AdminSessionManager.slot-counter-pickability.test.tsx",
+    "test": "Table view: every counted slot is an enabled chip and every uncounted chip is not offered"
+  },
+  {
+    "id": "session-management-chip-blocks-conflicting-cells",
+    "why": "cto/AdaptaLabs#135: without isBusy in describeSlot's isBlocked, a calendar-conflict cell stays out of the counters but its chip becomes a clickable free slot - the chips and the counters disagree. The mixed-day chip test asserts the offered chips are exactly the counted ones.",
+    "file": "frontend/src/components/AdminSessionManager.tsx",
+    "anchor": "    const isBlocked = isBusy || (!!session && session.remaining <= 0) || isAllocated;",
+    "mutation": "    const isBlocked = (!!session && session.remaining <= 0) || isAllocated;",
+    "runner": "vitest",
+    "project": "frontend",
+    "spec": "src/components/__tests__/AdminSessionManager.slot-counter-pickability.test.tsx",
+    "test": "Table view: every counted slot is an enabled chip and every uncounted chip is not offered"
+  },
+  {
+    "id": "session-management-chip-disables-past-cells",
+    "why": "cto/AdaptaLabs#135 and #101: forcing describeSlot's isPast false made a past chip clickable while every counter still excluded it, and survived the whole frontend suite. The server refuses a past start, so the researcher would select a slot that can never be created. The mixed-day chip test asserts the offered chips are exactly the counted ones.",
+    "file": "frontend/src/components/AdminSessionManager.tsx",
+    "anchor": "    const isPast = slotIsPast(slot) && !session && !isConfirmed && !isBusy && !isAllocated;",
+    "mutation": "    const isPast = false;",
+    "runner": "vitest",
+    "project": "frontend",
+    "spec": "src/components/__tests__/AdminSessionManager.slot-counter-pickability.test.tsx",
+    "test": "Table view: every counted slot is an enabled chip and every uncounted chip is not offered"
   }
 ]
