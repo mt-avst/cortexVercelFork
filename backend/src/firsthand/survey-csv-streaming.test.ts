@@ -42,6 +42,7 @@ const answer = (
   extra: Partial<StoredResponse> = {}
 ): StoredResponse => ({
   session_id: sessionId,
+  participant_id: sessionId,
   step_id: stepId,
   step_prompt: null,
   step_type: "open_text",

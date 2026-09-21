@@ -14,6 +14,7 @@ const response = (
   over: Partial<StoredResponse> = {}
 ): StoredResponse => ({
   session_id: sessionId,
+  participant_id: sessionId,
   step_id: stepId,
   // Spelled out rather than defaulted away, because a fixture that omits a
   // field cannot test what the field does - and this one decides whether an

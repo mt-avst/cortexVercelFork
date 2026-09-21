@@ -63,6 +63,16 @@ comment regardless, so the comment is the ledger and the issue is the alarm.
 
 This is the threshold `~/.claude/rules/common/code-review.md` asks each repo to set.
 
+## Local dev database
+
+`npm run dev:backend` runs NO migrations, so a local `cortex-ux-pg` needs
+`npm run migrate:firsthand` (from `backend/`) by hand after pulling a branch that adds one.
+Skip it and the survey-session mint route answers 500 for every participant holding a
+session, on `42883 function try_timestamptz(unknown) does not exist` - migration 0016.
+Deploy is not exposed to this: the initContainer runs `migrate:firsthand` before the app
+container and a failed run exits non-zero, so the pod never starts against an unmigrated
+database.
+
 ## Sweeps
 
 String sweeps are case-insensitive by default (`grep -ri`), across every file type with no
