@@ -223,8 +223,19 @@ const slotIsOutsideDrawableHours = (slot: { start: string; end: string }): boole
  * One expression, because selection, confirmation, the manual set and the
  * pruning below all have to agree on what "the same slot" means, and four
  * spellings of it is four chances to disagree.
+ *
+ * Normalised through `toISOString` because the confirmation set is keyed that
+ * way - both the sessions-to-confirmedSlots sync effect and `protectedSlotKeys`
+ * build their keys from `toISOString(session.start_time)`. `CalendarView`
+ * normalised the slot side to match while `isSlotPickable` read the same set
+ * with a raw template, which is two spellings of one key: exactly what this
+ * function exists to prevent. For the `string` the type promises `toISOString`
+ * is the identity, so today's ISO slots key identically either way - it only
+ * begins to matter if a `Date` ever reaches here past the type, which is the
+ * case `toISOString` exists for.
  */
-const slotKeyOf = (slot: { start: string; end: string }): string => `${slot.start}|${slot.end}`;
+const slotKeyOf = (slot: { start: string; end: string }): string =>
+  `${toISOString(slot.start)}|${toISOString(slot.end)}`;
 
 /**
  * Slots the researcher explicitly asked for, which outrank generated ones.
@@ -471,11 +482,18 @@ export const isSlotPickable = (
   // timezone/serialisation rounding between what the server stored and what
   // the client re-parses).
   //
-  // The tolerance is unobservable in this function's result, deliberately
-  // kept only to mirror `getSessionForSlot`: a slot within a second of a
-  // session but not exactly on it still overlaps that session, so
-  // `isAllocated` below excludes it anyway. Narrowing the tolerance
-  // to zero changes no answer, which is why no test pins it.
+  // The tolerance is kept only to mirror `getSessionForSlot`, and for every
+  // input production can produce it changes no answer: a slot within a second
+  // of a session but not exactly on it still overlaps that session, so
+  // `isAllocated` below excludes it anyway.
+  //
+  // It is NOT unobservable in general, which an earlier version of this
+  // comment claimed. A session SHORTER than the tolerance breaks the
+  // overlap argument: for a 500ms session and a sub-second slot ending
+  // exactly at its start, the two merely abut - `isAllocated` is false - so
+  // this function returns false with the tolerance and true at zero. Real
+  // sessions are minutes long, so that case is unreachable here, which is
+  // why no test pins it.
   const isExistingSession = sessions.some(session => {
     const sessionStart = new Date(session.start_time);
     const sessionEnd = new Date(session.end_time);
@@ -565,24 +583,13 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   const formatDate = (dateString: string) => formatStudyDate(dateString) ?? '';
 
 
-  const isSlotSelected = (slot: AvailableSlot) => {
-    const slotKey = `${slot.start}|${slot.end}`;
-    return selectedSlots.has(slotKey);
-  };
+  // Both key off `slotKeyOf`, which normalises through `toISOString` - this
+  // pair used to spell the same key two different ways (selection raw,
+  // confirmation normalised) while `isSlotPickable` read the confirmation set
+  // with a third. One spelling now, in the one function whose job that is.
+  const isSlotSelected = (slot: AvailableSlot) => selectedSlots.has(slotKeyOf(slot));
 
-  const isSlotConfirmed = (slot: AvailableSlot) => {
-    // Slot times are ISO strings per type definition
-    // Use toISOString helper to safely handle runtime type inconsistencies
-    const slotStart = toISOString(slot.start);
-    const slotEnd = toISOString(slot.end);
-    const slotKey = `${slotStart}|${slotEnd}`;
-    const isConfirmed = confirmedSlots.has(slotKey);
-    
-    // Check if slot is confirmed
-    // (Debug logging removed for production)
-    
-    return isConfirmed;
-  };
+  const isSlotConfirmed = (slot: AvailableSlot) => confirmedSlots.has(slotKeyOf(slot));
 
   // Delegates to the module-level version so the headline counter in the
   // parent (row 8) agrees with what this grid draws as blocked.
@@ -667,6 +674,32 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   };
 
   type SlotStatus = ReturnType<typeof describeSlot>;
+
+  /**
+   * Whether a click on this slot would do anything - the one spelling of the
+   * rule `clickSlot` below enforces, shared with the three places that have
+   * to DRAW that rule: the timeline tile's and the gutter tile's
+   * `tabIndex`/`aria-disabled`, and the Table chip's `disabled`.
+   *
+   * Three inline copies of `!isBlocked && !isPast` is three chances to drop a
+   * term in one of them, and dropping `!isPast` from the timeline tile alone
+   * passed all 122 AdminSessionManager tests: the tile went `tabIndex=0` and
+   * un-`aria-disabled` while every counter still excluded it, and the server
+   * refuses a past start (#101), so a keyboard user could select a slot that
+   * can never be created. That is the exact twin of the chip defect
+   * cto/AdaptaLabs#135 already fixed, and it is now one expression.
+   *
+   * NOT `isSlotPickable`: that is the COUNTERS' predicate and is stricter
+   * here on purpose. An existing session with room, or a confirmed slot, is
+   * excluded from "N slots available" but must stay clickable - that click is
+   * the deselect (#95's gutter removal depends on it). Deriving this from
+   * `isSlotPickable` would make every confirmed tile and chip unfocusable,
+   * which is a behaviour change, not a tidy-up.
+   *
+   * `clickSlot` keeps its two refusals spelled apart so each logs its own
+   * reason; they are these two terms and nothing else.
+   */
+  const slotIsActionable = (status: SlotStatus): boolean => !status.isBlocked && !status.isPast;
 
   const slotTooltip = (slot: AvailableSlot, status: SlotStatus): string => {
     try {
@@ -1200,7 +1233,12 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                         // reader with its full time span, matching the gutter
                         // slots below - the selected state was colour-only and
                         // the tile carried no role at all.
-                        const actionable = !status.isBlocked && !status.isPast;
+                        //
+                        // `slotIsActionable` rather than a fourth inline copy
+                        // of `!isBlocked && !isPast`: see its docblock. A past
+                        // tile must be unfocusable and aria-disabled, the same
+                        // as the Table chip.
+                        const actionable = slotIsActionable(status);
 
                         return (
                           <div
@@ -1338,13 +1376,14 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                             {gutterSlots.map(slot => {
                               const status = describeSlot(slot);
                               const timeLabel = slotTimeLabel(slot);
+                              const actionable = slotIsActionable(status);
                               return (
                                 <div
                                   key={slotKeyOf(slot)}
                                   className={`${status.slotClass} calendar-gutter-slot`}
                                   role="button"
-                                  tabIndex={status.isBlocked || status.isPast ? -1 : 0}
-                                  aria-disabled={status.isBlocked || status.isPast || undefined}
+                                  tabIndex={actionable ? 0 : -1}
+                                  aria-disabled={!actionable || undefined}
                                   title={slotTooltip(slot, status)}
                                   onClick={() => clickSlot(slot, status)}
                                   onKeyDown={(e) => {
@@ -1360,7 +1399,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                                     minHeight: '28px',
                                     padding: '4px 8px',
                                     fontSize: '0.7rem',
-                                    cursor: status.isBlocked || status.isPast ? 'not-allowed' : 'pointer',
+                                    cursor: actionable ? 'pointer' : 'not-allowed',
                                     // Past slots read as unavailable here too (#101).
                                     ...(status.isPast ? { opacity: 0.4 } : {})
                                   }}
@@ -1531,9 +1570,19 @@ const CalendarView: React.FC<CalendarViewProps> = ({
           //
           // Derived from `isSlotPickable` (cto/AdaptaLabs#135), the same
           // predicate the headline counters use, rather than hand-rolled from
-          // `status`: this was the ORIGINAL "159 slots available against a
-          // Select-all sum of 129" gap the row-8 docblock above describes, and
-          // a second hand-rolled copy here was exactly how it could reopen.
+          // `status`.
+          //
+          // This line was NOT the "159 against 129" gap the row-8 docblock
+          // describes - it was the side that produced 129, which was the
+          // correct number; the headline was the liar. What it WAS is an
+          // independent, hand-rolled second copy of the same rule that
+          // happened to agree: measured, restoring the original expression
+          // leaves all 122 AdminSessionManager tests green, because
+          // `!isBlocked && !isPast && !session && !isConfirmed` is
+          // set-equivalent to `isSlotPickable` today. Routing it through the
+          // shared predicate removes the second spelling, so the next change
+          // to the rule cannot land on one of them only. That - not a
+          // behaviour fix - is what the canary entry on this line pins.
           const actionable = decorated.filter(d => isSlotPickable(d.slot, events, sessions, confirmedSlots));
           const notYetSelected = actionable.filter(d => !d.status.isSelected);
           const allSelected = actionable.length > 0 && notYetSelected.length === 0;
@@ -1580,7 +1629,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                   // native disabled button carries the same accessible name
                   // and reads as a control - dimmed, not actionable - which is
                   // what this chip actually is.
-                  if (status.isBlocked || status.isPast) {
+                  if (!slotIsActionable(status)) {
                     return (
                       <button
                         key={slotKeyOf(slot)}
@@ -2947,7 +2996,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
   ]);
 
   const handleSlotSelect = useCallback((slot: AvailableSlot) => {
-    const slotKey = `${slot.start}|${slot.end}`;
+    const slotKey = slotKeyOf(slot);
     logger.debug('🔵 SLOT SELECTED:', { 
       slotKey, 
       currentSelectedSlots: Array.from(selectedSlots),
@@ -2964,7 +3013,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
   }, [selectedSlots, opportunityId, urlId, isTemporary, persistSelectedSlots]);
 
   const handleSlotDeselect = useCallback(async (slot: AvailableSlot) => {
-    const slotKey = `${slot.start}|${slot.end}`;
+    const slotKey = slotKeyOf(slot);
     logger.debug('handleSlotDeselect called:', { 
       slotKey, 
       currentSelectedSlots: Array.from(selectedSlots),

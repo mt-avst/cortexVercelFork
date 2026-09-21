@@ -2485,10 +2485,10 @@
   },
   {
     "id": "session-management-select-all-uses-the-pickable-predicate",
-    "why": "cto/AdaptaLabs#135: the per-day Select all (N) in the Table view counted every slot that did not conflict with a calendar event, while the headline counted only pickable ones - the original \"159 slots available against a Select-all sum of 129\" gap, the other way round. Reverting `actionable` to conflicts-only kept all 116 AdminSessionManager tests green before the mixed-day suite existed; the named test asserts headline === sum of Select all counts on a day carrying a past, a session, a full, an odd-length and an allocated cell.",
+    "why": "cto/AdaptaLabs#135: the per-day Select all (N) in the Table view. NOT a behaviour fix and this entry does not claim one - MEASURED, restoring origin/main's expression (`!d.status.isBlocked && !d.status.isPast && !d.status.session && !d.status.isConfirmed`) leaves all 122 AdminSessionManager tests green, because it is set-equivalent to isSlotPickable today: isSlotBusy IS slotConflictsWithEvents, and getSessionForSlot uses the same 1s match as the isExistingSession check. That line produced 129, the CORRECT number; the headline was the liar. What it was is a second, independently hand-rolled copy of the counters' rule that happened to agree - so this entry pins that the line stays DERIVED rather than re-hand-rolled, which is the only thing keeping the two from drifting apart on the next change to the rule. The mutation is the realistic drift: a re-hand-rolling that drops the past term, after which the headline no longer equals the Select-all sum on a day carrying a past cell.",
     "file": "frontend/src/components/AdminSessionManager.tsx",
     "anchor": "          const actionable = decorated.filter(d => isSlotPickable(d.slot, events, sessions, confirmedSlots));",
-    "mutation": "          const actionable = decorated.filter(d => !d.status.isBusy);",
+    "mutation": "          const actionable = decorated.filter(d => !d.status.isBlocked && !d.status.session && !d.status.isConfirmed);",
     "runner": "vitest",
     "project": "frontend",
     "spec": "src/components/__tests__/AdminSessionManager.slot-counter-pickability.test.tsx",
@@ -2548,5 +2548,16 @@
     "project": "frontend",
     "spec": "src/components/__tests__/AdminSessionManager.slot-counter-pickability.test.tsx",
     "test": "Table view: every counted slot is an enabled chip and every uncounted chip is not offered"
+  },
+  {
+    "id": "session-management-calendar-tile-disables-past-cells",
+    "why": "cto/AdaptaLabs#135 and #101: the Calendar timeline TILE's own clickability, the symmetric twin of session-management-chip-disables-past-cells which pins the Table chip. The tile carried its own inline copy of `!isBlocked && !isPast`; re-hand-rolling it as `!status.isBlocked` - dropping the past term, which a fourth inline copy of one rule invites - left all 122 AdminSessionManager tests green: the past tile went tabIndex=0 and lost aria-disabled while every counter still excluded it, and the server refuses a past start, so a keyboard user could select a slot that can never be created. Both sites now go through `slotIsActionable`. The named test asserts the past tile is aria-disabled and tabIndex -1, with a control that the two genuinely pickable tiles in the same render are focusable and not aria-disabled.",
+    "file": "frontend/src/components/AdminSessionManager.tsx",
+    "anchor": "                        // as the Table chip.\n                        const actionable = slotIsActionable(status);",
+    "mutation": "                        // as the Table chip.\n                        const actionable = !status.isBlocked;",
+    "runner": "vitest",
+    "project": "frontend",
+    "spec": "src/components/__tests__/AdminSessionManager.slot-counter-pickability.test.tsx",
+    "test": "Calendar view: a past tile is aria-disabled and not focusable"
   }
 ]

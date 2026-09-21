@@ -451,6 +451,42 @@ describe('AdminSessionManager - headline, Select all and chips agree on a mixed 
     expect(disabledTitles.filter(t => / 2 remaining$/.test(t))).toHaveLength(1);
   });
 
+  /**
+   * The Calendar grid's TILE, not the counter - the symmetric twin of the
+   * Table chip arm above. `describeSlot`'s `isPast` is pinned for the chip by
+   * the canary entry `session-management-chip-disables-past-cells`; the tile
+   * drew the same rule from its own inline copy, and dropping the past term
+   * from that copy alone passed all 122 AdminSessionManager tests. Both now
+   * go through `slotIsActionable`, and this arm is what notices if the tile
+   * re-hand-rolls it.
+   */
+  it('Calendar view: a past tile is aria-disabled and not focusable', async () => {
+    renderManager({ sessions: mixedDayFixture() });
+    await settle();
+    await setStartDateToFixedDay();
+    await settle();
+    fireEvent.click(screen.getByRole('button', { name: 'Calendar' }));
+    await settle();
+
+    // 08:00 is before "now" with nothing else wrong with it, so it is the one
+    // cell `describeSlot` reports as past. The server refuses a past start
+    // (#101), so the tile must take neither a click nor a keyboard stop.
+    const pastTile = screen.getByRole('button', { name: /in the past and cannot be scheduled/ });
+    expect(pastTile).toHaveAttribute('aria-disabled', 'true');
+    expect(pastTile).toHaveAttribute('tabindex', '-1');
+
+    // Control: the assertion above passes just as well if the grid stopped
+    // drawing tiles as buttons at all, so the two genuinely pickable cells
+    // (15:00 and 15:30, the same two the headline counts) must still be
+    // focusable and not aria-disabled in the same render.
+    const pickableTiles = screen.getAllByRole('button', { name: /Available time slot/ });
+    expect(pickableTiles).toHaveLength(2);
+    pickableTiles.forEach(tile => {
+      expect(tile).not.toHaveAttribute('aria-disabled');
+      expect(tile).toHaveAttribute('tabindex', '0');
+    });
+  });
+
   it('Table view: the counters follow a sessions change after first render', async () => {
     mockAvailability([slotAt(day, 12, 0), slotAt(day, 12, 30), slotAt(day, 13, 0)]);
     const props = {
