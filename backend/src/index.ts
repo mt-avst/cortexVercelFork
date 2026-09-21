@@ -4,20 +4,14 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
-import cron from 'node-cron';
 import { config, pool } from './config';
-import { betaAllAdminEnabled, betaAllAdminDomains } from './config/betaAllAdmin';
 import { logger } from './utils/logger';
-import { applyServerTimeouts } from './server-timeouts';
 import { createDatabaseHealthProbe } from './utils/deepHealth';
 import { errorHandler } from './utils/errorHandler';
 import { getBuildRevision } from './utils/buildInfo';
 import { isAiDraftingConfigured } from './services/study-drafter';
 import { sessionCookieName } from './utils/hostCookie';
 import { buildCsrfProtection, CSRF_ERROR_CODE } from './middleware/csrf';
-import { sendDueReminders } from './services/reminders';
-import { runFirstHandMaintenance } from './firsthand/maintenance';
-import { autoClosePublishedStudiesPastEndDate } from './utils/opportunityLifecycle';
 import { isPostgresRuntimeConfigured } from './firsthand/runtime-database';
 import authRoutes from './routes/auth';
 import { createAuthLimiter } from './middleware/auth-rate-limit';
@@ -160,7 +154,7 @@ app.use(cookieParser());
 // and was never wired to the SPA, which is why it broke in production).
 // Default ON in production; set ENABLE_CSRF=false to disable, or
 // ENABLE_CSRF=true to force-enable in development.
-const csrfEnabled =
+export const csrfEnabled =
   process.env.ENABLE_CSRF === 'true' ||
   (config.NODE_ENV === 'production' && process.env.ENABLE_CSRF !== 'false');
 if (csrfEnabled) {
@@ -288,76 +282,10 @@ app.use(logger.errorLogger());
 // Error handling middleware
 app.use(errorHandler);
 
-// Daily reminder emails at 09:00 UTC (single-replica deployment; the job is
-// idempotent per booking via reminder_sent_at). Disable with REMINDER_CRON_DISABLED=true.
-if (process.env.NODE_ENV !== 'test' && process.env.REMINDER_CRON_DISABLED !== 'true') {
-  cron.schedule('0 9 * * *', async () => {
-    try {
-      const summary = await sendDueReminders();
-      logger.info('Reminder cron run complete', { ...summary });
-    } catch (err) {
-      logger.error('Reminder cron run failed', { error: err });
-    }
-  });
-}
-
-// FirstHand maintenance at 03:00 UTC (single-replica deployment), folding the
-// standalone app's daily maintenance cron in-process: the transcript backstop
-// and the stale-upload reaper. runFirstHandMaintenance is best-effort and never
-// throws. Disable with FIRSTHAND_MAINTENANCE_CRON_DISABLED=true.
-if (
-  process.env.NODE_ENV !== 'test' &&
-  process.env.FIRSTHAND_MAINTENANCE_CRON_DISABLED !== 'true'
-) {
-  cron.schedule('0 3 * * *', async () => {
-    await runFirstHandMaintenance();
-  });
-}
-
-// Close published studies whose end_date has passed (Decision 3). Hourly rather
-// than daily so a study stops advertising itself as live within the hour of the
-// date its author set, not up to a day later. Single-replica deployment; the
-// sweep is a set-based UPDATE that only moves published -> closed, so it is
-// idempotent and safe to re-run. Disable with END_DATE_CLOSE_CRON_DISABLED=true.
-if (
-  process.env.NODE_ENV !== 'test' &&
-  process.env.END_DATE_CLOSE_CRON_DISABLED !== 'true'
-) {
-  cron.schedule('0 * * * *', async () => {
-    try {
-      await autoClosePublishedStudiesPastEndDate();
-    } catch (err) {
-      logger.error('End-date auto-close cron run failed', { error: err });
-    }
-  });
-}
-
-// Start server. Guarded like the cron schedules above so the app can be
-// imported by tests and driven with supertest without binding a port - which
-// is what lets a test pin the real middleware order rather than a copy of it.
-if (process.env.NODE_ENV !== 'test') {
-  // The socket bounds are applied to the server `listen` returns, not left at
-  // Node's defaults. `server.timeout` defaults to 0 - no bound at all on a
-  // socket that goes quiet mid-request - which is how one admin reading
-  // nothing could hold the single results-read permit indefinitely. See
-  // server-timeouts.ts for why each number is what it is.
-  if (betaAllAdminEnabled()) {
-    logger.warn(
-      'CORTEX_BETA_ALL_ADMIN is ON: signed-in employees on these email domains ' +
-        'are elevated to admin (superadmin is unaffected). Temporary beta switch, ' +
-        'MUST be off at go-live.',
-      { domains: betaAllAdminDomains() }
-    );
-  }
-
-  applyServerTimeouts(app.listen(config.PORT, () => {
-    logger.info('Server started', {
-      port: config.PORT,
-      environment: config.NODE_ENV,
-      corsOrigin: config.CORS_ORIGIN,
-      csrfEnabled,
-    });
-  }));
-}
-
+// This module assembles the Express app and nothing else. The process lifecycle
+// - the cron schedules and app.listen - lives in server.ts, the real entrypoint,
+// so importing this module (tests inspecting the mount table, supertest driving
+// the real middleware order) binds no socket and schedules no jobs. #153: when
+// listen ran here at module scope, re-importing the entrypoint under a non-test
+// NODE_ENV bound the real PORT, failing an unrelated port-holding test by name.
 export default app;
