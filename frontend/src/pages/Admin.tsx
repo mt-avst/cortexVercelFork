@@ -26,7 +26,7 @@ import AdminFeedback from '../components/AdminFeedback';
 import ErrorState from '../components/ErrorState';
 import ConfirmationModal from '../components/ConfirmationModal';
 import { Dropdown, DropdownItem, DropdownDivider, Icon, SortCaret } from '../components/ui';
-import { Settings, ClipboardList, Users, Clock, List, History, MessageSquare, Calendar, Download, Clapperboard, Flag, ArrowRight, MoreVertical, CheckCircle } from 'lucide-react';
+import { Settings, ClipboardList, Users, Clock, List, History, MessageSquare, Calendar, Download, Clapperboard, Flag, ArrowRight, MoreVertical, CheckCircle, AlertTriangle } from 'lucide-react';
 import { getStudyTypeGlyph } from '../utils/studyTypeIcons';
 
 import { formatStudyDate, formatClockTime, formatTimeZoneLabel } from '../utils/datetime';
@@ -845,14 +845,15 @@ const Admin: React.FC = () => {
                             // One call per row: the status cell renders this and
                             // also carries it as the label's `title`, and the
                             // readiness check reads six fields.
-                            const statusLabel = isPublishedButNotWorking(opportunity.status, {
+                            const notWorking = isPublishedButNotWorking(opportunity.status, {
                               type: opportunity.type,
                               deliveryMode: opportunity.delivery_mode,
                               hasLinkedStudy: Boolean(opportunity.firsthand_study_id),
                               externalLink: opportunity.external_link_optional,
                               sessionCount: (opportunity.sessions ?? []).length,
                               meetingLocation: opportunity.meeting_location_optional
-                            })
+                            });
+                            const statusLabel = notWorking
                               ? PUBLISHED_NOT_WORKING_LABEL
                               : getDisplayStatus(opportunity.status);
                             return (
@@ -924,21 +925,34 @@ const Admin: React.FC = () => {
                                   from these fields alone (a native survey or
                                   unmoderated study with no content).
                                 */}
-                                <span className={`admin-pill admin-study-status admin-study-status--${opportunity.status}`}>
+                                <span
+                                  className={`admin-pill admin-study-status admin-study-status--${opportunity.status}${
+                                    notWorking ? ' admin-study-status--not-working' : ''
+                                  }`}
+                                >
                                   {/*
                                     The label is clipped to the pill, and above
-                                    1220px the long one renders as PUBLISHED
-                                    followed by an ellipsis - so a broken
-                                    published study and a healthy one differ by
-                                    one glyph in an identically coloured pill.
-                                    The full string is in the DOM either way, so
-                                    a screen reader already announces it; the
-                                    `title` closes the hover case for sighted
-                                    users. It is the cheap half of the fix, not
-                                    the whole one: the durable answer is a
-                                    visual distinction that survives truncation,
-                                    which is cto/AdaptaLabs#149.
+                                    1220px the long one truncates - to
+                                    "PUBLIS..." beside the glyph - so without
+                                    more, a broken published study and a
+                                    healthy one differ by a few letters in an
+                                    identically coloured pill. The distinction therefore
+                                    lives OUTSIDE the label, where truncation
+                                    cannot reach it (cto/AdaptaLabs#149): an
+                                    amber fill, and a warning glyph that does
+                                    not shrink. Not colour alone and not the
+                                    word. The full string stays in the DOM for
+                                    a screen reader, and the `title` covers
+                                    hover; the glyph is decorative beside them.
                                   */}
+                                  {notWorking && (
+                                    <Icon
+                                      icon={AlertTriangle}
+                                      size={14}
+                                      aria-hidden="true"
+                                      className="admin-study-status__glyph"
+                                    />
+                                  )}
                                   <span className="admin-study-status__label" title={statusLabel}>
                                     {statusLabel}
                                   </span>
