@@ -2762,6 +2762,13 @@ body.admin-page .header .container {
   margin-right: 0.25rem;
 }
 
+/* #142: an `.admin-pill` in this cell takes `margin: 0` from the shared
+   primitive's ancestor-scoped rule (search "Shared pill primitive"), which
+   outranks the `margin-right` above - so the gutter for two pills sharing a
+   line is restated in the card-layout block instead (search "gutter"
+   under `@media (max-width: 1219.98px)`), which is the only layout where
+   they ever do share one. */
+
 /* Column alignment */
 .admin-dashboard table thead th:not(:first-child),
 .admin-dashboard table tbody td:not(:first-child) {
@@ -3167,22 +3174,23 @@ body.admin-page .header .container {
   vertical-align: middle;
 }
 
-.admin-data-table td.col-type .lozenge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.375rem 0.625rem;
-  font-size: 0.6875rem;
-  font-weight: 600;
-  line-height: 1;
-  white-space: nowrap;
-  margin: 0;
-}
+/* Box metrics (display/height/padding/font-size/line-height) for the type
+   lozenge in this column now come from the shared `.admin-pill` primitive
+   (#142) - see "Shared pill primitive" below, near `.admin-study-status`. */
 
-/* Column 3: Status - centered badges. Wide enough for "Auto-closed", the widest
-   badge that can appear here, which a closed study renders under its status. */
+/* Column 3: Status - centered badges. The widest thing this column has to
+   hold is the "Auto-closed" marker, and it is `white-space: nowrap` on one
+   line either way (#142; an earlier note here described a two-line 28.38px
+   pill, which the shared primitive's fixed 24px height and nowrap make
+   impossible now). What 10% loses is not the line count but the ink: the
+   pill is capped at the cell by `td > *`, so at 10% the text escapes its own
+   background. Measured at 1440px: 12% gives a 92.0px pill around 80.7px of
+   ink, 24px tall; 10% gives a 75.8px pill around the same 80.7px, which
+   `justify-content: center` then hangs ~2.5px off each end.
+   `e2e/admin-pill-primitive.test.ts` measures that ink against the pill's
+   box at 1240 and 1440 - a source pin on this number cannot. */
 .admin-data-table .col-status {
-  width: 10%;
+  width: 12%;
   min-width: 100px;
   text-align: center;
 }
@@ -3353,6 +3361,23 @@ body.admin-page .header .container {
   /* Actions: buttons and the kebab left-aligned beneath their label. */
   .admin-data-table td.col-actions .admin-action-group {
     justify-content: flex-start;
+  }
+
+  /* #142: the gutter between a closed study's status pill and its
+     "Auto-closed" marker. This is the only layout where the two share a
+     line: above 1220px the admin content column is max-width capped, so
+     the Status cell measures 92px of content box at 1220, 1440, 1920, 2560
+     and 3200 alike (measured) and the 67px + 92px pair always wraps,
+     centred. Here the cell is as wide as the card and they sit side by
+     side, where `margin: 0` from the shared primitive's ancestor-scoped
+     rule left them touching, 0px apart, with two backgrounds meeting.
+
+     One class more than that rule (0,5,3 against 0,4,3), so it wins on
+     specificity wherever either sits in the file. A margin on the SECOND
+     pill rather than on every pill: the first then still lines up flush
+     with the Type pill in the card row above it. */
+  .admin-dashboard table.admin-data-table tbody td.col-status > .admin-pill + .admin-pill {
+    margin-left: 0.25rem;
   }
 }
 
@@ -14025,6 +14050,118 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
   text-decoration: underline;
   text-underline-offset: 3px;
   cursor: pointer;
+}
+
+/* --- Shared pill primitive (#142) ---------------------------------------
+   The studies table used to render type (`.lozenge`), status
+   (`.admin-study-status`) and "Auto-closed" (a bootstrap-style
+   `.badge.bg-dark`) as three unrelated components, each with its own
+   display/height/font-size/line-height, so a row's pills sat on different
+   vertical centres and baselines. `.admin-pill` is the one box contract
+   all three now share via the second rule below - colour and radius stay
+   with each pill's own modifier class (`.lozenge-*`,
+   `.admin-study-status--*`, `.admin-pill--auto-closed`); this only fixes
+   the box.
+
+   The rule below is ancestor-scoped, and that scoping - specificity 0,4,3 -
+   is the whole mechanism: it is what outranks every other rule that has an
+   opinion about these pills' box. Nothing else in this file reaches it for
+   a `.admin-pill` inside these two cells. Ranked, measured on the served
+   build:
+
+     0,4,3  this rule                                        WINS
+     0,3,3  `td.col-status > *`                  (display, margin-right)
+     0,2,4  `td:not(:first-child) > span`        (display, text-align)
+     0,1,0  `.lozenge`, `.admin-study-status`    (height/font-size/…)
+
+   A bare `.admin-pill { … }` rule would sit at 0,1,0 and lose to all three,
+   so it is not written: it was measured to change nothing at 856/1024/1218/
+   1440 in both themes, which makes it a rule that reads as the mechanism
+   while doing none of the work. For the same reason the two legacy rules
+   above carry no `:not(.admin-pill)` exception - they already lose here.
+   What they must NOT do is get more specific: a future
+   `td.col-status > span.admin-study-status` (0,4,3, later in the file) or
+   anything above 0,4,3 takes the box back, which is what
+   `e2e/admin-pill-primitive.test.ts` measures in a real browser.
+
+   ponytail: the concrete height/padding/font-size values are duplicated
+   here rather than read from `.admin-pill` once - the next rule this
+   ancestor chain adds will win by file order, not by any principled
+   priority, same as it did before this fix. Upgrade path: scope the
+   `.lozenge`/`.admin-study-status` base rules' own box metrics the same
+   way this rule is scoped, then this whole block collapses into a bare
+   `.admin-pill` class with nothing left to fight. */
+.admin-dashboard table.admin-data-table tbody td.col-type .admin-pill,
+.admin-dashboard table.admin-data-table tbody td.col-status .admin-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  padding: 0 0.625rem;
+  margin: 0;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1;
+  vertical-align: middle;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+/* The status pill is the one whose label is not a fixed short word -
+   `PUBLISHED_NOT_WORKING_LABEL` ("Published, not working") already
+   overflowed this fixed-width cell on main. `justify-content: center` on
+   the shared primitive turned that overflow into 32px of glyph-on-glyph
+   overlap with the Type column's lozenge (#142 code review, HIGH 2) -
+   centred overflow spills both ways, where main's plain inline-block only
+   spilled right into empty space.
+
+   `text-overflow: ellipsis` does not paint an ellipsis on the flex
+   CONTAINER's own overflowing text (tried first - Chrome hard-clips both
+   ends with no "…", which is less readable than main's uncentred spill it
+   was meant to fix, not more). The label text is wrapped in its own
+   `.admin-study-status__label` flex-item span instead, and `overflow:
+   hidden` below does two jobs: it clips the overflow inside the pill (so
+   the ellipsis renders on a genuine block-level overflow at the item's own
+   end), and, because a flex item whose overflow is not `visible` takes an
+   automatic minimum size of 0, it also lets the item shrink below its
+   content width without a `min-width: 0` of its own - measured: declaring
+   one changes the computed `min-width` string from `auto` to `0px` and
+   nothing else, with identical boxes, scroll widths and text ink at
+   856/1024/1218/1440 in both themes. Every
+   other status label is short enough that all of this is a no-op:
+   shrinking and ellipsis only do anything once an item holds more content
+   than its available width allows.
+
+   The pill itself needs no rule here, and the clip is what makes the ink
+   claim testable: content of an `overflow: hidden` box cannot paint
+   outside it, so the label box sitting inside the pill box is the
+   guarantee - see `e2e/admin-pill-primitive.test.ts`, which asserts
+   exactly that rather than the two pills' boxes (the pill's box is capped
+   at the cell by `td > *`, so it never moves and a box comparison cannot
+   see the text spill at all). */
+.admin-study-status__label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Auto-closed marker - was a bootstrap `.badge.bg-dark`, a fourth primitive
+   with its own display/height/vertical-align and none of the uppercase/
+   tracking the other two pills carry. Same colour as before (background/
+   text tokens below resolve to the same #212529 / #FFFFFF as `.bg-dark` in
+   _utilities.css) - dark mode overrides `color` from `_themes.css`'s
+   higher-priority `themes` layer regardless of what is declared here (see
+   `body.theme-dark .admin-dashboard table tbody td span:not(.badge):not(.lozenge)`),
+   same as it already did for the bootstrap badge this replaces - not a
+   regression, and not fixable from this file. */
+.admin-pill--auto-closed {
+  background: var(--admin-pill-auto-closed-bg);
+  color: var(--admin-pill-auto-closed-text);
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 /* --- Status pills (Recent bookings + studies table) -------------------- */
