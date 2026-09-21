@@ -2461,13 +2461,13 @@
   },
   {
     "id": "completion-trace-reads-the-real-status",
-    "why": "cto/AdaptaLabs audit row 10, the wiring half. participantCompletionMap derives the participant-facing `completed` flag from the session's real status through `isAnsweredRuntimeStatus`, not from mere presence of a session. Hardcoding it true would mark an in-progress (resumable) survey as Completed, hiding the Start button on a survey the participant can still finish - the exact 'Completed means visited' class this row exists to end. A text assertion cannot see the derivation; this jest route test drives an in-progress session and demands completed:false. RENAMED in fe04e510, when the same test gained the inProgress assertion - and the entry kept naming the old title, so it reported TEST_MISSING on the merge train and had stopped grading anything. The runner matches the title exactly; a rename of a named test is a change to this manifest. Proven by mutation before entry - `const completed = true` failed only the named test.",
+    "why": "cto/AdaptaLabs audit row 10, the wiring half. participantCompletionMap derives the participant-facing `completed` flag from the session's real status through `isAnsweredRuntimeStatus`, not from mere presence of a session. Hardcoding it true would mark an in-progress (resumable) survey as Completed, hiding the Start button on a survey the participant can still finish - the exact 'Completed means visited' class this row exists to end. A text assertion cannot see the derivation; this jest route test drives an in-progress session and demands completed:false. REPOINTED after the merge train caught this entry twice over: fe04e510 renamed the test it named (TEST_MISSING), and the renamed test had by then moved to the DETAIL read, which derives the flag in its own helper - so even once found it graded the wrong function (SURVIVED). The listing had no in-progress arm at all; this entry now names one written for it. The runner matches a title exactly, and an entry must name a test that exercises ITS line. Proven by mutation before entry - `const completed = true` failed only the named test.",
     "file": "backend/src/routes/opportunities.ts",
     "anchor": "      const completed = isAnsweredRuntimeStatus(row.sessionStatus);",
     "mutation": "      const completed = true;",
     "runner": "jest",
     "spec": "src/routes/__tests__/opportunities.test.ts",
-    "test": "does not treat a still-in-progress session as completed, and marks it in progress"
+    "test": "does not treat a still-in-progress session as completed in the listing"
   },
   {
     "id": "completion-trace-scoped-to-the-participant",

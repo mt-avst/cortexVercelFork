@@ -483,6 +483,33 @@ describe('Opportunities API', () => {
         opportunityIds: ['op-nsv']
       });
     });
+
+    it('does not treat a still-in-progress session as completed in the listing', async () => {
+      // THE LISTING'S OWN ARM, and it is not a duplicate of the detail read's.
+      // The two derive the flag in different functions - the batched
+      // participantCompletionMap here, participantSessionSummaryForOpportunity
+      // there - and the only completion test the listing had drove a
+      // `completed` session, so hardcoding the flag true passed it. The merge
+      // train caught that: the canary entry on this line reported SURVIVED
+      // once the detail read grew its own helper and took the old test with
+      // it. A row the participant can still finish must not read as done, or
+      // the browse row hides the way back into it.
+      mockQuery.mockResolvedValueOnce({ rows: [nativeSurveyRow] });
+      mockFindParticipantCompletions.mockResolvedValueOnce([
+        {
+          opportunityId: 'op-nsv',
+          sessionStatus: 'link_opened',
+          completedAt: null
+        }
+      ]);
+
+      const response = await request(listening(app))
+        .get('/api/opportunities')
+        .expect(200);
+
+      const survey = response.body.find((o: { id: string }) => o.id === 'op-nsv');
+      expect(survey.completion).toEqual({ completed: false, completedAt: null });
+    });
   });
 
   describe('GET /api/opportunities', () => {
