@@ -336,9 +336,9 @@ export async function runMigrations() {
     // column and no timestamp, and `updated_at` cannot stand in for one
     // because any edit to the row re-stamps it. Whether provenance is needed
     // is Legal's question for go-live (cto/AdaptaLabs#126): if they need a
-    // record of the attestation, the answer is provenance columns, not a gate. Keeping the flag pointed at the destination
-    // CURRENTLY stored is a rule in the application, not a property of the
-    // column: the authoring form clears the tick when the author edits the
+    // record of the attestation, the answer is provenance columns, not a
+    // gate. Keeping the flag pointed at the destination CURRENTLY stored is a
+    // rule in the application, not a property of the column: the authoring form clears the tick when the author edits the
     // link, and the PATCH path resets the column to NULL when the link it is
     // handed differs from the one on the row. The database enforces neither,
     // and the PATCH comparison reads the row outside the write's transaction -

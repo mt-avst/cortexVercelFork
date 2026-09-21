@@ -2510,9 +2510,10 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
   // saying "the tool I am sending participants to collects its own consent".
   // Repoint the study at a DIFFERENT tool and that sentence is about something
   // nobody affirmed: the stored `true` reads as an affirmation about tool B
-  // that was only ever made about tool A. Silent today, and a compliance hole
-  // the moment the deferred publish gate lands, because the gate would then
-  // pass on the strength of it.
+  // that was only ever made about tool A. It gates nothing (decided
+  // 2026-09-21, see the publish guards), but Review would still tell the
+  // author "confirmed" for a tool they never confirmed, and any provenance
+  // added later (cto/AdaptaLabs#126) would record an attestation nobody made.
   //
   // The form reaches this without anybody touching the box: the save payload
   // omits the key when the shape has no Your link step, so external -> native
