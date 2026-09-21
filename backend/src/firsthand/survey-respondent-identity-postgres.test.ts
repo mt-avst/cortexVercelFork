@@ -33,10 +33,8 @@ import { startTestPostgres, type TestPostgres } from "../__tests__/helpers/postg
  *     `listResponsesWhere`), pinned through its OUTCOME - one person with two
  *     answer-carrying sessions must be one respondent;
  *   - the CSV batch read (`openSurveyCsvExport` -> `readBatch`), pinned on the
- *     delivered row, because no CSV byte depends on the column. The export
- *     groups by `session_id` on purpose (cto/AdaptaLabs#152), so its outcome
- *     cannot see this and the declared row type is the only thing that can.
- *     A test asserting the type it declares is the honest shape of that pin.
+ *     delivered row, and - since cto/AdaptaLabs#152 made the export group by
+ *     person and flag superseded sessions - through its OUTCOME as well.
  *
  * WHY REAL POSTGRES: the defect is entirely in the SQL text. A mocked pool
  * hands the repository rows the test wrote itself, so it asserts the fixture,
@@ -91,8 +89,19 @@ async function seedStudy(): Promise<void> {
   );
 }
 
-/** One runtime session for `PARTICIPANT_ID`, carrying one answer. */
-async function seedAnsweredSession(sessionId: string, selection: string): Promise<void> {
+/**
+ * One runtime session for `PARTICIPANT_ID`, carrying one answer.
+ *
+ * `savedAt` is explicit because which answer WINS is decided on it
+ * (cto/AdaptaLabs#152). `NOW()` in two statements is two different instants
+ * in practice, and nothing guarantees their order is the one the test names.
+ */
+async function seedAnsweredSession(
+  sessionId: string,
+  selection: string,
+  savedAt: string,
+  opportunityId: string = OPPORTUNITY_ID
+): Promise<void> {
   await pool.query(
     `INSERT INTO firsthand.runtime_sessions
        (session_id, token, study_id, study_title, participant_id,
@@ -103,22 +112,40 @@ async function seedAnsweredSession(sessionId: string, selection: string): Promis
      VALUES ($1, $2, $3, 'Respondent identity', $4, 'One Person', 'active', 'none',
              'granted', 'granted', 'idle', 'idle', NOW(), NOW(), $5,
              '[]'::jsonb, $1, 1)`,
-    [sessionId, `tok_${sessionId}`, STUDY_ID, PARTICIPANT_ID, OPPORTUNITY_ID]
+    [sessionId, `tok_${sessionId}`, STUDY_ID, PARTICIPANT_ID, opportunityId]
   );
   await pool.query(
     `INSERT INTO firsthand.participant_responses
        (id, session_id, step_id, step_type, response_payload, saved_at,
         study_id, step_prompt)
-     VALUES ($1, $2, $3, 'single_choice', $4::jsonb, NOW(), $5, $6)`,
+     VALUES ($1, $2, $3, 'single_choice', $4::jsonb, $5, $6, $7)`,
     [
       `resp_${sessionId}`,
       sessionId,
       QUESTION_ID,
       JSON.stringify({ selectedOption: selection }),
+      savedAt,
       STUDY_ID,
       QUESTION_STEP.prompt
     ]
   );
+}
+
+/** The whole export as lines, from the real streamed path. */
+async function streamedCsv(
+  scope:
+    | { kind: "study"; studyId: string }
+    | { kind: "opportunity"; studyId: string; opportunityId: string }
+): Promise<string[]> {
+  const { openSurveyCsvExport } = await import("./survey-results-repository");
+  const { toCsvHeaderRow, toCsvSessionRow } = await import("./survey-csv");
+
+  const csvExport = await openSurveyCsvExport(scope);
+  const lines = [toCsvHeaderRow([QUESTION_STEP], csvExport.removedQuestions)];
+  for await (const row of csvExport.participants(new AbortController().signal)) {
+    lines.push(toCsvSessionRow([QUESTION_STEP], csvExport.removedQuestions, row));
+  }
+  return lines;
 }
 
 describe.skipIf(skipDbTests)("the respondent identity, delivered by a real read", () => {
@@ -146,8 +173,8 @@ describe.skipIf(skipDbTests)("the respondent identity, delivered by a real read"
     await pool.query("TRUNCATE firsthand.runtime_sessions CASCADE");
     await pool.query("TRUNCATE firsthand.studies CASCADE");
     await seedStudy();
-    await seedAnsweredSession(FIRST_SESSION, "Left");
-    await seedAnsweredSession(SECOND_SESSION, "Right");
+    await seedAnsweredSession(FIRST_SESSION, "Left", "2026-09-20T09:00:00.000Z");
+    await seedAnsweredSession(SECOND_SESSION, "Right", "2026-09-21T09:00:00.000Z");
   });
 
   /**
@@ -159,12 +186,10 @@ describe.skipIf(skipDbTests)("the respondent identity, delivered by a real read"
    * arrive with the field `undefined`, `respondentKey` keys on `session_id`
    * instead, and this reads 2.
    *
-   * The per-question `answered` is asserted at 2 IN THE SAME TEST, and not by
-   * accident. It is the known, deliberately-unfixed disagreement
-   * (cto/AdaptaLabs#152): the headline counts people, the tallies count
-   * answer rows. Written down here so the day somebody fixes #152 this test
-   * fails and makes them look at it, rather than the two numbers drifting
-   * apart unwatched.
+   * The per-question tally is asserted IN THE SAME TEST, and it is the
+   * acceptance test for cto/AdaptaLabs#152: the headline counts people, so
+   * the chart under it must count one answer per person per question - the
+   * LATEST. Before #152 this read `answered: 2` beneath `respondents: 1`.
    */
   it("counts one participant holding two answered sessions as a single respondent", async () => {
     const { listResponsesForOpportunity } = await import("./survey-results-repository");
@@ -183,7 +208,12 @@ describe.skipIf(skipDbTests)("the respondent identity, delivered by a real read"
     const results = aggregateSurveyResults([QUESTION_STEP], responses);
 
     expect(results.respondents).toBe(1);
-    expect(results.questions[0]?.answered).toBe(2);
+    expect(results.questions[0]?.answered).toBe(1);
+    // WHICH answer, not only how many: the later Right, not the earlier Left.
+    expect(results.questions[0]?.options).toEqual([
+      { option: "Left", count: 0, percent: 0 },
+      { option: "Right", count: 1, percent: 100 }
+    ]);
   });
 
   /**
@@ -213,17 +243,11 @@ describe.skipIf(skipDbTests)("the respondent identity, delivered by a real read"
    * THE CSV BATCH PROJECTION, which is a SECOND copy of the same SELECT.
    *
    * `readBatch` repeats the projection verbatim, so the column can be lost
-   * from one and kept in the other - and losing it here is invisible to every
-   * CSV assertion in the repository, because the export groups by
-   * `session_id` and emits `session_id` in its first cell. Nothing about the
-   * bytes changes.
-   *
-   * What changes is that `StoredResponse.participant_id`, which this path
-   * populates and declares, becomes `undefined`. That is a trap set for the
-   * next reader rather than a bug today: the first consumer to group this
-   * export by person - #152's likely shape - would find the field missing
-   * from one of the two reads that produce it. So the pin is on the declared
-   * contract, asserted on rows a real database returned.
+   * from one and kept in the other - and no CSV byte shows it, because the
+   * export takes each session's person from its preflight list and its
+   * superseded flag from SQL (cto/AdaptaLabs#152). What breaks is the
+   * declared contract: `StoredResponse.participant_id` becomes undefined on
+   * rows this path returns. So the pin is on the delivered field.
    */
   it("delivers the participant id on every row the csv batch read returns", async () => {
     const { openSurveyCsvExport } = await import("./survey-results-repository");
@@ -243,5 +267,65 @@ describe.skipIf(skipDbTests)("the respondent identity, delivered by a real read"
     // "every row has it" phrasing, which is the shape of absence-assertion
     // that passes when the thing producing the list is broken.
     expect(delivered).toEqual([PARTICIPANT_ID, PARTICIPANT_ID]);
+  });
+
+  /**
+   * THE CSV KEEPS BOTH ANSWERS AND FLAGS THE ONE THAT LOST
+   * (cto/AdaptaLabs#152), through the real streamed path on rows a real
+   * Postgres returned.
+   */
+  it("exports both sessions under one person, with the earlier one flagged superseded", async () => {
+    const lines = await streamedCsv({ kind: "study", studyId: STUDY_ID });
+
+    expect(lines).toEqual([
+      "Session,Participant,Superseded,Which did you prefer?",
+      `${FIRST_SESSION},${PARTICIPANT_ID},true,Left`,
+      `${SECOND_SESSION},${PARTICIPANT_ID},false,Right`
+    ]);
+  });
+
+  /**
+   * THE SUPERSEDED PREFLIGHT'S SCOPE FILTER IS LOAD-BEARING, where without a
+   * cross-opportunity fixture nothing could test it.
+   *
+   * The batch read binds session ids, primary keys the scoped preflight already
+   * chose, so its own `${filter}` is defence-in-depth and untestable (see the
+   * comment at that site). What this test pins is a DIFFERENT scope: the
+   * superseded-sessions preflight (`readSupersededSessions`). One person can
+   * hold sessions in two opportunities of the same study, so without `${filter}`
+   * on that preflight, their later answer under ANOTHER researcher's
+   * recruitment would flag a session in this researcher's export - an answer
+   * outside the reader's scope leaking through as a superseded flag, with no
+   * row of data to make it visible. `csv-superseded-sql-keeps-to-the-export-scope`
+   * mutates that filter to `(${filter} OR TRUE)` and this test is what reds.
+   */
+  it("keeps a per-opportunity export to that opportunity when one person answered in two", async () => {
+    await pool.query("TRUNCATE firsthand.runtime_sessions CASCADE");
+    await seedAnsweredSession(FIRST_SESSION, "Left", "2026-09-20T09:00:00.000Z");
+    await seedAnsweredSession(
+      "sess_elsewhere",
+      "Right",
+      "2026-09-21T09:00:00.000Z",
+      "opp_someone_elses"
+    );
+
+    const lines = await streamedCsv({
+      kind: "opportunity",
+      studyId: STUDY_ID,
+      opportunityId: OPPORTUNITY_ID
+    });
+
+    // One session, and NOT flagged: the later answer lives in an export this
+    // reader is not entitled to, so it cannot supersede anything here.
+    expect(lines).toEqual([
+      "Session,Participant,Superseded,Which did you prefer?",
+      `${FIRST_SESSION},${PARTICIPANT_ID},false,Left`
+    ]);
+
+    // CONTROL: the other session is really there, and the study-wide export
+    // does see it - so the line above is the scope working, not a fixture
+    // that failed to seed.
+    const everything = await streamedCsv({ kind: "study", studyId: STUDY_ID });
+    expect(everything).toHaveLength(3);
   });
 });

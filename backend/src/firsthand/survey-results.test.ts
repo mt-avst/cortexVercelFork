@@ -624,8 +624,12 @@ describe("grouping every answer the reader will return, all to one question", ()
     const responses: StoredResponse[] = Array.from(
       { length: MAX_RESPONSE_ROWS },
       (_unused, index) => ({
-        session_id: `session_${index % 500}`,
-        participant_id: `participant_${index % 500}`,
+        // One person per row. Since cto/AdaptaLabs#152 a person answering the
+        // same question twice keeps only their latest answer, so a fixture that
+        // reused 500 people would hand the grouping 500 rows rather than the
+        // 200,000 this test exists to push through it.
+        session_id: `session_${index}`,
+        participant_id: `participant_${index}`,
         step_id: "step_1",
         step_prompt: "What did you think?",
         step_type: "open_text",
@@ -636,7 +640,222 @@ describe("grouping every answer the reader will return, all to one question", ()
 
     const results = aggregateSurveyResults([step], responses);
 
-    expect(results.respondents).toBe(500);
+    expect(results.respondents).toBe(MAX_RESPONSE_ROWS);
     expect(results.questions[0].answered).toBe(MAX_RESPONSE_ROWS);
   }, 15_000);
+});
+
+/**
+ * ONE PERSON, TWO SESSIONS, THE SAME QUESTION (cto/AdaptaLabs#152).
+ *
+ * An expired session earns a fresh mint rather than a dead link
+ * (cto/AdaptaLabs#129), so one person can answer a question in both. The
+ * headline counts people; before this every tally under it counted answer
+ * rows, and the page could read "1 participant" above a chart totalling 2.
+ * Decided: the LATEST answer wins, per person, per question, in every
+ * aggregate on the page.
+ */
+describe("one person answering the same question in two sessions", () => {
+  const choice = step({
+    step_id: "q1",
+    type: "single_choice",
+    prompt: "Which did you prefer?",
+    options: ["Left", "Right"]
+  });
+
+  const answer = (
+    stepId: string | null,
+    sessionId: string,
+    payload: Record<string, unknown>,
+    savedAt: string,
+    over: Partial<StoredResponse> = {}
+  ) =>
+    response(stepId, sessionId, payload, {
+      participant_id: "person",
+      step_type: "single_choice",
+      saved_at: savedAt,
+      ...over
+    });
+
+  it("counts the latest answer once, and the earlier one not at all", () => {
+    const results = aggregateSurveyResults(
+      [choice],
+      [
+        answer("q1", "monday", { selectedOption: "Left" }, "2026-09-21T09:00:00.000Z"),
+        answer("q1", "tuesday", { selectedOption: "Right" }, "2026-09-22T09:00:00.000Z")
+      ]
+    );
+
+    expect(results.respondents).toBe(1);
+    expect(results.questions[0]).toMatchObject({ answered: 1 });
+    expect(results.questions[0].options).toEqual([
+      { option: "Left", count: 0, percent: 0 },
+      { option: "Right", count: 1, percent: 100 }
+    ]);
+  });
+
+  it("decides by saved_at, not by the order the rows arrived in", () => {
+    // The later answer FIRST in the input. A rule that kept "the last row it
+    // saw" would report Left here.
+    const results = aggregateSurveyResults(
+      [choice],
+      [
+        answer("q1", "tuesday", { selectedOption: "Right" }, "2026-09-22T09:00:00.000Z"),
+        answer("q1", "monday", { selectedOption: "Left" }, "2026-09-21T09:00:00.000Z")
+      ]
+    );
+
+    expect(results.questions[0].options?.map((o) => o.count)).toEqual([0, 1]);
+  });
+
+  it("breaks a saved_at tie by input order, which both readers sort by saved_at then id", () => {
+    const at = "2026-09-21T09:00:00.000Z";
+    const results = aggregateSurveyResults(
+      [choice],
+      [
+        answer("q1", "first", { selectedOption: "Left" }, at),
+        answer("q1", "second", { selectedOption: "Right" }, at)
+      ]
+    );
+
+    expect(results.questions[0].options?.map((o) => o.count)).toEqual([0, 1]);
+  });
+
+  it("keeps a mean and an NPS to one answer per person", () => {
+    const rating = step({ step_id: "r1", type: "rating", config: { scale_max: 5 } });
+    const nps = step({ step_id: "n1", type: "nps" });
+
+    const [ratingResult, npsResult] = aggregateSurveyResults(
+      [rating, nps],
+      [
+        answer("r1", "monday", { rating: 1 }, "2026-09-21T09:00:00.000Z", { step_type: "rating" }),
+        answer("r1", "tuesday", { rating: 5 }, "2026-09-22T09:00:00.000Z", { step_type: "rating" }),
+        answer("n1", "monday", { rating: 0 }, "2026-09-21T09:00:00.000Z", { step_type: "nps" }),
+        answer("n1", "tuesday", { rating: 10 }, "2026-09-22T09:00:00.000Z", { step_type: "nps" })
+      ]
+    ).questions;
+
+    // Counting both rows would give a mean of 3 and an NPS of 0.
+    expect(ratingResult).toMatchObject({ answered: 1, mean: 5 });
+    expect(npsResult).toMatchObject({
+      answered: 1,
+      promoters: 1,
+      detractors: 0,
+      score: 100
+    });
+  });
+
+  it("lists only the latest open-text answer", () => {
+    const open = step({ step_id: "t1", type: "open_text" });
+
+    const [result] = aggregateSurveyResults(
+      [open],
+      [
+        answer("t1", "monday", { text: "before" }, "2026-09-21T09:00:00.000Z", { step_type: "open_text" }),
+        answer("t1", "tuesday", { text: "after" }, "2026-09-22T09:00:00.000Z", { step_type: "open_text" })
+      ]
+    ).questions;
+
+    expect(result.answers).toEqual([{ session_id: "tuesday", text: "after" }]);
+  });
+
+  it("keeps both answers when the two sessions answered DIFFERENT questions", () => {
+    const second = step({
+      step_id: "q2",
+      type: "single_choice",
+      prompt: "And this one?",
+      options: ["Yes", "No"]
+    });
+
+    const results = aggregateSurveyResults(
+      [choice, second],
+      [
+        answer("q1", "monday", { selectedOption: "Left" }, "2026-09-21T09:00:00.000Z"),
+        answer("q2", "tuesday", { selectedOption: "Yes" }, "2026-09-22T09:00:00.000Z")
+      ]
+    );
+
+    expect(results.questions.map((q) => q.answered)).toEqual([1, 1]);
+  });
+
+  it("does not merge two different people who answered the same question", () => {
+    const results = aggregateSurveyResults(
+      [choice],
+      [
+        answer("q1", "s1", { selectedOption: "Left" }, "2026-09-21T09:00:00.000Z", { participant_id: "one" }),
+        answer("q1", "s2", { selectedOption: "Right" }, "2026-09-22T09:00:00.000Z", { participant_id: "two" })
+      ]
+    );
+
+    expect(results.respondents).toBe(2);
+    expect(results.questions[0].answered).toBe(2);
+  });
+
+  it("applies the same rule to a question that has since been removed", () => {
+    const results = aggregateSurveyResults(
+      [],
+      [
+        answer(null, "monday", { selectedOption: "Left" }, "2026-09-21T09:00:00.000Z", { step_prompt: "Gone?" }),
+        answer(null, "tuesday", { selectedOption: "Right" }, "2026-09-22T09:00:00.000Z", { step_prompt: "Gone?" })
+      ]
+    );
+
+    expect(results.removed_questions).toHaveLength(1);
+    expect(results.removed_questions?.[0]).toMatchObject({
+      answered: 1,
+      retired_options: [{ option: "Right", count: 1 }]
+    });
+  });
+
+  it("reports the wording of the answer that won, so asked_as never outnumbers answered", () => {
+    const results = aggregateSurveyResults(
+      [choice],
+      [
+        answer("q1", "monday", { selectedOption: "Left" }, "2026-09-21T09:00:00.000Z", { step_prompt: "Old wording?" }),
+        answer("q1", "tuesday", { selectedOption: "Right" }, "2026-09-22T09:00:00.000Z", { step_prompt: "Which did you prefer?" })
+      ]
+    );
+
+    expect(results.questions[0].answered).toBe(1);
+    expect(results.questions[0].asked_as).toBeUndefined();
+  });
+
+  it("does not let a blank later answer replace a real earlier one", () => {
+    // The API accepts partial saves, so a blank row can be stored. The tallies
+    // drop blanks; if a blank could still WIN, the person would stay in the
+    // headline with their real answer gone from every chart.
+    const open = step({ step_id: "t1", type: "open_text" });
+    const rating = step({ step_id: "r1", type: "rating", config: { scale_max: 5 } });
+
+    const results = aggregateSurveyResults(
+      [choice, open, rating],
+      [
+        answer("q1", "monday", { selectedOption: "Left" }, "2026-09-21T09:00:00.000Z"),
+        answer("t1", "monday", { text: "It was great" }, "2026-09-21T09:00:00.000Z", { step_type: "open_text" }),
+        answer("r1", "monday", { rating: 4 }, "2026-09-21T09:00:00.000Z", { step_type: "rating" }),
+        answer("q1", "tuesday", {}, "2026-09-22T09:00:00.000Z"),
+        answer("t1", "tuesday", { text: "   " }, "2026-09-22T09:00:00.000Z", { step_type: "open_text" }),
+        answer("r1", "tuesday", {}, "2026-09-22T09:00:00.000Z", { step_type: "rating" })
+      ]
+    );
+
+    expect(results.questions.map((q) => q.answered)).toEqual([1, 1, 1]);
+    expect(results.questions[2].mean).toBe(4);
+    expect(results.questions[0].options?.map((o) => o.count)).toEqual([1, 0]);
+    expect(results.questions[1].answers).toEqual([{ session_id: "monday", text: "It was great" }]);
+  });
+
+  it("still counts a person whose only answer lost as a respondent", () => {
+    // The CONTROL for the skip: the person answered, so the headline keeps
+    // them even though one of their two rows is not tallied.
+    const results = aggregateSurveyResults(
+      [choice],
+      [
+        answer("q1", "monday", { selectedOption: "Left" }, "2026-09-21T09:00:00.000Z"),
+        answer("q1", "tuesday", { selectedOption: "Right" }, "2026-09-22T09:00:00.000Z")
+      ]
+    );
+
+    expect(results.respondents).toBe(1);
+  });
 });
