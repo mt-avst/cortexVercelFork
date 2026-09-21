@@ -349,18 +349,24 @@ describe('AdminSessionManager - a temporary study restores confirmed slots with 
  * render: both are protected, the prune keeps the earlier one, and the 14:30
  * cell abuts 14:00 (kept) while overlapping 14:15 (dropped).
  */
+/**
+ * The mixed day's availability, named separately so the gutter arm below can
+ * render the same day with two extra undrawable cells without re-stating it.
+ */
+const mixedDaySlots = () => [
+  slotAt(day, 8, 0),
+  slotAt(day, 10, 0),
+  slotAt(day, 11, 0),
+  slotAt(day, 12, 0),
+  slotAt(day, 13, 0),
+  slotAt(day, 13, 30),
+  slotAt(day, 14, 30),
+  slotAt(day, 15, 0),
+  slotAt(day, 15, 30),
+];
+
 const mixedDayFixture = () => {
-  mockAvailability([
-    slotAt(day, 8, 0),
-    slotAt(day, 10, 0),
-    slotAt(day, 11, 0),
-    slotAt(day, 12, 0),
-    slotAt(day, 13, 0),
-    slotAt(day, 13, 30),
-    slotAt(day, 14, 30),
-    slotAt(day, 15, 0),
-    slotAt(day, 15, 30),
-  ]);
+  mockAvailability(mixedDaySlots());
   vi.mocked(getMyCalendarEvents).mockResolvedValue([
     {
       id: 'evt-1',
@@ -456,7 +462,8 @@ describe('AdminSessionManager - headline, Select all and chips agree on a mixed 
    * Table chip arm above. `describeSlot`'s `isPast` is pinned for the chip by
    * the canary entry `session-management-chip-disables-past-cells`; the tile
    * drew the same rule from its own inline copy, and dropping the past term
-   * from that copy alone passed all 122 AdminSessionManager tests. Both now
+   * from that copy alone passed the whole AdminSessionManager suite as it
+   * then stood. Both now
    * go through `slotIsActionable`, and this arm is what notices if the tile
    * re-hand-rolls it.
    */
@@ -485,6 +492,84 @@ describe('AdminSessionManager - headline, Select all and chips agree on a mixed 
       expect(tile).not.toHaveAttribute('aria-disabled');
       expect(tile).toHaveAttribute('tabindex', '0');
     });
+  });
+
+  /**
+   * The OTHER half of `slotIsActionable`: the tiles that must stay clickable
+   * although the counters exclude them, and the gutter row that draws the
+   * same rule a second time.
+   *
+   * `slotIsActionable` is deliberately more lenient than `isSlotPickable` -
+   * an existing session WITH ROOM, and a confirmed slot, are out of "N slots
+   * available" but must still take a click, because that click is the
+   * deselect cto/AdaptaLabs#95's gutter removal depends on. Nothing pinned
+   * that in the whole frontend. MEASURED on this branch: rewriting the
+   * timeline tile as
+   * `actionable = isSlotPickable(slot, events, sessions, confirmedSlots)`
+   * left all 2551 frontend tests green - the whole frontend suite as it stood
+   * before this arm, measured 2026-09-21 - while a DOM census showed it setting
+   * `tabIndex` -1 and `aria-disabled` on the 11:00 and 13:10 tiles. Silent,
+   * and a behaviour change rather than a tidy-up.
+   *
+   * The GUTTER tile - slots outside the 07:00-23:00 timeline, drawn in their
+   * own row beneath it - had no test at all, so re-hand-rolling it as
+   * `!status.isBlocked` (the exact defect shape this branch fixed on the
+   * timeline tile, dropping the past term) was invisible too. The 06:00 cell
+   * is past AND undrawable, so it lands in the gutter and must refuse a
+   * click there as well; the 23:30 cell is the control that proves the
+   * gutter still draws focusable tiles at all, rather than none.
+   */
+  it('Calendar view: a session with room stays clickable and the gutter obeys the same rule', async () => {
+    const sessions = mixedDayFixture();
+    // The mixed day, plus the two cells the gutter row exists for: 06:00
+    // starts before TIMELINE_START_HOUR and 23:30-00:30 ends past
+    // TIMELINE_END_HOUR, so neither is drawable on the grid.
+    mockAvailability([slotAt(day, 6, 0), ...mixedDaySlots(), slotAt(day, 23, 30)]);
+    const { container } = renderManager({ sessions });
+    await settle();
+    await setStartDateToFixedDay();
+    await settle();
+    fireEvent.click(screen.getByRole('button', { name: 'Calendar' }));
+    await settle();
+
+    // 11:00 and 13:10 are existing sessions with room left, so `isSlotPickable`
+    // excludes both - deriving the tile from it takes the deselect away.
+    const withRoom = [
+      screen.getByRole('button', { name: '11:00 to 11:30 - Session: 2 capacity, 0 booked, 2 remaining' }),
+      screen.getByRole('button', { name: '13:10 to 13:40 - Session: 2 capacity, 0 booked, 2 remaining' }),
+    ];
+    withRoom.forEach(tile => {
+      expect(tile).not.toHaveAttribute('aria-disabled');
+      expect(tile).toHaveAttribute('tabindex', '0');
+    });
+
+    // Control, so the pair above cannot pass by the grid simply making every
+    // tile focusable: 14:00 also has room, but is overlapped by the 14:15
+    // session, so `isBlocked` holds and the tile must refuse the click.
+    const allocatedSession = screen.getByRole('button', {
+      name: '14:00 to 14:30 - Session: 2 capacity, 0 booked, 2 remaining',
+    });
+    expect(allocatedSession).toHaveAttribute('aria-disabled', 'true');
+    expect(allocatedSession).toHaveAttribute('tabindex', '-1');
+
+    // The gutter row. Queried by class because these tiles carry `title`
+    // rather than `aria-label`, so their accessible name is the time label.
+    const gutterTiles = Array.from(container.querySelectorAll('.calendar-gutter-slot'));
+    const titleOf = (el: Element) => el.getAttribute('title') ?? '';
+    expect(gutterTiles.map(titleOf).sort()).toEqual([
+      '06:00 to 06:30 - This time is in the past and cannot be scheduled',
+      '23:30 to 00:00 - Available time slot',
+    ]);
+
+    const pastGutterTile = gutterTiles.find(el => /in the past/.test(titleOf(el)))!;
+    expect(pastGutterTile).toHaveAttribute('aria-disabled', 'true');
+    expect(pastGutterTile).toHaveAttribute('tabindex', '-1');
+
+    // Control again: the free undrawable cell in the same row stays clickable,
+    // which is the entire reason the gutter row was added.
+    const freeGutterTile = gutterTiles.find(el => /Available time slot/.test(titleOf(el)))!;
+    expect(freeGutterTile).not.toHaveAttribute('aria-disabled');
+    expect(freeGutterTile).toHaveAttribute('tabindex', '0');
   });
 
   it('Table view: the counters follow a sessions change after first render', async () => {

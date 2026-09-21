@@ -583,10 +583,13 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   const formatDate = (dateString: string) => formatStudyDate(dateString) ?? '';
 
 
-  // Both key off `slotKeyOf`, which normalises through `toISOString` - this
-  // pair used to spell the same key two different ways (selection raw,
-  // confirmation normalised) while `isSlotPickable` read the confirmation set
-  // with a third. One spelling now, in the one function whose job that is.
+  // Both key off `slotKeyOf`, which normalises through `toISOString`. At
+  // 6c73fb57 this pair spelled the same key two different ways - selection
+  // raw (`${slot.start}|${slot.end}`), confirmation normalised - and
+  // `isSlotPickable` was a THIRD SITE reading the confirmation set, already
+  // through `slotKeyOf`, so it matched confirmation and not selection. Two
+  // spellings over three sites, not three spellings. One spelling now, in the
+  // one function whose job that is.
   const isSlotSelected = (slot: AvailableSlot) => selectedSlots.has(slotKeyOf(slot));
 
   const isSlotConfirmed = (slot: AvailableSlot) => confirmedSlots.has(slotKeyOf(slot));
@@ -683,18 +686,22 @@ const CalendarView: React.FC<CalendarViewProps> = ({
    *
    * Three inline copies of `!isBlocked && !isPast` is three chances to drop a
    * term in one of them, and dropping `!isPast` from the timeline tile alone
-   * passed all 122 AdminSessionManager tests: the tile went `tabIndex=0` and
-   * un-`aria-disabled` while every counter still excluded it, and the server
-   * refuses a past start (#101), so a keyboard user could select a slot that
-   * can never be created. That is the exact twin of the chip defect
-   * cto/AdaptaLabs#135 already fixed, and it is now one expression.
+   * passed the whole AdminSessionManager suite as it then stood: the tile
+   * went `tabIndex=0` and un-`aria-disabled` while every counter still
+   * excluded it, and the server refuses a past start (#101), so a keyboard
+   * user could select a slot that can never be created. That is the exact
+   * twin of the chip defect cto/AdaptaLabs#135 already fixed, and it is now
+   * one expression. The GUTTER tile was the third copy and the one with no
+   * test of any kind; the canary entry
+   * `session-management-calendar-gutter-tile-disables-past-cells` pins it.
    *
    * NOT `isSlotPickable`: that is the COUNTERS' predicate and is stricter
    * here on purpose. An existing session with room, or a confirmed slot, is
    * excluded from "N slots available" but must stay clickable - that click is
    * the deselect (#95's gutter removal depends on it). Deriving this from
    * `isSlotPickable` would make every confirmed tile and chip unfocusable,
-   * which is a behaviour change, not a tidy-up.
+   * which is a behaviour change, not a tidy-up - MEASURED, and pinned by
+   * `session-management-calendar-tile-stays-clickable-for-a-session-with-room`.
    *
    * `clickSlot` keeps its two refusals spelled apart so each logs its own
    * reason; they are these two terms and nothing else.
@@ -952,12 +959,12 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         // time. Both keys, which is what makes the render-time pass that used to
         // sit below the timeline redundant: that one compared `start|end`
         // strings only, so every duplicate it could catch is caught here first.
-        // Use the same key format as isSlotSelected for consistency
+        // Keyed by `slotKeyOf`, the same function selection and confirmation
+        // key off, so "the same slot" means one thing here and there.
         const seen = new Set<string>();
         const duplicateKeys = new Set<string>();
         nonOverlappingSlots = nonOverlappingSlots.filter(slot => {
-          // Use the same key format as selection tracking for consistency
-          const slotKey = `${slot.start}|${slot.end}`;
+          const slotKey = slotKeyOf(slot);
           
           // Also check by time for extra safety
           const startTime = new Date(slot.start).getTime();
@@ -1577,7 +1584,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
           // correct number; the headline was the liar. What it WAS is an
           // independent, hand-rolled second copy of the same rule that
           // happened to agree: measured, restoring the original expression
-          // leaves all 122 AdminSessionManager tests green, because
+          // leaves the whole AdminSessionManager suite green, because
           // `!isBlocked && !isPast && !session && !isConfirmed` is
           // set-equivalent to `isSlotPickable` today. Routing it through the
           // shared predicate removes the second spelling, so the next change
