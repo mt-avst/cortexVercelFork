@@ -22,8 +22,8 @@ import { closeListeningServers, listening } from "../../__tests__/helpers/listen
  *
  * NULL is a real, distinct state - "never recorded", which is every
  * opportunity that predates this column - and must never collapse into
- * `false`. It does NOT gate publish (an open compliance decision - see the
- * ponytail at the publish-validation call sites in this router).
+ * `false`. It deliberately does NOT gate publish (decided 2026-09-21 - see
+ * the publish-validation call sites in this router for why).
  */
 const skipDbTests = process.env.FIRSTHAND_SKIP_DB_TESTS === "1";
 
