@@ -46,6 +46,34 @@ describe('toPublicOpportunity', () => {
     expect(view).not.toHaveProperty('owner_email');
   });
 
+  /**
+   * The external-delivery consent affirmation (cto/AdaptaLabs#136) is
+   * authoring metadata and leaves by the same door as owner identity.
+   *
+   * Pinned HERE, in the fast jest suite, and not only in the real-Postgres
+   * route test: deleting the destructure left the whole backend jest run
+   * green, so the gate that actually blocks a careless edit could not see it.
+   *
+   * All three stored states, because the redaction is about the KEY being
+   * absent, not about its value being falsy - a `delete` guarded on
+   * truthiness would pass a `true`-only arm and publish every recorded false.
+   */
+  it('removes the external consent affirmation in all three of its states', () => {
+    for (const stored of [true, false, null]) {
+      const view = toPublicOpportunity({
+        ...opportunity,
+        external_consent_confirmed: stored,
+      }) as Record<string, unknown>;
+
+      expect(view).not.toHaveProperty('external_consent_confirmed');
+      // The owner identity beside it, so a mutation that swaps one redaction
+      // for the other cannot satisfy this arm on its own.
+      expect(view).not.toHaveProperty('owner_email');
+      // And the control: this serialiser is not simply dropping everything.
+      expect(view.title).toBe('Checkout flow walkthrough');
+    }
+  });
+
   it('removes the joining link from every session, not just the first', () => {
     const view = toPublicOpportunity(opportunity) as { sessions: Record<string, unknown>[] };
 
