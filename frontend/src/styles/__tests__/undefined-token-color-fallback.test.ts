@@ -117,3 +117,120 @@ describe('undefined design tokens with a colour-literal fallback', () => {
     expect(offences).toHaveLength(0);
   });
 });
+
+/**
+ * THE OTHER HALF OF THE SAME DEFECT: a BARE `var` reference to a token that
+ * does not exist.
+ *
+ * The guard above only sees the two-argument form, where a colour literal
+ * sits behind the token as a fallback. A bare reference to a misspelt or
+ * renamed token is strictly worse and completely invisible to it: the
+ * property simply does not apply, so the element inherits whatever its
+ * parent had. Text keeps rendering - in the wrong colour, with no fallback
+ * to point at and nothing in the console.
+ *
+ * SCOPE, STATED. This arm covers the file set cto/AdaptaLabs#141 touched,
+ * not all of src. That is not because the rest is clean - it has not been
+ * measured - but because this round changed these files and owes a guard
+ * over its own blast radius. Widening it is a separate, measured piece of
+ * work.
+ */
+
+/**
+ * Tokens a component SETS at runtime through an inline style property, which
+ * are real definition sites that no stylesheet declares. Kept separate from
+ * `definedTokens` rather than folded into it, so the allowlist and the
+ * behaviour of the #140 guard above are left exactly as they were.
+ */
+const inlineSetTokens = new Set<string>();
+for (const file of walk(SRC_DIR, ['.ts', '.tsx'])) {
+  const content = readFileSync(file, 'utf8');
+  for (const m of content.matchAll(/["'`](--[a-z0-9-]+)["'`]\s*(?:as[^:]*)?:/g)) {
+    inlineSetTokens.add(m[1]);
+  }
+}
+
+const resolvableTokens = new Set([...definedTokens, ...inlineSetTokens]);
+
+/** A `var` reference with NO fallback argument - it resolves or it vanishes. */
+const BARE_VAR = /var\(\s*(--[a-z0-9-]+)\s*\)/gi;
+
+/** The source files this branch changed. */
+const TOUCHED_FILES = [
+  'components/AdminFeedback.tsx',
+  'components/CalendarGrid.tsx',
+  'components/OpportunityForm/ConsentStep.tsx',
+  'components/OpportunityForm/DescribeIt.tsx',
+  'components/OpportunityForm/ExternalLinkTab.tsx',
+  'components/OpportunityForm/question-list.css',
+  'components/OpportunityForm/screener-questions.css',
+  'components/admin-feedback.css',
+  'styles/_components.css',
+  'styles/_themes.css',
+];
+
+const stripComments = (source: string): string =>
+  source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+const bareReferences = (source: string): string[] =>
+  [...stripComments(source).matchAll(BARE_VAR)].map((m) => m[1]);
+
+describe('bare token references in the files this branch touched', () => {
+  it('resolves every bare token reference to a definition', () => {
+    const unresolved: string[] = [];
+    let scanned = 0;
+
+    for (const relFile of TOUCHED_FILES) {
+      const content = readFileSync(join(SRC_DIR, relFile), 'utf8');
+      for (const token of bareReferences(content)) {
+        scanned += 1;
+        if (!resolvableTokens.has(token)) unresolved.push(`${relFile}: ${token}`);
+      }
+    }
+
+    // An empty offence list from a scan that read nothing is indistinguishable
+    // from a clean bill of health, so the scan has to prove it ran.
+    expect(scanned).toBeGreaterThan(500);
+    expect([...new Set(unresolved)]).toEqual([]);
+  });
+
+  it('reports a misspelt token as unresolved, on real file content', () => {
+    // CONTROL. Not a hand-written probe string: a real file from the set
+    // above, with one character dropped from the name of whichever token it
+    // happens to reference first. Derived rather than hardcoded on purpose -
+    // a control pinned to one named declaration goes red the moment an
+    // unrelated edit touches that line, and an arm that cries wolf is an arm
+    // somebody eventually weakens.
+    const real = readFileSync(
+      join(SRC_DIR, 'components/OpportunityForm/question-list.css'),
+      'utf8'
+    );
+    const [victim] = bareReferences(real);
+    expect(resolvableTokens.has(victim)).toBe(true);
+
+    const typo = victim.slice(0, -1);
+    expect(resolvableTokens.has(typo)).toBe(false);
+    const misspelt = real.split(`var(${victim})`).join(`var(${typo})`);
+    expect(misspelt).not.toEqual(real);
+
+    // The unmutated file is clean, so the scanner is not simply saying yes to
+    // everything; the mutated one reports the typo. Asserted as a CONTAINS
+    // rather than an equality, so a separate real offence elsewhere in the
+    // file is reported by the arm above and does not also redden this one.
+    expect(bareReferences(real).filter((t) => !resolvableTokens.has(t))).toEqual([]);
+    const found = bareReferences(misspelt).filter((t) => !resolvableTokens.has(t));
+    // Missing here would mean the scanner has stopped detecting anything, and
+    // the arm above is then asserting nothing at all.
+    expect(found).toContain(typo);
+  });
+
+  it('counts the runtime set tokens as defined, since a stylesheet never declares them', () => {
+    // CONTROL on the widening above: these two are set from a component's
+    // inline style and referenced from the stylesheets, so without this the
+    // first arm would report two false offences and somebody would reach for
+    // an allowlist instead.
+    expect(inlineSetTokens.has('--study-type-color')).toBe(true);
+    expect(inlineSetTokens.has('--cal-content-w')).toBe(true);
+    expect(definedTokens.has('--study-type-color')).toBe(false);
+  });
+});
