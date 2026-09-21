@@ -91,10 +91,10 @@
   },
   {
     "id": "csv-batch-asks-for-its-own-ids",
-    "why": "The output is identical whether a batch fetched its hundred participants or all of them, so deleting the predicate AND its bind parameter together changes nothing anybody can see - while loading the study's whole answer set once per batch, which is the exact heap streaming exists to remove. It survived every test in four files, including the real-Postgres one, because they all compare output. ANCHOR UPDATED when !214 moved this query into `readBatch` and reindented its parameter list - the canary reported ANCHOR_MISSING rather than quietly dropping the entry, which is the whole point of requiring an exact single match. THE PARAMETER HALF, and only that half: it asserts what the statement BOUND. What it RETURNED is now pinned separately by csv-batch-read-takes-only-what-it-asked-for, which is what closes cto/AdaptaLabs#20 - this entry used to say that gap was open, and it no longer is. ANCHOR UPDATED for cto/AdaptaLabs#152: the batch binds participant ids now, not session ids.",
+    "why": "The output is identical whether a batch fetched its hundred participants or all of them, so deleting the predicate AND its bind parameter together changes nothing anybody can see - while loading the study's whole answer set once per batch, which is the exact heap streaming exists to remove. It survived every test in four files, including the real-Postgres one, because they all compare output. ANCHOR UPDATED when !214 moved this query into `readBatch` and reindented its parameter list - the canary reported ANCHOR_MISSING rather than quietly dropping the entry, which is the whole point of requiring an exact single match. THE PARAMETER HALF, and only that half: it asserts what the statement BOUND. What it RETURNED is now pinned separately by csv-batch-read-takes-only-what-it-asked-for, which is what closes cto/AdaptaLabs#20 - this entry used to say that gap was open, and it no longer is. ANCHOR UPDATED for cto/AdaptaLabs#152: the batch binds participant ids now, not session ids. Re-anchored again when the batch read gained its `LIMIT ${CSV_BATCH_ROW_BUDGET + 1}` row budget (same ticket).",
     "file": "backend/src/firsthand/survey-results-repository.ts",
-    "anchor": "        WHERE ${filter} AND s.participant_id = ANY($${params.length + 1}::text[])\n        ORDER BY r.saved_at ASC, r.id ASC\n      `,\n            [...params, batch]",
-    "mutation": "        WHERE ${filter}\n        ORDER BY r.saved_at ASC, r.id ASC\n      `,\n            [...params]",
+    "anchor": "        WHERE ${filter} AND s.participant_id = ANY($${params.length + 1}::text[])\n        ORDER BY r.saved_at ASC, r.id ASC\n        LIMIT ${CSV_BATCH_ROW_BUDGET + 1}\n      `,\n            [...params, batch]",
+    "mutation": "        WHERE ${filter}\n        ORDER BY r.saved_at ASC, r.id ASC\n        LIMIT ${CSV_BATCH_ROW_BUDGET + 1}\n      `,\n            [...params]",
     "runner": "vitest",
     "spec": "src/firsthand/survey-csv-export.test.ts",
     "test": "asks each batch for ITS OWN hundred ids, and never for everything"
@@ -2810,7 +2810,7 @@
   },
   {
     "id": "survey-csv-batch-projection-delivers-participant-id",
-    "why": "THE SECOND COPY of the projection above, in `readBatch`, which can lose the column while the first keeps it. Before cto/AdaptaLabs#152 nothing about the CSV bytes depended on it; since #152 the export batches, groups and flags by person, so losing it empties the Participant cell and drops the superseded flag. The named test asserts the delivered field itself, on rows a real Postgres returned, so a failure names the cause rather than a symptom. Proven by mutation before entry (and re-proven on #152's branch with the anchor moved to the participant_id batch predicate): dropping the column from THIS projection reds the named test, while the aggregate entry's test stays green.",
+    "why": "THE SECOND COPY of the projection above, in `readBatch`, which can lose the column while the first keeps it. Since cto/AdaptaLabs#152 the export batches, groups and flags by person, so losing it is total: every row's participant id is undefined, the per-person lookup misses for every id in the batch, and the export yields NO data rows at all - a header-only 200 CSV (the #152 code gate measured 8 tests red across the CSV suites). The named test asserts the delivered field itself, on rows a real Postgres returned, so the failure names the cause rather than a symptom.",
     "file": "backend/src/firsthand/survey-results-repository.ts",
     "anchor": "        SELECT r.session_id, s.participant_id, r.step_id, r.step_prompt, r.step_type,\n               r.response_payload, r.saved_at\n        FROM participant_responses AS r\n        JOIN runtime_sessions AS s ON s.session_id = r.session_id\n        WHERE ${filter} AND s.participant_id = ANY($${params.length + 1}::text[])\n",
     "mutation": "        SELECT r.session_id, r.step_id, r.step_prompt, r.step_type,\n               r.response_payload, r.saved_at\n        FROM participant_responses AS r\n        JOIN runtime_sessions AS s ON s.session_id = r.session_id\n        WHERE ${filter} AND s.participant_id = ANY($${params.length + 1}::text[])\n",
@@ -2828,16 +2828,6 @@
     "runner": "vitest",
     "spec": "src/firsthand/survey-results.test.ts",
     "test": "counts the latest answer once, and the earlier one not at all"
-  },
-  {
-    "id": "superseded-tie-goes-to-the-later-row",
-    "why": "cto/AdaptaLabs#152. `saved_at` is client-supplied at millisecond precision, so ties are ordinary in imported and seeded data. Both readers order by (saved_at, id), and `>=` hands a tie to the later row so the winner does not depend on which reader asked. `>` hands it to the earlier one and the aggregate and the CSV flag still agree with each other - so only a test that names the expected winner can see the rule change. Proven KILLED before entry.",
-    "file": "backend/src/firsthand/survey-results.ts",
-    "anchor": "    } else if (Date.parse(row.saved_at) >= Date.parse(current.saved_at)) {",
-    "mutation": "    } else if (Date.parse(row.saved_at) > Date.parse(current.saved_at)) {",
-    "runner": "vitest",
-    "spec": "src/firsthand/survey-results.test.ts",
-    "test": "breaks a saved_at tie by input order, which both readers sort by saved_at then id"
   },
   {
     "id": "csv-flags-a-session-holding-a-lost-answer",
@@ -2859,5 +2849,45 @@
     "spec": "src/firsthand/survey-respondent-identity-postgres.test.ts",
     "test": "keeps a per-opportunity export to that opportunity when one person answered in two",
     "needsDatabase": true
+  },
+  {
+    "id": "superseded-rule-ignores-blank-answers",
+    "why": "cto/AdaptaLabs#152, the code gate's MEDIUM. The API accepts partial saves, so a blank row can be stored after a real answer. The tallies drop blanks; if a blank could still WIN the latest-answer rule, the person stays in the respondent headline while their real answer vanishes from every chart. This mutation lets any answerable-type row take part, blank or not. Proven KILLED before entry.",
+    "file": "backend/src/firsthand/survey-results.ts",
+    "anchor": "    if (!countsAsAnswer(row)) {",
+    "mutation": "    if (!QUESTION_TYPES.has(row.step_type)) {",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-results.test.ts",
+    "test": "does not let a blank later answer replace a real earlier one"
+  },
+  {
+    "id": "csv-batch-row-budget-is-a-literal",
+    "why": "cto/AdaptaLabs#152, the security gate's MEDIUM. A batch is a hundred PEOPLE, and one account can hold thousands of answer-carrying sessions, so the per-read heap bound is this budget and nothing else - measured without it: one read of ~100MB for a single such person on the pod every live session shares. Pinned as a literal in the test, which a derived expectation could not do. Proven KILLED before entry.",
+    "file": "backend/src/firsthand/survey-results-repository.ts",
+    "anchor": "export const CSV_BATCH_ROW_BUDGET = 10_000;",
+    "mutation": "export const CSV_BATCH_ROW_BUDGET = 20_000;",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-csv-export.test.ts",
+    "test": "caps a batch read at 10001 rows, one more than the budget of 10000"
+  },
+  {
+    "id": "csv-person-past-budget-is-refused-before-first-byte",
+    "why": "cto/AdaptaLabs#152. A person is never split across reads (their superseded flags need all their answers at once), so one person past the budget cannot be packed - they must be refused while the status can still be a 413. Without this check the planner puts them in a batch of their own and the read carries everything they have. Proven KILLED before entry.",
+    "file": "backend/src/firsthand/survey-results-repository.ts",
+    "anchor": "    if (!(person.answers <= CSV_BATCH_ROW_BUDGET)) {",
+    "mutation": "    if (false) {",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-csv-export.test.ts",
+    "test": "refuses before the first byte when one participant alone passes the row budget"
+  },
+  {
+    "id": "csv-batch-read-refuses-past-budget",
+    "why": "cto/AdaptaLabs#152. The HARD half of the row budget: batches are planned from preflight counts, and a person answering in between can push a read past them. The read is refused - destroying the socket mid-export - rather than truncated into a CSV that parses. Proven KILLED before entry.",
+    "file": "backend/src/firsthand/survey-results-repository.ts",
+    "anchor": "          if (result.rows.length > CSV_BATCH_ROW_BUDGET) {",
+    "mutation": "          if (false) {",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-csv-export.test.ts",
+    "test": "throws rather than truncating when a batch read returns more than its budget"
   }
 ]

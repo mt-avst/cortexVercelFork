@@ -23,7 +23,7 @@ const checkouts: Array<{
 }> = [];
 
 let open = 0;
-let participantRows: Array<{ participant_id: string }> = [];
+let participantRows: Array<{ participant_id: string; answers?: string }> = [];
 /**
  * What a batch read returns. `null` answers every batch with ONE row per
  * person it asked for - session id equal to the person's id - because the
@@ -68,7 +68,11 @@ vi.mock("./runtime-database", async (importOriginal) => ({
           entry.params.push(params);
           onQuery(sql);
           if (sql.includes("GROUP BY r.step_type")) return { rows: removedRows };
-          if (sql.includes("GROUP BY s.participant_id")) return { rows: participantRows };
+          if (sql.includes("GROUP BY s.participant_id")) {
+            // One answer each unless a test says otherwise - matching the
+            // one row per person the batch fake below returns.
+            return { rows: participantRows.map((row) => ({ answers: "1", ...row })) };
+          }
           if (answerRows !== null) return { rows: answerRows };
           const asked = (params[params.length - 1] ?? []) as string[];
           return {
@@ -308,6 +312,98 @@ describe("opening and draining a CSV export", () => {
     await expect(openSurveyCsvExport(scope)).rejects.toMatchObject({
       statusCode: 413
     });
+  });
+});
+
+/**
+ * THE PER-READ ROW BUDGET (cto/AdaptaLabs#152, the security gate's MEDIUM).
+ *
+ * A batch is a hundred PEOPLE, and a person is not bounded the way a session
+ * is: an abandoned session earns a fresh mint, so one account can hold
+ * thousands of answer-carrying sessions. Without a budget, one batch read
+ * returned ~100MB for a single such person. These pin the budget as a LITERAL,
+ * the packing, the refusal before the first byte, and the hard limit on the
+ * read itself.
+ */
+describe("keeping every batch read inside its row budget", () => {
+  beforeEach(() => {
+    checkouts.length = 0;
+    open = 0;
+    onQuery = () => {};
+    removedRows = [];
+    answerRows = null;
+  });
+
+  const batchIds = () =>
+    checkouts
+      .filter((entry) => entry.sql.some(IS_BATCH))
+      .map((entry) => entry.params[0][entry.params[0].length - 1] as string[]);
+
+  it("caps a batch read at 10001 rows, one more than the budget of 10000", async () => {
+    participantRows = [{ participant_id: "p1" }];
+    await drain();
+
+    const read = checkouts.find((entry) => entry.sql.some(IS_BATCH));
+    // Control: a vacuous `find` would make the assertion below pass on
+    // nothing.
+    expect(read).toBeDefined();
+    expect(read?.sql.join("\n")).toContain("LIMIT 10001");
+  });
+
+  it("starts a new batch before one would pass the row budget", async () => {
+    participantRows = [
+      { participant_id: "a", answers: "6000" },
+      { participant_id: "b", answers: "4000" },
+      { participant_id: "c", answers: "1" }
+    ];
+    await drain();
+
+    // a + b is exactly 10000, which fits; c would make it 10001.
+    expect(batchIds()).toEqual([["a", "b"], ["c"]]);
+  });
+
+  it("still packs a hundred one-answer people into one batch", async () => {
+    // The CONTROL for the test above: a budget that split every person into
+    // a batch of their own would pass it, and cost a checkout per person.
+    participantRows = Array.from({ length: 100 }, (_u, i) => ({ participant_id: `s${i}` }));
+    await drain();
+
+    expect(batchIds().map((ids) => ids.length)).toEqual([100]);
+  });
+
+  it("refuses before the first byte when one participant alone passes the row budget", async () => {
+    participantRows = [
+      { participant_id: "fine", answers: "3" },
+      { participant_id: "huge", answers: "10001" }
+    ];
+
+    await expect(openSurveyCsvExport(scope)).rejects.toMatchObject({ statusCode: 413 });
+    // Refused in the preflight: no batch read was ever issued.
+    expect(batchIds()).toEqual([]);
+  });
+
+  it("admits a participant who exactly fills the row budget", async () => {
+    participantRows = [{ participant_id: "full", answers: "10000" }];
+
+    await expect(openSurveyCsvExport(scope)).resolves.toBeDefined();
+  });
+
+  it("throws rather than truncating when a batch read returns more than its budget", async () => {
+    participantRows = [{ participant_id: "grew" }];
+    answerRows = Array.from({ length: 10_001 }, (_u, i) => ({
+      session_id: `g${i}`,
+      participant_id: "grew",
+      step_id: "q1",
+      step_prompt: null,
+      step_type: "open_text",
+      response_payload: { text: "x" },
+      saved_at: "2026-08-21T10:00:00.000Z"
+    }));
+
+    const csvExport = await openSurveyCsvExport(scope);
+    const iterator = csvExport.participants(new AbortController().signal);
+
+    await expect(iterator.next()).rejects.toMatchObject({ statusCode: 413 });
   });
 });
 

@@ -397,6 +397,26 @@ describe("one person answering in two sessions", () => {
     expect(rows(csv).slice(1)).toEqual(["s1,one,false,Left,", "s2,two,false,Right,"]);
   });
 
+  it("flags nothing for a person whose two sessions share only an instruction row", () => {
+    // An instruction is not an answer, so two of them cannot disagree - a
+    // flag here would mark a row superseded with nothing on it that lost.
+    const csv = toResponsesCsv(steps, [
+      response("intro", "monday", {}, { participant_id: "person", step_type: "instruction", saved_at: "2026-09-21T09:00:00.000Z" }),
+      response("intro", "tuesday", {}, { participant_id: "person", step_type: "instruction", saved_at: "2026-09-22T09:00:00.000Z" })
+    ]);
+
+    expect(rows(csv).slice(1)).toEqual(["monday,person,false,,", "tuesday,person,false,,"]);
+  });
+
+  it("flags nothing when the later answer to a question is blank", () => {
+    const csv = toResponsesCsv(steps, [
+      answer("q1", "monday", "Left", "2026-09-21T09:00:00.000Z"),
+      response("q1", "tuesday", {}, { participant_id: "person", step_type: "single_choice", saved_at: "2026-09-22T09:00:00.000Z" })
+    ]);
+
+    expect(rows(csv).slice(1)).toEqual(["monday,person,false,Left,", "tuesday,person,false,,"]);
+  });
+
   it("puts one person's sessions next to each other, whoever answered in between", () => {
     const csv = toResponsesCsv(steps, [
       answer("q1", "p-monday", "Left", "2026-09-21T09:00:00.000Z", "p"),

@@ -418,4 +418,85 @@ describe.skipIf(skipDbTests)("the CSV batch read, against real Postgres", () => 
       overRead({ values: [STUDY_ID], rows: widened.rows })
     ).toHaveLength(150);
   }, 120_000);
+
+  /**
+   * THE ROW BUDGET, on a real database (cto/AdaptaLabs#152, the security
+   * gate's MEDIUM). A batch is a hundred PEOPLE, and one person can hold
+   * thousands of answer-carrying sessions - so without a budget a single read
+   * carried everything that person had. Seeded with one answer per session,
+   * which is the shape the abuse takes: many abandoned sessions, each minted
+   * fresh.
+   */
+  async function seedOnePersonWith(answers: number): Promise<void> {
+    await pool.query(
+      `INSERT INTO firsthand.studies (id, title, intro_text, consent_text, status)
+       VALUES ($1, 'Batch scope', 'Intro', 'Consent', 'launched')`,
+      [STUDY_ID]
+    );
+    await pool.query(
+      `INSERT INTO firsthand.study_steps (id, study_id, step_order, type, prompt)
+       VALUES ($1, $2, 1, 'open_text', 'Question 0')`,
+      [`${STUDY_ID}_q0`, STUDY_ID]
+    );
+    await pool.query(
+      `INSERT INTO firsthand.runtime_sessions
+         (session_id, token, study_id, study_title, participant_id,
+          participant_display_name, session_status, transcript_status,
+          microphone_permission, screen_permission, recording_status,
+          upload_status, created_at, updated_at, opportunity_id, steps,
+          logical_session_id, attempt_number)
+       SELECT 'many_' || n, 'tok_many_' || n, $1, 'Batch scope', 'user_many', 'P',
+              'abandoned', 'none', 'granted', 'granted', 'idle', 'idle',
+              NOW(), NOW(), $2, '[]'::jsonb, 'many_' || n, 1
+       FROM generate_series(1, $3::int) AS n`,
+      [STUDY_ID, OPPORTUNITY_ID, answers]
+    );
+    await pool.query(
+      `INSERT INTO firsthand.participant_responses
+         (id, session_id, step_id, step_type, response_payload, saved_at,
+          study_id, step_prompt)
+       SELECT 'r_many_' || n, 'many_' || n, $1, 'open_text',
+              jsonb_build_object('text', 'answer ' || n),
+              TIMESTAMPTZ '2026-09-21 09:00:00+00' + n * INTERVAL '1 second',
+              $2, 'Question 0'
+       FROM generate_series(1, $3::int) AS n`,
+      [`${STUDY_ID}_q0`, STUDY_ID, answers]
+    );
+  }
+
+  it("refuses one participant whose answers pass the row budget, before any batch read", async () => {
+    await seedOnePersonWith(10_001);
+
+    const { openSurveyCsvExport } = await import("./survey-results-repository");
+
+    await expect(
+      openSurveyCsvExport({ kind: "study", studyId: STUDY_ID })
+    ).rejects.toMatchObject({ statusCode: 413 });
+    // Refused in the preflight - nothing was read in a batch. The preflight
+    // itself IS recorded (it binds no id list, so `asked` is null), which is
+    // also the control that the recorder was listening at all.
+    const shapes = readShapes(recorded);
+    expect(shapes.length).toBeGreaterThan(0);
+    expect(shapes.filter((shape) => shape.asked !== null)).toEqual([]);
+  }, 120_000);
+
+  it("reads a participant who exactly fills the row budget in one read of 10000 rows", async () => {
+    // The CONTROL for the refusal above: a budget that refused everything, or
+    // a preflight that miscounted, would pass that test and fail this one.
+    await seedOnePersonWith(10_000);
+
+    const { openSurveyCsvExport } = await import("./survey-results-repository");
+    const csvExport = await openSurveyCsvExport({ kind: "study", studyId: STUDY_ID });
+    recorded.length = 0;
+
+    let sessions = 0;
+    for await (const _row of csvExport.participants(new AbortController().signal)) {
+      sessions += 1;
+    }
+
+    expect(readShapes(recorded)).toEqual([
+      { asked: 1, returned: 1, rows: 10_000, overRead: 0 }
+    ]);
+    expect(sessions).toBe(10_000);
+  }, 120_000);
 });

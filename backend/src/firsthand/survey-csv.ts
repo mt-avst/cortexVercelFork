@@ -16,9 +16,12 @@ import {
  * Per session rather than per person, deliberately (cto/AdaptaLabs#152). One
  * person can hold two answer-carrying sessions, and the results page keeps
  * only their latest answer to each question. The export keeps EVERY answer,
- * names the person beside each session and flags a session holding an answer
- * the page replaced - so a researcher can see that somebody answered twice,
- * and can still reproduce the page by setting the flagged answers aside.
+ * names the person beside each session and flags a session holding at least
+ * one answer the page replaced - so a researcher can see that somebody
+ * answered twice. The flag is per ROW: it does not say which cell lost, and
+ * setting flagged rows aside does NOT reproduce the page, because a flagged
+ * row can still hold answers that count. That is the settled shape (a boolean
+ * per row); a researcher needing the page's exact numbers reads the page.
  */
 
 /**
@@ -253,6 +256,15 @@ export function toCsvSessionRow(
   return [
     cell(row.sessionId, false),
     // Neutralised: an id we did not mint ourselves, and the cost is nothing.
+    //
+    // ponytail: this is `users.id`, stable across every study the person
+    //   takes part in, so two exports can be joined on it where two session
+    //   ids could not. Within the entitled readers it adds nothing (the owner
+    //   already joins answers to name and email via session-events), and
+    //   Cortex makes no anonymity claim; the exposure is a CSV passed on.
+    //   Upgrade path: a per-study keyed digest of the id, the salted-digest
+    //   route docs/PRODUCTION_HARDENING.md already names.
+    //   -> cto/AdaptaLabs#154
     cell(row.participantId ?? "", true),
     cell(row.superseded ? "true" : "false", false),
     ...questions.map((step) => columnFor(step, byColumn.get(step.step_id))),

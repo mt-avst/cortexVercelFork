@@ -820,6 +820,27 @@ describe("one person answering the same question in two sessions", () => {
     expect(results.questions[0].asked_as).toBeUndefined();
   });
 
+  it("does not let a blank later answer replace a real earlier one", () => {
+    // The API accepts partial saves, so a blank row can be stored. The tallies
+    // drop blanks; if a blank could still WIN, the person would stay in the
+    // headline with their real answer gone from every chart.
+    const open = step({ step_id: "t1", type: "open_text" });
+
+    const results = aggregateSurveyResults(
+      [choice, open],
+      [
+        answer("q1", "monday", { selectedOption: "Left" }, "2026-09-21T09:00:00.000Z"),
+        answer("t1", "monday", { text: "It was great" }, "2026-09-21T09:00:00.000Z", { step_type: "open_text" }),
+        answer("q1", "tuesday", {}, "2026-09-22T09:00:00.000Z"),
+        answer("t1", "tuesday", { text: "   " }, "2026-09-22T09:00:00.000Z", { step_type: "open_text" })
+      ]
+    );
+
+    expect(results.questions.map((q) => q.answered)).toEqual([1, 1]);
+    expect(results.questions[0].options?.map((o) => o.count)).toEqual([1, 0]);
+    expect(results.questions[1].answers).toEqual([{ session_id: "monday", text: "It was great" }]);
+  });
+
   it("still counts a person whose only answer lost as a respondent", () => {
     // The CONTROL for the skip: the person answered, so the headline keeps
     // them even though one of their two rows is not tallied.

@@ -474,6 +474,33 @@ const questionKey = (row: StoredResponse): string =>
     : `r:${row.step_type}\u0000${row.step_prompt ?? UNKNOWN_REMOVED_PROMPT}`;
 
 /**
+ * Whether a stored row is an answer the tallies would count, by the same
+ * predicates they use: non-blank text, at least one selection, a numeric
+ * rating. The rating's RANGE is not checked here - that needs the step's
+ * scale, which a removed question no longer has - so an off-scale rating
+ * still takes part, and would then be dropped by `tallyScale`. That is the
+ * one gap between this and the tallies, and it needs a stored rating outside
+ * the question's own scale to reach.
+ */
+const countsAsAnswer = (row: StoredResponse): boolean => {
+  if (!QUESTION_TYPES.has(row.step_type)) {
+    return false;
+  }
+
+  const payload = row.response_payload ?? {};
+
+  if (row.step_type === "open_text") {
+    return asText(payload).trim().length > 0;
+  }
+
+  if (row.step_type === "rating" || row.step_type === "nps") {
+    return asRating(payload) !== undefined;
+  }
+
+  return asSelections(payload, row.step_type).length > 0;
+};
+
+/**
  * The answers that LOST: for each person and each question, every answer but
  * the latest (cto/AdaptaLabs#152).
  *
@@ -486,17 +513,27 @@ const questionKey = (row: StoredResponse): string =>
  * the most recent thing a person told us is what they think now.
  *
  * A tie on `saved_at` goes to the answer LATER IN THE INPUT. Both readers hand
- * this rows ordered by `(saved_at, id)`, so a tie is broken by `id` and the
- * result does not depend on which reader asked. `>=` below is what does that.
+ * this rows ordered by `(saved_at, id)`, so a tie is broken by `id` - a random
+ * uuid, so the choice is arbitrary, but it is DETERMINISTIC and the same
+ * whichever reader asked, which is the property that matters: the page and
+ * the CSV's flag never disagree about which answer won.
+ *
+ * `saved_at` is stamped by the server unless an API caller supplies one; the
+ * app never does. A caller who backdates can only choose between their OWN
+ * answers, so it buys nothing over simply answering again.
  *
  * Returned as the losers rather than the winners because both consumers want
  * the losers: the aggregation SKIPS them, and the CSV keeps every row and
  * FLAGS the sessions holding one. A lost answer is still data - for a small
  * qualitative study, somebody changing their mind is a finding.
  *
- * Only answerable types take part. An `instruction` row is not an answer, so
- * two of them cannot disagree, and flagging a session for one would mark a row
- * superseded with nothing on it that lost.
+ * Only ANSWERS take part - an answerable type carrying something the tallies
+ * below would count (`countsAsAnswer`). An `instruction` row is not an answer,
+ * so flagging a session for one would mark a row superseded with nothing on
+ * it that lost. And a BLANK later row - storable by a client driving the API,
+ * which accepts partial saves - must not knock out a real earlier answer:
+ * the tallies drop blanks, so letting one win would leave the person counted
+ * in the headline with their real answer gone from every chart.
  *
  * Keyed by object identity, so it only means anything for the array it was
  * built from - which is how both callers use it.
@@ -508,7 +545,7 @@ export function supersededAnswers(
   const superseded = new Set<StoredResponse>();
 
   for (const row of responses) {
-    if (!QUESTION_TYPES.has(row.step_type)) {
+    if (!countsAsAnswer(row)) {
       continue;
     }
 
