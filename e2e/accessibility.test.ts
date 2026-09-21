@@ -1586,12 +1586,14 @@ test.describe('Accessibility Tests', () => {
     // a regression there): the sort-caret and kebab icons are decorative
     // glyphs axe cannot contrast-check at all ("non-text characters"), and
     // the STATUS pills (draft/published/closed - a different fix, row 27) hit
-    // axe's "partially obscured" heuristic regardless of their color, since
-    // it also fires unchanged on .badge.bg-dark (an unrelated status color
-    // this diff never touches).
+    // axe's "partially obscured" heuristic regardless of their color.
+    // No clause for `.admin-pill--auto-closed` (#142): measured with this
+    // regex back in its pre-#142 form, the filter stays green, so the
+    // marker resolves cleanly and an exception for it would be an
+    // unexercised clause hiding whatever lands there next.
     const unexpectedIncomplete = scan.incomplete
       .flatMap((rule) => rule.nodes.map((node) => node.target.map(String).join(' ')))
-      .filter((target) => !/admin-th-sort-caret|Actions for .* study.*aria-hidden|admin-study-status|badge\.bg-dark/.test(target));
+      .filter((target) => !/admin-th-sort-caret|Actions for .* study.*aria-hidden|admin-study-status/.test(target));
     expect(
       unexpectedIncomplete,
       `axe could not resolve ${unexpectedIncomplete.length} unexpected node(s) - the scan may be blind: ${unexpectedIncomplete.join(', ')}`
