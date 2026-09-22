@@ -183,3 +183,38 @@ describe('AdminFeedback load-error alert sits where its colour rule can reach it
     expect(alert?.classList.contains('feedback-error-text')).toBe(true);
   });
 });
+
+/**
+ * cto/AdaptaLabs#150: the view-feedback modal's scrim was rendered as a plain
+ * descendant of the admin-tabs card. That card carries `backdrop-filter`
+ * (styles/_components.css), which - per spec - induces a stacking context of
+ * its own. Because the card itself is not elevated in the root stacking
+ * context, the page-level FeedbackFooter (a later sibling of <main>, z-index:
+ * 10, position: relative) paints ABOVE the whole card and everything inside
+ * it, scrim included, however high the scrim's own z-index reads.
+ *
+ * jsdom has no layout, so this cannot assert a paint order. What it CAN
+ * assert is the fix's actual mechanism: the modal escapes that ancestor via a
+ * portal to document.body, the same pattern ConfirmationModal already uses
+ * for the identical reason. A modal that is not a DOM descendant of the
+ * backdrop-filter card is provably outside its stacking context.
+ */
+describe('AdminFeedback view modal escapes the tabs card stacking context (cto/AdaptaLabs#150)', () => {
+  it('portals the view-feedback scrim to document.body, not the render container', async () => {
+    mockGetFeedback.mockResolvedValue({ items: [item(1)], has_more: false });
+
+    const { container } = render(<AdminFeedback />);
+    await waitFor(() => {
+      expect(screen.getByText('feedback body 1')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('feedback body 1').closest('tr') as HTMLElement);
+
+    const scrim = await screen.findByTestId('feedback-view-modal');
+    // The would-be ancestor with backdrop-filter (admin-tabs-card in Admin.tsx)
+    // wraps `container` in the real page; a portal renders as a sibling of
+    // `container` under document.body, so it is never one of its descendants.
+    expect(container.contains(scrim)).toBe(false);
+    expect(document.body.contains(scrim)).toBe(true);
+  });
+});
