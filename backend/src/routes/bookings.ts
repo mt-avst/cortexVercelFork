@@ -19,6 +19,7 @@ import { awardPoints, awardPointsAfterApproval } from '../services/gamification'
 import { parsePointsHistoryCursor } from '../../../shared/services/gamification';
 import type { PointsHistoryCursor } from '../services/gamification';
 import { isOpportunityOwner } from '../utils/opportunityOwnership';
+import { OPPORTUNITY_CLOSED_CODE, OPPORTUNITY_CLOSED_MESSAGE, hasOpportunityClosed } from '../utils/opportunityClosed';
 import { z } from 'zod';
 import { VALIDATION } from '../../../shared/constants';
 import {
@@ -77,7 +78,8 @@ router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request,
       SELECT s.*, o.status as opportunity_status, o.title as opportunity_title,
              o.owner_user_id, o.purpose_one_liner, o.id as opportunity_id,
              o.type as opportunity_type, o.screener,
-             o.consent_text, o.consent_template_id, o.consent_template_version
+             o.consent_text, o.consent_template_id, o.consent_template_version,
+             o.end_date as opportunity_end_date
       FROM sessions s
       JOIN opportunities o ON s.opportunity_id = o.id
       WHERE s.id = $1
@@ -126,6 +128,20 @@ router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request,
     if (new Date(session.end_time) <= new Date()) {
       await client.query('ROLLBACK');
       throw new ValidationError('Cannot book past sessions');
+    }
+
+    // The study-level closure gate (cto/AdaptaLabs#143), beside the slot-level
+    // one above. A study can carry an `end_date` in the past while still
+    // holding one future slot - the sweep only closes on an hourly tick, and a
+    // study created undated-then-dated keeps whatever slots were already
+    // there - and until this guard existed nothing on this path checked it, so
+    // a study the mint routes already refuse as closed was still bookable.
+    // Same refusal the mint routes use, so one study cannot answer two
+    // different ways depending on which surface a participant reaches it
+    // through.
+    if (hasOpportunityClosed(session.opportunity_end_date)) {
+      await client.query('ROLLBACK');
+      throw new AppError(OPPORTUNITY_CLOSED_MESSAGE, 403, OPPORTUNITY_CLOSED_CODE);
     }
 
     // The consent gate (#79 step 1b; baseline extended in audit row 9), off the
@@ -811,7 +827,8 @@ router.post('/:id/reschedule', requireAuth, asyncHandler(async (req: Request, re
     // Load target session with opportunity details
     const targetSessionResult = await client.query(`
       SELECT s.*, o.status as opportunity_status, o.title as opportunity_title,
-             o.purpose_one_liner, o.id as opportunity_id, o.owner_user_id
+             o.purpose_one_liner, o.id as opportunity_id, o.owner_user_id,
+             o.end_date as opportunity_end_date
       FROM sessions s
       JOIN opportunities o ON s.opportunity_id = o.id
       WHERE s.id = $1
@@ -848,6 +865,17 @@ router.post('/:id/reschedule', requireAuth, asyncHandler(async (req: Request, re
     if (new Date(targetSession.end_time) <= new Date()) {
       await client.query('ROLLBACK');
       throw new ValidationError('Cannot reschedule to past sessions');
+    }
+
+    // The study-level closure gate (cto/AdaptaLabs#143), mirroring the book
+    // route's guard above. The same-opportunity check just above means this is
+    // the SAME study the booking was already on, but a study can close (by
+    // `end_date`) after the original booking was made and while a future slot
+    // still exists on it, so this cannot be skipped as "already checked at
+    // book time".
+    if (hasOpportunityClosed(targetSession.opportunity_end_date)) {
+      await client.query('ROLLBACK');
+      throw new AppError(OPPORTUNITY_CLOSED_MESSAGE, 403, OPPORTUNITY_CLOSED_CODE);
     }
 
     if (targetSession.booked_count >= targetSession.capacity) {
