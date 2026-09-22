@@ -16,16 +16,49 @@ import { NPS_SCALE_MAX, type StudyStep } from "./contract";
  * parses it with `.strict()`. A field added on the client and not here is
  * therefore a 422 the first time it is submitted - never a key that zod
  * silently strips and the aggregate quietly reads as "unanswered".
+ *
+ * Ceilings on a stored answer's free-text fields (cto/AdaptaLabs#155, fix 1 of
+ * 2). Before these, every field below was a bare `z.string()` (or an array of
+ * them) bounded only by the 100kb request-body limit, so a single crafted
+ * answer could carry megabytes of text; the survey CSV export and aggregate
+ * results readers then read that per session across a 100-session batch,
+ * reaching ~510MB on the single-replica 2Gi runtime pod. Policy numbers,
+ * pinned as literals in survey-answers.test.ts - a test that derived its
+ * expectation from the constant could not see the constant move.
+ *
+ * A per-field cap alone is not enough: `selectedOptions` at 500 entries of
+ * 1,000 chars each is 500KB, ABOVE the 100kb body limit, so raising a large
+ * payload through it - on ANY step type, since nothing stopped an open_text
+ * answer from also carrying `selectedOptions` - reopened the same DoS the
+ * `text` cap closed. Found by the security-auditor gate on !510. Two
+ * independent layers close it:
+ *
+ *  - these limits now match the authoring ceilings a legitimate
+ *    `selectedOption`/`selectedOptions` value can ever reach -
+ *    `INLINE_STUDY_LIMITS.maxOptionLength` (500 chars) and
+ *    `INLINE_STUDY_LIMITS.maxOptions` (20) - so `selectedOptions` caps at
+ *    10KB, under the body limit even alone. Kept as INDEPENDENT literals
+ *    rather than importing those constants: this is a participant-answer
+ *    security ceiling, not an authoring UX limit, and the two must not
+ *    silently drift together if either is retuned for an unrelated reason;
+ *  - `findAnswerValidityProblem` below refuses a payload carrying a field
+ *    that step type cannot legitimately produce, so `selectedOptions` cannot
+ *    be smuggled onto an open_text/rating/nps step to begin with.
+ *
+ * `text` (10,000 chars) is generous for genuine long-form free text and is
+ * unaffected by this - it was never the field being bypassed.
  */
+export const MAX_ANSWER_TEXT_LENGTH = 10_000;
+export const MAX_ANSWER_OPTION_LENGTH = 500;
+export const MAX_ANSWER_OPTIONS_COUNT = 20;
+
 export const surveyAnswerSchema = z.object({
-  // ponytail: unbounded free text. A single answer is capped only by the 100kb
-  //   request-body limit, so the aggregate results body bounds itself with
-  //   MAX_AGGREGATE_RESPONSE_CHARS instead (survey-results-repository.ts).
-  //   Upgrade path: a `.max()` here, once a sensible per-answer ceiling is
-  //   agreed. -> cto/AdaptaLabs#155
-  text: z.string().optional(),
-  selectedOption: z.string().optional(),
-  selectedOptions: z.array(z.string()).optional(),
+  text: z.string().max(MAX_ANSWER_TEXT_LENGTH).optional(),
+  selectedOption: z.string().max(MAX_ANSWER_OPTION_LENGTH).optional(),
+  selectedOptions: z
+    .array(z.string().max(MAX_ANSWER_OPTION_LENGTH))
+    .max(MAX_ANSWER_OPTIONS_COUNT)
+    .optional(),
   rating: z.number().int().optional()
 });
 
@@ -80,6 +113,31 @@ const ratingBounds = (step: StudyStep) =>
     : { min: 1, max: step.config?.scale_max ?? 0 };
 
 /**
+ * The one field an answerable step type may legitimately carry. Every other
+ * `SurveyAnswer` field must be absent - not merely ignored - so a payload
+ * cannot relocate a large value onto a step type whose own field cap does not
+ * apply to it (cto/AdaptaLabs#155, fix 1 of 2, HIGH from the security-auditor
+ * gate on !510: an open_text step accepted `selectedOptions` unchecked, so the
+ * 10,000-char `text` cap was sidestepped by carrying the payload there
+ * instead, still under the request-body limit).
+ */
+const ANSWER_FIELD_BY_STEP_TYPE: Readonly<Record<string, keyof SurveyAnswer>> =
+  {
+    open_text: "text",
+    single_choice: "selectedOption",
+    multi_choice: "selectedOptions",
+    rating: "rating",
+    nps: "rating"
+  };
+
+const SURVEY_ANSWER_FIELDS = [
+  "text",
+  "selectedOption",
+  "selectedOptions",
+  "rating"
+] as const satisfies ReadonlyArray<keyof SurveyAnswer>;
+
+/**
  * A validity rule broken by an answer. Reported as a code rather than a
  * message, like `StepShapeProblem`, because the same rule is enforced at two
  * boundaries - the participant UI and the runtime API - and each words its
@@ -92,6 +150,7 @@ const ratingBounds = (step: StudyStep) =>
  */
 export type AnswerValidityProblem =
   | { code: "step_not_answerable" }
+  | { code: "field_not_applicable" }
   | { code: "option_not_offered" }
   | { code: "option_repeated" }
   | { code: "too_many_selections"; max: number }
@@ -103,6 +162,15 @@ export function findAnswerValidityProblem(
 ): AnswerValidityProblem | null {
   if (!isAnswerable(step)) {
     return { code: "step_not_answerable" };
+  }
+
+  const allowedField = ANSWER_FIELD_BY_STEP_TYPE[step.type];
+  const hasInapplicableField = SURVEY_ANSWER_FIELDS.some(
+    (field) => field !== allowedField && answer[field] !== undefined
+  );
+
+  if (hasInapplicableField) {
+    return { code: "field_not_applicable" };
   }
 
   const options = step.options ?? [];

@@ -63,12 +63,12 @@ const MAX_RESPONSE_ROWS = 200_000;
  * The most free-text characters an aggregate results BODY may carry.
  * cto/AdaptaLabs#9, option A.
  *
- * `MAX_RESPONSE_ROWS` bounds the row count, but not the body: an open-text
- * answer has no length limit at the write boundary (`surveyAnswerSchema.text`
- * is a bare `z.string()`), so the AGGREGATE of many normal answers - or a few
- * large ones, each still under the 100kb request-body limit - is a
- * few-hundred-megabyte `res.json` on a single-replica 2Gi pod. That is two
- * problems, and this closes ONE of them outright:
+ * `MAX_RESPONSE_ROWS` bounds the row count, but not the body: `surveyAnswerSchema`
+ * now caps a single answer's free-text fields (cto/AdaptaLabs#155, fix 1 of 2 -
+ * `MAX_ANSWER_TEXT_LENGTH` and friends in survey-answers.ts), but the AGGREGATE
+ * of many normal answers, each individually within that per-answer cap, is
+ * still a few-hundred-megabyte `res.json` on a single-replica 2Gi pod. That is
+ * two problems, and this closes ONE of them outright:
  *
  *  - the heap that OOM-kills every live participant session - CLOSED, the body
  *    is now bounded;
@@ -107,8 +107,10 @@ export const MAX_AGGREGATE_RESPONSE_CHARS = 5_000_000;
 /**
  * The free-text length one stored answer contributes to the body.
  *
- * Only the fields `surveyAnswerSchema` allows to be unbounded strings. `rating`
- * is an integer and negligible; the session id and timestamps are fixed width.
+ * Only the fields `surveyAnswerSchema` allows to be variable-length strings -
+ * each individually capped, but still the only fields whose SUM across many
+ * answers this aggregate bound has to watch. `rating` is an integer and
+ * negligible; the session id and timestamps are fixed width.
  */
 function payloadTextLength(payload: Record<string, unknown>): number {
   let total = 0;
