@@ -696,6 +696,22 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
     return () => mq.removeEventListener('change', handleChange);
   }, []);
 
+  /**
+   * #130 (second pass): whether the grid ACTUALLY overflows, measured -
+   * deliberately excluding the `matchMedia(max-width: 768px)` branch that
+   * `needsScrollContainment` folds in below purely to keep the sticky header
+   * consistent on phone (see that state's own comment). Gating the day pager
+   * on `needsScrollContainment` looked like reuse but wasn't: that signal is
+   * forced true for the whole ≤768px band regardless of overflow, so a 2-3
+   * day study viewed at 481-768px (iPad portrait, a half-width desktop
+   * window) - which fits with room to spare - still showed a pager whose
+   * "Next" scrolled nothing. That is the exact defect #130 exists to kill,
+   * over a WIDER band than the original (≤480px only). This is the pure half
+   * of the same measurement, so a genuinely-fitting grid never shows the
+   * pager at any width, and a genuinely-overflowing one always does.
+   */
+  const [gridOverflows, setGridOverflows] = useState(false);
+
   useEffect(() => {
     const el = timelineRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
@@ -705,7 +721,9 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
     const requiredWidth = dayGrid.minWidth + 90 + 24;
     const measure = () => {
       const isPhone = window.matchMedia?.('(max-width: 768px)').matches ?? false;
-      setNeedsScrollContainment(isPhone || el.clientWidth < requiredWidth);
+      const overflows = el.clientWidth < requiredWidth;
+      setNeedsScrollContainment(isPhone || overflows);
+      setGridOverflows(overflows);
     };
     measure();
     const observer = new ResizeObserver(measure);
@@ -1030,14 +1048,18 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
       )}
 
       {/* Day pager (row 6, second-pass review; #130 for this gate). Rendered
-          only once `needsScrollContainment` says the grid genuinely cannot
-          show every visible day at once - the same measurement that switches
-          on `.calendar-timeline--scrolls` - rather than on viewport width
-          alone, so two days that fit comfortably at a narrow-but-not-tiny
-          width do not get a "Next" that visibly moves nothing. Distinct from
-          the week nav above - this steps one COLUMN, not one WINDOW, and
-          exists even for a plain one-week study that never triggers that. */}
-      {needsScrollContainment && visibleDays.length > 1 && (
+          only once `gridOverflows` says the grid genuinely cannot show every
+          visible day at once - the PURE measured half of the same
+          overflow check that also feeds `.calendar-timeline--scrolls`, NOT
+          `needsScrollContainment` itself, which folds in a ≤768px
+          matchMedia branch that is true regardless of overflow (kept for the
+          sticky-header reason on that state's own comment). Gating on that
+          combined signal would show a pager whose "Next" moves nothing for
+          any 2-3 day study viewed at 481-768px, an even wider band than the
+          original ≤480px defect. Distinct from the week nav above - this
+          steps one COLUMN, not one WINDOW, and exists even for a plain
+          one-week study that never triggers that. */}
+      {gridOverflows && visibleDays.length > 1 && (
         <div
           className="calendar-day-pager d-flex justify-content-between align-items-center mb-3"
           role="group"

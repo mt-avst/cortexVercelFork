@@ -9,30 +9,45 @@ import CalendarGrid from '../CalendarGrid';
  * #130: the phone day-pager (`focusedDayIndex`) used to be written ONLY by
  * its own Previous/Next buttons, so a swipe on the still-swipeable
  * `.calendar-timeline` scroller left the label and the buttons'
- * enabled/disabled state pointing at the wrong day. Separately, it rendered
- * on viewport width alone (`isNarrowViewport`), with no regard for whether
- * the grid actually needed to scroll - two days that fit comfortably at a
- * narrow-but-not-tiny width still showed a pager whose "Next" moved nothing.
+ * enabled/disabled state pointing at the wrong day.
+ *
+ * Separately - and this is the second pass, after code review caught the
+ * first fix reusing the wrong signal - the pager must render only when the
+ * grid ACTUALLY cannot show every visible day at once, at ANY viewport
+ * width. The first attempt gated it on `needsScrollContainment`, which folds
+ * in a `matchMedia(max-width: 768px)` branch that is forced true for the
+ * WHOLE <=768px band regardless of overflow (kept there deliberately, for
+ * the sticky-header reason - see that state's own comment in the
+ * component). Reusing it for the pager meant a 2-3 day study viewed at
+ * 481-768px (iPad portrait, a half-width desktop window) - which fits with
+ * room to spare - still showed a pager whose "Next" scrolled nothing: the
+ * exact defect #130 exists to kill, over a WIDER band than main's original
+ * (<=480px only). The fix is `gridOverflows`, the pure measured half of that
+ * same check, with the matchMedia branch excluded.
  *
  * jsdom has NO LAYOUT (#95): `offsetWidth`, `clientWidth` and
- * `getBoundingClientRect` are always 0/stubbed, so a test that scrolls a real
- * element and then asserts on layout-derived state would pass whether or not
- * the production code ran at all. Two things below are NOT stubbed, and are
- * what these tests actually drive:
- *   - `Element.scrollLeft` is a genuine settable/readable property in jsdom
- *     (verified directly: `el.scrollLeft = 304` then reads back `304`),
- *     unlike `clientWidth`, which is hard-wired to 0 - so setting it and
- *     firing a `scroll` event exercises the real column-stride arithmetic in
+ * `getBoundingClientRect` are always 0/stubbed, and `ResizeObserver` does not
+ * exist at all - both verified directly against a bare jsdom window. A test
+ * that scrolls or resizes a real element and asserts on layout-derived state
+ * would pass whether or not the production code ran at all. Nothing here
+ * relies on real layout; instead:
+ *   - `Element.scrollLeft` IS a genuine settable/readable property in jsdom
+ *     (verified: set 304, read back 304), so setting it and firing a
+ *     `scroll` event exercises the real column-stride arithmetic in
  *     `handleTimelineScroll`, not a stub.
- *   - `window.matchMedia` does not exist at all in this jsdom (verified:
- *     `typeof window.matchMedia === 'undefined'` on a bare jsdom window, and
- *     no setup file here installs one), so mocking it is what actually
- *     controls `needsScrollContainment` in these tests. The OTHER path that
- *     can set it - the `ResizeObserver` measurement against `clientWidth` -
- *     is a second vacuity trap (that width is always 0 in jsdom) and is never
- *     reached here: `ResizeObserver` is also undefined in this environment,
- *     so that branch returns early and cannot quietly make these tests pass
- *     for the wrong reason.
+ *   - `window.matchMedia` does not exist in this jsdom at all, so mocking it
+ *     is what controls the narrow-viewport branch directly.
+ *   - `clientWidth` is a genuinely hard-wired-0 getter on `Element.prototype`
+ *     (verified via its property descriptor) - not writable per-element like
+ *     `scrollLeft` is. It is therefore overridden at the prototype level with
+ *     a fake getter reading a test-controlled variable, and a minimal
+ *     `ResizeObserver` stub is installed so the `measure()` effect that reads
+ *     it actually runs (it early-returns otherwise) - `observe`/`disconnect`
+ *     are no-ops, since every test here only needs the SYNCHRONOUS `measure()`
+ *     call already inside that effect on mount, never a later resize
+ *     callback. This drives `gridOverflows` exactly as deliberately as
+ *     `scrollLeft` and `matchMedia` are driven above, and never lets a real
+ *     (always-zero) `clientWidth` decide a test's outcome.
  */
 
 vi.mock('../../api/client', () => ({
@@ -68,10 +83,10 @@ const renderGrid = (sessions: ReturnType<typeof sessionOn>[]) =>
 
 /**
  * Installs a `window.matchMedia` mock that answers every query (the
- * component only ever asks `(max-width: 768px)`) with a fixed `matches`,
- * which is what drives `needsScrollContainment`'s initial state directly -
- * see the docblock above for why this, and not a layout measurement, is the
- * non-vacuous way to control it here.
+ * component only ever asks `(max-width: 768px)`) with a fixed `matches`.
+ * Controls the narrow-viewport branch only - NOT whether the grid overflows,
+ * which is `mockedClientWidth` below. Kept separate on purpose: the whole
+ * point of this fix is that these two must be independently controllable.
  */
 const mockMatchMedia = (matches: boolean) => {
   window.matchMedia = vi.fn().mockImplementation((query: string) => ({
@@ -82,28 +97,62 @@ const mockMatchMedia = (matches: boolean) => {
   })) as unknown as typeof window.matchMedia;
 };
 
+/** See the docblock above: a no-op stand-in, just enough for `measure()`'s
+ * mount-time effect to run instead of early-returning. */
+class FakeResizeObserver {
+  observe(): void {}
+  unobserve(): void {}
+  disconnect(): void {}
+}
+
+/** Backs the `Element.prototype.clientWidth` override installed below. */
+let mockedClientWidth = 2000;
+
+Object.defineProperty(Element.prototype, 'clientWidth', {
+  configurable: true,
+  get: () => mockedClientWidth,
+});
+
+/**
+ * Forces `gridOverflows` true or false by setting the fake measured width
+ * comfortably under or comfortably over what any fixture in this file
+ * requires (largest here is 3 columns: 128*3 + 24*2 + 90 + 24 = 546px).
+ */
+const setMeasuredOverflow = (overflows: boolean) => {
+  mockedClientWidth = overflows ? 50 : 2000;
+};
+
 const pinClockTo = (iso: string) => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
   vi.setSystemTime(new Date(iso));
 };
 
 const ORIGINAL_MATCH_MEDIA = window.matchMedia;
+const ORIGINAL_RESIZE_OBSERVER = (globalThis as { ResizeObserver?: unknown }).ResizeObserver;
 
 beforeEach(() => {
   vi.clearAllMocks();
   // A fixed Monday-anchored week, all in the future, so nothing here is read
   // as past by the anchoring logic these tests are not exercising.
   pinClockTo('2026-09-01T09:00:00');
+  (globalThis as { ResizeObserver: unknown }).ResizeObserver = FakeResizeObserver;
+  // Comfortable fit by default; a test that wants overflow says so explicitly.
+  setMeasuredOverflow(false);
 });
 
 afterEach(() => {
   vi.useRealTimers();
   window.matchMedia = ORIGINAL_MATCH_MEDIA;
+  (globalThis as { ResizeObserver?: unknown }).ResizeObserver = ORIGINAL_RESIZE_OBSERVER;
 });
 
-describe('CalendarGrid day pager - render gate (#130)', () => {
-  it('does not render when the grid does not need scroll containment, even with more than one visible day', () => {
-    mockMatchMedia(false);
+describe('CalendarGrid day pager - render gate (#130, second pass)', () => {
+  it('hides the pager at a narrow (<=768px) viewport when the grid does not actually overflow', () => {
+    // The regression code review caught: a `matchMedia`-narrow viewport used
+    // to be enough on its own (via `needsScrollContainment`) even though
+    // this grid comfortably fits.
+    mockMatchMedia(true);
+    setMeasuredOverflow(false);
     renderGrid([sessionOn('2026-09-07'), sessionOn('2026-09-08')]);
 
     expect(
@@ -111,15 +160,20 @@ describe('CalendarGrid day pager - render gate (#130)', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('renders once the grid needs scroll containment', () => {
-    mockMatchMedia(true);
+  it('shows the pager when the grid overflows, regardless of viewport width', () => {
+    // A wide (non-narrow) viewport that genuinely cannot fit the grid - the
+    // case `needsScrollContainment` alone would never have shown, since its
+    // matchMedia branch is false here and only the measured half is true.
+    mockMatchMedia(false);
+    setMeasuredOverflow(true);
     renderGrid([sessionOn('2026-09-07'), sessionOn('2026-09-08')]);
 
     expect(screen.getByRole('group', { name: 'Calendar day navigation' })).toBeInTheDocument();
   });
 
-  it('stays off a single-day grid even when scroll containment is on', () => {
-    mockMatchMedia(true);
+  it('keeps the pager off a single-day grid even when the grid overflows', () => {
+    mockMatchMedia(false);
+    setMeasuredOverflow(true);
     renderGrid([sessionOn('2026-09-07')]);
 
     expect(
@@ -134,7 +188,7 @@ describe('CalendarGrid day pager - swipe sync (#130)', () => {
   const COLUMN_STRIDE_PX = 152;
 
   it('moves the label and button state when the scroller is swiped, not just when its buttons are pressed', () => {
-    mockMatchMedia(true);
+    setMeasuredOverflow(true);
     const { container } = renderGrid([
       sessionOn('2026-09-07'),
       sessionOn('2026-09-08'),
@@ -158,7 +212,7 @@ describe('CalendarGrid day pager - swipe sync (#130)', () => {
   });
 
   it('rounds a partial swipe to the nearest column rather than flooring it', () => {
-    mockMatchMedia(true);
+    setMeasuredOverflow(true);
     const { container } = renderGrid([
       sessionOn('2026-09-07'),
       sessionOn('2026-09-08'),
@@ -175,7 +229,7 @@ describe('CalendarGrid day pager - swipe sync (#130)', () => {
   });
 
   it('clamps a scroll position past the last column rather than reporting an out-of-range day', () => {
-    mockMatchMedia(true);
+    setMeasuredOverflow(true);
     const { container } = renderGrid([sessionOn('2026-09-07'), sessionOn('2026-09-08')]);
     const timeline = container.querySelector('.calendar-timeline') as HTMLElement;
 
@@ -189,7 +243,7 @@ describe('CalendarGrid day pager - swipe sync (#130)', () => {
   });
 
   it('still lets the buttons drive the pager directly (unchanged behaviour)', () => {
-    mockMatchMedia(true);
+    setMeasuredOverflow(true);
     renderGrid([sessionOn('2026-09-07'), sessionOn('2026-09-08'), sessionOn('2026-09-09')]);
 
     fireEvent.click(screen.getByRole('button', { name: 'Next day' }));
@@ -201,24 +255,29 @@ describe('CalendarGrid day pager - swipe sync (#130)', () => {
 /**
  * Non-vacuousness, proven by mutation rather than asserted in prose:
  *
- * 1. Reverting the render gate to `isNarrowViewport && visibleDays.length > 1`
- *    (the pre-#130 shape) turns both tests in the "render gate" describe
- *    block red: with no `window.innerWidth` narrowed and `matchMedia` mocked
- *    but `isNarrowViewport`'s own initial-state check reading
- *    `window.innerWidth <= 480` (jsdom's default width is 1024), the pager
- *    never renders even when `mockMatchMedia(true)` says scroll containment
- *    is on - "renders once the grid needs scroll containment" fails to find
- *    the group role.
+ * 1. Reverting the render gate from `gridOverflows` back to
+ *    `needsScrollContainment` (the exact regression code review caught)
+ *    turns "hides the pager at a narrow (<=768px) viewport when the grid
+ *    does not actually overflow" red: with `mockMatchMedia(true)`,
+ *    `needsScrollContainment` is true regardless of `setMeasuredOverflow
+ *    (false)`, so the pager renders and the `not.toBeInTheDocument()`
+ *    assertion fails. ("shows the pager when the grid overflows..." does NOT
+ *    catch this particular mutation - `needsScrollContainment` also goes
+ *    true via its own OR'd-in overflow measurement in that case, which is
+ *    why the narrow-but-fitting test above is the one that has to exist.)
  *
- * 2. Deleting the `onScroll={handleTimelineScroll}` wiring (or reverting
+ * 2. Reverting the render gate to a constant `false` turns "shows the pager
+ *    when the grid overflows..." red, and every swipe-sync test red with it
+ *    (the pager cannot be found to interact with at all).
+ *
+ * 3. Deleting the `onScroll={handleTimelineScroll}` wiring (or reverting
  *    `handleTimelineScroll` to a no-op) turns every test in the "swipe sync"
  *    describe block red except the last: firing `scroll` on the timeline no
  *    longer moves `focusedDayIndex`, so the label stays "Mon, Sep 7 · 1 of 3"
- *    after every simulated swipe and the disabled-state assertions on the
- *    buttons fail. The last test, which drives the buttons directly rather
- *    than the scroller, keeps passing either way - which is exactly why it
- *    is included, as the control proving the other four are not passing for
- *    an unrelated reason (e.g. the buttons alone rendering the right label).
+ *    after every simulated swipe. The last test, which drives the buttons
+ *    directly rather than the scroller, keeps passing either way - the
+ *    control proving the other three are not passing for an unrelated
+ *    reason (e.g. the buttons alone rendering the right label).
  *
  * Verified locally against this branch; not committed, since it is a
  * temporary edit to source made only to prove these tests kill the mutations
