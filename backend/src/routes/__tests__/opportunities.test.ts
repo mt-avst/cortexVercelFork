@@ -5507,6 +5507,221 @@ describe('Opportunities API', () => {
     });
   });
 
+  describe('duplicate INSERT column census (cto/AdaptaLabs#147)', () => {
+    /**
+     * EVERY COLUMN THE DUPLICATE INSERT MUST ACCOUNT FOR - READ FROM A REAL
+     * CREATE CALL RATHER THAN RESTATED HERE.
+     *
+     * The duplicate statement is a second, hand-written column list with
+     * nothing tying it to create's, so a column added to create silently
+     * stopped being copied on duplicate - which is exactly how `screener`,
+     * `target_roles`, `start_date`, `end_date` and `meeting_location_optional`
+     * went missing before this test existed. Reading create's own INSERT at
+     * test time, rather than hardcoding its column names a second time here,
+     * means this census cannot go stale the moment create's own list changes -
+     * a hardcoded copy could, silently, which is the whole failure mode #147
+     * exists to close.
+     */
+    const createColumnList = async (): Promise<string[]> => {
+      mockQuery.mockResolvedValueOnce({ rows: [] }); // user upsert
+      mockQuery.mockResolvedValueOnce({
+        rows: [{
+          id: 'create-census', type: 'interview',
+          created_at: new Date(), updated_at: new Date(),
+          start_date: null, end_date: null
+        }]
+      });
+
+      await request(listening(app))
+        .post('/api/opportunities')
+        .send({
+          type: 'interview',
+          title: 'A census interview title',
+          purpose_one_liner: 'A purpose long enough to satisfy the minimum length rule'
+        })
+        .expect(201);
+
+      const insert = mockQuery.mock.calls.find((call: unknown[]) =>
+        String(call[0]).includes('INSERT INTO opportunities')
+      );
+      const sql = String(insert![0]);
+      return sql
+        .slice(sql.indexOf('('), sql.indexOf(') VALUES'))
+        .split(',')
+        .map((column: string) => column.replace(/[()\s]/g, ''));
+    };
+
+    /**
+     * The row being duplicated, with a distinct value on every column create
+     * can write - including the three columns duplicate deliberately RESETS,
+     * given a value here that differs from the reset value, so a reset that
+     * quietly turned into an accidental copy-through would be told apart from
+     * one that is genuinely deliberate.
+     */
+    const originalRow = {
+      id: 'original-id',
+      type: 'interview',
+      title: 'An original interview title',
+      purpose_one_liner: 'A purpose long enough to satisfy the minimum length rule',
+      description_optional: 'An original description',
+      product_optional: 'An original product',
+      meeting_location_optional: 'An original meeting location',
+      default_duration_minutes: 45,
+      status: 'published',
+      owner_user_id: 'original-owner-id',
+      external_link_optional: 'https://example.com/original-link',
+      firsthand_study_id: 'study-original',
+      participant_type_required: 'specific',
+      participant_type_specific_details: 'An original participant detail',
+      start_date: new Date('2026-03-01T09:00:00.000Z'),
+      end_date: new Date('2026-04-01T09:00:00.000Z'),
+      delivery_mode: 'native',
+      consent_text: 'Original consent wording',
+      consent_template_id: 'custom',
+      consent_template_version: null,
+      screener: { questions: [{ id: 'role', prompt: 'Which team?', options: [] }] },
+      target_roles: ['Engineer', 'Designer'],
+      external_consent_confirmed: true
+    };
+
+    // A superadmin acting on someone else's study, so `owner_user_id` in the
+    // response can only be the CALLER if it was reset - the ordinary
+    // researcher_admin `app` used elsewhere in this file can never own an
+    // opportunity it does not also own, which would leave a reset
+    // indistinguishable from an accidental copy-through.
+    const superadminApp = express();
+    superadminApp.use(express.json());
+    superadminApp.use((req, _res, next) => {
+      (req as unknown as { session: unknown }).session = {
+        user: {
+          id: 'superadmin-id',
+          name: 'Super Admin',
+          email: 'superadmin@example.com',
+          role: 'superadmin'
+        }
+      };
+      next();
+    });
+    superadminApp.use('/api/opportunities', opportunitiesRouter);
+    superadminApp.use(errorHandler);
+
+    const duplicateInsert = async (): Promise<{ columns: string[]; values: unknown[] }> => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: originalRow.owner_user_id }] });
+      mockQuery.mockResolvedValueOnce({ rows: [originalRow] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ id: 'duplicate-id', created_at: new Date(), updated_at: new Date() }]
+      });
+
+      await request(listening(superadminApp))
+        .post(`/api/opportunities/${originalRow.id}/duplicate`)
+        .expect(201);
+
+      const insert = mockQuery.mock.calls.find((call: unknown[]) =>
+        String(call[0]).includes('INSERT INTO opportunities')
+      );
+      const sql = String(insert![0]);
+      const columns = sql
+        .slice(sql.indexOf('('), sql.indexOf(') VALUES'))
+        .split(',')
+        .map((column: string) => column.replace(/[()\s]/g, ''));
+      return { columns, values: insert![1] as unknown[] };
+    };
+
+    // Reset to a fixed value rather than copied from the source row.
+    const RESET: Record<string, unknown> = {
+      status: 'draft',
+      owner_user_id: 'superadmin-id',
+      delivery_mode: 'external'
+    };
+
+    // Named at the site in routes/opportunities.ts; repeated here only as a
+    // key set, so this test can assert coverage without restating the prose.
+    const EXCLUDED_COLUMNS = ['external_consent_confirmed', 'firsthand_study_id'];
+
+    /**
+     * THE COVERAGE ASSERTION. Every column create's INSERT names must appear
+     * on duplicate's INSERT or in `EXCLUDED_COLUMNS` - nothing more, nothing
+     * less. A column added to create and left unclassified here fails THIS
+     * test, by name, whether it was forgotten on duplicate's INSERT or
+     * forgotten from `EXCLUDED_COLUMNS`.
+     */
+    it('accounts for every column create writes, as copied, reset, or excluded with a reason', async () => {
+      const created = await createColumnList();
+      mockQuery.mockClear();
+      const { columns: duplicated } = await duplicateInsert();
+
+      // THE CONTROL. Without it, an empty `created` (a create call that wrote
+      // no columns at all) would make the equality below vacuously true.
+      expect(created.length).toBeGreaterThan(15);
+
+      expect([...duplicated, ...EXCLUDED_COLUMNS].sort()).toEqual([...created].sort());
+      // No column appears both bound and excluded - that would hide which one
+      // is true.
+      expect(duplicated.filter((c) => EXCLUDED_COLUMNS.includes(c))).toEqual([]);
+    });
+
+    it('binds every copied column to the ORIGINAL row\'s value', async () => {
+      mockQuery.mockClear();
+      const { columns, values } = await duplicateInsert();
+      const bound = (column: string) => {
+        const index = columns.indexOf(column);
+        expect(index).toBeGreaterThan(-1);
+        return values[index];
+      };
+
+      const copied: Record<string, unknown> = {
+        type: originalRow.type,
+        title: `${originalRow.title} (copy)`,
+        purpose_one_liner: originalRow.purpose_one_liner,
+        description_optional: originalRow.description_optional,
+        product_optional: originalRow.product_optional,
+        meeting_location_optional: originalRow.meeting_location_optional,
+        default_duration_minutes: originalRow.default_duration_minutes,
+        external_link_optional: originalRow.external_link_optional,
+        participant_type_required: originalRow.participant_type_required,
+        participant_type_specific_details: originalRow.participant_type_specific_details,
+        start_date: originalRow.start_date,
+        end_date: originalRow.end_date,
+        consent_text: originalRow.consent_text,
+        consent_template_id: originalRow.consent_template_id,
+        consent_template_version: originalRow.consent_template_version,
+        screener: JSON.stringify(originalRow.screener),
+        target_roles: JSON.stringify(originalRow.target_roles)
+      };
+
+      for (const [column, value] of Object.entries(copied)) {
+        expect({ [column]: bound(column) }).toEqual({ [column]: value });
+      }
+    });
+
+    it('resets status, owner and delivery mode rather than copying the original\'s', async () => {
+      mockQuery.mockClear();
+      const { columns, values } = await duplicateInsert();
+      const bound = (column: string) => {
+        const index = columns.indexOf(column);
+        expect(index).toBeGreaterThan(-1);
+        return values[index];
+      };
+
+      for (const [column, value] of Object.entries(RESET)) {
+        // The control for each: the original row's OWN value for this column
+        // must differ from the reset value, or a copy-through would pass here
+        // too.
+        expect((originalRow as Record<string, unknown>)[column]).not.toEqual(value);
+        expect({ [column]: bound(column) }).toEqual({ [column]: value });
+      }
+    });
+
+    it('excludes external_consent_confirmed and firsthand_study_id from the insert entirely', async () => {
+      mockQuery.mockClear();
+      const { columns } = await duplicateInsert();
+
+      for (const column of EXCLUDED_COLUMNS) {
+        expect(columns).not.toContain(column);
+      }
+    });
+  });
+
   describe('POST /api/opportunities/:id/close-if-past', () => {
     it('should close the opportunity once all sessions are past', async () => {
       // Ownership check
