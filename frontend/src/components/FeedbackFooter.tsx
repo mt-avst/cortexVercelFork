@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { submitFeedback } from '../api/client';
 import { logger } from '../utils/logger';
@@ -10,6 +10,13 @@ const FeedbackFooter: React.FC = () => {
   const [submitted, setSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const submittedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clear the submitted-banner timer on unmount only. Must sit before the
+  // early return below - hooks run unconditionally on every render.
+  useEffect(() => () => {
+    if (submittedTimerRef.current) clearTimeout(submittedTimerRef.current);
+  }, []);
 
   // Row 22 (second-pass review): /feedback carries its own dedicated form, so
   // the footer's identical "tell us how to improve Cortex" prompt stacked
@@ -38,7 +45,8 @@ const FeedbackFooter: React.FC = () => {
       });
       setSubmitted(true);
       setFeedback('');
-      setTimeout(() => setSubmitted(false), 3000);
+      if (submittedTimerRef.current) clearTimeout(submittedTimerRef.current);
+      submittedTimerRef.current = setTimeout(() => setSubmitted(false), 3000);
     } catch (err: unknown) {
       logger.error('Footer feedback submit error', {
         error: err instanceof Error ? err.message : String(err),
