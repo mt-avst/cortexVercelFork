@@ -4652,6 +4652,7 @@ router.post('/:id/duplicate', requireAdmin, opportunityWriteLimiter, asyncHandle
   //   instead of the original's. Not built here: this endpoint currently
   //   duplicates the `opportunities` row alone, and reaching into the
   //   FirstHand runtime pool is a larger change than a column census fix.
+  //   -> cto/AdaptaLabs#156
   const query = `
     INSERT INTO opportunities (
       type, title, purpose_one_liner, description_optional,
