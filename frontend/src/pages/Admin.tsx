@@ -586,6 +586,7 @@ const Admin: React.FC = () => {
               <ul className="nav nav-tabs nav-fill" role="tablist" style={{ border: 'none', margin: 0 }}>
                 <li className="nav-item" role="presentation">
                   <button
+                    id="research-studies-tab-button"
                     className={`custom-tab-button ${activeTab === 'opportunities' ? 'active' : ''}`}
                     onClick={() => setActiveTab('opportunities')}
                     role="tab"
@@ -602,6 +603,7 @@ const Admin: React.FC = () => {
                 </li>
                 <li className="nav-item" role="presentation">
                   <button
+                    id="completion-approvals-tab-button"
                     className={`custom-tab-button ${activeTab === 'approvals' ? 'active' : ''}`}
                     onClick={() => setActiveTab('approvals')}
                     role="tab"
@@ -619,6 +621,7 @@ const Admin: React.FC = () => {
                 {/* Feedback tab - all admins (researcher_admin and superadmin) */}
                 <li className="nav-item" role="presentation">
                   <button
+                    id="feedback-tab-button"
                     className={`custom-tab-button ${activeTab === 'feedback' ? 'active' : ''}`}
                     onClick={() => setActiveTab('feedback')}
                     role="tab"
@@ -638,6 +641,7 @@ const Admin: React.FC = () => {
                 {/* Bookings tab - was the prominent "Recent bookings" card */}
                 <li className="nav-item" role="presentation">
                   <button
+                    id="bookings-tab-button"
                     className={`custom-tab-button ${activeTab === 'bookings' ? 'active' : ''}`}
                     onClick={() => setActiveTab('bookings')}
                     role="tab"
@@ -756,7 +760,7 @@ const Admin: React.FC = () => {
                       title="Failed to load studies"
                       message={error}
                       actionLabel="Retry"
-                      onAction={loadOpportunities}
+                      onAction={() => loadOpportunities()}
                       icon="alert-triangle"
                     />
                   )}

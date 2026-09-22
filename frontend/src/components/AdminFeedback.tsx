@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { getFeedback, deleteFeedback, exportFeedbackCsv, FeedbackItem } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import LoadingSpinner from './LoadingSpinner';
@@ -376,8 +377,12 @@ const AdminFeedback: React.FC = () => {
         </div>
       )}
 
-      {/* View Feedback Modal */}
-      {viewModal.show && currentFeedback && (
+      {/* View Feedback Modal. Portalled to document.body - the admin-tabs
+          card this component lives inside carries backdrop-filter, which
+          induces its own stacking context and traps a plain-nested z-index
+          below the page-level FeedbackFooter (cto/AdaptaLabs#150). Same
+          pattern ConfirmationModal already uses for the same reason. */}
+      {viewModal.show && currentFeedback && createPortal(
         // ponytail: the scrim (rgba(0, 0, 0, 0.85) below) and the dialog's
         // drop shadow (rgba(0, 0, 0, 0.5), a few lines down) stay hardcoded
         // black rather than routed through a token. Both are theme-neutral
@@ -388,6 +393,7 @@ const AdminFeedback: React.FC = () => {
         // Upgrade path: a dedicated --shadow-modal-current token, if a
         // second modal ever needs the same shape.
         <div
+          data-testid="feedback-view-modal"
           onClick={closeViewModal}
           style={{
             position: 'fixed',
@@ -547,7 +553,8 @@ const AdminFeedback: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       <ConfirmationModal
