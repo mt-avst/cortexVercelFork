@@ -154,6 +154,10 @@ export async function writeSurveyCsv(
   openParticipants: (
     signal: AbortSignal
   ) => AsyncGenerator<CsvSessionRow>,
+  // Also the HMAC key material for each row's Participant digest
+  // (cto/AdaptaLabs#154), not only the failure log's context below - a
+  // mismatch between this and the study the rows actually belong to would
+  // silently digest under the wrong study.
   context: { studyId: string }
 ): Promise<void> {
   /**
@@ -266,7 +270,8 @@ export async function writeSurveyCsv(
       }
 
       await write(
-        toCsvSessionRow(steps, removedQuestions, participant) + CSV_LINE_ENDING
+        toCsvSessionRow(steps, removedQuestions, participant, context.studyId) +
+          CSV_LINE_ENDING
       );
     }
 

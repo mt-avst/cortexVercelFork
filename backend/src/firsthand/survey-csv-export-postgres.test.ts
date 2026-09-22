@@ -47,6 +47,12 @@ import { startTestPostgres, type TestPostgres } from "../__tests__/helpers/postg
 const execFileAsync = promisify(execFile);
 const skipDbTests = process.env.FIRSTHAND_SKIP_DB_TESTS === "1";
 
+// `toResponsesCsv`'s oracle and the streamed writer both digest the
+// participant id against a study id now (cto/AdaptaLabs#154), so both need a
+// secret to key on before either side of the byte comparisons below can run.
+process.env.SESSION_SECRET ||=
+  "vitest-survey-csv-export-postgres-not-a-real-secret"; // gitleaks:allow
+
 const migrateScript = path.resolve(__dirname, "../../scripts/firsthand-migrate.mjs");
 
 const STUDY_ID = "study_export";
@@ -407,7 +413,7 @@ describe.skipIf(skipDbTests)("the streamed CSV export, against real Postgres", (
     const { listResponsesForStudy } = await import("./survey-results-repository");
     const { toResponsesCsv } = await import("./survey-csv");
 
-    const oracle = toResponsesCsv(steps, await listResponsesForStudy(STUDY_ID));
+    const oracle = toResponsesCsv(steps, await listResponsesForStudy(STUDY_ID), STUDY_ID);
     const streamed = await streamedCsv({ kind: "study", studyId: STUDY_ID });
 
     // THE ASSERTION THE MOCKED SUITE CANNOT MAKE. Both sides read the same
@@ -448,7 +454,8 @@ describe.skipIf(skipDbTests)("the streamed CSV export, against real Postgres", (
       await listResponsesForOpportunity({
         opportunityId: OPPORTUNITY_ID,
         studyId: STUDY_ID
-      })
+      }),
+      STUDY_ID
     );
     const streamed = await streamedCsv({
       kind: "opportunity",
@@ -734,7 +741,7 @@ describe.skipIf(skipDbTests)("the streamed CSV export, against real Postgres", (
     const { listResponsesForStudy } = await import("./survey-results-repository");
     const { toResponsesCsv } = await import("./survey-csv");
 
-    const oracle = toResponsesCsv(steps, await listResponsesForStudy(STUDY_ID));
+    const oracle = toResponsesCsv(steps, await listResponsesForStudy(STUDY_ID), STUDY_ID);
     const streamed = await streamedCsv({ kind: "study", studyId: STUDY_ID });
 
     expect(streamed).toBe(oracle);

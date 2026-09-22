@@ -11,6 +11,15 @@ import {
 } from "./survey-csv";
 import type { StoredResponse } from "./survey-results";
 
+// `toCsvSessionRow` now digests the participant id against a study id
+// (cto/AdaptaLabs#154) and needs a secret to do it. Both sides below always
+// key on the SAME `STUDY_ID`, so which value it is does not matter to this
+// file's equality check - only that both sides agree.
+process.env.SESSION_SECRET ||=
+  "vitest-survey-csv-streaming-not-a-real-secret"; // gitleaks:allow
+
+const STUDY_ID = "study_streaming_comparison";
+
 /**
  * ASSEMBLING THE SAME EMITTERS ONE PARTICIPANT AT A TIME MUST PRODUCE THE SAME
  * BYTES AS ASSEMBLING THEM ALL AT ONCE.
@@ -61,7 +70,7 @@ function assembleStreamed(
 
   let out = toCsvHeaderRow(steps, removed) + CSV_LINE_ENDING;
   for (const row of toCsvSessionRows(responses)) {
-    out += toCsvSessionRow(steps, removed, row) + CSV_LINE_ENDING;
+    out += toCsvSessionRow(steps, removed, row, STUDY_ID) + CSV_LINE_ENDING;
   }
   return out;
 }
@@ -133,7 +142,7 @@ describe("streamed against whole-string CSV", () => {
 
   it.each(cases)("matches for %s", (_name, steps, responses) => {
     expect(assembleStreamed(steps, responses)).toBe(
-      toResponsesCsv(steps, responses)
+      toResponsesCsv(steps, responses, STUDY_ID)
     );
   });
 
@@ -159,7 +168,7 @@ describe("streamed against whole-string CSV", () => {
     }
 
     expect(assembleStreamed(steps, responses)).toBe(
-      toResponsesCsv(steps, responses)
+      toResponsesCsv(steps, responses, STUDY_ID)
     );
   });
 });

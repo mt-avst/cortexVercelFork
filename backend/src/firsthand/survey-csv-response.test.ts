@@ -6,6 +6,12 @@ vi.mock("../utils/logger", () => ({
   logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() }
 }));
 
+// The writer's own `context.studyId` now keys `participantDigest`
+// (cto/AdaptaLabs#154) as well as naming the failure log, so every real
+// `toCsvSessionRow` call below needs a secret to digest against.
+process.env.SESSION_SECRET ||=
+  "vitest-survey-csv-response-not-a-real-secret"; // gitleaks:allow
+
 import {
   writeSurveyCsv,
   SURVEY_CSV_DRAIN_TIMEOUT_MS,
