@@ -423,6 +423,23 @@ describe('Admin dashboard accessibility (row 13)', () => {
     // The glyph is no longer any button's accessible name.
     expect(screen.queryByRole('button', { name: '⋮' })).not.toBeInTheDocument();
   });
+
+  it('resolves every tabpanel\'s aria-labelledby to a real element (cto/AdaptaLabs#150)', async () => {
+    // The Feedback tabpanel named "feedback-tab-button" in aria-labelledby,
+    // but no element in the tree carried that id - a screen reader announced
+    // the panel with no name. The three sibling tabs share the identical
+    // wiring (aria-labelledby pointing at "<tab>-tab-button" with no matching
+    // id on the tab button itself), so this checks all four rather than only
+    // the one the report named.
+    renderAdmin();
+    await screen.findByText('Checkout usability test');
+
+    for (const tabpanel of screen.getAllByRole('tabpanel', { hidden: true })) {
+      const labelId = tabpanel.getAttribute('aria-labelledby');
+      expect(labelId).toBeTruthy();
+      expect(document.getElementById(labelId as string)).not.toBeNull();
+    }
+  });
 });
 
 describe('the Show all researchers toggle (Decision 2)', () => {
@@ -461,6 +478,41 @@ describe('the Show all researchers toggle (Decision 2)', () => {
       'true'
     );
     expect(screen.getByText('Across every researcher on Cortex')).toBeInTheDocument();
+  });
+});
+
+describe('Retry after a failed load keeps the admin\'s filters (cto/AdaptaLabs#145)', () => {
+  it('refetches with the Status filter still applied, not cleared', async () => {
+    // ErrorState's Retry button is wired onClick={onAction}, so React hands it
+    // the click's MouseEvent. loadOpportunities's first parameter is
+    // forceClearFilter - a plain onAction={loadOpportunities} makes that event
+    // object the (truthy) argument, silently clearing the Status filter on
+    // every Retry. This pins the params a Retry actually sends.
+    renderAdmin();
+    await screen.findByText('Checkout usability test');
+
+    fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'draft' } });
+    await waitFor(() =>
+      expect(vi.mocked(getOpportunities)).toHaveBeenLastCalledWith({ status: 'draft', scope: 'mine' })
+    );
+
+    // Force the next load (triggered by the filter change above having already
+    // resolved) to fail, then trigger a second one that genuinely fails.
+    vi.mocked(getOpportunities).mockRejectedValueOnce(new Error('network down'));
+    fireEvent.change(screen.getByLabelText('Study Type'), { target: { value: 'survey' } });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Failed to load studies');
+
+    vi.mocked(getOpportunities).mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    await waitFor(() => expect(vi.mocked(getOpportunities)).toHaveBeenCalled());
+    // The measured regression: status:draft (and type:survey) dropped, leaving only scope.
+    expect(vi.mocked(getOpportunities)).toHaveBeenLastCalledWith({
+      status: 'draft',
+      type: 'survey',
+      scope: 'mine',
+    });
   });
 });
 
