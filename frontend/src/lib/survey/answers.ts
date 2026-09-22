@@ -37,6 +37,11 @@ const validityMessage = (problem: AnswerValidityProblem): string => {
       // answerable steps. Worded anyway rather than thrown, so a future
       // caller gets a message, not a crash.
       return "This step does not take an answer.";
+    case "field_not_applicable":
+      // Unreachable from the runner: each field component only ever sets its
+      // own step type's field (SurveyQuestion.tsx). Worded anyway for the
+      // same reason as step_not_answerable above.
+      return "That answer does not match this question's type.";
   }
 };
 
