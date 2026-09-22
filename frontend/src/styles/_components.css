@@ -3292,6 +3292,16 @@ body.admin-page .header .container {
   min-width: 200px;
 }
 
+/* #131: card view's own sort control (Admin.tsx, immediately above the
+   Research Studies table). Hidden by default; shown inside the
+   `@media (max-width: 1219.98px)` block below, exactly where the ROW 14
+   fix hides <thead> - the table's only other sort control - out of the
+   layout. Shares sortField/sortDirection state with the header buttons via
+   handleSort, so this is never a second source of truth. */
+.admin-card-sort {
+  display: none;
+}
+
 /* ============================================================
    ROW 14 - Research Studies table reflows to cards on phone.
    Under `table-layout: fixed` the column min-widths force a ~530px
@@ -3321,13 +3331,12 @@ body.admin-page .header .container {
    width in this gap was already forcing into a horizontal document-level
    scroll to render at all (a symptom, not a feature, of the same defect).
 
-   ponytail: the card view hides <thead>, which is where this table's only
-   column-sort controls live (Admin.tsx handleSort/ariaSortFor) - so this
-   fix costs sorting for every admin between 768 and 1220px (tablet, and
-   many laptops at less than full width). Accepted here because a visibly
-   broken status pill was judged worse than a lost secondary control; a real
-   fix is a scrollable table (keeps <thead>) or a sort control inside card
-   view -> cto/AdaptaLabs#131
+   #131: the card view hides <thead>, which is where this table's only
+   column-sort controls used to live (Admin.tsx handleSort/ariaSortFor). Card
+   view now carries its own sort control (`.admin-card-sort`, shown below),
+   reading and writing the same sortField/sortDirection state through the
+   same handleSort - so the reflow no longer costs sorting at any width
+   below 1220px.
    ============================================================ */
 @media (max-width: 1219.98px) {
   .admin-data-table,
@@ -3339,11 +3348,15 @@ body.admin-page .header .container {
 
   /* Every cell becomes a block, overriding the older phone rules that hid
      columns 4-8 by :nth-child (which is what put the row actions out of
-     reach). !important beats those higher-specificity nth-child hides. */
+     reach). !important beats those higher-specificity nth-child hides.
+     max-width too: the tablet and phone table rules clamp the first cell
+     (`td:nth-child(1)`) to 35%/40%, which squeezed each card's study title
+     into a narrow column - the same clamp Recent bookings cancels below. */
   .admin-data-table td {
     display: block !important;
     width: auto !important;
     min-width: 0 !important;
+    max-width: none !important;
     padding: 0.4rem 0 !important;
     text-align: left !important;
     border: 0;
@@ -3395,6 +3408,88 @@ body.admin-page .header .container {
      with the Type pill in the card row above it. */
   .admin-dashboard table.admin-data-table tbody td.col-status > .admin-pill + .admin-pill {
     margin-left: 0.25rem;
+  }
+
+  /* #131: the card-view sort control, shown in the same block that hides the
+     <thead> it stands in for. Right-aligned above the first card. */
+  .admin-card-sort {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: var(--spacing-3);
+  }
+
+  .admin-card-sort .form-label {
+    margin: 0;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+
+  /* One shared height so the select and the direction pill sit flush:
+     left to their own padding they measured 32.4px and 34.2px. The extra
+     .admin-dashboard beats the phone `.admin-dashboard .form-select` rule,
+     which otherwise lays 14px of side padding over the chevron and clips
+     the selected field's name. */
+  .admin-card-sort {
+    --admin-card-sort-height: 2rem;
+  }
+
+  .admin-dashboard .admin-card-sort .form-select,
+  .admin-dashboard .admin-card-sort-dir {
+    box-sizing: border-box;
+    height: var(--admin-card-sort-height);
+    min-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  .admin-dashboard .admin-card-sort .form-select {
+    width: auto;
+    padding-right: 2rem;
+  }
+
+  /* Deliberately one class less specific than the rule above, so the later
+     phone `.admin-dashboard .form-select` rules still win below 768px and
+     keep this select at 16px there (iOS zooms on focus below that). */
+  .admin-card-sort .form-select {
+    padding-left: var(--spacing-3);
+    font-size: var(--font-size-small);
+  }
+
+  /* Quiet pill button, matching .admin-chip's box so the direction control
+     reads as part of the same admin control family as the quick filters. */
+  .admin-card-sort-dir {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0 0.75rem;
+    border: 1px solid var(--border-strong-current);
+    border-radius: var(--radius-full);
+    background: var(--surface-glass-current);
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .admin-card-sort-dir:hover {
+    border-color: var(--color-cortex-orange);
+    color: var(--text-primary);
+  }
+
+  .admin-card-sort-dir:focus-visible {
+    outline: 2px solid var(--focus-ring, var(--brand-headline));
+    outline-offset: 2px;
+  }
+}
+
+/* #131: on a phone every admin select grows to 2.5rem with a 16px font (so
+   iOS does not zoom on focus); the direction pill grows with it. */
+@media (max-width: 575px) {
+  .admin-card-sort {
+    --admin-card-sort-height: 2.5rem;
   }
 }
 
@@ -6031,9 +6126,13 @@ body.theme-light .study-summary-line {
   min-width: 200px;
 }
 
+/* The floor matches the 180px min-width its select carries below
+   (`.filters-row .form-select`). At 150px the field shrank under its own
+   control, so between ~770 and ~880px the Status select overflowed into
+   Study Type and Study Type out of the panel; now the row wraps instead. */
 .filter-field-sm {
-  flex: 1 1 150px;
-  min-width: 150px;
+  flex: 1 1 180px;
+  min-width: 180px;
 }
 
 /* ============================================================
