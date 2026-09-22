@@ -642,6 +642,59 @@ router.delete('/:id', requireAdmin, asyncHandler(async (req: Request, res: Respo
     // NOWAIT booking paths raise, which the error middleware maps to a 409.
     await client.query(`SET LOCAL lock_timeout = ${SESSION_DELETE_LOCK_TIMEOUT_MS}`);
 
+    // cto/AdaptaLabs#128: serialise concurrent deletes of the SAME study's
+    // sessions before either one asks "how many upcoming slots remain?" below.
+    // Without this, two concurrent deletes of a study's final two upcoming
+    // slots each read the OTHER session as still-remaining under READ
+    // COMMITTED - the sibling row is not locked by anything this transaction
+    // holds - so both pass the last-bookable-slot guard and both commit,
+    // leaving the study published with zero bookable slots: the exact state
+    // the guard exists to prevent.
+    //
+    // AN ADVISORY LOCK, not the `ORDER BY id FOR UPDATE` sibling-row lock
+    // opportunities.ts delete-sessions and sync-booked-counts use below in
+    // this file. Those two are safe together because BOTH take every session
+    // row lock they will ever need, in one ordered statement, as the FIRST
+    // lock of their transaction. This route cannot do that: a few lines below
+    // it takes a single, unordered `FOR UPDATE` on the ONE row being deleted
+    // (#116/#34), pinned byte-for-byte by
+    // sessions.delete-locks-against-a-racing-booking.test.ts. Bolting an
+    // `ORDER BY id FOR UPDATE` over every sibling row AFTER that single-row
+    // lock would reintroduce exactly the cycle #34 exists to avoid: two
+    // concurrent deletes of a study's own final two slots would each already
+    // hold their OWN row out of id order, then each block waiting on the
+    // OTHER's row via the ordered sibling lock - A-holding-then-wants-B waits
+    // on B, B-holding-then-wants-A waits on A, 40P01.
+    //
+    // A `pg_advisory_xact_lock` keyed on the opportunity is a SINGLE resource
+    // per study, so two transactions racing for it can only ever produce one
+    // winner and one waiter - never a cycle - and nothing else in this
+    // codebase requests this specific lock, so it cannot form a cross-cycle
+    // with the row locks sync-booked-counts or delete-sessions take. It is
+    // bound by the same `lock_timeout` set above (confirmed against a real
+    // Postgres: advisory locks honour it exactly as row locks do) and
+    // released automatically at COMMIT/ROLLBACK. `hashtextextended` rather
+    // than `hashtext` for a 64-bit key, so two unrelated studies are
+    // vanishingly unlikely to collide and serialise against each other by
+    // accident.
+    //
+    // Looked up unlocked, before the row lock below: a session's
+    // `opportunity_id` is immutable in practice (not in
+    // UPDATABLE_SESSION_COLUMNS, so no PATCH can move it), and a session
+    // deleted by someone else in the gap is still caught by the "0 rows"
+    // check on the row lock immediately below - this lookup only decides
+    // which advisory key to take, not whether the session exists.
+    const opportunityForLock = await client.query(
+      'SELECT opportunity_id FROM sessions WHERE id = $1',
+      [sessionId]
+    );
+    if (opportunityForLock.rows.length > 0) {
+      await client.query(
+        'SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))',
+        [opportunityForLock.rows[0].opportunity_id]
+      );
+    }
+
     const sessionCheck = await client.query(
       'SELECT booked_count FROM sessions WHERE id = $1 FOR UPDATE',
       [sessionId]
@@ -667,11 +720,10 @@ router.delete('/:id', requireAdmin, asyncHandler(async (req: Request, res: Respo
     // (its booking window closed) must still let its old slots be tidied away -
     // refusing that with "this is the last bookable slot" would be both wrong
     // and untrue.
-    // ponytail: single-row FOR UPDATE only; two concurrent deletes of a study's
-    //   final two upcoming slots can each see the other as remaining and both
-    //   commit, leaving it slotless. Narrow and recoverable (add a slot or
-    //   unpublish). Upgrade path: lock the study's session rows in id order
-    //   before the count. -> cto/AdaptaLabs#128
+    // cto/AdaptaLabs#128: the remaining-slot count just below is only the
+    // committed truth because the advisory lock taken above already
+    // serialises any OTHER delete on this same study - see that comment for
+    // why a sibling row lock could not do this safely at this call site.
     // `is_upcoming` comes from this JOIN (not the booked_count read above) so the
     // hot FOR UPDATE line stays byte-identical for the row-lock test that pins it.
     const oppInfo = await client.query(
