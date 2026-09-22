@@ -2443,895 +2443,945 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
     ...data
   }: UpdateOpportunityBody = req.body;
   // Note: Data is already validated by validateRequest(UpdateOpportunitySchema) middleware
-  
-  // Check ownership (only owner or global admin can edit)
-  const ownershipCheck = await pool.query(
-    'SELECT owner_user_id FROM opportunities WHERE id = $1',
-    [id]
-  );
-  
-  if (ownershipCheck.rows.length === 0) {
-    throw new NotFoundError('Study');
-  }
-  
-  // Check ownership (superadmins can edit any)
-  const isOwner = isOpportunityOwner(ownershipCheck.rows[0], req.user);
-  const isSuperadmin = req.user!.role === 'superadmin';
-  if (!isSuperadmin && !isOwner) {
-    throw new ForbiddenError('Only the owner can edit this study');
-  }
-  
-  // Get existing opportunity to check type when status is being changed
-  const existingOpp = await pool.query(
-    // title and purpose_one_liner are read so an inline study created on this
-    // path can inherit them when the request does not also change them.
-    'SELECT type, title, purpose_one_liner, status, external_link_optional, firsthand_study_id, participant_type_required, delivery_mode FROM opportunities WHERE id = $1',
-    [id]
-  );
-  // Same delete-mid-request race the UPDATE below now handles: without this the
-  // row access throws a TypeError and answers 500 instead of 404.
-  if (existingOpp.rows.length === 0) {
-    throw new NotFoundError('Study');
-  }
 
-  const existingType = data.type || existingOpp.rows[0].type;
-
-  // Moderated consent (#79): refuse on the wrong effective type, resolve the
-  // template claim, and OVERWRITE what flows into the generic column loop -
-  // the stored pair must come from resolution, never from the request. When
-  // the body carries no consent fields, nothing is touched.
-  const consentWrite = resolveModeratedConsentWrite(data, existingType);
-  if (consentWrite) {
-    data.consent_text = consentWrite.consent_text;
-    data.consent_template_id = consentWrite.consent_template_id;
-    data.consent_template_version = consentWrite.consent_template_version;
-  }
-
-  // A type change out of the moderated pair strips consent in the same UPDATE.
-  // Without this, the wording stays on the row - and public, via
-  // toPublicOpportunity - on a type whose every consent PATCH the gate above
-  // refuses, so nobody could clear it without flipping the type back. Runs
-  // after the resolver on purpose: a body carrying BOTH a type change and
-  // consent fields was already refused by CONSENT_FIELDS_WRONG_TYPE, and
-  // seeding the nulls before the resolver would make it refuse this stripping
-  // as a wrong-type consent write.
-  if (data.type !== undefined && !MODERATED_CONSENT_TYPES.has(data.type)) {
-    data.consent_text = null;
-    data.consent_template_id = null;
-    data.consent_template_version = null;
-  }
-
-  const existingLink = existingOpp.rows[0].external_link_optional;
-  const existingFirstHandStudyId = existingOpp.rows[0].firsthand_study_id;
-  const newLink = data.external_link_optional !== undefined ? data.external_link_optional : existingLink;
-  const newFirstHandStudyId = data.firsthand_study_id !== undefined ? data.firsthand_study_id : existingFirstHandStudyId;
-
-  // AN AFFIRMATION IS ABOUT ONE DESTINATION, SO IT CANNOT OUTLIVE IT.
+  // #151: every stored-vs-incoming decision below - ownership, the moderated
+  // consent strip, the external-link affirmation reset, the publish guard -
+  // used to be taken against two separate, UNLOCKED `pool.query` reads with no
+  // transaction spanning them and the UPDATE that closed the handler. A second
+  // PATCH on the same id could land in the gap between them and move the row
+  // the comparison was made against: #136's consent affirmation is the
+  // concrete case (relink to tool B on one request, lose the reset on a
+  // concurrent one still holding tool A's stale snapshot), but the same shape
+  // reaches the type/consent strip and the publish guard too.
   //
-  // `external_consent_confirmed` (cto/AdaptaLabs#136) records the author
-  // saying "the tool I am sending participants to collects its own consent".
-  // Repoint the study at a DIFFERENT tool and that sentence is about something
-  // nobody affirmed: the stored `true` reads as an affirmation about tool B
-  // that was only ever made about tool A. It gates nothing (decided
-  // 2026-09-21, see the publish guards), but Review would still tell the
-  // author "confirmed" for a tool they never confirmed, and any provenance
-  // added later (cto/AdaptaLabs#126) would record an attestation nobody made.
+  // Closed by taking ONE client for the whole handler: BEGIN, read the row
+  // `FOR UPDATE` so a second PATCH on this id blocks on the lock rather than
+  // racing it, make every decision below against that locked read, then
+  // UPDATE and COMMIT on the SAME client. `client.query` replaces `pool.query`
+  // for every opportunities-table statement from here to the end of the
+  // handler.
   //
-  // The form reaches this without anybody touching the box: the save payload
-  // omits the key when the shape has no Your link step, so external -> native
-  // -> external round-trips the stored `true` back into a re-ticked checkbox
-  // for a link the author has since replaced.
-  //
-  // Reset to NULL - "never recorded" - not false: the author has not said no,
-  // they have said nothing yet about this destination.
-  //
-  // WHEN BOTH FIELDS ARRIVE IN ONE PATCH THE EXPLICIT BOOLEAN WINS. That is a
-  // deliberate re-affirmation - a new link and, in the same breath, the author
-  // confirming the new tool - and clobbering it would leave no way to express
-  // the one correct way to relink. Only a request SILENT about the affirmation
-  // has it cleared.
-  //
-  // THIS IS THE FLOOR UNDER THE FORM, NOT THE WHOLE FIX. Cortex's own authoring
-  // form clears the tick in state the moment the author edits the link
-  // (`handleInputChange` in frontend/src/pages/OpportunityForm.tsx), so a
-  // relink saved from the UI arrives here with the link changed and the
-  // affirmation absent - the shape this reset is waiting for. Without that, the
-  // form sent the new link AND the stale `true` in one body and the exception
-  // above honoured it, because nothing on the wire distinguishes a deliberate
-  // re-affirmation from a stale one. The reset stays regardless: it is the only
-  // thing standing between a direct API caller and a `true` about tool A on a
-  // row pointing at tool B.
-  //
-  // Compared on normalised values rather than raw ones. Of the "empty" spellings
-  // an INCOMING link could take, only whitespace PADDING is reachable:
-  // `externalLinkSchema` is `z.string().url()`, which refuses `null`, `''` and
-  // `'   '` at the boundary, but the URL constructor strips surrounding spaces,
-  // so `'  https://a/x  '` is accepted and arrives padded. The column loop below
-  // stores `value.trim()`, so the padded form and the bare form are one stored
-  // value and must not read as two tools. The `|| null` arm is about the STORED
-  // side, where a row genuinely holds NULL or `''` for "no link".
-  const normaliseExternalLink = (value: unknown): string | null =>
-    typeof value === 'string' ? value.trim() || null : null;
-  // ponytail: `existingLink` is read outside the write's transaction
-  //   The SELECT that produced it and the UPDATE that ends this handler are
-  //   two separate `pool.query` calls with no transaction and no row lock
-  //   between them, so the comparison can be made against a row that has
-  //   already moved. Two concurrent PATCHes on one opportunity interleave:
-  //   A relinks to tool B and clears the affirmation; B, holding a snapshot
-  //   taken before A landed, sees the link unchanged, skips the reset and
-  //   writes `external_consent_confirmed = true` over it. The row ends as
-  //   link=B with an affirmation made about tool A - the exact state this
-  //   reset exists to prevent, reached by racing it. Narrow (it needs two
-  //   admins saving the same study at once) but it is a correctness ceiling,
-  //   not a taste one, so it gets an issue as well as this comment.
-  //   -> #151, upgrade path: take one client from the pool for the whole
-  //      handler, re-read this row with `SELECT ... FOR UPDATE` inside the
-  //      same transaction as the UPDATE, and commit both together. Not done
-  //      here because it rethreads every query in a handler of this size, and
-  //      the same ceiling applies to the other stored-vs-incoming decisions
-  //      above (the type/consent strip, the publish guard), so it is one
-  //      change for all of them rather than a special case for this field.
-  if (
-    data.external_link_optional !== undefined &&
-    data.external_consent_confirmed === undefined &&
-    normaliseExternalLink(data.external_link_optional) !== normaliseExternalLink(existingLink)
-  ) {
-    data.external_consent_confirmed = null;
-  }
+  // The study-authoring calls further down (`createStudy`,
+  // `updateLinkedStudyContent`, `claimStudyIfUnowned`, `deleteStudyUnchecked`)
+  // are the deliberate exception. They run on the FirstHand runtime pool, a
+  // different database to this one - see "Build the study before the update"
+  // below - so they keep their own connections and their own transactions,
+  // unrelated to this fix and still not atomic with the opportunity write.
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
 
-  const newParticipantType = data.participant_type_required !== undefined
-    ? data.participant_type_required
-    : existingOpp.rows[0].participant_type_required;
-  // The mode this request leaves behind, for the same reason the publish guard
-  // below reads the resulting state rather than only what the request sets.
-  const newDeliveryMode =
-    data.delivery_mode !== undefined
-      ? data.delivery_mode
-      : existingOpp.rows[0].delivery_mode ?? 'external';
-
-  // Unmoderated studies run with logged-in Cortex users, so an external
-  // participant type is not representable. Only enforce when this request
-  // actually sets the type or participant type, so an unrelated edit to a
-  // legacy unmoderated+external row is not blocked (the bad value can still be
-  // corrected by PATCHing participant_type_required to a non-external value).
-  if (
-    (data.type !== undefined || data.participant_type_required !== undefined) &&
-    existingType === 'unmoderated' &&
-    newParticipantType === 'external'
-  ) {
-    throw new ValidationError('Unmoderated studies cannot use an external participant type; participants must be logged-in Cortex users');
-  }
-
-  if (inlineSurveyInput && newDeliveryMode !== 'native') {
-    throw new ValidationError(QUESTIONS_NEED_NATIVE_DELIVERY);
-  }
-
-  // An inline study can only fill a gap, never replace a link. Rejected rather
-  // than resolved by precedence, matching create.
-  if (inlineStudyInput && existingType !== 'unmoderated') {
-    throw new ValidationError('Only unmoderated studies can carry a task list');
-  }
-
-  if (inlineSurveyInput && !QUESTION_CARRYING_TYPES.has(existingType)) {
-    throw new ValidationError(ONLY_QUESTION_TYPES_CARRY_QUESTIONS);
-  }
-
-  // `existingType` is the RESULTING type, merged over the stored row by the
-  // block above - so a PATCH that turns a survey into a `question` is capped by
-  // the cap it is moving to, not the one it is leaving.
-  if (
-    inlineSurveyInput &&
-    countAskedQuestions(inlineSurveyInput.steps) > maxQuestionsFor(existingType)
-  ) {
-    throw new ValidationError(TOO_MANY_QUESTIONS_MESSAGE);
-  }
-
-  // Authored content against an opportunity that ALREADY has a study used to be
-  // refused outright here - "edit its tasks in the Task Lists area" - because
-  // `inline_*` only ever creates, so honouring the request would have minted a
-  // second study and repointed the row at it. That refusal is gone: the study
-  // build below now rewrites the linked study in place when the caller may
-  // write it. See updateLinkedStudyContent for why that is conditional and
-  // what each of its three outcomes means.
-  //
-  // What has NOT changed is the refusal to accept an explicit link alongside
-  // authored content. Both are still rejected rather than resolved by
-  // precedence, which is what create does for the identical body.
-  //
-  // `!== undefined` rather than a truthiness check, and that distinction is
-  // load-bearing: `firsthand_study_id: null` is permitted by the update schema,
-  // and `null?.trim()` is undefined, so a truthiness check let
-  // `PATCH { inline_study, firsthand_study_id: null }` through - clearing the
-  // link in the same breath as authoring content into the study it pointed at,
-  // leaving that study rewritten AND unreferenced. The old blanket refusal on
-  // the stored link was what covered this; nothing else did.
-  if (inlineStudyInput && data.firsthand_study_id !== undefined) {
-    throw new ValidationError(
-      'Send either firsthand_study_id or inline_study, not both'
+    // Check ownership (only owner or global admin can edit). `FOR UPDATE`:
+    // this is the same row every decision below reads, and it stays locked
+    // until this transaction commits or rolls back.
+    const ownershipCheck = await client.query(
+      'SELECT owner_user_id FROM opportunities WHERE id = $1 FOR UPDATE',
+      [id]
     );
-  }
 
-  // The survey twin, and it is not optional for the same reasons.
-  if (inlineSurveyInput && data.firsthand_study_id !== undefined) {
-    throw new ValidationError(
-      'Send either firsthand_study_id or inline_survey, not both'
+    if (ownershipCheck.rows.length === 0) {
+      throw new NotFoundError('Study');
+    }
+
+    // Check ownership (superadmins can edit any)
+    const isOwner = isOpportunityOwner(ownershipCheck.rows[0], req.user);
+    const isSuperadmin = req.user!.role === 'superadmin';
+    if (!isSuperadmin && !isOwner) {
+      throw new ForbiddenError('Only the owner can edit this study');
+    }
+
+    // Get existing opportunity to check type when status is being changed.
+    // Still `FOR UPDATE`: re-asking for a lock this transaction already holds
+    // on the same row costs nothing extra - Postgres just confirms it - and
+    // this is the read every stored-vs-incoming decision below is taken
+    // against.
+    const existingOpp = await client.query(
+      // title and purpose_one_liner are read so an inline study created on this
+      // path can inherit them when the request does not also change them.
+      'SELECT type, title, purpose_one_liner, status, external_link_optional, firsthand_study_id, participant_type_required, delivery_mode FROM opportunities WHERE id = $1 FOR UPDATE',
+      [id]
     );
-  }
+    // The opportunity cannot have been deleted between the two reads above -
+    // both run inside the same transaction, against a row held `FOR UPDATE`
+    // since the first of them - so this is a defensive check rather than a
+    // live race now. Left in rather than removed: it costs nothing and
+    // answers a clean 404 instead of a TypeError on the row access below if
+    // that invariant is ever wrong.
+    if (existingOpp.rows.length === 0) {
+      throw new NotFoundError('Study');
+    }
 
-  // Additional validation for published opportunities.
-  //
-  // Evaluated against the state this request LEAVES BEHIND, not only against a
-  // status it sets. Gating on `data.status === 'published'` alone meant that
-  // clearing the study on an already-published opportunity sailed through:
-  // PATCH { firsthand_study_id: null } left a live unmoderated opportunity with
-  // no study, the exact state this guard exists to prevent.
-  const willBePublished =
-    data.status !== undefined
-      ? data.status === 'published'
-      : existingOpp.rows[0].status === 'published';
+    const existingType = data.type || existingOpp.rows[0].type;
 
-  // ...but only for requests that could CREATE the bad state: ones that
-  // publish, change the type, or change what the opportunity points at. An
-  // unrelated edit to a row ALREADY in that state stays allowed, or a legacy
-  // published row with no study could never have its other fields corrected -
-  // which is precisely the remediation the participant-type comment above
-  // promises, and reset-demo-data.ts seeds exactly such a row.
-  const changesPublishShape =
-    data.status !== undefined ||
-    data.type !== undefined ||
-    data.firsthand_study_id !== undefined ||
-    inlineStudyInput !== undefined ||
-    inlineSurveyInput !== undefined ||
-    data.external_link_optional !== undefined ||
-    // Switching delivery mode changes WHICH of the two things is required, so
-    // it changes the publish shape as surely as clearing the link does. Without
-    // this, `PATCH { delivery_mode: 'native' }` on a published external survey
-    // produced a live native survey with no questions - the same hole the type
-    // flip above opened, through a different door.
-    data.delivery_mode !== undefined;
+    // Moderated consent (#79): refuse on the wrong effective type, resolve the
+    // template claim, and OVERWRITE what flows into the generic column loop -
+    // the stored pair must come from resolution, never from the request. When
+    // the body carries no consent fields, nothing is touched.
+    const consentWrite = resolveModeratedConsentWrite(data, existingType);
+    if (consentWrite) {
+      data.consent_text = consentWrite.consent_text;
+      data.consent_template_id = consentWrite.consent_template_id;
+      data.consent_template_version = consentWrite.consent_template_version;
+    }
 
-  const publishGuardApplies = willBePublished && changesPublishShape;
+    // A type change out of the moderated pair strips consent in the same UPDATE.
+    // Without this, the wording stays on the row - and public, via
+    // toPublicOpportunity - on a type whose every consent PATCH the gate above
+    // refuses, so nobody could clear it without flipping the type back. Runs
+    // after the resolver on purpose: a body carrying BOTH a type change and
+    // consent fields was already refused by CONSENT_FIELDS_WRONG_TYPE, and
+    // seeding the nulls before the resolver would make it refuse this stripping
+    // as a wrong-type consent write.
+    if (data.type !== undefined && !MODERATED_CONSENT_TYPES.has(data.type)) {
+      data.consent_text = null;
+      data.consent_template_id = null;
+      data.consent_template_version = null;
+    }
 
-  // Same rule as create, asked of the RESULTING state rather than of the request
-  // - gating on the request's own status let `PATCH { type: 'poll' }` against a
-  // published opportunity produce a published poll with no link. Every value
-  // below is already merged over the stored row above.
-  //
-  // `publishGuardApplies` stays outside the predicate deliberately. It is not
-  // part of "is this publishable"; it is this endpoint's separate decision to
-  // leave an unrelated edit to a row ALREADY in the bad state alone.
-  if (publishGuardApplies) {
-    // Whether this opportunity has a slot a participant could still book, for
-    // the moderated-type gate (#118). Counted ONLY for `test`/`interview`, so an
-    // ordinary poll/survey publish pays no extra query, and against the
-    // participant-actionable predicate `end_time > NOW()` - the same set as
-    // `UPCOMING_SESSIONS_ONLY` and the `bookings.ts` booking refusal, NOT a bare
-    // `COUNT(*)`. A study whose only slots are in the past is as unbookable as
-    // one with none, and publishing it would re-open exactly the a21 defect.
+    const existingLink = existingOpp.rows[0].external_link_optional;
+    const existingFirstHandStudyId = existingOpp.rows[0].firsthand_study_id;
+    const newLink = data.external_link_optional !== undefined ? data.external_link_optional : existingLink;
+    const newFirstHandStudyId = data.firsthand_study_id !== undefined ? data.firsthand_study_id : existingFirstHandStudyId;
+
+    // AN AFFIRMATION IS ABOUT ONE DESTINATION, SO IT CANNOT OUTLIVE IT.
     //
-    // `undefined` for every other type: `findPublishProblem` only consults this
-    // for moderated types, and passing a signal it will not read would be noise.
-    // The wizard persists its temporary slots BEFORE this publishing update
-    // (OpportunityForm `handleSubmit`), so by the time control reaches here the
-    // author's slots are already rows this query can see.
-    let hasBookableSlot: boolean | undefined;
-    if (MODERATED_CONSENT_TYPES.has(existingType)) {
-      const slotCount = await pool.query(
-        'SELECT 1 FROM sessions WHERE opportunity_id = $1 AND end_time > NOW() LIMIT 1',
-        [id]
-      );
-      hasBookableSlot = slotCount.rowCount ? slotCount.rowCount > 0 : false;
+    // `external_consent_confirmed` (cto/AdaptaLabs#136) records the author
+    // saying "the tool I am sending participants to collects its own consent".
+    // Repoint the study at a DIFFERENT tool and that sentence is about something
+    // nobody affirmed: the stored `true` reads as an affirmation about tool B
+    // that was only ever made about tool A. It gates nothing (decided
+    // 2026-09-21, see the publish guards), but Review would still tell the
+    // author "confirmed" for a tool they never confirmed, and any provenance
+    // added later (cto/AdaptaLabs#126) would record an attestation nobody made.
+    //
+    // The form reaches this without anybody touching the box: the save payload
+    // omits the key when the shape has no Your link step, so external -> native
+    // -> external round-trips the stored `true` back into a re-ticked checkbox
+    // for a link the author has since replaced.
+    //
+    // Reset to NULL - "never recorded" - not false: the author has not said no,
+    // they have said nothing yet about this destination.
+    //
+    // WHEN BOTH FIELDS ARRIVE IN ONE PATCH THE EXPLICIT BOOLEAN WINS. That is a
+    // deliberate re-affirmation - a new link and, in the same breath, the author
+    // confirming the new tool - and clobbering it would leave no way to express
+    // the one correct way to relink. Only a request SILENT about the affirmation
+    // has it cleared.
+    //
+    // THIS IS THE FLOOR UNDER THE FORM, NOT THE WHOLE FIX. Cortex's own authoring
+    // form clears the tick in state the moment the author edits the link
+    // (`handleInputChange` in frontend/src/pages/OpportunityForm.tsx), so a
+    // relink saved from the UI arrives here with the link changed and the
+    // affirmation absent - the shape this reset is waiting for. Without that, the
+    // form sent the new link AND the stale `true` in one body and the exception
+    // above honoured it, because nothing on the wire distinguishes a deliberate
+    // re-affirmation from a stale one. The reset stays regardless: it is the only
+    // thing standing between a direct API caller and a `true` about tool A on a
+    // row pointing at tool B.
+    //
+    // Compared on normalised values rather than raw ones. Of the "empty" spellings
+    // an INCOMING link could take, only whitespace PADDING is reachable:
+    // `externalLinkSchema` is `z.string().url()`, which refuses `null`, `''` and
+    // `'   '` at the boundary, but the URL constructor strips surrounding spaces,
+    // so `'  https://a/x  '` is accepted and arrives padded. The column loop below
+    // stores `value.trim()`, so the padded form and the bare form are one stored
+    // value and must not read as two tools. The `|| null` arm is about the STORED
+    // side, where a row genuinely holds NULL or `''` for "no link".
+    const normaliseExternalLink = (value: unknown): string | null =>
+      typeof value === 'string' ? value.trim() || null : null;
+    // Closed (#151): `existingLink` above comes off the row this transaction
+    // holds `FOR UPDATE`, so a second PATCH on this id cannot land between this
+    // comparison and the UPDATE that commits it - it blocks on the lock
+    // instead, then makes this same comparison against what the first PATCH
+    // actually wrote.
+    if (
+      data.external_link_optional !== undefined &&
+      data.external_consent_confirmed === undefined &&
+      normaliseExternalLink(data.external_link_optional) !== normaliseExternalLink(existingLink)
+    ) {
+      data.external_consent_confirmed = null;
     }
 
-    // `external_consent_confirmed` (cto/AdaptaLabs#136) deliberately does not
-    // gate this check either - self-attestation buys no assurance and a gate
-    // would block republishing a legacy external study. The reasoning, and the
-    // provenance question left for go-live (cto/AdaptaLabs#126), are at the
-    // create call site above.
-    const updatePublishProblem = findPublishProblem({
-      willBePublished: true,
-      type: existingType,
-      deliveryMode: newDeliveryMode,
-      hasBookableSlot,
-      // Trimmed for the same reason as the create guard: an all-whitespace id
-      // would otherwise satisfy this and store NULL.
-      hasLinkedStudy: Boolean(newFirstHandStudyId?.trim()),
-      hasInlineStudy: Boolean(inlineStudyInput),
-      hasInlineSurvey: Boolean(inlineSurveyInput),
-      externalLink: newLink,
-      // A caller REMOVING the study from a published opportunity is not trying
-      // to publish, so telling them to add a prompt "before publishing"
-      // describes an action they are not taking.
-      removingLinkedStudy: Boolean(
-        data.firsthand_study_id !== undefined && existingFirstHandStudyId?.trim()
-      )
-    });
-    if (updatePublishProblem) {
-      throw new ValidationError(PUBLISH_PROBLEM_MESSAGES[updatePublishProblem.code]);
-    }
-  }
+    const newParticipantType = data.participant_type_required !== undefined
+      ? data.participant_type_required
+      : existingOpp.rows[0].participant_type_required;
+    // The mode this request leaves behind, for the same reason the publish guard
+    // below reads the resulting state rather than only what the request sets.
+    const newDeliveryMode =
+      data.delivery_mode !== undefined
+        ? data.delivery_mode
+        : existingOpp.rows[0].delivery_mode ?? 'external';
 
-  // Same boundary check as create, against the resulting state, so switching a
-  // published external survey to native cannot adopt a recorded task list on
-  // the way through.
-  //
-  // Gated on the request actually changing the link or what the link has to be,
-  // for the reason the publish guard above states for itself: an unrelated edit
-  // to a row already in a bad state must stay allowed, or the row can never be
-  // repaired. Unconditionally, this refused `PATCH { title }`, refused
-  // `PATCH { status: 'draft' }` - so the misleading page could not even be
-  // taken down - and answered every one of them with a message about question
-  // types the caller had not touched. DELETE was the only way out.
-  const changesLinkage =
-    data.firsthand_study_id !== undefined ||
-    data.delivery_mode !== undefined ||
-    data.type !== undefined;
-
-  // FIX 5: skipped entirely when this request is authoring inline content.
-  //
-  // The guards above ("Send either firsthand_study_id or inline_study, not
-  // both", and the inline_survey twin) already refuse `data.firsthand_study_id
-  // !== undefined` alongside `inlineStudyInput`/`inlineSurveyInput` - INCLUDING
-  // an explicit null, which is why they test `!== undefined` rather than
-  // truthiness. So by the time control reaches here with inline content
-  // present, `data.firsthand_study_id` is guaranteed undefined, and
-  // `newFirstHandStudyId` therefore falls back to whatever is ALREADY stored -
-  // which this request is not touching.
-  //
-  // `changesLinkage` does not know that: the form sends `type` on every save,
-  // so `changesLinkage` reads true on a request that authors content into an
-  // opportunity whose STORED link is dangling (the study behind it was
-  // deleted), and this pre-check then resolves that stale id, gets null, and
-  // refuses the save with "That task list could not be found" - before
-  // `updateLinkedStudyContent` below ever gets to answer 'missing' and mint a
-  // repair. That is the one designed repair path for a dangling link
-  // (A0/B3's "author a replacement on the form"), and until this guard it was
-  // unreachable.
-  //
-  // Nothing here is lost by skipping: `updateLinkedStudyContent` (recorded
-  // task list) and its survey counterpart re-check the vocabulary against the
-  // STORED kind themselves, and the early ownership check added just above
-  // them (the FIX 1 second finding) still runs there too. Both are the real
-  // authorisation and vocabulary boundary for content going into an existing
-  // link; this pre-check only exists to catch a NEW `firsthand_study_id` on
-  // the request body, which inline content can never carry.
-  const authoringInlineContent = Boolean(inlineStudyInput || inlineSurveyInput);
-
-  if (changesLinkage && newFirstHandStudyId?.trim() && !authoringInlineContent) {
-    await assertLinkedStudyKindMatches(
-      newFirstHandStudyId.trim(),
-      existingType,
-      newDeliveryMode,
-      { userId: req.user!.id, isSuperadmin },
-      // Ownership is checked only when THIS request is actually changing what
-      // the opportunity points at - not merely on the trigger above, which
-      // also fires for `delivery_mode`/`type` changes that leave the id
-      // untouched. Without this gate, the read-only save path - resending the
-      // SAME not-yours id on every save while editing an unrelated field -
-      // would be refused, which is the regression FIX 1 must not cause.
-      data.firsthand_study_id !== undefined &&
-        data.firsthand_study_id?.trim() !== existingFirstHandStudyId?.trim()
-    );
-  }
-  
-  // Build the study before the update, for the same reason as create: the row
-  // has to reference an id that already exists. See the create handler for why
-  // this cannot share a transaction with the opportunity write.
-  //
-  // The in-place branch keeps that ordering even though its id already exists,
-  // and it is worth being honest about what that costs. An in-place update is
-  // NOT compensable - there is no history to restore - so if the opportunity
-  // write below fails, the study holds the newly authored content while the
-  // opportunity's own fields do not. It leaves no orphan and no dangling
-  // reference, which is the failure the compensating `deleteStudyUnchecked`
-  // exists to prevent on the mint path, and reversing the order would only
-  // move the seam: a study write that failed after the opportunity write is
-  // the same partial save wearing the other hat.
-  //
-  // In the ordinary case the author simply saves again. In ONE case they
-  // cannot, and it is worth naming rather than glossing: if the opportunity
-  // was deleted between the ownership check and the write, the response is a
-  // 404 and there is nothing left to retry against, while the study has
-  // already been rewritten. Nothing in the 404 hints that a write landed, so
-  // the seam is logged where it happens.
-  let createdStudyId: string | null = null;
-  // Set when the linked study was rewritten and no column on `opportunities`
-  // changed. Read once, below, where an otherwise-empty update would answer
-  // "No fields to update" for a request that in fact saved everything it
-  // carried.
-  let updatedStudyInPlace = false;
-  /**
-   * The linked study's `updated_at` as it stands AFTER this request, returned
-   * to the caller so a client saving repeatedly can advance its own
-   * concurrency precondition without re-reading the study.
-   *
-   * Set on both paths that leave a study written: an in-place rewrite, and a
-   * fresh mint. Null when this request wrote no study at all, which is the
-   * honest answer for a save that carried no authored content - the caller
-   * must keep whatever precondition it already held rather than treating
-   * silence as "no study".
-   */
-  let linkedStudyUpdatedAt: string | null = null;
-
-  const linkedStudyId = existingFirstHandStudyId?.trim() || null;
-  const studyRequesterForThisWrite: StudyRequester = {
-    userId: req.user!.id,
-    isSuperadmin: req.user!.role === 'superadmin'
-  };
-
-  /**
-   * An in-place write reaches EVERY opportunity linked to the study, not just
-   * this one.
-   *
-   * `firsthand_study_id` is a bare TEXT column with no unique constraint, and
-   * many opportunities to one study is a designed feature - see the repoint
-   * comment further down. So the owner of a shared study, editing it here,
-   * would change what a colleague's live opportunity serves to its
-   * participants: their consent copy, and the target_url of every task, under
-   * recording. Their opportunity row is untouched and they are not told.
-   *
-   * Ownership is not the question. The author may well own the study, and
-   * `PUT /api/firsthand/studies/:studyId` already lets them edit it. The
-   * question is what this SURFACE implies: an author editing an opportunity
-   * reasonably believes the change is scoped to that opportunity, and here it
-   * is not. So the refusal is about the affordance, and it points at the
-   * editor where the sharing is visible.
-   *
-   * Only the fan-out is refused, never a study this opportunity alone uses.
-   *
-   * B3 replaces the reuse picker with copy-on-select, so the picker itself can
-   * no longer CREATE a new sharing relationship - a copy is a new, unshared
-   * study from the moment it is minted. This guard is deliberately RETAINED
-   * anyway, as defence in depth: it costs one query, it is the last check
-   * standing between an in-place rewrite and another opportunity's content for
-   * any row a future code path or a hand-edited link manages to share again,
-   * and an unreachable guard is a much cheaper mistake than a missing one.
-   * Migration 0012 converts every row that already shared a study at deploy
-   * time, so in steady state this branch is not expected to fire - but it
-   * stays live rather than becoming wrong.
-   */
-  const studyIsSharedWithAnotherOpportunity = async (studyId: string) => {
-    const others = await pool.query(
-      'SELECT 1 FROM opportunities WHERE firsthand_study_id = $1 AND id <> $2 LIMIT 1',
-      [studyId, id]
-    );
-
-    return (others.rowCount ?? 0) > 0;
-  };
-
-  if (inlineStudyInput) {
-    if (!isStudiesPersistenceConfigured()) {
-      throw new AppError('Task lists require a configured PostgreSQL database.', 503);
+    // Unmoderated studies run with logged-in Cortex users, so an external
+    // participant type is not representable. Only enforce when this request
+    // actually sets the type or participant type, so an unrelated edit to a
+    // legacy unmoderated+external row is not blocked (the bad value can still be
+    // corrected by PATCHing participant_type_required to a non-external value).
+    if (
+      (data.type !== undefined || data.participant_type_required !== undefined) &&
+      existingType === 'unmoderated' &&
+      newParticipantType === 'external'
+    ) {
+      throw new ValidationError('Unmoderated studies cannot use an external participant type; participants must be logged-in Cortex users');
     }
 
-    if (linkedStudyId && (await studyIsSharedWithAnotherOpportunity(linkedStudyId))) {
+    if (inlineSurveyInput && newDeliveryMode !== 'native') {
+      throw new ValidationError(QUESTIONS_NEED_NATIVE_DELIVERY);
+    }
+
+    // An inline study can only fill a gap, never replace a link. Rejected rather
+    // than resolved by precedence, matching create.
+    if (inlineStudyInput && existingType !== 'unmoderated') {
+      throw new ValidationError('Only unmoderated studies can carry a task list');
+    }
+
+    if (inlineSurveyInput && !QUESTION_CARRYING_TYPES.has(existingType)) {
+      throw new ValidationError(ONLY_QUESTION_TYPES_CARRY_QUESTIONS);
+    }
+
+    // `existingType` is the RESULTING type, merged over the stored row by the
+    // block above - so a PATCH that turns a survey into a `question` is capped by
+    // the cap it is moving to, not the one it is leaving.
+    if (
+      inlineSurveyInput &&
+      countAskedQuestions(inlineSurveyInput.steps) > maxQuestionsFor(existingType)
+    ) {
+      throw new ValidationError(TOO_MANY_QUESTIONS_MESSAGE);
+    }
+
+    // Authored content against an opportunity that ALREADY has a study used to be
+    // refused outright here - "edit its tasks in the Task Lists area" - because
+    // `inline_*` only ever creates, so honouring the request would have minted a
+    // second study and repointed the row at it. That refusal is gone: the study
+    // build below now rewrites the linked study in place when the caller may
+    // write it. See updateLinkedStudyContent for why that is conditional and
+    // what each of its three outcomes means.
+    //
+    // What has NOT changed is the refusal to accept an explicit link alongside
+    // authored content. Both are still rejected rather than resolved by
+    // precedence, which is what create does for the identical body.
+    //
+    // `!== undefined` rather than a truthiness check, and that distinction is
+    // load-bearing: `firsthand_study_id: null` is permitted by the update schema,
+    // and `null?.trim()` is undefined, so a truthiness check let
+    // `PATCH { inline_study, firsthand_study_id: null }` through - clearing the
+    // link in the same breath as authoring content into the study it pointed at,
+    // leaving that study rewritten AND unreferenced. The old blanket refusal on
+    // the stored link was what covered this; nothing else did.
+    if (inlineStudyInput && data.firsthand_study_id !== undefined) {
       throw new ValidationError(
-        'This task list is also used by another study, so editing it here would change what that study serves its participants. Edit it in the Task Lists area, where everything using it is visible'
+        'Send either firsthand_study_id or inline_study, not both'
       );
     }
 
-    if (linkedStudyId) {
-      const outcome = await updateLinkedStudyContent(
-        linkedStudyId,
-        'recorded',
-        {
+    // The survey twin, and it is not optional for the same reasons.
+    if (inlineSurveyInput && data.firsthand_study_id !== undefined) {
+      throw new ValidationError(
+        'Send either firsthand_study_id or inline_survey, not both'
+      );
+    }
+
+    // Additional validation for published opportunities.
+    //
+    // Evaluated against the state this request LEAVES BEHIND, not only against a
+    // status it sets. Gating on `data.status === 'published'` alone meant that
+    // clearing the study on an already-published opportunity sailed through:
+    // PATCH { firsthand_study_id: null } left a live unmoderated opportunity with
+    // no study, the exact state this guard exists to prevent.
+    const willBePublished =
+      data.status !== undefined
+        ? data.status === 'published'
+        : existingOpp.rows[0].status === 'published';
+
+    // ...but only for requests that could CREATE the bad state: ones that
+    // publish, change the type, or change what the opportunity points at. An
+    // unrelated edit to a row ALREADY in that state stays allowed, or a legacy
+    // published row with no study could never have its other fields corrected -
+    // which is precisely the remediation the participant-type comment above
+    // promises, and reset-demo-data.ts seeds exactly such a row.
+    const changesPublishShape =
+      data.status !== undefined ||
+      data.type !== undefined ||
+      data.firsthand_study_id !== undefined ||
+      inlineStudyInput !== undefined ||
+      inlineSurveyInput !== undefined ||
+      data.external_link_optional !== undefined ||
+      // Switching delivery mode changes WHICH of the two things is required, so
+      // it changes the publish shape as surely as clearing the link does. Without
+      // this, `PATCH { delivery_mode: 'native' }` on a published external survey
+      // produced a live native survey with no questions - the same hole the type
+      // flip above opened, through a different door.
+      data.delivery_mode !== undefined;
+
+    const publishGuardApplies = willBePublished && changesPublishShape;
+
+    // Same rule as create, asked of the RESULTING state rather than of the request
+    // - gating on the request's own status let `PATCH { type: 'poll' }` against a
+    // published opportunity produce a published poll with no link. Every value
+    // below is already merged over the stored row above.
+    //
+    // `publishGuardApplies` stays outside the predicate deliberately. It is not
+    // part of "is this publishable"; it is this endpoint's separate decision to
+    // leave an unrelated edit to a row ALREADY in the bad state alone.
+    if (publishGuardApplies) {
+      // Whether this opportunity has a slot a participant could still book, for
+      // the moderated-type gate (#118). Counted ONLY for `test`/`interview`, so an
+      // ordinary poll/survey publish pays no extra query, and against the
+      // participant-actionable predicate `end_time > NOW()` - the same set as
+      // `UPCOMING_SESSIONS_ONLY` and the `bookings.ts` booking refusal, NOT a bare
+      // `COUNT(*)`. A study whose only slots are in the past is as unbookable as
+      // one with none, and publishing it would re-open exactly the a21 defect.
+      //
+      // `undefined` for every other type: `findPublishProblem` only consults this
+      // for moderated types, and passing a signal it will not read would be noise.
+      // The wizard persists its temporary slots BEFORE this publishing update
+      // (OpportunityForm `handleSubmit`), so by the time control reaches here the
+      // author's slots are already rows this query can see.
+      let hasBookableSlot: boolean | undefined;
+      if (MODERATED_CONSENT_TYPES.has(existingType)) {
+        const slotCount = await client.query(
+          'SELECT 1 FROM sessions WHERE opportunity_id = $1 AND end_time > NOW() LIMIT 1',
+          [id]
+        );
+        hasBookableSlot = slotCount.rowCount ? slotCount.rowCount > 0 : false;
+      }
+
+      // `external_consent_confirmed` (cto/AdaptaLabs#136) deliberately does not
+      // gate this check either - self-attestation buys no assurance and a gate
+      // would block republishing a legacy external study. The reasoning, and the
+      // provenance question left for go-live (cto/AdaptaLabs#126), are at the
+      // create call site above.
+      const updatePublishProblem = findPublishProblem({
+        willBePublished: true,
+        type: existingType,
+        deliveryMode: newDeliveryMode,
+        hasBookableSlot,
+        // Trimmed for the same reason as the create guard: an all-whitespace id
+        // would otherwise satisfy this and store NULL.
+        hasLinkedStudy: Boolean(newFirstHandStudyId?.trim()),
+        hasInlineStudy: Boolean(inlineStudyInput),
+        hasInlineSurvey: Boolean(inlineSurveyInput),
+        externalLink: newLink,
+        // A caller REMOVING the study from a published opportunity is not trying
+        // to publish, so telling them to add a prompt "before publishing"
+        // describes an action they are not taking.
+        removingLinkedStudy: Boolean(
+          data.firsthand_study_id !== undefined && existingFirstHandStudyId?.trim()
+        )
+      });
+      if (updatePublishProblem) {
+        throw new ValidationError(PUBLISH_PROBLEM_MESSAGES[updatePublishProblem.code]);
+      }
+    }
+
+    // Same boundary check as create, against the resulting state, so switching a
+    // published external survey to native cannot adopt a recorded task list on
+    // the way through.
+    //
+    // Gated on the request actually changing the link or what the link has to be,
+    // for the reason the publish guard above states for itself: an unrelated edit
+    // to a row already in a bad state must stay allowed, or the row can never be
+    // repaired. Unconditionally, this refused `PATCH { title }`, refused
+    // `PATCH { status: 'draft' }` - so the misleading page could not even be
+    // taken down - and answered every one of them with a message about question
+    // types the caller had not touched. DELETE was the only way out.
+    const changesLinkage =
+      data.firsthand_study_id !== undefined ||
+      data.delivery_mode !== undefined ||
+      data.type !== undefined;
+
+    // FIX 5: skipped entirely when this request is authoring inline content.
+    //
+    // The guards above ("Send either firsthand_study_id or inline_study, not
+    // both", and the inline_survey twin) already refuse `data.firsthand_study_id
+    // !== undefined` alongside `inlineStudyInput`/`inlineSurveyInput` - INCLUDING
+    // an explicit null, which is why they test `!== undefined` rather than
+    // truthiness. So by the time control reaches here with inline content
+    // present, `data.firsthand_study_id` is guaranteed undefined, and
+    // `newFirstHandStudyId` therefore falls back to whatever is ALREADY stored -
+    // which this request is not touching.
+    //
+    // `changesLinkage` does not know that: the form sends `type` on every save,
+    // so `changesLinkage` reads true on a request that authors content into an
+    // opportunity whose STORED link is dangling (the study behind it was
+    // deleted), and this pre-check then resolves that stale id, gets null, and
+    // refuses the save with "That task list could not be found" - before
+    // `updateLinkedStudyContent` below ever gets to answer 'missing' and mint a
+    // repair. That is the one designed repair path for a dangling link
+    // (A0/B3's "author a replacement on the form"), and until this guard it was
+    // unreachable.
+    //
+    // Nothing here is lost by skipping: `updateLinkedStudyContent` (recorded
+    // task list) and its survey counterpart re-check the vocabulary against the
+    // STORED kind themselves, and the early ownership check added just above
+    // them (the FIX 1 second finding) still runs there too. Both are the real
+    // authorisation and vocabulary boundary for content going into an existing
+    // link; this pre-check only exists to catch a NEW `firsthand_study_id` on
+    // the request body, which inline content can never carry.
+    const authoringInlineContent = Boolean(inlineStudyInput || inlineSurveyInput);
+
+    if (changesLinkage && newFirstHandStudyId?.trim() && !authoringInlineContent) {
+      await assertLinkedStudyKindMatches(
+        newFirstHandStudyId.trim(),
+        existingType,
+        newDeliveryMode,
+        { userId: req.user!.id, isSuperadmin },
+        // Ownership is checked only when THIS request is actually changing what
+        // the opportunity points at - not merely on the trigger above, which
+        // also fires for `delivery_mode`/`type` changes that leave the id
+        // untouched. Without this gate, the read-only save path - resending the
+        // SAME not-yours id on every save while editing an unrelated field -
+        // would be refused, which is the regression FIX 1 must not cause.
+        data.firsthand_study_id !== undefined &&
+          data.firsthand_study_id?.trim() !== existingFirstHandStudyId?.trim()
+      );
+    }
+
+    // Build the study before the update, for the same reason as create: the row
+    // has to reference an id that already exists. See the create handler for why
+    // this cannot share a transaction with the opportunity write - studies live
+    // on the FirstHand runtime pool, opportunities on this one, so `client` here
+    // and whatever connection each of these calls takes internally are two
+    // different connections to two different databases; nothing below shares
+    // the lock taken above or joins its transaction.
+    //
+    // The in-place branch keeps that ordering even though its id already exists,
+    // and it is worth being honest about what that costs. An in-place update is
+    // NOT compensable - there is no history to restore - so if the opportunity
+    // write below fails, the study holds the newly authored content while the
+    // opportunity's own fields do not. It leaves no orphan and no dangling
+    // reference, which is the failure the compensating `deleteStudyUnchecked`
+    // exists to prevent on the mint path, and reversing the order would only
+    // move the seam: a study write that failed after the opportunity write is
+    // the same partial save wearing the other hat.
+    //
+    // In the ordinary case the author simply saves again. The one case they
+    // cannot is now unreachable rather than merely rare: the opportunity row
+    // has been held `FOR UPDATE` since the locked read at the top of this
+    // handler, so it cannot be deleted out from under this request between
+    // that read and the write below.
+    let createdStudyId: string | null = null;
+    // Set when the linked study was rewritten and no column on `opportunities`
+    // changed. Read once, below, where an otherwise-empty update would answer
+    // "No fields to update" for a request that in fact saved everything it
+    // carried.
+    let updatedStudyInPlace = false;
+    /**
+     * The linked study's `updated_at` as it stands AFTER this request, returned
+     * to the caller so a client saving repeatedly can advance its own
+     * concurrency precondition without re-reading the study.
+     *
+     * Set on both paths that leave a study written: an in-place rewrite, and a
+     * fresh mint. Null when this request wrote no study at all, which is the
+     * honest answer for a save that carried no authored content - the caller
+     * must keep whatever precondition it already held rather than treating
+     * silence as "no study".
+     */
+    let linkedStudyUpdatedAt: string | null = null;
+
+    const linkedStudyId = existingFirstHandStudyId?.trim() || null;
+    const studyRequesterForThisWrite: StudyRequester = {
+      userId: req.user!.id,
+      isSuperadmin: req.user!.role === 'superadmin'
+    };
+
+    /**
+     * An in-place write reaches EVERY opportunity linked to the study, not just
+     * this one.
+     *
+     * `firsthand_study_id` is a bare TEXT column with no unique constraint, and
+     * many opportunities to one study is a designed feature - see the repoint
+     * comment further down. So the owner of a shared study, editing it here,
+     * would change what a colleague's live opportunity serves to its
+     * participants: their consent copy, and the target_url of every task, under
+     * recording. Their opportunity row is untouched and they are not told.
+     *
+     * Ownership is not the question. The author may well own the study, and
+     * `PUT /api/firsthand/studies/:studyId` already lets them edit it. The
+     * question is what this SURFACE implies: an author editing an opportunity
+     * reasonably believes the change is scoped to that opportunity, and here it
+     * is not. So the refusal is about the affordance, and it points at the
+     * editor where the sharing is visible.
+     *
+     * Only the fan-out is refused, never a study this opportunity alone uses.
+     *
+     * B3 replaces the reuse picker with copy-on-select, so the picker itself can
+     * no longer CREATE a new sharing relationship - a copy is a new, unshared
+     * study from the moment it is minted. This guard is deliberately RETAINED
+     * anyway, as defence in depth: it costs one query, it is the last check
+     * standing between an in-place rewrite and another opportunity's content for
+     * any row a future code path or a hand-edited link manages to share again,
+     * and an unreachable guard is a much cheaper mistake than a missing one.
+     * Migration 0012 converts every row that already shared a study at deploy
+     * time, so in steady state this branch is not expected to fire - but it
+     * stays live rather than becoming wrong.
+     */
+    const studyIsSharedWithAnotherOpportunity = async (studyId: string) => {
+      const others = await client.query(
+        'SELECT 1 FROM opportunities WHERE firsthand_study_id = $1 AND id <> $2 LIMIT 1',
+        [studyId, id]
+      );
+
+      return (others.rowCount ?? 0) > 0;
+    };
+
+    if (inlineStudyInput) {
+      if (!isStudiesPersistenceConfigured()) {
+        throw new AppError('Task lists require a configured PostgreSQL database.', 503);
+      }
+
+      if (linkedStudyId && (await studyIsSharedWithAnotherOpportunity(linkedStudyId))) {
+        throw new ValidationError(
+          'This task list is also used by another study, so editing it here would change what that study serves its participants. Edit it in the Task Lists area, where everything using it is visible'
+        );
+      }
+
+      if (linkedStudyId) {
+        const outcome = await updateLinkedStudyContent(
+          linkedStudyId,
+          'recorded',
+          {
+            consent_text: inlineStudyInput.consent_text.trim(),
+            consent_template_id: inlineStudyInput.consent_template_id ?? null,
+            consent_template_version: inlineStudyInput.consent_template_version ?? null,
+            // Omitted rather than resolved when the request did not carry one.
+            // resolveStudyDuration(undefined) is null, and updateStudy skips a
+            // key that is absent - so without this, a save that says nothing
+            // about duration erases an estimate set by hand in StudyEditor. The
+            // same reason title and intro_text are not written here at all.
+            ...(inlineStudyInput.estimated_duration_minutes !== undefined
+              ? {
+                  estimated_duration_minutes: resolveStudyDuration(
+                    inlineStudyInput.estimated_duration_minutes
+                  )
+                }
+              : {}),
+            steps: toStudySteps(
+              inlineStudyInput.steps,
+              linkedStudyId,
+              inlineStudyInput.target_url
+            )
+          },
+          studyRequesterForThisWrite,
+          expectedStudyUpdatedAt,
+          stepKeysAreComplete(inlineStudyInput.steps)
+        );
+
+        if (outcome.outcome === 'forbidden') {
+          // The security event, logged here for the same reason the study route
+          // logs its own: a ForbiddenError reaches errorHandler, which records
+          // the URL and the user but NOT the study id, and cannot be told apart
+          // from any other 403 on this route. Without this line, an admin
+          // probing which colleagues' studies are linked to opportunities they
+          // own generates no distinguishable signal.
+          logger.warn('Refused a cross-owner study write', {
+            studyId: linkedStudyId,
+            userId: req.user!.id,
+            via: 'opportunity-form'
+          });
+
+          throw new ForbiddenError(
+            'This task list belongs to another researcher; only its owner or a superadmin can edit it'
+          );
+        }
+
+        if (outcome.outcome === 'stale') {
+          // Nothing on the opportunities row has been written yet, so a plain
+          // ROLLBACK is enough to release the `FOR UPDATE` lock before this
+          // early return - the `finally` below only releases the client, it
+          // does not close a still-open transaction.
+          await client.query('ROLLBACK');
+          return sendStaleStudyConflict(
+            res,
+            linkedStudyId,
+            req.user!.id,
+            'this task list',
+            outcome.currentUpdatedAt
+          );
+        }
+
+        if (outcome.outcome === 'updated') {
+          updatedStudyInPlace = true;
+          linkedStudyUpdatedAt = outcome.updatedAt;
+        }
+        if (outcome.outcome === 'missing') {
+          // Falls through to the mint below, which repoints the dangling link at
+          // a study that exists. Logged for the same reason as an explicit
+          // repoint: the dangling id is the only clue to which study went
+          // missing, and it is gone the moment the UPDATE lands.
+          logger.warn('Opportunity linked a study that no longer exists; authoring a replacement', {
+            opportunityId: id,
+            missingStudyId: linkedStudyId,
+            userId: req.user!.id
+          });
+        }
+      }
+
+      if (!updatedStudyInPlace) {
+        const studyId = `study_${crypto.randomUUID()}`;
+        const stored = await createStudy({
+          id: studyId,
+          // `||` rather than `??`: a row stored before the schema trimmed these
+          // fields can hold '', which `??` would happily propagate into a study
+          // whose session payload then fails to assemble.
+          title: (data.title || existingOpp.rows[0].title || 'Untitled study').trim(),
+          intro_text: (
+            data.purpose_one_liner || existingOpp.rows[0].purpose_one_liner || 'Recorded session'
+          ).trim(),
           consent_text: inlineStudyInput.consent_text.trim(),
           consent_template_id: inlineStudyInput.consent_template_id ?? null,
           consent_template_version: inlineStudyInput.consent_template_version ?? null,
-          // Omitted rather than resolved when the request did not carry one.
-          // resolveStudyDuration(undefined) is null, and updateStudy skips a
-          // key that is absent - so without this, a save that says nothing
-          // about duration erases an estimate set by hand in StudyEditor. The
-          // same reason title and intro_text are not written here at all.
-          ...(inlineStudyInput.estimated_duration_minutes !== undefined
-            ? {
-                estimated_duration_minutes: resolveStudyDuration(
-                  inlineStudyInput.estimated_duration_minutes
-                )
-              }
-            : {}),
-          steps: toStudySteps(
-            inlineStudyInput.steps,
-            linkedStudyId,
-            inlineStudyInput.target_url
-          )
-        },
-        studyRequesterForThisWrite,
-        expectedStudyUpdatedAt,
-        stepKeysAreComplete(inlineStudyInput.steps)
-      );
-
-      if (outcome.outcome === 'forbidden') {
-        // The security event, logged here for the same reason the study route
-        // logs its own: a ForbiddenError reaches errorHandler, which records
-        // the URL and the user but NOT the study id, and cannot be told apart
-        // from any other 403 on this route. Without this line, an admin
-        // probing which colleagues' studies are linked to opportunities they
-        // own generates no distinguishable signal.
-        logger.warn('Refused a cross-owner study write', {
-          studyId: linkedStudyId,
-          userId: req.user!.id,
-          via: 'opportunity-form'
+          estimated_duration_minutes: resolveStudyDuration(inlineStudyInput.estimated_duration_minutes),
+          status: 'launched',
+          // The editing user, not the opportunity's owner: a superadmin editing
+          // someone else's opportunity is the author of the study they just wrote,
+          // and the opportunity owner never saw its consent copy.
+          owner_user_id: req.user!.id,
+          // Provenance only, from the picker's copy-on-select. See the create
+          // route's inline_study branch for why this is explicit.
+          copied_from_study_id: inlineStudyInput.copied_from_study_id ?? null,
+          steps: toStudySteps(inlineStudyInput.steps, studyId, inlineStudyInput.target_url)
         });
+        createdStudyId = stored.study.id;
+        linkedStudyUpdatedAt = stored.study.updated_at;
+        // Routed through the same field loop as everything else so the id lands in
+        // the UPDATE without a second code path.
+        data.firsthand_study_id = createdStudyId;
+      }
+    } else if (inlineSurveyInput) {
+      if (!isStudiesPersistenceConfigured()) {
+        throw new AppError('Questions require a configured PostgreSQL database.', 503);
+      }
 
-        throw new ForbiddenError(
-          'This task list belongs to another researcher; only its owner or a superadmin can edit it'
+      if (linkedStudyId && (await studyIsSharedWithAnotherOpportunity(linkedStudyId))) {
+        throw new ValidationError(
+          'These questions are also used by another study, so editing them here would change what that study asks its participants. Edit them in the Task Lists area, where everything using them is visible'
         );
       }
 
-      if (outcome.outcome === 'stale') {
-        return sendStaleStudyConflict(
-          res,
+      if (linkedStudyId) {
+        const outcome = await updateLinkedStudyContent(
           linkedStudyId,
-          req.user!.id,
-          'this task list',
-          outcome.currentUpdatedAt
+          'survey',
+          {
+            consent_text: inlineSurveyInput.consent_text.trim(),
+            consent_template_id: inlineSurveyInput.consent_template_id ?? null,
+            consent_template_version: inlineSurveyInput.consent_template_version ?? null,
+            // Omitted rather than resolved when the request did not carry one.
+            // resolveStudyDuration(undefined) is null, and updateStudy skips a
+            // key that is absent - so without this, a save that says nothing
+            // about duration erases an estimate set by hand in StudyEditor. The
+            // same reason title and intro_text are not written here at all.
+            ...(inlineSurveyInput.estimated_duration_minutes !== undefined
+              ? {
+                  estimated_duration_minutes: resolveStudyDuration(
+                    inlineSurveyInput.estimated_duration_minutes
+                  )
+                }
+              : {}),
+            steps: toSurveySteps(inlineSurveyInput.steps, linkedStudyId)
+          },
+          studyRequesterForThisWrite,
+          expectedStudyUpdatedAt,
+          stepKeysAreComplete(inlineSurveyInput.steps)
         );
+
+        if (outcome.outcome === 'forbidden') {
+          // The security event, logged here for the same reason the study route
+          // logs its own: a ForbiddenError reaches errorHandler, which records
+          // the URL and the user but NOT the study id, and cannot be told apart
+          // from any other 403 on this route. Without this line, an admin
+          // probing which colleagues' studies are linked to opportunities they
+          // own generates no distinguishable signal.
+          logger.warn('Refused a cross-owner study write', {
+            studyId: linkedStudyId,
+            userId: req.user!.id,
+            via: 'opportunity-form'
+          });
+
+          throw new ForbiddenError(
+            'These questions belong to another researcher; only their owner or a superadmin can edit them'
+          );
+        }
+
+        if (outcome.outcome === 'stale') {
+          // Same reasoning as the task-list branch above: nothing has been
+          // written to the opportunities row, so ROLLBACK releases the lock
+          // before this early return.
+          await client.query('ROLLBACK');
+          return sendStaleStudyConflict(
+            res,
+            linkedStudyId,
+            req.user!.id,
+            'these questions',
+            outcome.currentUpdatedAt
+          );
+        }
+
+        if (outcome.outcome === 'updated') {
+          updatedStudyInPlace = true;
+          linkedStudyUpdatedAt = outcome.updatedAt;
+        }
       }
 
-      if (outcome.outcome === 'updated') {
-        updatedStudyInPlace = true;
-        linkedStudyUpdatedAt = outcome.updatedAt;
-      }
-      if (outcome.outcome === 'missing') {
-        // Falls through to the mint below, which repoints the dangling link at
-        // a study that exists. Logged for the same reason as an explicit
-        // repoint: the dangling id is the only clue to which study went
-        // missing, and it is gone the moment the UPDATE lands.
-        logger.warn('Opportunity linked a study that no longer exists; authoring a replacement', {
-          opportunityId: id,
-          missingStudyId: linkedStudyId,
-          userId: req.user!.id
-        });
-      }
-    }
-
-    if (!updatedStudyInPlace) {
-      const studyId = `study_${crypto.randomUUID()}`;
-      const stored = await createStudy({
-        id: studyId,
-        // `||` rather than `??`: a row stored before the schema trimmed these
-        // fields can hold '', which `??` would happily propagate into a study
-        // whose session payload then fails to assemble.
-        title: (data.title || existingOpp.rows[0].title || 'Untitled study').trim(),
-        intro_text: (
-          data.purpose_one_liner || existingOpp.rows[0].purpose_one_liner || 'Recorded session'
-        ).trim(),
-        consent_text: inlineStudyInput.consent_text.trim(),
-        consent_template_id: inlineStudyInput.consent_template_id ?? null,
-        consent_template_version: inlineStudyInput.consent_template_version ?? null,
-        estimated_duration_minutes: resolveStudyDuration(inlineStudyInput.estimated_duration_minutes),
-        status: 'launched',
-        // The editing user, not the opportunity's owner: a superadmin editing
-        // someone else's opportunity is the author of the study they just wrote,
-        // and the opportunity owner never saw its consent copy.
-        owner_user_id: req.user!.id,
-        // Provenance only, from the picker's copy-on-select. See the create
-        // route's inline_study branch for why this is explicit.
-        copied_from_study_id: inlineStudyInput.copied_from_study_id ?? null,
-        steps: toStudySteps(inlineStudyInput.steps, studyId, inlineStudyInput.target_url)
-      });
-      createdStudyId = stored.study.id;
-      linkedStudyUpdatedAt = stored.study.updated_at;
-      // Routed through the same field loop as everything else so the id lands in
-      // the UPDATE without a second code path.
-      data.firsthand_study_id = createdStudyId;
-    }
-  } else if (inlineSurveyInput) {
-    if (!isStudiesPersistenceConfigured()) {
-      throw new AppError('Questions require a configured PostgreSQL database.', 503);
-    }
-
-    if (linkedStudyId && (await studyIsSharedWithAnotherOpportunity(linkedStudyId))) {
-      throw new ValidationError(
-        'These questions are also used by another study, so editing them here would change what that study asks its participants. Edit them in the Task Lists area, where everything using them is visible'
-      );
-    }
-
-    if (linkedStudyId) {
-      const outcome = await updateLinkedStudyContent(
-        linkedStudyId,
-        'survey',
-        {
+      if (!updatedStudyInPlace) {
+        const studyId = `study_${crypto.randomUUID()}`;
+        const stored = await createStudy({
+          // Same `||` reasoning as the task-list branch above: a legacy row can
+          // hold '', which `??` would carry into a study whose session payload then
+          // fails to assemble.
+          id: studyId,
+          title: (data.title || existingOpp.rows[0].title || 'Untitled survey').trim(),
+          intro_text: (
+            data.purpose_one_liner || existingOpp.rows[0].purpose_one_liner || 'Survey'
+          ).trim(),
           consent_text: inlineSurveyInput.consent_text.trim(),
           consent_template_id: inlineSurveyInput.consent_template_id ?? null,
           consent_template_version: inlineSurveyInput.consent_template_version ?? null,
-          // Omitted rather than resolved when the request did not carry one.
-          // resolveStudyDuration(undefined) is null, and updateStudy skips a
-          // key that is absent - so without this, a save that says nothing
-          // about duration erases an estimate set by hand in StudyEditor. The
-          // same reason title and intro_text are not written here at all.
-          ...(inlineSurveyInput.estimated_duration_minutes !== undefined
-            ? {
-                estimated_duration_minutes: resolveStudyDuration(
-                  inlineSurveyInput.estimated_duration_minutes
-                )
-              }
-            : {}),
-          steps: toSurveySteps(inlineSurveyInput.steps, linkedStudyId)
-        },
-        studyRequesterForThisWrite,
-        expectedStudyUpdatedAt,
-        stepKeysAreComplete(inlineSurveyInput.steps)
-      );
+          estimated_duration_minutes: resolveStudyDuration(
+            inlineSurveyInput.estimated_duration_minutes
+          ),
+          status: 'launched',
+          owner_user_id: req.user!.id,
+          kind: 'survey',
+          // Provenance only, from the picker's copy-on-select. See the create
+          // route's inline_survey branch for why this is explicit.
+          copied_from_study_id: inlineSurveyInput.copied_from_study_id ?? null,
+          steps: toSurveySteps(inlineSurveyInput.steps, studyId)
+        });
+        createdStudyId = stored.study.id;
+        linkedStudyUpdatedAt = stored.study.updated_at;
+        data.firsthand_study_id = createdStudyId;
+      }
+    }
 
-      if (outcome.outcome === 'forbidden') {
-        // The security event, logged here for the same reason the study route
-        // logs its own: a ForbiddenError reaches errorHandler, which records
-        // the URL and the user but NOT the study id, and cannot be told apart
-        // from any other 403 on this route. Without this line, an admin
-        // probing which colleagues' studies are linked to opportunities they
-        // own generates no distinguishable signal.
-        logger.warn('Refused a cross-owner study write', {
+    // Reached only when this request carries no authored content at all: both
+    // guards above refuse an explicit link alongside `inline_*`, so the two are
+    // mutually exclusive by the time control gets here.
+    if (!inlineStudyInput && !inlineSurveyInput && data.firsthand_study_id !== undefined) {
+      // Normalise before the loop, which stores `value.trim()` verbatim and would
+      // otherwise write '' where create writes NULL for the same input. Two
+      // representations of "no study" is a trap for any later IS NOT NULL query.
+      data.firsthand_study_id = data.firsthand_study_id?.trim() || null;
+
+      // Repointing an opportunity leaves the study it used to reference behind.
+      // That study is NOT deleted: unlike the mint path's compensating delete,
+      // which removes a study nothing ever referenced, this one was deliberately
+      // chosen by somebody, may be referenced by other opportunities
+      // (`firsthand_study_id` is a bare TEXT column - many opportunities to one
+      // study is a designed feature, not an accident), and remains visible and
+      // owned in the Task Lists area where its owner can delete it. What it must
+      // not be is INVISIBLE, so the previous id is recorded here: without this
+      // line the only trace of the link that existed is gone the moment the
+      // UPDATE lands.
+      if (
+        linkedStudyId &&
+        data.firsthand_study_id !== linkedStudyId
+      ) {
+        logger.info('Opportunity repointed away from its previous study', {
+          opportunityId: id,
+          previousStudyId: linkedStudyId,
+          newStudyId: data.firsthand_study_id,
+          userId: req.user!.id
+        });
+      }
+
+      // Same claim-on-link as the create handler, for the same reason: attaching
+      // an unowned legacy study to an opportunity is the point at which it
+      // starts being served, so it must not still be writable by every admin.
+      if (data.firsthand_study_id && isStudiesPersistenceConfigured()) {
+        const claimedStudyId = data.firsthand_study_id;
+        if (await claimStudyIfUnowned(claimedStudyId, req.user!.id)) {
+          logger.info('Unowned study claimed by the opportunity linking it', {
+            studyId: claimedStudyId,
+            newOwnerUserId: req.user!.id
+          });
+        }
+      }
+    }
+
+    // Build dynamic update query
+    const updateFields: string[] = [];
+    // `boolean` is in the union because `external_consent_confirmed`
+    // (cto/AdaptaLabs#136) is the first boolean column in the allow-list. Without
+    // it the cast in the else-branch below would launder a real boolean through
+    // `as string | number | Date | null` and the compiler would stop being able
+    // to see the next type that does not belong here.
+    const values: (string | number | boolean | Date | null)[] = [];
+    let paramCount = 0;
+
+    Object.entries(data).forEach(([key, value]) => {
+      if (value !== undefined) {
+        // THE SECOND HALF OF THE ALLOW-LIST, AND IT IS NOT BELT-AND-BRACES.
+        //
+        // The check at the top of this handler vets the REQUEST BODY. This one
+        // vets what actually reaches the SET clause, ~660 lines later, and the
+        // two are not the same set: this handler MUTATES `data` in between -
+        // `data.firsthand_study_id = createdStudyId` at three sites above. Those
+        // three are allow-listed, so the entry check was sound today, but only
+        // today, and held by nothing except the distance between the two points.
+        //
+        // A security gate measured that. Adding one line above this loop that
+        // writes an injected key into `data` for an ORDINARY body - no hostile
+        // input anywhere in the request - survived all 987 tests and rebuilt the
+        // entire original vulnerability:
+        //
+        //   UPDATE opportunities SET title = $1,
+        //     purpose_one_liner = (SELECT email FROM users LIMIT 1), ... RETURNING *
+        //
+        // answering 200 with the address in the response body. A guard at the
+        // boundary cannot protect a statement built six hundred lines inside it.
+        //
+        // The review gate found the same gap from the other side: with only the
+        // entry check, narrowing it to `unknownFields.length === Object.keys(body).length`
+        // - the shape a well-meaning "do not 400 a mostly-valid save" refactor
+        // produces - also survived 987 tests and let a MIXED body through.
+        //
+        // `data` has the three non-column keys destructured out by this point, so
+        // this set is the whole rule here. Raised as the same ValidationError as
+        // the entry check so the two cannot answer differently for one cause.
+        if (!UPDATABLE_OPPORTUNITY_COLUMNS.has(key)) {
+          logger.error('Refused a column outside the allow-list at the update builder', {
+            opportunityId: id,
+            userId: req.user?.id,
+            field: key.slice(0, 64)
+          });
+          throw new ValidationError('Validation failed', [
+            `Only ${[...UPDATABLE_OPPORTUNITY_COLUMNS].join(', ')} may be updated`
+          ]);
+        }
+        paramCount++;
+        if (key === 'screener') {
+          // JSONB column: serialise the validated object (or null to clear the
+          // screener) and cast the text param so Postgres stores jsonb, not a
+          // JSON string. The screener is already validated by screenerSchema, so
+          // it is not run through the string-trim branch below.
+          updateFields.push(`${key} = $${paramCount}::jsonb`);
+          values.push(value === null ? null : JSON.stringify(value));
+        } else if (key === 'target_roles') {
+          // JSONB column, same as the screener. Validated and deduped by
+          // targetRolesSchema; an empty list (or null) clears it, so the read-back
+          // matches create (null for no advertised audience).
+          updateFields.push(`${key} = $${paramCount}::jsonb`);
+          const roles = value as string[] | null;
+          values.push(roles && roles.length > 0 ? JSON.stringify(roles) : null);
+        } else {
+          updateFields.push(`${key} = $${paramCount}`);
+          // `screener` and `target_roles` (the non-primitive JSONB columns) are
+          // handled in the branches above, so every value reaching here is a
+          // primitive; the cast records that the key guard narrows what TypeScript
+          // on its own cannot. The cast names `boolean` too, because
+          // `external_consent_confirmed` is a real boolean column and laundering
+          // it through a narrower cast would hide the next value that is not.
+          values.push(
+            typeof value === 'string'
+              ? value.trim()
+              : (value as string | number | boolean | Date | null)
+          );
+        }
+      }
+    });
+
+    // An in-place study update changes no column on `opportunities`, so a request
+    // whose entire content was the authored task list or question set leaves this
+    // empty. Refusing it here would answer "No fields to update" for a save that
+    // wrote everything it carried - and that is exactly the shape an autosave
+    // sends, so it is not a hypothetical body.
+    if (updateFields.length === 0 && !updatedStudyInPlace) {
+      throw new ValidationError('No fields to update');
+    }
+
+    paramCount++;
+    values.push(id);
+
+    // Reading the row back rather than writing it keeps `updated_at` honest: the
+    // BEFORE UPDATE trigger would otherwise stamp an opportunity that did not
+    // change. Same returned shape either way, so the response below needs no
+    // second path.
+    const query = updateFields.length > 0
+      ? `
+      UPDATE opportunities
+      SET ${updateFields.join(', ')}
+      WHERE id = $${paramCount}
+      RETURNING *
+    `
+      : `SELECT * FROM opportunities WHERE id = $${paramCount}`;
+
+    let result;
+    try {
+      result = await client.query(query, values);
+
+      // Zero rows is now structurally unreachable rather than merely rare: the
+      // row has been held `FOR UPDATE` since the first locked read at the top
+      // of this handler, so nothing else could have deleted it in between.
+      // Left in as a defensive check - it costs nothing and answers a clean
+      // 404 rather than a TypeError on the row access below if that
+      // invariant is ever wrong.
+      if (result.rowCount === 0) {
+        throw new NotFoundError('Study');
+      }
+    } catch (error) {
+      if (updatedStudyInPlace) {
+        // Not recoverable - see the ordering note above. Logged because the
+        // caller's 404 or 500 says nothing about the study write that did land,
+        // and this line is the only record that the two halves disagree.
+        logger.error('Opportunity write failed after its study was rewritten in place', {
+          opportunityId: id,
           studyId: linkedStudyId,
           userId: req.user!.id,
-          via: 'opportunity-form'
-        });
-
-        throw new ForbiddenError(
-          'These questions belong to another researcher; only their owner or a superadmin can edit them'
-        );
-      }
-
-      if (outcome.outcome === 'stale') {
-        return sendStaleStudyConflict(
-          res,
-          linkedStudyId,
-          req.user!.id,
-          'these questions',
-          outcome.currentUpdatedAt
-        );
-      }
-
-      if (outcome.outcome === 'updated') {
-        updatedStudyInPlace = true;
-        linkedStudyUpdatedAt = outcome.updatedAt;
-      }
-    }
-
-    if (!updatedStudyInPlace) {
-      const studyId = `study_${crypto.randomUUID()}`;
-      const stored = await createStudy({
-        // Same `||` reasoning as the task-list branch above: a legacy row can
-        // hold '', which `??` would carry into a study whose session payload then
-        // fails to assemble.
-        id: studyId,
-        title: (data.title || existingOpp.rows[0].title || 'Untitled survey').trim(),
-        intro_text: (
-          data.purpose_one_liner || existingOpp.rows[0].purpose_one_liner || 'Survey'
-        ).trim(),
-        consent_text: inlineSurveyInput.consent_text.trim(),
-        consent_template_id: inlineSurveyInput.consent_template_id ?? null,
-        consent_template_version: inlineSurveyInput.consent_template_version ?? null,
-        estimated_duration_minutes: resolveStudyDuration(
-          inlineSurveyInput.estimated_duration_minutes
-        ),
-        status: 'launched',
-        owner_user_id: req.user!.id,
-        kind: 'survey',
-        // Provenance only, from the picker's copy-on-select. See the create
-        // route's inline_survey branch for why this is explicit.
-        copied_from_study_id: inlineSurveyInput.copied_from_study_id ?? null,
-        steps: toSurveySteps(inlineSurveyInput.steps, studyId)
-      });
-      createdStudyId = stored.study.id;
-      linkedStudyUpdatedAt = stored.study.updated_at;
-      data.firsthand_study_id = createdStudyId;
-    }
-  }
-
-  // Reached only when this request carries no authored content at all: both
-  // guards above refuse an explicit link alongside `inline_*`, so the two are
-  // mutually exclusive by the time control gets here.
-  if (!inlineStudyInput && !inlineSurveyInput && data.firsthand_study_id !== undefined) {
-    // Normalise before the loop, which stores `value.trim()` verbatim and would
-    // otherwise write '' where create writes NULL for the same input. Two
-    // representations of "no study" is a trap for any later IS NOT NULL query.
-    data.firsthand_study_id = data.firsthand_study_id?.trim() || null;
-
-    // Repointing an opportunity leaves the study it used to reference behind.
-    // That study is NOT deleted: unlike the mint path's compensating delete,
-    // which removes a study nothing ever referenced, this one was deliberately
-    // chosen by somebody, may be referenced by other opportunities
-    // (`firsthand_study_id` is a bare TEXT column - many opportunities to one
-    // study is a designed feature, not an accident), and remains visible and
-    // owned in the Task Lists area where its owner can delete it. What it must
-    // not be is INVISIBLE, so the previous id is recorded here: without this
-    // line the only trace of the link that existed is gone the moment the
-    // UPDATE lands.
-    if (
-      linkedStudyId &&
-      data.firsthand_study_id !== linkedStudyId
-    ) {
-      logger.info('Opportunity repointed away from its previous study', {
-        opportunityId: id,
-        previousStudyId: linkedStudyId,
-        newStudyId: data.firsthand_study_id,
-        userId: req.user!.id
-      });
-    }
-
-    // Same claim-on-link as the create handler, for the same reason: attaching
-    // an unowned legacy study to an opportunity is the point at which it
-    // starts being served, so it must not still be writable by every admin.
-    if (data.firsthand_study_id && isStudiesPersistenceConfigured()) {
-      const claimedStudyId = data.firsthand_study_id;
-      if (await claimStudyIfUnowned(claimedStudyId, req.user!.id)) {
-        logger.info('Unowned study claimed by the opportunity linking it', {
-          studyId: claimedStudyId,
-          newOwnerUserId: req.user!.id
+          error: String(error)
         });
       }
-    }
-  }
 
-  // Build dynamic update query
-  const updateFields: string[] = [];
-  // `boolean` is in the union because `external_consent_confirmed`
-  // (cto/AdaptaLabs#136) is the first boolean column in the allow-list. Without
-  // it the cast in the else-branch below would launder a real boolean through
-  // `as string | number | Date | null` and the compiler would stop being able
-  // to see the next type that does not belong here.
-  const values: (string | number | boolean | Date | null)[] = [];
-  let paramCount = 0;
-
-  Object.entries(data).forEach(([key, value]) => {
-    if (value !== undefined) {
-      // THE SECOND HALF OF THE ALLOW-LIST, AND IT IS NOT BELT-AND-BRACES.
-      //
-      // The check at the top of this handler vets the REQUEST BODY. This one
-      // vets what actually reaches the SET clause, ~660 lines later, and the
-      // two are not the same set: this handler MUTATES `data` in between -
-      // `data.firsthand_study_id = createdStudyId` at three sites above. Those
-      // three are allow-listed, so the entry check was sound today, but only
-      // today, and held by nothing except the distance between the two points.
-      //
-      // A security gate measured that. Adding one line above this loop that
-      // writes an injected key into `data` for an ORDINARY body - no hostile
-      // input anywhere in the request - survived all 987 tests and rebuilt the
-      // entire original vulnerability:
-      //
-      //   UPDATE opportunities SET title = $1,
-      //     purpose_one_liner = (SELECT email FROM users LIMIT 1), ... RETURNING *
-      //
-      // answering 200 with the address in the response body. A guard at the
-      // boundary cannot protect a statement built six hundred lines inside it.
-      //
-      // The review gate found the same gap from the other side: with only the
-      // entry check, narrowing it to `unknownFields.length === Object.keys(body).length`
-      // - the shape a well-meaning "do not 400 a mostly-valid save" refactor
-      // produces - also survived 987 tests and let a MIXED body through.
-      //
-      // `data` has the three non-column keys destructured out by this point, so
-      // this set is the whole rule here. Raised as the same ValidationError as
-      // the entry check so the two cannot answer differently for one cause.
-      if (!UPDATABLE_OPPORTUNITY_COLUMNS.has(key)) {
-        logger.error('Refused a column outside the allow-list at the update builder', {
-          opportunityId: id,
-          userId: req.user?.id,
-          field: key.slice(0, 64)
-        });
-        throw new ValidationError('Validation failed', [
-          `Only ${[...UPDATABLE_OPPORTUNITY_COLUMNS].join(', ')} may be updated`
-        ]);
+      if (createdStudyId) {
+        try {
+          await deleteStudyUnchecked(createdStudyId);
+        } catch (cleanupError) {
+          logger.error('Failed to remove inline study after opportunity update failed', {
+            studyId: createdStudyId,
+            error: String(cleanupError)
+          });
+        }
       }
-      paramCount++;
-      if (key === 'screener') {
-        // JSONB column: serialise the validated object (or null to clear the
-        // screener) and cast the text param so Postgres stores jsonb, not a
-        // JSON string. The screener is already validated by screenerSchema, so
-        // it is not run through the string-trim branch below.
-        updateFields.push(`${key} = $${paramCount}::jsonb`);
-        values.push(value === null ? null : JSON.stringify(value));
-      } else if (key === 'target_roles') {
-        // JSONB column, same as the screener. Validated and deduped by
-        // targetRolesSchema; an empty list (or null) clears it, so the read-back
-        // matches create (null for no advertised audience).
-        updateFields.push(`${key} = $${paramCount}::jsonb`);
-        const roles = value as string[] | null;
-        values.push(roles && roles.length > 0 ? JSON.stringify(roles) : null);
-      } else {
-        updateFields.push(`${key} = $${paramCount}`);
-        // `screener` and `target_roles` (the non-primitive JSONB columns) are
-        // handled in the branches above, so every value reaching here is a
-        // primitive; the cast records that the key guard narrows what TypeScript
-        // on its own cannot. The cast names `boolean` too, because
-        // `external_consent_confirmed` is a real boolean column and laundering
-        // it through a narrower cast would hide the next value that is not.
-        values.push(
-          typeof value === 'string'
-            ? value.trim()
-            : (value as string | number | boolean | Date | null)
-        );
-      }
+      throw error;
     }
-  });
-  
-  // An in-place study update changes no column on `opportunities`, so a request
-  // whose entire content was the authored task list or question set leaves this
-  // empty. Refusing it here would answer "No fields to update" for a save that
-  // wrote everything it carried - and that is exactly the shape an autosave
-  // sends, so it is not a hypothetical body.
-  if (updateFields.length === 0 && !updatedStudyInPlace) {
-    throw new ValidationError('No fields to update');
-  }
-  
-  paramCount++;
-  values.push(id);
-  
-  // Reading the row back rather than writing it keeps `updated_at` honest: the
-  // BEFORE UPDATE trigger would otherwise stamp an opportunity that did not
-  // change. Same returned shape either way, so the response below needs no
-  // second path.
-  const query = updateFields.length > 0
-    ? `
-    UPDATE opportunities 
-    SET ${updateFields.join(', ')}
-    WHERE id = $${paramCount}
-    RETURNING *
-  `
-    : `SELECT * FROM opportunities WHERE id = $${paramCount}`;
-  
-  let result;
-  try {
-    result = await pool.query(query, values);
 
-    // Zero rows means the opportunity was deleted between the ownership check
-    // and this write. Raised inside the try so it takes the compensating
-    // delete: otherwise the row access below threw outside it, leaving the
-    // study behind.
-    if (result.rowCount === 0) {
-      throw new NotFoundError('Study');
-    }
+    await client.query('COMMIT');
+
+    const opportunity = {
+      ...result.rows[0],
+      created_at: result.rows[0].created_at.toISOString(),
+      updated_at: result.rows[0].updated_at.toISOString(),
+      start_date: result.rows[0].start_date ? result.rows[0].start_date.toISOString() : null,
+      end_date: result.rows[0].end_date ? result.rows[0].end_date.toISOString() : null,
+      sessions: [],
+      /**
+       * The linked study's revision after this write, for the caller's NEXT
+       * precondition.
+       *
+       * OMITTED rather than sent as null when this request wrote no study, and
+       * the distinction is the whole reason this is spelled with a conditional
+       * spread. A client that reads a present-but-null field as "there is no
+       * study" would clear a precondition it should have kept, and the save
+       * after that would go through fail-open with nothing anywhere saying the
+       * protection had been dropped. Absent means "this request says nothing
+       * about the study", which is what a title-only save actually means.
+       */
+      ...(linkedStudyUpdatedAt ? { linked_study_updated_at: linkedStudyUpdatedAt } : {})
+    };
+
+    res.json(opportunity);
   } catch (error) {
-    if (updatedStudyInPlace) {
-      // Not recoverable - see the ordering note above. Logged because the
-      // caller's 404 or 500 says nothing about the study write that did land,
-      // and this line is the only record that the two halves disagree.
-      logger.error('Opportunity write failed after its study was rewritten in place', {
-        opportunityId: id,
-        studyId: linkedStudyId,
-        userId: req.user!.id,
-        error: String(error)
-      });
-    }
-
-    if (createdStudyId) {
-      try {
-        await deleteStudyUnchecked(createdStudyId);
-      } catch (cleanupError) {
-        logger.error('Failed to remove inline study after opportunity update failed', {
-          studyId: createdStudyId,
-          error: String(cleanupError)
-        });
-      }
-    }
+    // Guarded: a ROLLBACK that throws on a dead connection must not replace the
+    // error that caused it (matches sessions.ts/bookings.ts). Harmless on a
+    // transaction already closed by one of the explicit ROLLBACKs above (a
+    // `stale` outcome) - Postgres answers "no transaction in progress", and
+    // that failure is swallowed here the same way.
+    await client.query('ROLLBACK').catch(() => {});
     throw error;
+  } finally {
+    client.release();
   }
-
-  const opportunity = {
-    ...result.rows[0],
-    created_at: result.rows[0].created_at.toISOString(),
-    updated_at: result.rows[0].updated_at.toISOString(),
-    start_date: result.rows[0].start_date ? result.rows[0].start_date.toISOString() : null,
-    end_date: result.rows[0].end_date ? result.rows[0].end_date.toISOString() : null,
-    sessions: [],
-    /**
-     * The linked study's revision after this write, for the caller's NEXT
-     * precondition.
-     *
-     * OMITTED rather than sent as null when this request wrote no study, and
-     * the distinction is the whole reason this is spelled with a conditional
-     * spread. A client that reads a present-but-null field as "there is no
-     * study" would clear a precondition it should have kept, and the save
-     * after that would go through fail-open with nothing anywhere saying the
-     * protection had been dropped. Absent means "this request says nothing
-     * about the study", which is what a title-only save actually means.
-     */
-    ...(linkedStudyUpdatedAt ? { linked_study_updated_at: linkedStudyUpdatedAt } : {})
-  };
-
-  res.json(opportunity);
 }));
 
 

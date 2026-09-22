@@ -61,8 +61,10 @@ import { pool } from '../../config';
 import { isDatabaseAvailable } from '../../utils/database';
 import { errorHandler } from '../../utils/errorHandler';
 import { UpdateOpportunitySchema } from '../../validation/schemas';
+import { wireConnectThroughQuery } from '../../__tests__/helpers/pooled-client-mock';
 
 const mockQuery = pool.query as unknown as jest.Mock;
+const mockConnect = pool.connect as unknown as jest.Mock;
 const mockIsDatabaseAvailable = isDatabaseAvailable as unknown as jest.Mock;
 
 const CALLER = 'admin-1';
@@ -93,6 +95,9 @@ const updateStatements = () => statements().filter((sql) => sql.includes('UPDATE
  * pass on a handler that had 403'd instead.
  */
 const arrangeOwnedOpportunity = () => {
+  // #151: the handler now runs its opportunities-table statements on a
+  // client from `pool.connect()` rather than on `pool.query` directly.
+  wireConnectThroughQuery(mockConnect, mockQuery);
   mockQuery.mockImplementation(async (sql: unknown) => {
     const text = String(sql);
     if (text.includes('SELECT owner_user_id FROM opportunities')) {
