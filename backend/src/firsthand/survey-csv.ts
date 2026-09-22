@@ -1,3 +1,5 @@
+import { createHmac } from "crypto";
+
 import type { StudyStep } from "../../../shared/firsthand/contract";
 import {
   UNKNOWN_REMOVED_PROMPT,
@@ -216,15 +218,62 @@ export type CsvSessionRow = {
 };
 
 /**
+ * A per-study digest of a participant id, for the CSV's Participant column
+ * (cto/AdaptaLabs#154).
+ *
+ * The raw id (`runtime_sessions.participant_id`, which is `users.id`) is
+ * stable across every study the same person takes part in, so two exports
+ * from two DIFFERENT studies could be joined on it - something two session
+ * ids could not do. Keying an HMAC on the server secret closes that: nobody
+ * without the secret can compute or invert the digest, and folding the study
+ * id into the MESSAGE rather than treating it as a separate lookup is enough
+ * to make two studies' digests for the same person computationally unrelated
+ * - HMAC's PRF guarantee already covers that, so a second key-derivation step
+ * would buy nothing this one call does not. Within one study the inputs are
+ * fixed, so the same person's two sessions still carry the same value and two
+ * different people still get different ones - exactly the property #152
+ * needs, and no more than the un-joinable session id already gave a reader.
+ *
+ * Truncated to 16 hex characters (64 bits): plenty to tell participants
+ * apart within one study's row count, short of the full 256-bit output this
+ * column has no use for.
+ */
+export function participantDigest(studyId: string, participantId: string): string {
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) {
+    // Mirrors oauthState.ts: read at CALL time, not module scope, so
+    // importing this file cannot make every src/firsthand/** vitest suite a
+    // transitive importer of ../config (see studies-repository.ts's own note
+    // on that). Production always has this set - shared/config/environment.ts
+    // requires it to boot at all - so this path is a test-configuration gap,
+    // not a production one.
+    throw new Error(
+      "participantDigest: SESSION_SECRET is required to digest a participant id"
+    );
+  }
+
+  // NUL-joined, the same separator `detachedKey` above uses and for the
+  // same reason: a real id will not contain one, where a plain space
+  // plausibly could and would let two different (studyId, participantId)
+  // pairs collide on the same HMAC message.
+  return createHmac("sha256", secret)
+    .update(`${studyId}\u0000${participantId}`)
+    .digest("hex")
+    .slice(0, 16);
+}
+
+/**
  * One SESSION's row, from that session's answers alone.
  *
- * A row needs nothing but one session's answers plus the column layout, which
- * is why the export can hold one batch in memory instead of the whole study.
+ * A row needs nothing but one session's answers, the study it belongs to and
+ * the column layout, which is why the export can hold one batch in memory
+ * instead of the whole study.
  */
 export function toCsvSessionRow(
   steps: StudyStep[],
   removed: RemovedQuestion[],
-  row: CsvSessionRow
+  row: CsvSessionRow,
+  studyId: string
 ): string {
   const { answers } = row;
   const questions = steps.filter((step) => QUESTION_TYPES.has(step.type));
@@ -255,17 +304,11 @@ export function toCsvSessionRow(
 
   return [
     cell(row.sessionId, false),
-    // Neutralised: an id we did not mint ourselves, and the cost is nothing.
-    //
-    // ponytail: this is `users.id`, stable across every study the person
-    //   takes part in, so two exports can be joined on it where two session
-    //   ids could not. Within the entitled readers it adds nothing (the owner
-    //   already joins answers to name and email via session-events), and
-    //   Cortex makes no anonymity claim; the exposure is a CSV passed on.
-    //   Upgrade path: a per-study keyed digest of the id, the salted-digest
-    //   route docs/PRODUCTION_HARDENING.md already names.
-    //   -> cto/AdaptaLabs#154
-    cell(row.participantId ?? "", true),
+    // cto/AdaptaLabs#154: a per-study digest, not the raw `users.id` this
+    // column used to print. Not neutralised - `participantDigest` mints a
+    // fixed hex shape ourselves, the same reasoning `answerFor`'s ratings
+    // comment gives for skipping the participant-authored prefix.
+    cell(row.participantId ? participantDigest(studyId, row.participantId) : "", false),
     cell(row.superseded ? "true" : "false", false),
     ...questions.map((step) => columnFor(step, byColumn.get(step.step_id))),
     ...removed.map((question) =>
@@ -371,12 +414,13 @@ export const CSV_LINE_ENDING = "\r\n";
  */
 export function toResponsesCsv(
   steps: StudyStep[],
-  responses: StoredResponse[]
+  responses: StoredResponse[],
+  studyId: string
 ): string {
   const removed = removedQuestionColumns(responses);
 
   const lines = toCsvSessionRows(responses).map((row) =>
-    toCsvSessionRow(steps, removed, row)
+    toCsvSessionRow(steps, removed, row, studyId)
   );
 
   return (

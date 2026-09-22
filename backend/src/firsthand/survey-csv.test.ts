@@ -1,8 +1,30 @@
 import { describe, expect, it } from "vitest";
 
 import type { StudyStep } from "../../../shared/firsthand/contract";
-import { toCsvContentDisposition, toResponsesCsv } from "./survey-csv";
+import {
+  participantDigest,
+  toCsvContentDisposition,
+  toResponsesCsv
+} from "./survey-csv";
 import type { StoredResponse } from "./survey-results";
+
+// `toResponsesCsv` digests the Participant column against a study id now
+// (cto/AdaptaLabs#154) and needs a secret to do it.
+process.env.SESSION_SECRET ||= "vitest-survey-csv-not-a-real-secret"; // gitleaks:allow
+
+/**
+ * Every case in this file exports under the SAME study, so this is the only
+ * study id `toResponsesCsv` ever sees here - the digest tests in
+ * survey-csv-participant-digest.test.ts are what actually prove the
+ * per-study behaviour. `d(...)` below turns a fixture's raw participant id
+ * into what the Participant column now prints for it under THIS study, so
+ * the shape/quoting/injection assertions below stay about the shape of the
+ * row rather than about the digest itself.
+ */
+const STUDY_ID = "study_csv_shape";
+const d = (participantId: string) => participantDigest(STUDY_ID, participantId);
+const renderCsv = (steps: StudyStep[], responses: StoredResponse[]) =>
+  toResponsesCsv(steps, responses, STUDY_ID);
 
 const step = (over: Partial<StudyStep> & Pick<StudyStep, "type" | "step_id">) =>
   ({ order: 1, prompt: "Question", ...over }) as StudyStep;
@@ -44,7 +66,7 @@ describe("shape", () => {
   // spreadsheet and stats package expects. A row per answer would need
   // pivoting before anyone could look at it.
   it("writes a header of prompts and one row per participant", () => {
-    const csv = toResponsesCsv(steps, [
+    const csv = renderCsv(steps, [
       response("q1", "s1", { text: "Good" }),
       response("q2", "s1", { rating: 4 }),
       response("q1", "s2", { text: "Bad" })
@@ -52,36 +74,36 @@ describe("shape", () => {
 
     expect(rows(csv)).toEqual([
       "Session,Participant,Superseded,Thoughts?,Ease",
-      "s1,s1,false,Good,4",
-      "s2,s2,false,Bad,"
+      `s1,${d("s1")},false,Good,4`,
+      `s2,${d("s2")},false,Bad,`
     ]);
   });
 
   it("keeps a column for a question nobody answered", () => {
-    const csv = toResponsesCsv(steps, [response("q1", "s1", { text: "Good" })]);
+    const csv = renderCsv(steps, [response("q1", "s1", { text: "Good" })]);
 
     expect(rows(csv)[0]).toBe("Session,Participant,Superseded,Thoughts?,Ease");
-    expect(rows(csv)[1]).toBe("s1,s1,false,Good,");
+    expect(rows(csv)[1]).toBe(`s1,${d("s1")},false,Good,`);
   });
 
   // Semicolon, not comma, so the join does not force the field to be quoted
   // for a reason that has nothing to do with its content.
   it("joins multi choice selections in one unquoted cell", () => {
-    const csv = toResponsesCsv(
+    const csv = renderCsv(
       [step({ step_id: "q1", type: "multi_choice", prompt: "Which?" })],
       [response("q1", "s1", { selectedOptions: ["a", "b"] })]
     );
 
-    expect(rows(csv)[1]).toBe("s1,s1,false,a; b");
+    expect(rows(csv)[1]).toBe(`s1,${d("s1")},false,a; b`);
   });
 
   it("still quotes a selected option that itself contains a comma", () => {
-    const csv = toResponsesCsv(
+    const csv = renderCsv(
       [step({ step_id: "q1", type: "multi_choice", prompt: "Which?" })],
       [response("q1", "s1", { selectedOptions: ["Jira, Cloud", "b"] })]
     );
 
-    expect(rows(csv)[1]).toBe('s1,s1,false,"Jira, Cloud; b"');
+    expect(rows(csv)[1]).toBe(`s1,${d("s1")},false,"Jira, Cloud; b"`);
   });
 });
 
@@ -93,13 +115,13 @@ describe("quoting", () => {
     ["a quote", 'He said "no"', '"He said ""no"""'],
     ["a newline", "line one\nline two", '"line one\nline two"']
   ])("quotes %s", (_label, text, expected) => {
-    const csv = toResponsesCsv(steps, [response("q1", "s1", { text })]);
+    const csv = renderCsv(steps, [response("q1", "s1", { text })]);
 
-    expect(rows(csv)[1]).toBe(`s1,s1,false,${expected}`);
+    expect(rows(csv)[1]).toBe(`s1,${d("s1")},false,${expected}`);
   });
 
   it("quotes a prompt containing a comma", () => {
-    const csv = toResponsesCsv(
+    const csv = renderCsv(
       [step({ step_id: "q1", type: "open_text", prompt: "Easy, or hard?" })],
       []
     );
@@ -120,7 +142,7 @@ describe("formula injection", () => {
   it.each([["="], ["+"], ["@"]])(
     "neutralises a cell starting with %s",
     (lead) => {
-      const csv = toResponsesCsv(steps, [
+      const csv = renderCsv(steps, [
         response("q1", "s1", { text: `${lead}HYPERLINK("http://evil.test")` })
       ]);
 
@@ -130,7 +152,7 @@ describe("formula injection", () => {
   );
 
   it("neutralises a formula disguised as a negative number", () => {
-    const csv = toResponsesCsv(steps, [
+    const csv = renderCsv(steps, [
       response("q1", "s1", { text: '-2+3+cmd|" /c calc"!A0' })
     ]);
 
@@ -138,11 +160,11 @@ describe("formula injection", () => {
   });
 
   it("leaves ordinary text alone", () => {
-    const csv = toResponsesCsv(steps, [
+    const csv = renderCsv(steps, [
       response("q1", "s1", { text: "No problems at all" })
     ]);
 
-    expect(rows(csv)[1]).toBe("s1,s1,false,No problems at all");
+    expect(rows(csv)[1]).toBe(`s1,${d("s1")},false,No problems at all`);
   });
 
   // Question prompts are free text authored by any researcher_admin, and the
@@ -150,7 +172,7 @@ describe("formula injection", () => {
   // aimed at the highest-privileged user in the system, through the header
   // row rather than the data rows.
   it("neutralises a formula in a researcher-authored prompt", () => {
-    const csv = toResponsesCsv(
+    const csv = renderCsv(
       [
         step({
           step_id: "q1",
@@ -166,7 +188,7 @@ describe("formula injection", () => {
   });
 
   it("leaves an ordinary prompt readable in the header", () => {
-    const csv = toResponsesCsv(steps, [response("q1", "s1", { text: "Fine" })]);
+    const csv = renderCsv(steps, [response("q1", "s1", { text: "Fine" })]);
 
     expect(rows(csv)[0]).toBe("Session,Participant,Superseded,Thoughts?");
   });
@@ -175,12 +197,12 @@ describe("formula injection", () => {
   // participant, so it must not pick up a defensive prefix and stop being a
   // number in the spreadsheet.
   it("leaves a numeric rating usable as a number", () => {
-    const csv = toResponsesCsv(
+    const csv = renderCsv(
       [step({ step_id: "q1", type: "rating", prompt: "Ease", config: { scale_max: 5 } })],
       [response("q1", "s1", { rating: 4 })]
     );
 
-    expect(rows(csv)[1]).toBe("s1,s1,false,4");
+    expect(rows(csv)[1]).toBe(`s1,${d("s1")},false,4`);
   });
 });
 
@@ -270,7 +292,7 @@ describe("answers to a removed question", () => {
   ) => response(null, sessionId, payload, { step_prompt: prompt, step_type: stepType });
 
   it("gets a column of its own, marked as removed", () => {
-    const csv = toResponsesCsv(live, [
+    const csv = renderCsv(live, [
       response("q1", "s1", { text: "live" }),
       detached("What did you think of the old checkout?", "s1", { text: "detached" })
     ]);
@@ -278,33 +300,36 @@ describe("answers to a removed question", () => {
     expect(rows(csv)[0]).toBe(
       "Session,Participant,Superseded,Still asked,What did you think of the old checkout? (removed question)"
     );
-    expect(rows(csv)[1]).toBe("s1,s1,false,live,detached");
+    expect(rows(csv)[1]).toBe(`s1,${d("s1")},false,live,detached`);
   });
 
   it("does not spill a detached answer into a live question's column", () => {
     // The two are keyed differently - one by step id, one by prompt and type -
     // and a shared key would put the detached answer under "Still asked".
-    const csv = toResponsesCsv(live, [
+    const csv = renderCsv(live, [
       detached("Removed", "s1", { text: "detached" })
     ]);
 
-    expect(rows(csv)[1]).toBe("s1,s1,false,,detached");
+    expect(rows(csv)[1]).toBe(`s1,${d("s1")},false,,detached`);
   });
 
   it("leaves the cell blank for a participant who never saw the removed question", () => {
-    const csv = toResponsesCsv(live, [
+    const csv = renderCsv(live, [
       response("q1", "s1", { text: "live" }),
       detached("Removed", "s2", { text: "detached" })
     ]);
 
-    expect(rows(csv).slice(1)).toEqual(["s1,s1,false,live,", "s2,s2,false,,detached"]);
+    expect(rows(csv).slice(1)).toEqual([
+      `s1,${d("s1")},false,live,`,
+      `s2,${d("s2")},false,,detached`
+    ]);
   });
 
   it("neutralises a removed prompt that would run as a formula", () => {
     // The suffix must not become the thing that makes the cell safe: the
     // prompt is still researcher-authored free text, and the person opening
     // this export is the highest-privileged user in the system.
-    const csv = toResponsesCsv(live, [
+    const csv = renderCsv(live, [
       detached('=HYPERLINK("http://evil.test")', "s1", { text: "a" })
     ]);
 
@@ -312,7 +337,7 @@ describe("answers to a removed question", () => {
   });
 
   it("names the column plainly when the wording was never recorded", () => {
-    const csv = toResponsesCsv(live, [detached(null, "s1", { text: "a" })]);
+    const csv = renderCsv(live, [detached(null, "s1", { text: "a" })]);
 
     expect(rows(csv)[0]).toBe(
       "Session,Participant,Superseded,Still asked,A question that has since been removed (removed question)"
@@ -320,7 +345,7 @@ describe("answers to a removed question", () => {
   });
 
   it("adds no columns when nothing was removed", () => {
-    const csv = toResponsesCsv(live, [response("q1", "s1", { text: "live" })]);
+    const csv = renderCsv(live, [response("q1", "s1", { text: "live" })]);
 
     expect(rows(csv)[0]).toBe("Session,Participant,Superseded,Still asked");
   });
@@ -355,52 +380,55 @@ describe("one person answering in two sessions", () => {
     });
 
   it("heads the first column Session, since it has always printed a session id", () => {
-    const csv = toResponsesCsv(steps, []);
+    const csv = renderCsv(steps, []);
     expect(rows(csv)[0]).toBe("Session,Participant,Superseded,Which?,And?");
   });
 
   it("keeps both rows, names the person on each and flags the one that lost", () => {
-    const csv = toResponsesCsv(steps, [
+    const csv = renderCsv(steps, [
       answer("q1", "monday", "Left", "2026-09-21T09:00:00.000Z"),
       answer("q1", "tuesday", "Right", "2026-09-22T09:00:00.000Z")
     ]);
 
     expect(rows(csv).slice(1)).toEqual([
-      "monday,person,true,Left,",
-      "tuesday,person,false,Right,"
+      `monday,${d("person")},true,Left,`,
+      `tuesday,${d("person")},false,Right,`
     ]);
   });
 
   it("flags a session with ANY lost answer, even when another of its answers still counts", () => {
     // Monday answered q1 and q2; Tuesday answered q2 again. Monday's q1 still
     // counts on the page, and the row is flagged because its q2 does not.
-    const csv = toResponsesCsv(steps, [
+    const csv = renderCsv(steps, [
       answer("q1", "monday", "Left", "2026-09-21T09:00:00.000Z"),
       answer("q2", "monday", "Yes", "2026-09-21T09:01:00.000Z"),
       answer("q2", "tuesday", "No", "2026-09-22T09:00:00.000Z")
     ]);
 
     expect(rows(csv).slice(1)).toEqual([
-      "monday,person,true,Left,Yes",
-      "tuesday,person,false,,No"
+      `monday,${d("person")},true,Left,Yes`,
+      `tuesday,${d("person")},false,,No`
     ]);
   });
 
   it("flags nothing when two DIFFERENT people answered the same question", () => {
     // The control: a flag that fired on any shared question would pass the
     // two tests above and mark every row of every study.
-    const csv = toResponsesCsv(steps, [
+    const csv = renderCsv(steps, [
       answer("q1", "s1", "Left", "2026-09-21T09:00:00.000Z", "one"),
       answer("q1", "s2", "Right", "2026-09-22T09:00:00.000Z", "two")
     ]);
 
-    expect(rows(csv).slice(1)).toEqual(["s1,one,false,Left,", "s2,two,false,Right,"]);
+    expect(rows(csv).slice(1)).toEqual([
+      `s1,${d("one")},false,Left,`,
+      `s2,${d("two")},false,Right,`
+    ]);
   });
 
   it("flags nothing for a person whose two sessions share only an instruction row", () => {
     // An instruction is not an answer, so two of them cannot disagree - a
     // flag here would mark a row superseded with nothing on it that lost.
-    const csv = toResponsesCsv(steps, [
+    const csv = renderCsv(steps, [
       // Carrying a SELECTION, so only the type check can keep them out: with
       // empty payloads they were rejected as blank and the test could not
       // fail with the type guard deleted (measured by the review gate).
@@ -408,20 +436,26 @@ describe("one person answering in two sessions", () => {
       response("intro", "tuesday", { selectedOption: "x" }, { participant_id: "person", step_type: "instruction", saved_at: "2026-09-22T09:00:00.000Z" })
     ]);
 
-    expect(rows(csv).slice(1)).toEqual(["monday,person,false,,", "tuesday,person,false,,"]);
+    expect(rows(csv).slice(1)).toEqual([
+      `monday,${d("person")},false,,`,
+      `tuesday,${d("person")},false,,`
+    ]);
   });
 
   it("flags nothing when the later answer to a question is blank", () => {
-    const csv = toResponsesCsv(steps, [
+    const csv = renderCsv(steps, [
       answer("q1", "monday", "Left", "2026-09-21T09:00:00.000Z"),
       response("q1", "tuesday", {}, { participant_id: "person", step_type: "single_choice", saved_at: "2026-09-22T09:00:00.000Z" })
     ]);
 
-    expect(rows(csv).slice(1)).toEqual(["monday,person,false,Left,", "tuesday,person,false,,"]);
+    expect(rows(csv).slice(1)).toEqual([
+      `monday,${d("person")},false,Left,`,
+      `tuesday,${d("person")},false,,`
+    ]);
   });
 
   it("puts one person's sessions next to each other, whoever answered in between", () => {
-    const csv = toResponsesCsv(steps, [
+    const csv = renderCsv(steps, [
       answer("q1", "p-monday", "Left", "2026-09-21T09:00:00.000Z", "p"),
       answer("q1", "other", "Left", "2026-09-21T12:00:00.000Z", "o"),
       answer("q1", "p-tuesday", "Right", "2026-09-22T09:00:00.000Z", "p")

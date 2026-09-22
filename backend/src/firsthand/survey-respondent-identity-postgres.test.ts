@@ -54,6 +54,11 @@ import { startTestPostgres, type TestPostgres } from "../__tests__/helpers/postg
 const execFileAsync = promisify(execFile);
 const skipDbTests = process.env.FIRSTHAND_SKIP_DB_TESTS === "1";
 
+// `toCsvSessionRow` digests the participant id against a study id now
+// (cto/AdaptaLabs#154), and needs a secret to do it.
+process.env.SESSION_SECRET ||=
+  "vitest-survey-respondent-identity-not-a-real-secret"; // gitleaks:allow
+
 const migrateScript = path.resolve(__dirname, "../../scripts/firsthand-migrate.mjs");
 
 const STUDY_ID = "study_respondent_identity";
@@ -143,7 +148,9 @@ async function streamedCsv(
   const csvExport = await openSurveyCsvExport(scope);
   const lines = [toCsvHeaderRow([QUESTION_STEP], csvExport.removedQuestions)];
   for await (const row of csvExport.participants(new AbortController().signal)) {
-    lines.push(toCsvSessionRow([QUESTION_STEP], csvExport.removedQuestions, row));
+    lines.push(
+      toCsvSessionRow([QUESTION_STEP], csvExport.removedQuestions, row, scope.studyId)
+    );
   }
   return lines;
 }
@@ -275,12 +282,15 @@ describe.skipIf(skipDbTests)("the respondent identity, delivered by a real read"
    * Postgres returned.
    */
   it("exports both sessions under one person, with the earlier one flagged superseded", async () => {
+    const { participantDigest } = await import("./survey-csv");
+    const digest = participantDigest(STUDY_ID, PARTICIPANT_ID);
+
     const lines = await streamedCsv({ kind: "study", studyId: STUDY_ID });
 
     expect(lines).toEqual([
       "Session,Participant,Superseded,Which did you prefer?",
-      `${FIRST_SESSION},${PARTICIPANT_ID},true,Left`,
-      `${SECOND_SESSION},${PARTICIPANT_ID},false,Right`
+      `${FIRST_SESSION},${digest},true,Left`,
+      `${SECOND_SESSION},${digest},false,Right`
     ]);
   });
 
@@ -300,6 +310,9 @@ describe.skipIf(skipDbTests)("the respondent identity, delivered by a real read"
    * mutates that filter to `(${filter} OR TRUE)` and this test is what reds.
    */
   it("keeps a per-opportunity export to that opportunity when one person answered in two", async () => {
+    const { participantDigest } = await import("./survey-csv");
+    const digest = participantDigest(STUDY_ID, PARTICIPANT_ID);
+
     await pool.query("TRUNCATE firsthand.runtime_sessions CASCADE");
     await seedAnsweredSession(FIRST_SESSION, "Left", "2026-09-20T09:00:00.000Z");
     await seedAnsweredSession(
@@ -319,7 +332,7 @@ describe.skipIf(skipDbTests)("the respondent identity, delivered by a real read"
     // reader is not entitled to, so it cannot supersede anything here.
     expect(lines).toEqual([
       "Session,Participant,Superseded,Which did you prefer?",
-      `${FIRST_SESSION},${PARTICIPANT_ID},false,Left`
+      `${FIRST_SESSION},${digest},false,Left`
     ]);
 
     // CONTROL: the other session is really there, and the study-wide export
