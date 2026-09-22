@@ -618,23 +618,12 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
    * share the viewport with its neighbour.
    */
   const timelineRef = useRef<HTMLDivElement>(null);
-  const [isNarrowViewport, setIsNarrowViewport] = useState(
-    () => typeof window !== 'undefined' && window.innerWidth <= 480
-  );
-  useEffect(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return;
-    const mq = window.matchMedia('(max-width: 480px)');
-    const handleChange = (e: MediaQueryListEvent) => setIsNarrowViewport(e.matches);
-    setIsNarrowViewport(mq.matches);
-    mq.addEventListener('change', handleChange);
-    return () => mq.removeEventListener('change', handleChange);
-  }, []);
 
-  // ponytail: only the Previous/Next buttons write this - a swipe on the
-  // still-swipeable scroller below leaves it stale, and the pager renders on
-  // viewport width alone rather than on whether the grid actually overflows.
-  //   -> cto/AdaptaLabs#130, breaks once a real gesture or a wide-enough
-  //      narrow viewport is what a real device sends.
+  /**
+   * #130: written by the Previous/Next buttons (via `goToDay`) AND by
+   * `handleTimelineScroll` below, so a swipe on the still-swipeable scroller
+   * keeps this in step too, rather than only reacting to its own buttons.
+   */
   const [focusedDayIndex, setFocusedDayIndex] = useState(0);
   // A new set of visible days (a refetch, a week-nav page change) can leave a
   // stale index pointing past the end, or at a day that is no longer the one
@@ -658,6 +647,20 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
       behavior: 'smooth',
     });
   }, [visibleDays.length, dayGrid.gap]);
+
+  /**
+   * #130: keeps `focusedDayIndex` in step with a native swipe on the
+   * scroller, which `goToDay` above cannot see - that only fires from the
+   * Previous/Next buttons. Same column-stride arithmetic `goToDay` uses to
+   * scroll TO a day, run in reverse to read back which day the scroll
+   * position now sits at.
+   */
+  const handleTimelineScroll = useCallback(() => {
+    const columnStride = DAY_COLUMN_MIN_WIDTH_PX + dayGrid.gap;
+    const scrollLeft = timelineRef.current?.scrollLeft ?? 0;
+    const index = Math.round(scrollLeft / columnStride);
+    setFocusedDayIndex(Math.max(0, Math.min(index, visibleDays.length - 1)));
+  }, [dayGrid.gap, visibleDays.length]);
 
   /**
    * Whether `.calendar-timeline` needs to become its own horizontal scroll
@@ -1026,12 +1029,15 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
         </div>
       )}
 
-      {/* Day pager (row 6, second-pass review). Phone-only: at that width the
-          grid shows one column at a time and the horizontal scrollbar is the
-          only other way to move, which is easy to miss entirely. Distinct
-          from the week nav above - this steps one COLUMN, not one WINDOW, and
+      {/* Day pager (row 6, second-pass review; #130 for this gate). Rendered
+          only once `needsScrollContainment` says the grid genuinely cannot
+          show every visible day at once - the same measurement that switches
+          on `.calendar-timeline--scrolls` - rather than on viewport width
+          alone, so two days that fit comfortably at a narrow-but-not-tiny
+          width do not get a "Next" that visibly moves nothing. Distinct from
+          the week nav above - this steps one COLUMN, not one WINDOW, and
           exists even for a plain one-week study that never triggers that. */}
-      {isNarrowViewport && visibleDays.length > 1 && (
+      {needsScrollContainment && visibleDays.length > 1 && (
         <div
           className="calendar-day-pager d-flex justify-content-between align-items-center mb-3"
           role="group"
@@ -1115,6 +1121,9 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
         ref={timelineRef}
         className={`calendar-timeline${needsScrollContainment ? ' calendar-timeline--scrolls' : ''}`}
         style={{ position: 'relative' }}
+        // #130: keeps the day pager in step with a native swipe, which the
+        // Previous/Next buttons alone cannot see.
+        onScroll={handleTimelineScroll}
         // On phone this is a horizontal scroll container (audit #114); a
         // scrollable region must be keyboard-reachable so it can be scrolled
         // with the arrow keys, and named so assistive tech announces it. Native
