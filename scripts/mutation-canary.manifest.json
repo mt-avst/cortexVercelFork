@@ -2979,5 +2979,15 @@
     "runner": "vitest",
     "spec": "src/firsthand/survey-answers.test.ts",
     "test": "rejects a text answer one character past the ceiling"
+  },
+  {
+    "id": "survey-answer-field-exclusivity-blocks-smuggling",
+    "why": "cto/AdaptaLabs#155 (fix 1 of 2), HIGH from the security-auditor gate on !510. Per-field length caps alone do not close the DoS: at the original caps (500 entries x 1,000 chars), `selectedOptions` alone was 500KB - ABOVE the 100kb body limit - and nothing stopped an open_text or rating/nps step from carrying `selectedOptions` instead of its own field, so the `text` cap was sidestepped by relocating the payload. This guard refuses any field a step type cannot legitimately produce. Verified against the real client first: SurveyQuestion.tsx/ChoiceField.tsx/ScaleField.tsx each only ever set their own step type's field, so this enforces the existing contract rather than narrowing it - it is not reachable by an honest participant. Disabling the check (`if (false)` in place of `if (hasInapplicableField)`) is the shape a tidy-up could produce - a stale-looking guard that 'never fires' - and it leaks nothing, breaks no schema and refuses nobody honest, so no gate reading for authorisation or validity would flag it. Proven by mutation before entry: `if (false)` failed only the two named smuggling tests, with the four field-exclusivity controls and all eleven length-cap tests in the file staying green.",
+    "file": "shared/firsthand/survey-answers.ts",
+    "anchor": "  if (hasInapplicableField) {",
+    "mutation": "  if (false) {",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-answers.test.ts",
+    "test": "rejects an open_text answer smuggling selectedOptions"
   }
 ]
