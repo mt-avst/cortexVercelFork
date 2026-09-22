@@ -76,6 +76,7 @@ import {
 import { isPublishableExternalLink } from '../../../shared/firsthand/url-safety';
 import type { DeliveryMode } from '../validation/schemas';
 import { autoCloseOpportunityIfNeeded } from '../utils/opportunityLifecycle';
+import { OPPORTUNITY_CLOSED_CODE, OPPORTUNITY_CLOSED_MESSAGE } from '../utils/opportunityClosed';
 import { perUserLimiter } from '../middleware/per-user-rate-limit';
 import {
   participantRuntimeWork,
@@ -130,10 +131,11 @@ import { Opportunity, CreateOpportunityRequest, UpdateOpportunityRequest, Sessio
  * are the same. The frontend keys on the CODE at both sites and renders the
  * server's own sentence, so the two cannot drift into telling a participant
  * two different things about one study.
+ *
+ * Moved to `utils/opportunityClosed.ts` (cto/AdaptaLabs#143) so the booking and
+ * reschedule routes can throw the identical refusal rather than keeping their
+ * own copy.
  */
-const OPPORTUNITY_CLOSED_CODE = 'OPPORTUNITY_CLOSED';
-const OPPORTUNITY_CLOSED_MESSAGE =
-  'This study has closed and is no longer accepting participants.';
 
 function unavailableOpportunityError(status: string): AppError {
   if (status === 'closed') {
