@@ -4609,24 +4609,57 @@ router.post('/:id/duplicate', requireAdmin, opportunityWriteLimiter, asyncHandle
 
   // Create duplicate as draft.
   //
-  // `external_consent_confirmed` (cto/AdaptaLabs#136) is DELIBERATELY ABSENT
-  // from this column list, so a copy starts at NULL - "never recorded" - and
-  // the author has to re-affirm. That looks inconsistent beside `consent_text`
-  // three lines down, which this same statement does copy, and the difference
-  // is the point: the moderated consent WORDING is a property of the study
-  // being copied and travels with it, while this affirmation is a statement
-  // about one specific external destination. The copy's link is editable from
-  // the moment it exists, so carrying the tick across would hand the author a
-  // pre-affirmed study and let them point it anywhere - exactly the drift the
-  // PATCH path resets for. Failing to "never recorded" also matches how
-  // `screener` and `target_roles` are left out here.
+  // The column list below is graded against create's own INSERT by a census
+  // test (cto/AdaptaLabs#147): every column create writes must appear here or
+  // in the two-column exclusion note right below, or the test fails by name.
+  // That is what stopped `screener`, `target_roles`, `start_date`, `end_date`
+  // and `meeting_location_optional` silently going missing from every
+  // duplicate before this comment existed.
+  //
+  // Two columns are DELIBERATELY ABSENT:
+  //
+  // `external_consent_confirmed` (cto/AdaptaLabs#136): a copy starts at NULL -
+  // "never recorded" - and the author has to re-affirm. That looks
+  // inconsistent beside `consent_text` below, which this statement does copy,
+  // and the difference is the point: the moderated consent WORDING is a
+  // property of the study being copied and travels with it, while this
+  // affirmation is a statement about one specific external destination. The
+  // copy's link is editable from the moment it exists, so carrying the tick
+  // across would hand the author a pre-affirmed study and let them point it
+  // anywhere - exactly the drift the PATCH path resets for.
+  //
+  // `firsthand_study_id` (cto/AdaptaLabs#147): this endpoint copies the
+  // `opportunities` row only - it does not duplicate the FirstHand study the
+  // original links to, unlike the create path's own `inline_study`/
+  // `inline_survey` branches, which mint a fresh study with
+  // `copied_from_study_id` set. Carrying the id across would leave two
+  // opportunities pointing at the SAME study - one edit away from a
+  // researcher silently rewriting content the other opportunity still relies
+  // on. A duplicate is a fresh draft with no study of its own until the
+  // author attaches one.
+  //
+  // `delivery_mode` is COPIED FOR MOST TYPES, but RESET to 'external' rather
+  // than carried through: it is bound to `firsthand_study_id`, which is
+  // excluded above, so preserving 'native' here would produce a native
+  // opportunity pointing at no study at all. 'external' is the same fallback
+  // create uses for an opportunity with no linked study.
+  //
+  // ponytail: this makes duplicating a native poll/survey lose its question
+  //   set, not just its native flag - the researcher has to rebuild it from
+  //   scratch. The upgrade is to duplicate the linked study too (createStudy
+  //   with copied_from_study_id, exactly as create's own inline_survey branch
+  //   already does), keep delivery_mode as copied, and link the new study
+  //   instead of the original's. Not built here: this endpoint currently
+  //   duplicates the `opportunities` row alone, and reaching into the
+  //   FirstHand runtime pool is a larger change than a column census fix.
   const query = `
     INSERT INTO opportunities (
       type, title, purpose_one_liner, description_optional,
-      product_optional, default_duration_minutes, status,
+      product_optional, meeting_location_optional, default_duration_minutes, status,
       owner_user_id, external_link_optional, participant_type_required, participant_type_specific_details,
-      consent_text, consent_template_id, consent_template_version
-    ) VALUES ($1, $2, $3, $4, $5, $6, 'draft', $7, $8, $9, $10, $11, $12, $13)
+      start_date, end_date, delivery_mode, consent_text,
+      consent_template_id, consent_template_version, screener, target_roles
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19::jsonb, $20::jsonb)
     RETURNING *
   `;
 
@@ -4636,7 +4669,12 @@ router.post('/:id/duplicate', requireAdmin, opportunityWriteLimiter, asyncHandle
     opp.purpose_one_liner,
     opp.description_optional,
     opp.product_optional,
+    opp.meeting_location_optional,
     opp.default_duration_minutes,
+    // Reset, not copied - see the block comment above.
+    'draft',
+    // Reset to the duplicating caller, not the original owner - a superadmin
+    // duplicating someone else's study becomes the new owner of the copy.
     req.user!.id,
     /*
      * Re-checked rather than copied through. This endpoint cannot introduce a
@@ -4651,6 +4689,10 @@ router.post('/:id/duplicate', requireAdmin, opportunityWriteLimiter, asyncHandle
       : null,
     opp.participant_type_required,
     opp.participant_type_specific_details,
+    opp.start_date,
+    opp.end_date,
+    // Reset, not copied - see the block comment above.
+    'external',
     // Moderated consent (#79) is COPIED, not re-derived. Duplicating is how a
     // researcher runs a repeat study; a copy that silently dropped consent
     // would recruit and ingest recordings with no consent text at all - the
@@ -4659,7 +4701,14 @@ router.post('/:id/duplicate', requireAdmin, opportunityWriteLimiter, asyncHandle
     // so what it resolves to cannot differ.
     opp.consent_text ?? null,
     opp.consent_template_id ?? null,
-    opp.consent_template_version ?? null
+    opp.consent_template_version ?? null,
+    // Eligibility screener (JSONB, $19::jsonb) - content of the study, copied
+    // verbatim like consent_text above.
+    opp.screener ? JSON.stringify(opp.screener) : null,
+    // Roles/skills wanted (JSONB, $20::jsonb) - same treatment as screener.
+    opp.target_roles && opp.target_roles.length > 0
+      ? JSON.stringify(opp.target_roles)
+      : null
   ];
 
   const result = await pool.query(query, values);
