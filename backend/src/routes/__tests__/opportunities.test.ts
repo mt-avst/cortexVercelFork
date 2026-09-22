@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, beforeEach, jest } from '@jest/globals';
 import request from 'supertest';
 import { listening } from '../../__tests__/helpers/listening';
+import { wireConnectThroughQuery } from '../../__tests__/helpers/pooled-client-mock';
 import express from 'express';
 
 // Mock the database pool for testing (factory uses only inline jest.fn() to avoid TDZ)
@@ -269,6 +270,13 @@ describe('Opportunities API', () => {
     jest.clearAllMocks();
     // Reset mock to return empty arrays by default
     mockQuery.mockResolvedValue({ rows: [] });
+    // #151: PATCH /api/opportunities/:id now runs its opportunities-table
+    // statements on a client from `pool.connect()` rather than on
+    // `pool.query` directly. Routing that client through this same
+    // `mockQuery` - with BEGIN/COMMIT/ROLLBACK answered directly, so they
+    // never consume a queued `mockResolvedValueOnce` - keeps every existing
+    // PATCH arrangement in this file unchanged.
+    wireConnectThroughQuery(mockConnect, mockQuery);
     mockIsDatabaseAvailable.mockResolvedValue(true);
     delete process.env.FRONTEND_URL;
     // The mint and results routes are rate limited per user, and the counters

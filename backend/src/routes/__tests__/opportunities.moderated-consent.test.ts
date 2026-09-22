@@ -28,6 +28,7 @@ import {
 import { DEFAULT_CONSENT_TEXT } from '../../../../shared/firsthand/inline-study';
 import { toPublicOpportunity } from '../../utils/publicOpportunity';
 import { addMockOpportunity } from '../../../../demo/mock-data';
+import { wireConnectThroughQuery } from '../../__tests__/helpers/pooled-client-mock';
 
 /**
  * Moderated consent on the opportunity write path (#79, step 1a).
@@ -50,6 +51,7 @@ import { addMockOpportunity } from '../../../../demo/mock-data';
  */
 
 const mockQuery = pool.query as unknown as jest.Mock;
+const mockConnect = pool.connect as unknown as jest.Mock;
 const mockIsDatabaseAvailable = isDatabaseAvailable as unknown as jest.Mock;
 
 const CALLER = 'admin-1';
@@ -82,6 +84,9 @@ const RETURNING_ROW = {
 
 /** An owned opportunity of the given type, reachable through every gate. */
 const arrangeOwnedOpportunity = (type: string) => {
+  // #151: the handler now runs its opportunities-table statements on a
+  // client from `pool.connect()` rather than on `pool.query` directly.
+  wireConnectThroughQuery(mockConnect, mockQuery);
   mockQuery.mockImplementation(async (sql: unknown) => {
     const text = String(sql);
     if (text.includes('SELECT owner_user_id FROM opportunities')) {
