@@ -1,4 +1,5 @@
 import type { StudyStep } from "@shared/firsthand/contract";
+import { MAX_ANSWER_TEXT_LENGTH } from "@shared/firsthand/survey-answers";
 import { isAnswerable, type SurveyAnswer } from "../../lib/survey/answers";
 import { ChoiceField } from "./fields/ChoiceField";
 import { ScaleField } from "./fields/ScaleField";
@@ -70,6 +71,7 @@ export function SurveyQuestion({
           aria-invalid={error ? true : undefined}
           className="response-input"
           id={step.step_id}
+          maxLength={MAX_ANSWER_TEXT_LENGTH}
           onChange={(event) => {
             onChange({ ...answer, text: event.target.value });
           }}
