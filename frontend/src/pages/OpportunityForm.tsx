@@ -3087,6 +3087,24 @@ const OpportunityForm: React.FC = () => {
       (formData.end_date || '') !== (originalFormData.end_date || '') ||
       formData.study_source !== originalFormData.study_source ||
       formData.copied_from_study_id !== originalFormData.copied_from_study_id ||
+      // Moderated consent (cto/AdaptaLabs#144), the third consent pair this
+      // list carries - the survey and recorded ones are above. Wording alone
+      // was omitted entirely, so an author who rewrote it and changed nothing
+      // else got no Save Changes button on the steps that render one, while
+      // `dirtySignature` still fired the exit warning: the same disagreement
+      // the survey pair was fixed for. The classification pair mirrors the
+      // reasoning above it - a reclassify-only save (unlocking custom wording,
+      // then restoring the template verbatim) has to be offerable too.
+      //
+      // `external_consent_confirmed` (cto/AdaptaLabs#136) is a fourth, separate
+      // field this list already carries below - it is the hand-off
+      // affirmation, not the moderated wording, and stays out of this block.
+      formData.moderated_consent_text.trim() !==
+        originalFormData.moderated_consent_text.trim() ||
+      formData.moderated_consent_template_id !==
+        originalFormData.moderated_consent_template_id ||
+      formData.moderated_consent_template_version !==
+        originalFormData.moderated_consent_template_version ||
       // The external-delivery consent affirmation (cto/AdaptaLabs#136).
       //
       // THIS CLAUSE IS ABOUT THE SAVE BUTTON, not the exit warning.
