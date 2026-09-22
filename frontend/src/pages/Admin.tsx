@@ -30,6 +30,13 @@ import { Settings, ClipboardList, Users, Clock, List, History, MessageSquare, Ca
 import { getStudyTypeGlyph } from '../utils/studyTypeIcons';
 
 import { formatStudyDate, formatClockTime, formatTimeZoneLabel } from '../utils/datetime';
+
+/** The Research Studies table's four sortable columns - extracted once so the
+ * card-view sort control (#131) and the header buttons/handleSort/ariaSortFor
+ * all reference one union, rather than four copies of the same literal that
+ * only agreed by convention. */
+type SortField = 'title' | 'created_at' | 'type' | 'status';
+
 const Admin: React.FC = () => {
   const { user, loading, initialAuthCheck } = useAuth();
   // Each page names itself in the browser tab; the "· Cortex" lock-up lives here
@@ -63,7 +70,7 @@ const Admin: React.FC = () => {
   }, [searchQuery]);
   const [activeTab, setActiveTab] = useState<'opportunities' | 'approvals' | 'feedback' | 'bookings'>('opportunities');
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const [sortField, setSortField] = useState<'title' | 'created_at' | 'type' | 'status'>('created_at');
+  const [sortField, setSortField] = useState<SortField>('created_at');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [_loadingStats, setLoadingStats] = useState(false);
@@ -135,7 +142,7 @@ const Admin: React.FC = () => {
   // and a slim all-clear line otherwise.
   const attentionClear = (pendingApprovalsCount ?? 0) === 0 && studiesClosingSoon.length === 0;
 
-  const handleSort = (field: 'title' | 'created_at' | 'type' | 'status') => {
+  const handleSort = (field: SortField) => {
     if (field === sortField) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
@@ -147,7 +154,7 @@ const Admin: React.FC = () => {
   // aria-sort tells a screen reader which column is sorted and which way - the
   // bare ↑/↓ glyph never did (row 13). Only the active column is asc/desc; the
   // rest are 'none' so the table reports one sorted column, not seven.
-  const ariaSortFor = (field: 'title' | 'created_at' | 'type' | 'status'): 'ascending' | 'descending' | 'none' =>
+  const ariaSortFor = (field: SortField): 'ascending' | 'descending' | 'none' =>
     sortField === field ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none';
 
   const toggleQuickFilter = (filter: QuickFilter) => {
@@ -799,7 +806,35 @@ const Admin: React.FC = () => {
 
                   {/* Research Studies Table */}
                   {!loadingOpportunities && !error && sortedOpportunities.length > 0 && (
-                    <div className="table-responsive" style={{ 
+                    <>
+                    {/* #131: card view (below 1220px - see the ROW 14 comment in
+                        _components.css) hides <thead>, which is where the table's
+                        only sort controls live. This is not a second sort
+                        mechanism: it reads and writes the SAME sortField/
+                        sortDirection state through the SAME handleSort the header
+                        buttons use, so the two surfaces can never disagree. Hidden
+                        above the breakpoint by .admin-card-sort's own default rule
+                        in _components.css. */}
+                    <div className="admin-card-sort" role="group" aria-label="Sort studies">
+                      <label htmlFor="cardSortField" className="form-label mb-0">Sort by</label>
+                      <select
+                        id="cardSortField"
+                        className="form-select"
+                        value={sortField}
+                        onChange={(e) => handleSort(e.target.value as SortField)}
+                      >
+                        <option value="title">Study</option>
+                        <option value="type">Type</option>
+                        <option value="status">Status</option>
+                        <option value="created_at">Created</option>
+                      </select>
+                      <button type="button" className="admin-card-sort-dir" onClick={() => handleSort(sortField)}>
+                        <span className="visually-hidden">Sort direction: </span>
+                        {sortDirection === 'asc' ? 'Ascending' : 'Descending'}
+                        <SortCaret active direction={sortDirection} />
+                      </button>
+                    </div>
+                    <div className="table-responsive" style={{
                       minHeight: '400px', 
                       overflow: 'visible', 
                       width: '100%'
@@ -1100,6 +1135,7 @@ const Admin: React.FC = () => {
                         </tbody>
                       </table>
                     </div>
+                    </>
                   )}
                 </div>
 
