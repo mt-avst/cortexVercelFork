@@ -22,3 +22,15 @@ configure({ asyncUtilTimeout: 5000 });
 if (typeof window !== 'undefined') {
   window.scrollTo = () => {};
 }
+
+// Same gap, one level down: jsdom does not implement Element.prototype.scrollTo
+// either. CalendarGrid's day pager (#130) calls it on its own scroller element
+// from a button click, which previously had no test exercising that click at
+// all - the first one to do so turned an unrelated jsdom limitation into an
+// uncaught "scrollTo is not a function" that failed the run despite every
+// assertion passing. Stubbed globally for the same reason as window.scrollTo
+// above: any future component calling `el.scrollTo(...)` from an event handler
+// would hit this identically.
+if (typeof Element !== 'undefined' && !Element.prototype.scrollTo) {
+  Element.prototype.scrollTo = function scrollTo() {};
+}
