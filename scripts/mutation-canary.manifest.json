@@ -3063,5 +3063,38 @@
     "runner": "jest",
     "spec": "src/utils/__tests__/publicOpportunity.test.ts",
     "test": "removes the admin progress totals and auto_closed, non-zero totals, auto-closed"
+  },
+  {
+    "id": "last-session-close-only-closes-a-published-study",
+    "why": "Admin table Step 2 (MR A), from the fix-round review. `autoCloseOpportunityIfNeeded` reads the status in one statement and writes in another. Without `AND status = 'published'` on the UPDATE, a manual close or a move to draft landing between the two is overwritten as a sweep close with `auto_closed = true` - the study relabels itself and a draft goes back to closed. Compiles, and every single-statement test stays green.",
+    "file": "backend/src/utils/opportunityLifecycle.ts",
+    "anchor": "WHERE id = $2 AND status = 'published'\"",
+    "mutation": "WHERE id = $2\"",
+    "runner": "vitest",
+    "spec": "src/routes/__tests__/opportunities.auto-closed-postgres.test.ts",
+    "test": "leaves a study closed by hand between its read and its write closed by hand",
+    "needsDatabase": true
+  },
+  {
+    "id": "auto-closed-migration-tolerates-only-a-duplicate-column",
+    "why": "Admin table Step 2 (MR A). The auto_closed block's catch tolerates ONLY 42701, the racing-deploy duplicate column. Widening it to every class-42 error (the shared predicate's rule) would log and continue past a missing trigger or a privilege error; the post-check would still catch the missing column, so this entry grades the catch itself by the error code the migration surfaces.",
+    "file": "backend/src/db/migrate.ts",
+    "anchor": "?.code !== '42701') throw error;",
+    "mutation": "?.code !== '42701' && !String((error as { code?: unknown } | null)?.code).startsWith('42')) throw error;",
+    "runner": "vitest",
+    "spec": "src/db/__tests__/migrate-auto-closed-backfill-postgres.test.ts",
+    "test": "throws, rather than logging, a class-42 error 42704 raised inside the block",
+    "needsDatabase": true
+  },
+  {
+    "id": "auto-closed-migration-fails-when-the-column-is-missing",
+    "why": "Admin table Step 2 (MR A). After the guarded block, the migration asks pg_catalog whether auto_closed exists and fails the deploy if not. Dropping that check lets a tolerated error ship a schema without the column, after which every status PATCH and both auto-close sweeps fail on 42703 in production.",
+    "file": "backend/src/db/migrate.ts",
+    "anchor": "    if (autoClosedColumn.rowCount !== 1) {",
+    "mutation": "    if (false) {",
+    "runner": "vitest",
+    "spec": "src/db/__tests__/migrate-auto-closed-backfill-postgres.test.ts",
+    "test": "fails the migration by name when a tolerated 42701 leaves the column missing",
+    "needsDatabase": true
   }
 ]

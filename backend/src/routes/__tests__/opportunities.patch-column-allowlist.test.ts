@@ -548,6 +548,15 @@ describe('PATCH /api/opportunities/:id column allow-list', () => {
     const MOCK_ID = 'mock-3';
     const patchMock = (body: Record<string, unknown>) =>
       request(listening(appAs('superadmin'))).patch(`/api/opportunities/${MOCK_ID}`).send(body);
+    // The demo store is module state; put mock-3 back so a test added below
+    // this block never inherits a closed study.
+    let original: Record<string, unknown> | undefined;
+    beforeAll(() => {
+      original = { ...(getMockOpportunity(MOCK_ID) as unknown as Record<string, unknown>) };
+    });
+    afterAll(() => {
+      if (original) updateMockOpportunity(MOCK_ID, original);
+    });
 
     beforeEach(() => {
       mockIsDatabaseAvailable.mockResolvedValue(false as never);

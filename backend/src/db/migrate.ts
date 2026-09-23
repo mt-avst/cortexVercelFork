@@ -51,6 +51,9 @@ import { pool } from '../config';
  *   -> the blocks tolerate the same thing for the same reason, so a second
  *   predicate would be a second thing to keep in step. Split it if a block
  *   ever needs to tolerate something the others must not.
+ *   The auto_closed block IS that split: it tolerates only 42701 (a racing
+ *   deploy) and checks the column afterwards, because its backfill must run
+ *   exactly once and a swallowed 42704/42501 would ship without the column.
  */
 function rethrowUnlessSchemaAlreadyApplied(error: unknown, note: string): void {
   const code = (error as { code?: unknown } | null | undefined)?.code;

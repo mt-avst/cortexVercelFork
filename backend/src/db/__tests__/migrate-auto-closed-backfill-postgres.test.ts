@@ -208,9 +208,10 @@ describe.skipIf(skipDbTests)("the auto_closed column and its one-time backfill",
   };
 
   it.each([
-    ["42704", "undefined_object, e.g. a missing trigger"],
-    ["42501", "insufficient_privilege"]
-  ])("throws, rather than logging, a class-42 error %s (%s) raised inside the block", async (sqlstate) => {
+    // 42704 undefined_object (e.g. a missing trigger), 42501 insufficient_privilege
+    ["42704"],
+    ["42501"]
+  ])("throws, rather than logging, a class-42 error %s raised inside the block", async (sqlstate) => {
     await raiseInsideTheBackfill(sqlstate);
 
     await expect(runMigrations()).rejects.toMatchObject({
