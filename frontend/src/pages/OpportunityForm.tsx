@@ -4434,6 +4434,23 @@ const OpportunityForm: React.FC = () => {
 
           await persistTemporarySessions(savedOpportunity.id);
         }
+
+        // Move `storedFormRef`'s status forward from the PATCH response
+        // itself, BEFORE the re-read below that can fail. Without this, a
+        // save that succeeds followed by a re-read that throws (a 503, say)
+        // left `storedFormRef.current.status` on its pre-save value - so
+        // Review's alert heading (and `autosaveApplies`, which reads the
+        // same ref) kept describing the study as it was before this save,
+        // while a "Failed to load study" banner showed alongside it. The
+        // PATCH response is already authoritative for what the server now
+        // holds; the reload below exists for the rest of the form, not for
+        // this one field.
+        if (storedFormRef.current) {
+          storedFormRef.current = {
+            ...storedFormRef.current,
+            status: savedOpportunity.status === 'closed' ? 'draft' : savedOpportunity.status
+          };
+        }
       } else {
         // Create as a DRAFT when this Finish would publish a bookable type, so
         // the slots can be seated before the publish gate runs; every other
@@ -6230,13 +6247,6 @@ const OpportunityForm: React.FC = () => {
                         onEdit={goToStepAndFocus}
                         isEdit={isEdit}
                         status={formData.status}
-                        // ponytail: storedFormRef only moves forward through
-                        //   loadOpportunity on the edit path, so if a save succeeds
-                        //   and its re-read then fails, Review's alert heading keeps
-                        //   the pre-save status until the next successful load (a
-                        //   "Failed to load study" banner shows meanwhile). Upgrade:
-                        //   set storedFormRef's status from the PATCH response before
-                        //   the reload. Same staleness autosaveApplies already has.
                         storedStatus={storedFormRef.current?.status ?? null}
                         onStatusChange={(status) => handleInputChange('status', status)}
                         statusError={validationErrors.status}
