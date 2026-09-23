@@ -2516,6 +2516,33 @@ body.admin-page .header .container {
   padding-right: var(--container-padding);
 }
 
+/* The Admin dashboard (Admin.tsx adds `admin-dashboard-page` beside
+   `admin-page`; Settings carries only the latter) gets a 1440px column - page
+   and header together, so the logo keeps lining up with the content edge. At
+   1200px, less four nested paddings, the Research Studies table rendered
+   918px wide at every viewport and starved its Study column (Admin table
+   Step 1, 2026-09-23). */
+body.admin-dashboard-page .header .container,
+body.admin-dashboard-page .main > .container {
+  max-width: 1440px;
+}
+
+/* The page content stacks above the site feedback footer - see
+   `_themes.css`, search "stacks the Admin page content above". That rule
+   lives in the themes layer because the `.admin-page-bg > *` z-index it
+   raises is declared there. */
+
+/* ...and the header's side padding takes the main card's 24px inset too, so
+   the logo sits on the same edge as the "Admin" heading and the table below,
+   and the header's right-hand controls end where the page actions do. From
+   768px up only: below that the main card's inset drops to 12px. */
+@media (min-width: 768px) {
+  body.admin-dashboard-page .header .container {
+    padding-left: calc(var(--container-padding) + 24px);
+    padding-right: calc(var(--container-padding) + 24px);
+  }
+}
+
 /* ============================================================
    ADMIN DASHBOARD
    ============================================================ */
@@ -2621,46 +2648,15 @@ body.admin-page .header .container {
   hyphens: auto;
 }
 
-/* Status and Clicks columns - prevent breaking */
-.admin-dashboard table thead th:nth-child(3),
-.admin-dashboard table thead th:nth-child(4) {
-  white-space: nowrap;
-  word-break: normal;
-}
-
-/* Title column - left aligned, slightly larger */
-.admin-dashboard table thead th:nth-child(1) {
-  text-align: left;
-  font-size: 0.85rem;
-  padding: 10px 12px;
-}
-
-/* Longer headers - smaller font to fit better */
-.admin-dashboard table thead th:nth-child(5),
-.admin-dashboard table thead th:nth-child(7) {
-  font-size: 0.75rem;
-}
-
-@media (min-width: 1200px) {
-  .admin-dashboard table thead th {
-    font-size: 0.85rem;
-  }
-  .admin-dashboard table thead th:nth-child(1) {
-    font-size: 0.9rem;
-  }
-  .admin-dashboard table thead th:nth-child(5),
-  .admin-dashboard table thead th:nth-child(7) {
-    font-size: 0.8rem;
-  }
-}
-
+/* No positional (`:nth-child`) header rules here. This selector family matches
+   every table in .admin-dashboard - Research Studies, Recent bookings and
+   Feedback - so a rule addressed by column POSITION lands on whichever table
+   has a cell there, and re-targets itself whenever a column is added or
+   removed. The Research Studies header has its own single style (search
+   "One header style for every column"). */
 @media (min-width: 1400px) {
   .admin-dashboard table thead th {
-    font-size: 0.9rem;
     padding: 12px 8px;
-  }
-  .admin-dashboard table thead th:nth-child(1) {
-    font-size: 0.95rem;
   }
 }
 
@@ -2722,74 +2718,66 @@ body.admin-page .header .container {
 /* Named columns, not positions. A bare positional selector hits BOTH tables in
    .admin-dashboard - Recent bookings' third column is the participant, not the
    status - and it silently re-targets itself whenever a column is added or
-   removed. A closed study carries two badges, `closed` and `Auto-closed`, which
-   need 184px; nowrap held them on one line in an 84px cell and spilled them
-   100px into the neighbouring column, so the status cell wraps and the second
-   badge drops underneath. The badges keep their own nowrap. */
+   removed. The status cell may wrap: a closed study's "Auto-closed" caption
+   sits on its own line under the pill (search "Auto-closed caption"). */
 .admin-dashboard table.admin-data-table tbody td.col-status {
   white-space: normal;
   overflow: visible;
-  padding-left: 8px;
-  padding-right: 8px;
-}
-
-.admin-dashboard table.admin-data-table tbody td.col-metric {
-  white-space: nowrap;
-  overflow: visible;
-  padding-left: 8px;
-  padding-right: 8px;
-}
-
-/* Type badges visibility */
-.admin-dashboard table.admin-data-table tbody td.col-type {
-  overflow: visible;
-}
-
-.admin-dashboard table.admin-data-table tbody td.col-type .badge {
-  white-space: nowrap;
-  overflow: visible;
-  text-overflow: clip;
-  max-width: none;
-}
-
-/* Status column isolation */
-.admin-dashboard table.admin-data-table tbody td.col-status {
   isolation: isolate;
 }
 
-.admin-dashboard table.admin-data-table tbody td.col-status > * {
-  display: inline-block;
-  margin-right: 0.25rem;
-}
-
-/* #142: an `.admin-pill` in this cell takes `margin: 0` from the shared
-   primitive's ancestor-scoped rule (search "Shared pill primitive"), which
-   outranks the `margin-right` above - so the gutter for two pills sharing a
-   line is restated in the card-layout block instead (search "gutter"
-   under `@media (max-width: 1219.98px)`), which is the only layout where
-   they ever do share one. */
-
-/* Column alignment */
-.admin-dashboard table thead th:not(:first-child),
-.admin-dashboard table tbody td:not(:first-child) {
-  text-align: center;
-}
-
-.admin-dashboard table thead th:first-child,
-.admin-dashboard table tbody td:first-child {
+/* Column alignment for every dashboard table: text left, nothing centred -
+   the Research Studies treatment (search "One self-contained spec"), now
+   shared by Recent bookings and Feedback too. Centred columns once made each
+   value float in its cell with no common edge to read down. */
+.admin-dashboard table thead th,
+.admin-dashboard table tbody td {
   text-align: left;
 }
 
-/* Badge/lozenge content centered within cells */
 .admin-dashboard table tbody td:not(:first-child) {
   vertical-align: middle;
 }
 
-.admin-dashboard table tbody td:not(:first-child) > span,
-.admin-dashboard table tbody td:not(:first-child) > small,
-.admin-dashboard table tbody td:not(:first-child) > div:not(.dropdown):not(.admin-action-group) {
-  display: inline-block;
-  text-align: center;
+/* Recent bookings in table mode (its card reflow is below 768px): the first
+   column flush with the "Recent bookings" heading and the last flush with the
+   Export CSV button, like the studies table under its filter row. */
+@media (min-width: 768px) {
+  /* Headers take the cells' 8px side padding, so every header sits on its
+     column's text edge (the shared `table thead th` rule gives 6px below
+     1400px, which left PARTICIPANT and STATUS 2px left of their values). The
+     first/last rules below still win for the outer edges. */
+  .admin-dashboard table.admin-cards-phone thead th {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  /* The studies table's header box: 12px above and below, one subtle
+     divider. `thead tr th` outranks the shared "Table cells - transparent"
+     reset that strips header borders; the light theme restates this in
+     `_themes.css`, whose blanket header block would otherwise win. */
+  .admin-dashboard table.admin-cards-phone thead tr th {
+    padding-top: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border-subtle-current);
+  }
+
+  /* Row dividers on the cells: the table is `border-collapse: separate`, so
+     the `tbody tr` border the shared rules declare never paints. Same 1px
+     subtle divider as the studies table (colour held in `_themes.css`). */
+  .admin-dashboard table.admin-cards-phone tbody tr td {
+    border-bottom: 1px solid var(--border-subtle-current);
+  }
+
+  .admin-dashboard table.admin-cards-phone thead th:first-child,
+  .admin-dashboard table.admin-cards-phone tbody td:first-child {
+    padding-left: 0;
+  }
+
+  .admin-dashboard table.admin-cards-phone thead th:last-child,
+  .admin-dashboard table.admin-cards-phone tbody td:last-child {
+    padding-right: 0;
+  }
 }
 
 /* Badges centered via text-align on parent cell */
@@ -2955,7 +2943,8 @@ body.admin-page .header .container {
   }
 }
 
-/* Type badges (lozenge) - base styles, overridden by col-type specific rules */
+/* Type badges (lozenge) - base styles, overridden for the studies table by the
+   shared pill primitive (search "Shared pill primitive") */
 .admin-dashboard table tbody td .lozenge,
 .admin-dashboard table tbody td span.lozenge {
   border-radius: var(--tag-radius);
@@ -3041,7 +3030,7 @@ body.admin-page .header .container {
 }
 
 .custom-tab-button.active i,
-.custom-tab-button.active span {
+.custom-tab-button.active span:not(.admin-tab-count--alert) {
   color: #FFFFFF;
 }
 
@@ -3055,8 +3044,12 @@ body.admin-page .header .container {
   border-bottom: 2px solid var(--color-brand-orange);
 }
 
+/* The amber count badge keeps its own dark ink: an inherited tab colour on
+   that fill measured 1.3:1 (dark) and 1.6:1 (light) - a "1" nobody could
+   read. Excluded here and in both theme blocks (`_themes.css`), which is
+   the only way `.admin-tab-count--alert`'s colour can win. */
 .custom-tab-button i,
-.custom-tab-button span {
+.custom-tab-button span:not(.admin-tab-count--alert) {
   color: inherit;
 }
 
@@ -3085,6 +3078,17 @@ body.admin-page .header .container {
   overflow: hidden;
 }
 
+/* The Research Studies table (Admin.tsx). One self-contained spec, scoped
+   `.admin-dashboard table.admin-data-table` so it outranks the shared
+   `.admin-dashboard table ...` rules above, which still style the Recent
+   bookings table. Those shared rules that centred cells or padded the first
+   row are scoped `:not(.admin-data-table)` at their own site rather than
+   fought here.
+
+   Geometry (Admin table Step 1, 2026-09-23): 12px cell padding, the first
+   column flush left and the last flush right so the table's edges line up
+   with the filter row above; text columns left, the Actions column right;
+   nothing centred. */
 .admin-data-table {
   margin-bottom: 0;
   width: 100%;
@@ -3094,331 +3098,189 @@ body.admin-page .header .container {
   margin-right: 0 !important;
 }
 
-.admin-data-table th,
-.admin-data-table td {
-  padding: 1.25rem 1.5rem;
+.admin-dashboard table.admin-data-table thead th,
+.admin-dashboard table.admin-data-table tbody td {
+  padding: 12px;
   vertical-align: middle;
+  text-align: left;
 }
 
-/* Pixel-perfect: First column aligns with "Cortex" header text */
-.admin-data-table th:first-child,
-.admin-data-table td:first-child {
-  padding-left: 0 !important;
+/* One body type size; cells that need another say so (the meta line 13px,
+   captions 12px). */
+.admin-dashboard table.admin-data-table tbody td {
+  font-size: 14px;
+  line-height: 20px;
 }
 
-/* Title column */
-.admin-data-table td.col-title {
-  padding-top: 1rem;
-  padding-bottom: 1rem;
+.admin-dashboard table.admin-data-table thead th:first-child,
+.admin-dashboard table.admin-data-table tbody td:first-child {
+  padding-left: 0;
 }
 
-/* Table Headers - Uppercase, tracked-out grey */
-.admin-data-table th {
-  text-transform: uppercase;
-  font-size: 0.75rem;
-  letter-spacing: 0.05em;
-  color: var(--text-muted);
+.admin-dashboard table.admin-data-table thead th:last-child,
+.admin-dashboard table.admin-data-table tbody td:last-child {
+  padding-right: 0;
+  text-align: right;
+}
+
+/* One header style for every column, sortable or not. The sortable ones are
+   `<button class="admin-th-sort">`, which inherits all of this (see that rule)
+   - buttons reset text-transform and letter-spacing, which is how the header
+   row used to mix casings and sizes. Colour is set in `_themes.css`
+   (`.admin-data-table` header rules there), because the themes layer owns it
+   and wins. */
+.admin-dashboard table.admin-data-table thead th {
+  font-size: 11px;
   font-weight: 600;
-  border-bottom: 1px solid var(--border-cortex-glass);
+  line-height: 16px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   white-space: nowrap;
-  vertical-align: middle;
+  word-break: normal;
+  hyphens: manual;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-subtle-current);
 }
 
-/* Header alignment matches column alignment */
-.admin-data-table th.col-type,
-.admin-data-table th.col-status {
-  text-align: center;
+/* COLUMN WIDTHS. Fixed pixels on every column but Study, which takes the
+   remainder - under `table-layout: fixed` the <col> widths are the whole
+   story, and percentages are what starved Study to 14% (129px at 1440).
+   Measured against the widest content each column holds:
+   - Status 128: the widest pill ("PUBLISHED") is ~80px; the auto-closed
+     caption sits under it, never beside it
+   - Progress 140: "12 / 20" + "60%" over the bar, or "N clicks"
+   - Next 176: "Thu 24 Sept 2026" on the first line, the session time and
+     relative day on the second (Admin.tsx) - on one line the date and time
+     are ~174px, more than this column's 152px content box
+   - Created 136: the widest date, "Wed 30 Sept 2026", is 108.7px at 13px
+     Manrope (measured), so 112 (88px of content box) wrapped the year onto
+     a second line on every row
+   - Actions 120: View/Edit + the kebab, flush right with no right padding
+   Below 1280px Created is dropped (see the media block below). */
+.admin-data-table col.col-status {
+  width: 128px;
 }
 
-.admin-data-table th.col-metric {
-  text-align: right;
+.admin-data-table col.col-progress {
+  width: 140px;
 }
 
-.admin-data-table th.col-actions {
-  text-align: center;
+.admin-data-table col.col-next {
+  width: 176px;
 }
 
-/* ============================================================
-   TABLE COLUMN DISCIPLINE - Explicit Width Assignments
-   ============================================================ */
-
-/* Column 1: Title - generous space for title + description */
-/* NB: under `table-layout: fixed` these percentages are the whole story -
-   min-width is not honoured, so a column gets exactly its share and no more.
-   Title gives up the 3% that Status needs for its widest badge, and 3% more
-   to Actions and to bringing the set to exactly 100% (see Actions) - a title
-   wraps, a pair of buttons cannot. Recruitment gives 1% too: its ratio and
-   bar need ~65px of a column that was ~117px. */
-.admin-data-table .col-title {
-  width: 14%;
-  min-width: 260px;
+.admin-data-table col.col-date {
+  width: 136px;
 }
 
-/* Column 2: Type - centered lozenges. Sized for the longest type name, which is
-   now "Recorded session". Renaming a type is a layout change in a
-   `table-layout: fixed` table, so these two numbers move with the name.
-
-   MEASURED, not counted off the string. Rendered at the badge's own type rules
-   (0.7rem, uppercase, 600, 0.03em tracking, 8px side padding) in Chrome:
-   "Recorded study" was 125.7px and "Recorded session" is 137.5px, so the column
-   needs 12px more than it did - hence 140px -> 152px, and the extra 1% which is
-   worth about that much at the table widths this page is used at. Character
-   count is not the measurement: the previous longest name was two characters
-   shorter but only 11.8px narrower. */
-.admin-data-table .col-type {
-  width: 13%;
-  min-width: 152px;
-  text-align: center;
+.admin-data-table col.col-actions {
+  width: 120px;
 }
 
-/* Type column - vertically centered */
-.admin-data-table td.col-type {
-  padding: 1.5rem 1rem;
-  vertical-align: middle;
+/* 1024-1279.98px: still the table, minus Created - the column, its header
+   and its cells go together, or the Actions cell would slide under Created's
+   <col>. Created stays sortable: `.admin-card-sort` is shown across this band
+   (and the card view below it) by its own rule further down. */
+@media (min-width: 1024px) and (max-width: 1279.98px) {
+  .admin-data-table col.col-date,
+  .admin-dashboard table.admin-data-table th.col-date,
+  .admin-dashboard table.admin-data-table td.col-date {
+    display: none;
+  }
 }
 
-/* Box metrics (display/height/padding/font-size/line-height) for the type
-   lozenge in this column now come from the shared `.admin-pill` primitive
-   (#142) - see "Shared pill primitive" below, near `.admin-study-status`. */
-
-/* Column 3: Status - centered badges. The widest thing this column has to
-   hold is the "Auto-closed" marker, and it is `white-space: nowrap` on one
-   line either way (#142; an earlier note here described a two-line 28.38px
-   pill, which the shared primitive's fixed 24px height and nowrap make
-   impossible now). What 10% loses is not the line count but the ink: the
-   pill is capped at the cell by `td > *`, so at 10% the text escapes its own
-   background. Measured at 1440px: 12% gives a 92.0px pill around 80.7px of
-   ink, 24px tall; 10% gives a 75.8px pill around the same 80.7px, which
-   `justify-content: center` then hangs ~2.5px off each end.
-   `e2e/admin-pill-primitive.test.ts` measures that ink against the pill's
-   box at 1240 and 1440 - a source pin on this number cannot. */
-.admin-data-table .col-status {
-  width: 12%;
-  min-width: 100px;
-  text-align: center;
+/* Row dividers and the table-mode row box. Table mode only: the card view
+   below 1024px draws its own card border instead. */
+@media (min-width: 1024px) {
+  .admin-dashboard table.admin-data-table tbody td {
+    border-bottom: 1px solid var(--border-subtle-current);
+  }
 }
 
-.admin-data-table td.col-status {
-  padding: 1.5rem 1rem;
-  vertical-align: middle;
+/* Study: title (two lines at most) over one meta line - the type pill and the
+   purpose one-liner. Full strings ride in `title` attributes (Admin.tsx). */
+.admin-data-table .row-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  margin: 0;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
-/* Clicks: a bare right-aligned count. nowrap header so it never breaks to "Click / s". */
-.admin-data-table .col-metric {
-  width: 8%;
-  min-width: 72px;
-  text-align: right;
+/* The meta line's box is the purpose text's own 18px line; the 24px type
+   pill is centred on it and overhangs it by 3px above and below. That keeps
+   the pill at the shared primitive's height (#142) while a row with a
+   two-line title stays 87px tall (12 + 40 + 4 + 18 + 12, plus the 1px
+   divider) under the 88px ceiling - boxing the line to the pill's 24px made
+   it 93px. The 4px margin leaves the pill 1px clear of the title's line box. */
+.admin-study-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 18px;
+  margin-top: 4px;
 }
 
-/* Short headers stay on one line; only "Next session / deadline" is allowed the
-   intentional two-line wrap. Stops "Clicks"/"Actions" breaking mid-word. */
-.admin-data-table th.admin-th {
+.admin-study-meta .admin-pill {
+  flex: none;
+}
+
+.admin-data-table .admin-study-meta .row-desc {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
 }
 
-.admin-data-table th.col-next {
-  white-space: normal;
+/* Created: a quiet 13px date, one line (see its column width above). It may
+   still wrap on a wider fallback font rather than spill into Actions. */
+.admin-dashboard table.admin-data-table td.col-date .admin-cell-metadata {
+  font-size: 13px;
+  line-height: 18px;
 }
 
-/* Recruitment carries a ratio AND a progress bar, so it needs more than a bare
-   count column - it replaced the old "Booked" column and renders "2 / 3" with a
-   percentage and a block bar beneath. There is no separate Capacity column: that
-   duplicated this cell's denominator. */
-.admin-data-table .col-recruitment {
-  width: 12%;
-  min-width: 150px;
+/* Progress: a session study's ratio + bar, or a sessionless study's clicks.
+   Proportional figures here: the count is left-aligned and followed by a
+   word, and Manrope's tabular "1" sits in a full-width slot, so "18 clicks"
+   read as "1 8 clicks". (The ratio and percentage above the bar keep their
+   tabular figures.) */
+.admin-progress-clicks {
+  font-variant-numeric: normal;
+  color: var(--text-primary);
 }
 
-/* Next session / deadline: a date, an optional time, and a relative note that
-   can run to "Ends tomorrow" - sized to keep all three on their own lines. */
-.admin-data-table .col-next {
-  width: 16%;
-  min-width: 170px;
-}
-
-.admin-data-table td.col-metric {
-  padding: 1.5rem 1.5rem;
-  vertical-align: middle;
-}
-
-/* Column 6: Created Date. Wide enough for a full "Sun 16 Aug 2026" on one line -
-   at 11% the year wrapped underneath the month. */
-.admin-data-table .col-date {
-  width: 12%;
-  min-width: 110px;
-}
-
-.admin-data-table td.col-date {
-  padding: 1.5rem 1.5rem;
-  vertical-align: middle;
-}
-
-/* Actions - an inline View/Edit button plus the kebab menu, so wider than the
-   bare-kebab column it replaced.
-
-   11% was not enough, and the failure was silent: the percentages here sum to
-   more than 100, `table-layout: fixed` scales them down, and the action group
-   is capped at the cell (`max-width: 100%`), so at every width above 1220px
-   the cell offered 83px to ~102px of buttons. The kebab's `flex-shrink` gave
-   way and its icon was squeezed to 0px - an empty outlined box where the row
-   menu should be (measured on main at 1240 and 1440).
-
-   The columns now sum to EXACTLY 100%, so each number means what it says.
-   13% resolves to a ~103px content box at 1240px (the column is %-driven here,
-   not content-sized - min-width is advisory under table-layout: fixed). The
-   View + kebab pair is ~98px, so the slack lives in `.admin-action-group`'s
-   gap, NOT in this column's width or padding - trimming either shrinks the
-   cell with it and changes nothing. See that rule for the measured fit. */
-.admin-data-table .col-actions {
-  width: 13%;
-  min-width: 132px;
-  text-align: center;
-}
-
-.admin-data-table td.col-actions {
-  padding: 1.5rem 1rem;
-  vertical-align: middle;
-}
-
-/* Numeric column alignment */
-.admin-data-table th.col-numeric,
-.admin-data-table td.col-numeric {
-  text-align: right;
-}
-
-/* Legacy support for existing classes */
-.admin-data-table th.admin-th-type,
-.admin-data-table td.admin-cell-type {
-  min-width: 200px;
-}
-
-/* #131: card view's own sort control (Admin.tsx, immediately above the
-   Research Studies table). Hidden by default; shown inside the
-   `@media (max-width: 1219.98px)` block below, exactly where the ROW 14
-   fix hides <thead> - the table's only other sort control - out of the
-   layout. Shares sortField/sortDirection state with the header buttons via
-   handleSort, so this is never a second source of truth. */
+/* #131: the Sort-by control (Admin.tsx, immediately above the Research
+   Studies table). Hidden by default; shown by the
+   `@media (max-width: 1279.98px)` block below, which covers every width
+   where a sortable header is out of view: 1024-1279.98px, where the Created
+   column (and so its sort button) is dropped, and below 1024px, where the
+   ROW 14 card view hides <thead> altogether. It offers exactly the fields
+   the headers do. Shares sortField/sortDirection state with the header
+   buttons via handleSort, so this is never a second source of truth. */
 .admin-card-sort {
   display: none;
 }
 
-/* ============================================================
-   ROW 14 - Research Studies table reflows to cards on phone.
-   Under `table-layout: fixed` the column min-widths force a ~530px
-   document at 390px, pushing the row actions (and the kebab) off the
-   right edge where they cannot be reached. Below 768px each row becomes
-   a card with its column name shown inline above the value, so nothing
-   is unreachable and the page stops forcing a horizontal scroll. The
-   breakpoint matches the header's collapse point. The label sits on its
-   own line above the value so cells that hold several nodes (status +
-   "Auto-closed", the recruitment ratio + bar) never misalign.
-
-   Row 16 (second-pass audit): the same `table-layout: fixed` columns also
-   compress between this breakpoint and the point where the admin content
-   column hits its own max-width (~1220px viewport upward: MEASURED, the
-   table's rendered width stays fixed at 918px from 1440px viewport up, so
-   nothing above ~1220px was ever squeezed). In that gap a status pill's box
-   - capped at `max-width: 100%` of its own compressed cell by the "prevent
-   content from spilling into adjacent cells" rule above - renders narrower
-   than its own label ("PUBLISHED" needs ~77px, the cell was giving it as
-   little as 55px), so the pill's colour fill clips its own text. Raising
-   this breakpoint to the width the table already renders cleanly at is
-   simpler and safer than teaching a `table-layout: fixed` table with no
-   min-width to scroll horizontally inside a container that has its own
-   `overflow: visible` (kept `visible` on purpose: it lets the row action
-   menu escape the table's bounds - see `Admin.tsx`). Below it, everything
-   reuses the phone-card path this comment already documents, which every
-   width in this gap was already forcing into a horizontal document-level
-   scroll to render at all (a symptom, not a feature, of the same defect).
-
-   #131: the card view hides <thead>, which is where this table's only
-   column-sort controls used to live (Admin.tsx handleSort/ariaSortFor). Card
-   view now carries its own sort control (`.admin-card-sort`, shown below),
-   reading and writing the same sortField/sortDirection state through the
-   same handleSort - so the reflow no longer costs sorting at any width
-   below 1220px.
-   ============================================================ */
-@media (max-width: 1219.98px) {
-  .admin-data-table,
-  .admin-data-table tbody,
-  .admin-data-table tr {
-    display: block;
-    width: 100%;
-  }
-
-  /* Every cell becomes a block, overriding the older phone rules that hid
-     columns 4-8 by :nth-child (which is what put the row actions out of
-     reach). !important beats those higher-specificity nth-child hides.
-     max-width too: the tablet and phone table rules clamp the first cell
-     (`td:nth-child(1)`) to 35%/40%, which squeezed each card's study title
-     into a narrow column - the same clamp Recent bookings cancels below. */
-  .admin-data-table td {
-    display: block !important;
-    width: auto !important;
-    min-width: 0 !important;
-    max-width: none !important;
-    padding: 0.4rem 0 !important;
-    text-align: left !important;
-    border: 0;
-  }
-
-  /* The column names move into each cell as data-label, so the header row is
-     redundant here. display:none rather than clip: a clipped header row keeps
-     its wide sort buttons in the layout and re-expands the document. */
-  .admin-data-table thead {
-    display: none;
-  }
-
-  .admin-data-table tr.admin-row-clickable {
-    border: 1px solid var(--border-subtle-current);
-    border-radius: var(--radius-md);
-    background: var(--surface-glass-current);
-    padding: var(--spacing-2) var(--spacing-3);
-    margin-bottom: var(--spacing-3);
-  }
-
-  .admin-data-table td::before {
-    content: attr(data-label);
-    display: block;
-    margin-bottom: 0.15rem;
-    font-size: 0.7rem;
-    font-weight: 600;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-  }
-
-  /* Actions: buttons and the kebab left-aligned beneath their label. */
-  .admin-data-table td.col-actions .admin-action-group {
-    justify-content: flex-start;
-  }
-
-  /* #142: the gutter between a closed study's status pill and its
-     "Auto-closed" marker. This is the only layout where the two share a
-     line: above 1220px the admin content column is max-width capped, so
-     the Status cell measures 92px of content box at 1220, 1440, 1920, 2560
-     and 3200 alike (measured) and the 67px + 92px pair always wraps,
-     centred. Here the cell is as wide as the card and they sit side by
-     side, where `margin: 0` from the shared primitive's ancestor-scoped
-     rule left them touching, 0px apart, with two backgrounds meeting.
-
-     One class more than that rule (0,5,3 against 0,4,3), so it wins on
-     specificity wherever either sits in the file. A margin on the SECOND
-     pill rather than on every pill: the first then still lines up flush
-     with the Type pill in the card row above it. */
-  .admin-dashboard table.admin-data-table tbody td.col-status > .admin-pill + .admin-pill {
-    margin-left: 0.25rem;
-  }
-
-  /* #131: the card-view sort control, shown in the same block that hides the
-     <thead> it stands in for. Right-aligned above the first card. */
+@media (max-width: 1279.98px) {
+  /* Inside the quick-filters row's end group (`.admin-quick-filters__end`,
+     which does the right-alignment and wrapping). */
   .admin-card-sort {
     display: flex;
     align-items: center;
     justify-content: flex-end;
     flex-wrap: wrap;
     gap: 0.5rem;
-    margin-bottom: var(--spacing-3);
   }
 
   .admin-card-sort .form-label {
@@ -3482,6 +3344,118 @@ body.admin-page .header .container {
   .admin-card-sort-dir:focus-visible {
     outline: 2px solid var(--focus-ring, var(--brand-headline));
     outline-offset: 2px;
+  }
+}
+
+/* ============================================================
+   ROW 14 - Research Studies table reflows to cards on phone.
+   Under `table-layout: fixed` the column min-widths force a ~530px
+   document at 390px, pushing the row actions (and the kebab) off the
+   right edge where they cannot be reached. Below the breakpoint (768px
+   when this was written; 1023.98px now, see below) each row becomes a
+   card with its column name shown inline above the value, so nothing is
+   unreachable and the page stops forcing a horizontal scroll. The label sits on its
+   own line above the value so cells that hold several nodes (status +
+   "Auto-closed", the recruitment ratio + bar) never misalign.
+
+   Row 16 (second-pass audit) raised this breakpoint to 1219.98px, because
+   the old percentage columns squeezed the status pills below their own
+   label width between 768 and 1220px. That left every laptop-width window
+   on a ~500px-per-study stack of label/value pairs.
+
+   Admin table Step 1 (2026-09-23) moved it to 1023.98px. The columns are
+   now fixed pixel widths with Study the only fluid one, two sparse columns
+   (Type, Clicks) are folded into Study and Progress, and Created drops out
+   between 1024 and 1279.98px - so the table holds its pills, and the Study
+   column keeps >= 300px of content box, down to 1024px. Below that the card
+   view below still applies, unchanged.
+
+   #131: the card view hides <thead>, which is where this table's column-sort
+   controls live (Admin.tsx handleSort/ariaSortFor). The Sort-by control
+   (`.admin-card-sort`, its own media block above) is shown at every width
+   below 1280px, which includes all of this one - so the reflow never costs
+   sorting.
+
+   MUST stay in lockstep with the row-actions dropdown anchor block (search
+   "card-reflow breakpoint (row 14") - it drifted once.
+   ============================================================ */
+@media (max-width: 1023.98px) {
+  .admin-data-table,
+  .admin-data-table tbody,
+  .admin-data-table tr {
+    display: block;
+    width: 100%;
+  }
+
+  /* The <col> widths are table-mode geometry. Left in a block-level table
+     they would form an anonymous table as wide as the fixed columns sum to
+     and push the document sideways on a phone. */
+  .admin-data-table colgroup {
+    display: none;
+  }
+
+  /* The one-line meta clamp is table-mode density. A card has the room, and a
+     phone cannot hover the `title` that carries the clamped text, so here the
+     meta line wraps: the type pill, then the whole purpose sentence, as the
+     card showed it before Step 1. */
+  .admin-data-table .admin-study-meta {
+    flex-wrap: wrap;
+    height: auto;
+    row-gap: 4px;
+  }
+
+  .admin-data-table .admin-study-meta .row-desc {
+    flex-basis: 100%;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+
+  /* Every cell becomes a block, overriding the older phone rules that hid
+     columns 4-8 by :nth-child (which is what put the row actions out of
+     reach). !important beats those higher-specificity nth-child hides.
+     max-width too: the tablet and phone table rules clamp the first cell
+     (`td:nth-child(1)`) to 35%/40%, which squeezed each card's study title
+     into a narrow column - the same clamp Recent bookings cancels below. */
+  .admin-data-table td {
+    display: block !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    padding: 0.4rem 0 !important;
+    text-align: left !important;
+    border: 0;
+  }
+
+  /* The column names move into each cell as data-label, so the header row is
+     redundant here. display:none rather than clip: a clipped header row keeps
+     its wide sort buttons in the layout and re-expands the document. */
+  .admin-data-table thead {
+    display: none;
+  }
+
+  .admin-data-table tr.admin-row-clickable {
+    border: 1px solid var(--border-subtle-current);
+    border-radius: var(--radius-md);
+    background: var(--surface-glass-current);
+    padding: var(--spacing-2) var(--spacing-3);
+    margin-bottom: var(--spacing-3);
+  }
+
+  .admin-data-table td::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 0.15rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  /* Actions: buttons and the kebab left-aligned beneath their label. */
+  .admin-data-table td.col-actions .admin-action-group {
+    justify-content: flex-start;
   }
 }
 
@@ -3557,25 +3531,9 @@ body.admin-page .header .container {
   }
 }
 
-.row-title {
-  color: #FFFFFF;
-  font-weight: 600;
-  display: block;
-  margin-bottom: 2px;
-  line-height: 1.3;
-}
-
-.row-desc {
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 0.875rem;
-  margin-top: 0;
-  display: block;
-  line-height: 1.4;
-}
-
-.col-numeric {
-  text-align: right;
-}
+/* `.row-title` / `.row-desc` have no bare base rules: their type is set by
+   the studies table spec (search "Study: title (two lines at most)") and
+   their colour by `_themes.css`, which wins it in either theme. */
 
 /* ============================================================
    TABLE READABILITY ENHANCEMENT - Dark Mode Glass Cockpit
@@ -3594,37 +3552,11 @@ body.theme-dark .admin-data-table tbody td {
   color: #FFFFFF;
 }
 
-body.theme-dark .admin-data-table .row-title {
-  color: #FFFFFF;
-  font-weight: 600;
-}
+/* No zebra striping and no separate dark header rule: the studies table
+   separates rows with a 1px divider and styles its header once, in both
+   themes (search "One self-contained spec"). */
 
-body.theme-dark .admin-data-table .row-desc {
-  color: rgba(255, 255, 255, 0.75); /* Slightly brighter for better readability */
-}
-
-/* 3. Zebra Striping - Subtle alternating rows for eye tracking */
-body.theme-dark .admin-data-table tbody tr:nth-child(even) {
-  background-color: rgba(255, 255, 255, 0.02); /* Barely visible change */
-}
-
-body.theme-dark .admin-data-table tbody tr:nth-child(odd) {
-  background-color: transparent;
-}
-
-/* 4. Table Header - Clear separation */
-body.theme-dark .admin-data-table thead th {
-  color: #94A3B8; /* Slate-400 - muted but readable */
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-/* 5. Metric Values - High visibility numbers */
-body.theme-dark .admin-data-table td.col-metric {
-  color: #FFFFFF;
-  font-variant-numeric: tabular-nums;
-}
-
-/* 6. Date Column - Slightly muted but readable */
+/* 3. Date Column - Slightly muted but readable */
 body.theme-dark .admin-data-table td.col-date {
   color: rgba(255, 255, 255, 0.85);
 }
@@ -3879,14 +3811,12 @@ body.theme-dark .admin-data-table td.col-date {
 
 .admin-dashboard .tab-content {
   background-color: transparent;
-  /* Pixel-perfect: Minimal top spacing, no side padding */
-  padding: 1rem 0 0 0 !important;
-}
-
-@media (max-width: 575px) {
-  .admin-dashboard .tab-content {
-    padding: 0.75rem 0 0 0 !important;
-  }
+  /* No padding of its own: the tabs card's body (`.admin-tabs-card
+     .card-body-transparent`) is the one inset between the tab bar and the
+     panel. This rule's 16px on top of that body's 20px, plus the tab bar's
+     24px bottom margin, once left 60px of empty card above the first
+     filter (Admin table Step 1, 2026-09-23). */
+  padding: 0 !important;
 }
 
 /* ============================================================
@@ -4021,9 +3951,8 @@ body.theme-dark .admin-data-table td.col-date {
   }
 }
 
-/* Column widths are owned by the semantic .col-* classes above (.col-title,
-   .col-type, .col-status, .col-recruitment, .col-metric, .col-next, .col-date,
-   .col-actions).
+/* The Research Studies table's column widths are owned by its <colgroup>
+   (`col.col-*` rules, search "COLUMN WIDTHS").
  *
  * There used to be a SECOND width system here: a block of
  * `table.table-hover thead th:nth-child(N)` rules, one per column, which
@@ -5850,17 +5779,24 @@ body.theme-dark .legend-label-past {
    cursor moved here from .admin-th, so non-sortable headers no longer imply
    they can be clicked. */
 .admin-th-sort {
-  display: block;
-  width: 100%;
+  /* Shrink-wrapped to its label and caret, so the 2px focus ring (below)
+     outlines the control rather than the whole column - at 1440 a full-width
+     button drew a 590px ring round "STUDY". The <th>'s text-align still
+     places it. */
+  display: inline-block;
+  max-width: 100%;
   padding: 0;
   border: 0;
   background: none;
   font: inherit;
   color: inherit;
-  /* Block + inherit so the button keeps the <th>'s own text-align (the admin
-     headers are centred); a flex button would pack to the left and disagree
-     with its centred body column. The caret is an inline span, so it flows
-     after the label under the same alignment. */
+  /* A button resets text-transform and letter-spacing (they are not part of
+     the `font` shorthand), which is how the sortable headers once rendered
+     in mixed case beside uppercase plain ones. Inherit both, so a sortable
+     header is typographically identical to a plain one. */
+  text-transform: inherit;
+  letter-spacing: inherit;
+  /* The caret is an inline span, so it flows after the label. */
   text-align: inherit;
   cursor: pointer;
 }
@@ -5945,19 +5881,37 @@ body.theme-dark .legend-label-past {
    PAGE-SPECIFIC LAYOUT PATTERNS
    ============================================================ */
 
-/* Admin Page Full-Height Container */
+/* Admin Page Full-Height Container. No side padding: the page shell's one
+   side inset is `.admin-card-main`'s 24px below, and the table panel's own
+   24px inside the tabs card. Four stacked insets (container, this, the row
+   gutter, the main card) once took 282px out of a 1200px column at 1440px
+   (Admin table Step 1, 2026-09-23). The phone block below restores a 12px
+   inset under 768px. */
 .admin-page-fullheight {
   min-height: 100vh;
-  padding: 0.5rem 1.5rem 1.5rem; /* Reduced top padding */
+  padding: 0.5rem 0 1.5rem; /* Reduced top padding */
   max-width: 100%;
   width: 100%;
+}
+
+/* The dashboard's grid row holds one full-width column, so its gutter (the
+   row's negative margins and the column's padding) only ever narrowed the
+   page. Zeroed at every width. */
+.row.admin-dashboard {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.row.admin-dashboard > .admin-content-wrapper {
+  padding-left: 0;
+  padding-right: 0;
 }
 
 /* Admin Main Card - Reduced top padding for tighter header spacing */
 .admin-card-main {
   min-height: calc(100vh - 4rem);
   border-radius: 0;
-  padding: 16px 40px 40px !important; /* Tighter top, uniform sides/bottom */
+  padding: 16px 24px 40px !important; /* Tighter top, 24px sides, 40px bottom */
 }
 
 /* Row 14: the admin shell nests several padded cards (page container -> main
@@ -5977,12 +5931,10 @@ body.theme-dark .legend-label-past {
     padding-right: var(--spacing-3);
   }
 
-  /* This row carries Bootstrap's negative gutter margins and a width cap that,
-     with the trimmed container padding above, left an uneven right-hand gap.
-     Zero the gutters on phone so the cards sit symmetrically in the viewport. */
+  /* This row's width cap, with the trimmed container padding above, left an
+     uneven right-hand gap on phone. Its gutters are zeroed at every width
+     above. */
   .row.admin-dashboard {
-    margin-left: 0;
-    margin-right: 0;
     max-width: 100%;
   }
 }
@@ -6093,8 +6045,17 @@ body.theme-light .study-summary-line {
 }
 
 /* Stat Card Body - Compact padding */
-.stat-card-body {
-  padding: 0.25rem 0.75rem 0.25rem;
+/* No side padding of its own: the tile's `.card` padding (24px) is its one
+   inset. The extra 12px each side left 153px of a 225px tile at 1024px, which
+   wrapped "SESSIONS THIS / WEEK" and "Across all published / studies" and
+   dropped that tile's baselines out of line with its neighbours (Admin table
+   Step 1 fix round, 2026-09-23). Scoped `.admin-dashboard` so it also
+   outranks - by source order at equal specificity - the
+   `.admin-dashboard .card-body` side padding that the 1400/1920/2560px media
+   rules near the top of this file add (24/32/40px): without it the double
+   inset came back at the widths most admins use. */
+.admin-dashboard .stat-card-body {
+  padding: 0.25rem 0;
 }
 
 /* Stat Card Header - Flex with negative margin bottom */
@@ -11659,9 +11620,11 @@ body.theme-dark .form-control::placeholder {
    High-end Enterprise Table Styles
    ========================================= */
 
-/* Table Headers - Uppercase & Muted */
-.admin-dashboard table thead th,
-.admin-data-table th {
+/* Table Headers - Uppercase & Muted. Every block in this polish section skips
+   the Research Studies table (`:where` keeps the specificity the rules had
+   before it was excluded): that table carries its own header, row and hover
+   spec (search "One self-contained spec"). */
+.admin-dashboard table:where(:not(.admin-data-table)) thead th {
   text-transform: uppercase;
   font-size: 0.75rem;
   letter-spacing: 0.05em;
@@ -11671,21 +11634,16 @@ body.theme-dark .form-control::placeholder {
   padding-bottom: 20px;
 }
 
-/* First row "Soft Entrance" - Hero row gets breathing room */
-.admin-dashboard table tbody tr:first-child td,
-.admin-data-table tbody tr:first-child td {
-  padding-top: 24px;
-}
+/* No first-row "soft entrance" padding: it made the first Recent bookings
+   row 8px taller than every other and doubled the gap under the header. */
 
 /* Table Rows - Glass Hover Effect */
-.admin-dashboard table tbody tr,
-.admin-data-table tbody tr {
+.admin-dashboard table:where(:not(.admin-data-table)) tbody tr {
   transition: all 0.2s ease;
   border-left: 2px solid transparent; /* Prepare for hover */
 }
 
-.admin-dashboard table tbody tr:hover,
-.admin-data-table tbody tr:hover {
+.admin-dashboard table:where(:not(.admin-data-table)) tbody tr:hover {
   background: linear-gradient(90deg, rgba(255, 255, 255, 0.03) 0%, transparent 100%);
   border-left: 2px solid var(--color-brand-orange); /* The "Active Scan" look */
 }
@@ -11823,7 +11781,8 @@ body.theme-dark .opportunity-form small:not(.badge) {
 }
 
 /* Below the .admin-data-table card-reflow breakpoint (row 14 above this
-   table's own rules; raised to 1219.98px by row 16 second-pass) the table
+   table's own rules; raised to 1219.98px by row 16 second-pass, moved to
+   1023.98px by the Admin table Step 1 fix, 2026-09-23) the table
    reflows to stacked cards and the kebab moves to the LEFT of a narrow card
    (.admin-action-group becomes justify-content: flex-start), so the
    unconditional `right: 0 !important` above (correct on desktop, opening
@@ -11834,9 +11793,9 @@ body.theme-dark .opportunity-form small:not(.badge) {
    !important, and to sit AFTER the block above, to win against it - two
    `!important` declarations of equal specificity resolve by source order,
    same as normal rules. MUST share the same breakpoint as the card reflow -
-   it drifted to 767.98px against the reflow's 1219.98px once, opening the
-   menu off-screen for every card view between 768 and 1220px. */
-@media (max-width: 1219.98px) {
+   it drifted to 767.98px against the reflow's then 1219.98px once, opening
+   the menu off-screen for every card view between 768 and 1220px. */
+@media (max-width: 1023.98px) {
   .admin-action-dropdown-menu,
   .admin-action-dropdown,
   .admin-data-table .dropdown-menu,
@@ -13866,13 +13825,14 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
    Research Studies table. Session is sized for the widest value it can hold -
    "Wed 19 Aug 2026 · 23:00 GMT+1" - and Study takes the remainder, being the
    only column with free text in it. */
-/* One padding for the header and its cells, so the column reads as a column:
-   the th carried 12px and the td 8px, leaving "STUDY" indented past the titles
-   underneath it. */
+/* One padding for the header and its cells, so the column reads as a column.
+   This rule's padding reaches only the <th> (the cells take the table's
+   `table.table-hover tbody td` 8px, which outranks it), so it must equal
+   that 8px: at 12px "STUDY" sat 4px right of the titles under it. */
 .admin-dashboard .col-recent-study {
   width: 36%;
   text-align: left;
-  padding-left: 12px;
+  padding-left: 8px;
 }
 
 .admin-dashboard .col-recent-session {
@@ -14140,6 +14100,22 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
 }
 
 /* --- Quick-filter chips ------------------------------------------------- */
+/* The row's right end: "Clear filters" and the Sort-by control as one group.
+   The auto margin pushes it to the right edge; it wraps as a unit, and
+   stays right-aligned when it drops to its own line. */
+.admin-quick-filters__end {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--spacing-3);
+  margin-left: auto;
+}
+
+.admin-quick-filters__end:empty {
+  display: none;
+}
+
 .admin-quick-filters {
   display: flex;
   align-items: center;
@@ -14179,7 +14155,6 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
 }
 
 .admin-clear-filters {
-  margin-left: auto;
   padding: 0.35rem 0.25rem;
   border: none;
   background: none;
@@ -14203,16 +14178,28 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
    `.admin-study-status--*`, `.admin-pill--auto-closed`); this only fixes
    the box.
 
-   The rule below is ancestor-scoped, and that scoping - specificity 0,4,3 -
-   is the whole mechanism: it is what outranks every other rule that has an
-   opinion about these pills' box. Nothing else in this file reaches it for
-   a `.admin-pill` inside these two cells. Ranked, measured on the served
-   build:
+   The rule below is ancestor-scoped, and that scoping - specificity 0,4,3
+   for the Study-cell selector, 0,5,3 for the status one (its
+   `:not(.admin-pill--auto-closed)` adds a class) - is the whole mechanism:
+   it is what outranks every other rule that has an opinion about these
+   pills' box. Nothing else in this file reaches it for a `.admin-pill`
+   inside these two cells. Ranked, measured on the served build:
 
-     0,4,3  this rule                                        WINS
-     0,3,3  `td.col-status > *`                  (display, margin-right)
-     0,2,4  `td:not(:first-child) > span`        (display, text-align)
+     0,5,3 / 0,4,3  this rule                                WINS
      0,1,0  `.lozenge`, `.admin-study-status`    (height/font-size/…)
+
+   (Two more used to sit between those - `td.col-status > *` and
+   `td:not(:first-child) > span`, both forcing inline-block. The first was
+   deleted and the second no longer matches this table, in the Admin table
+   Step 1 fix, 2026-09-23.)
+
+   The type pill lives in the Study cell's meta line since that fix (the Type
+   column is gone), so the first selector below reaches it there. It is the
+   same pill, at the same 24px; the meta line lets it overhang its 18px text
+   line rather than grow the row (search "The meta line's box").
+   The "Auto-closed" marker is NOT a pill any more - it is a caption under the
+   status pill (search "Auto-closed caption") - so it is excluded here rather
+   than boxed and then un-boxed.
 
    A bare `.admin-pill { … }` rule would sit at 0,1,0 and lose to all three,
    so it is not written: it was measured to change nothing at 856/1024/1218/
@@ -14231,8 +14218,8 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
    `.lozenge`/`.admin-study-status` base rules' own box metrics the same
    way this rule is scoped, then this whole block collapses into a bare
    `.admin-pill` class with nothing left to fight. */
-.admin-dashboard table.admin-data-table tbody td.col-type .admin-pill,
-.admin-dashboard table.admin-data-table tbody td.col-status .admin-pill {
+.admin-dashboard table.admin-data-table tbody td.col-title .admin-pill,
+.admin-dashboard table.admin-data-table tbody td.col-status .admin-pill:not(.admin-pill--auto-closed) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -14287,22 +14274,27 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
   white-space: nowrap;
 }
 
-/* Auto-closed marker - was a bootstrap `.badge.bg-dark`, a fourth primitive
-   with its own display/height/vertical-align and none of the uppercase/
-   tracking the other two pills carry. Same colour as before (background/
-   text tokens below resolve to the same #212529 / #FFFFFF as `.bg-dark` in
-   _utilities.css) - dark mode overrides `color` from `_themes.css`'s
-   higher-priority `themes` layer regardless of what is declared here (see
-   `body.theme-dark .admin-dashboard table tbody td span:not(.badge):not(.lozenge)`),
-   same as it already did for the bootstrap badge this replaces - not a
-   regression, and not fixable from this file. */
+/* Auto-closed caption. A closed study used to carry a second pill,
+   AUTO-CLOSED, stacked under CLOSED - two pills read as two statuses, and
+   the stack made every closed row the tallest on the page. Auto-closed is
+   the reason, not a second status, so it is plain muted text on its own
+   line, 2px under the one status pill (Admin table Step 1, 2026-09-23). The
+   markup keeps the `.admin-pill` class it shared with #142's primitive, which
+   excludes it (see that rule). Colour for dark mode is restated in
+   `_themes.css`, whose blanket `td *` colour otherwise wins. */
 .admin-pill--auto-closed {
-  background: var(--admin-pill-auto-closed-bg);
-  color: var(--admin-pill-auto-closed-text);
-  border: 1px solid transparent;
-  border-radius: var(--radius-full);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
+  display: block;
+  margin: 2px 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
 }
 
 /* --- Status pills (Recent bookings + studies table) -------------------- */
@@ -14428,40 +14420,37 @@ body.theme-light .admin-study-status--not-working {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 0.25rem;
-  line-height: 1.3;
+  gap: 2px;
 }
 
-/* The note is forced onto its own row (own flex line) so it can never sit
-   beside the date - that collision read as "16:00Today". The date/time line may
-   wrap WITHIN the column when tight; it must not be nowrap, or in this
-   fixed-layout table it spills into the Created column instead of wrapping. */
+/* Two lines: the date, then a caption. A session's clock time leads the
+   caption ("16:00 · Tomorrow"), because date and time together are ~174px on
+   one line against this column's 152px content box (Admin table Step 1,
+   2026-09-23). The date may still wrap WITHIN the column if it ever has to;
+   it must not be nowrap, or in this fixed-layout table it spills into the
+   Created column instead of wrapping. */
 .admin-next__date {
   display: block;
   width: 100%;
+  font-size: 14px;
+  line-height: 20px;
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .admin-next__time {
-  margin-left: 0.35rem;
-  font-weight: 400;
-  font-size: 0.85rem;
+  font-weight: 600;
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
-  white-space: nowrap; /* keep "18:09" and its middot together; the date may wrap */
-}
-
-.admin-next__time::before {
-  content: '· ';
-  color: var(--text-muted);
+  white-space: nowrap;
 }
 
 /* Its own line, and visibly a caption rather than a continuation of the date. */
 .admin-next__note {
   display: block;
   width: 100%;
-  font-size: 0.75rem;
+  font-size: 12px;
+  line-height: 16px;
   color: var(--text-muted);
 }
 
@@ -14499,6 +14488,10 @@ body.theme-light .admin-study-status--not-working {
 
 .admin-action-primary {
   font-weight: 600;
+  /* One width for every label ("View" measured 57px, "Edit" 52px), so the
+     inline buttons' left edges line up down the column instead of stepping
+     by 5px. Fits the Actions column's 108px content box with the kebab. */
+  min-width: 60px;
 }
 
 /* --- Tabbed panel card ---------------------------------------------------
@@ -14508,10 +14501,49 @@ body.theme-light .admin-study-status--not-working {
    strip out (scoped here so other usages are untouched). */
 .admin-tabs-card {
   overflow: hidden; /* clip the full-width tab bar to the card's radius */
+  /* No `.card` padding: the tab bar runs edge to edge, and the panel below
+     carries the one 24px inset (`.card-body-transparent`, next rule). The
+     card's own 24px on top of that cost the Research Studies table 48px. */
+  padding: 0;
 }
 
 .admin-tabs-card .admin-tabs-container {
   border-bottom: 1px solid var(--border-subtle-current);
+}
+
+/* The tab bar: flush to the card's top and sides with its divider running
+   edge to edge, the tabs themselves inset 8px so the first tab's icon (after
+   the button's own 16px) lines up with the panel content's 24px edge below.
+   No bottom margin: `.tabs-container`'s 24px would stack on the panel body's
+   20px. The side padding is !important only because `.tabs-container`
+   zeroes it with !important. */
+.admin-tabs-card .admin-tabs-container {
+  margin-bottom: 0;
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+}
+
+/* Underline tabs pack left at their own width and never wrap a label.
+   `nav-fill` forced four equal columns (242px each at 1440px), which broke
+   "Completion Approvals" onto two lines - a 74px tab beside three 50px ones,
+   its History icon floating free of its label. Scoped to this card; from
+   576px up only, because the phone block stacks the tabs full-width
+   (search "TABS RESPONSIVENESS"). The row still wraps as a whole if four
+   labels ever outgrow the card. */
+@media (min-width: 576px) {
+  .admin-tabs-card .nav-tabs {
+    justify-content: flex-start;
+    gap: 8px;
+  }
+
+  .admin-tabs-card .nav-fill .nav-item {
+    flex: 0 0 auto;
+  }
+
+  .admin-tabs-card .nav-fill .custom-tab-button {
+    white-space: nowrap;
+    width: auto;
+  }
 }
 
 .admin-tabs-card .card-body-transparent {

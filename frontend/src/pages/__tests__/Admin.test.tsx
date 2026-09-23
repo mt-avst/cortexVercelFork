@@ -461,7 +461,7 @@ describe('Admin dashboard accessibility (row 13)', () => {
     await screen.findByText('Checkout usability test');
     // A non-sortable header and a sortable one both carry scope=col; a plain <th>
     // without scope is what the audit flagged.
-    expect(screen.getByRole('columnheader', { name: 'Recruitment' })).toHaveAttribute('scope', 'col');
+    expect(screen.getByRole('columnheader', { name: 'Progress' })).toHaveAttribute('scope', 'col');
     expect(screen.getByRole('button', { name: /^Study/ }).closest('th')).toHaveAttribute('scope', 'col');
   });
 
