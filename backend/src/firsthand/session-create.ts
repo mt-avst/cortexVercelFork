@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from 'crypto';
+import type { PoolClient } from 'pg';
 
 import {
   sessionPayloadSchema,
@@ -65,13 +66,36 @@ export type CreateSessionResult =
   | { ok: false; error: CreateSessionError };
 
 export async function createSession(
-  input: CreateSessionInput
+  input: CreateSessionInput,
+  /**
+   * When supplied (cto/AdaptaLabs#159), both `getStudyById` just below and
+   * `seedRuntimeSession` further down run on THIS client instead of each
+   * checking out and committing/releasing their own.
+   *
+   * `seedRuntimeSession`'s reason is race-safety - see that function's
+   * docblock. `getStudyById`'s is NOT a race: it reads `studies`, not
+   * `runtime_sessions`, so there was never a correctness reason to serialize
+   * it (MR !528 review pass 1 HIGH-1 corrects an earlier version of this
+   * comment that claimed otherwise). The reason is connection BUDGET. The
+   * caller here is `runSerializedForMintPair`'s locked transaction, which
+   * already holds one of the runtime pool's `RUNTIME_POOL_MAX_CONNECTIONS =
+   * 5` connections for the whole decision. Leaving `getStudyById` on its own
+   * pooled read meant every mint under that lock held TWO connections at
+   * once, and participant work is not behind the admission cap that would
+   * otherwise queue a second checkout politely - so a burst of 5+ concurrent
+   * participants (different people, same study) exhausted the pool entirely:
+   * proven end to end at 8 concurrent participants, all 8 timing out at
+   * `connectionTimeoutMillis` (10s) on origin's version of this fix, and all
+   * 8 succeeding in milliseconds once `getStudyById` stopped taking a second
+   * connection.
+   */
+  existingClient?: PoolClient
 ): Promise<CreateSessionResult> {
   if (!isStudiesPersistenceConfigured()) {
     return { ok: false, error: 'persistence_not_configured' };
   }
 
-  const study = await getStudyById(input.studyId);
+  const study = await getStudyById(input.studyId, existingClient);
 
   if (!study) {
     return { ok: false, error: 'study_not_found' };
@@ -151,7 +175,7 @@ export async function createSession(
     return { ok: false, error: 'payload_assembly_failed' };
   }
 
-  await seedRuntimeSession(validated.data);
+  await seedRuntimeSession(validated.data, existingClient);
 
   return {
     ok: true,
