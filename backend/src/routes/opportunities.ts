@@ -1407,7 +1407,7 @@ async function participantCompletionMap(
       });
     }
   } catch (error) {
-    logger.error('Failed to load participant completion trace', { error });
+    logger.error('Failed to load participant completion trace', { error: String(error) });
   }
 
   return map;
@@ -1458,7 +1458,7 @@ async function participantSessionSummaryForOpportunity(
         })
     };
   } catch (error) {
-    logger.error('Failed to load participant session summary', { error, opportunityId });
+    logger.error('Failed to load participant session summary', { error: String(error), opportunityId });
     return { completed: false, completedAt: null, inProgress: false };
   }
 }
@@ -1715,7 +1715,7 @@ router.get('/', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req: Re
     if (error instanceof AppError) {
       throw error;
     }
-    logger.error('Error in opportunities route', { error });
+    logger.error('Error in opportunities route', { error: String(error) });
     res.status(500).json({ error: 'Internal server error' });
   }
 }));
@@ -5145,7 +5145,7 @@ router.get('/:id/sessions', optionalAuth, withLiveRoleIfPresent, asyncHandler(as
     if (error instanceof AppError) {
       throw error;
     }
-    logger.error('Error fetching sessions', { error });
+    logger.error('Error fetching sessions', { error: String(error) });
     res.status(500).json({ error: 'Failed to fetch sessions' });
   }
 }));
@@ -5323,7 +5323,10 @@ router.post('/:id/sessions', requireAdmin, asyncHandler(async (req: Request, res
     if (error instanceof AppError) {
       throw error;
     }
-    logger.error('Error creating sessions', { error });
+    logger.error('Error creating sessions', {
+      error: String(error),
+      code: (error as { code?: unknown })?.code
+    });
     res.status(500).json({ error: 'Failed to create sessions' });
   }
 }));
@@ -5453,7 +5456,10 @@ router.delete('/:id/sessions', requireAdmin, asyncHandler(async (req: Request, r
     if (error instanceof AppError) {
       throw error;
     }
-    logger.error('Error deleting sessions', { error });
+    logger.error('Error deleting sessions', {
+      error: String(error),
+      code: (error as { code?: unknown })?.code
+    });
     res.status(500).json({ error: 'Failed to delete sessions' });
   }
 }));
