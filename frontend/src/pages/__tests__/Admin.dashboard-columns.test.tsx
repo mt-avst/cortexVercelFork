@@ -151,24 +151,24 @@ describe('Recent bookings: the session cell must be able to wrap', () => {
 // it as `opportunity_title` - so every query below is scoped to the studies
 // table, reached through the one column header the other table does not have.
 const findStudiesTable = async (): Promise<HTMLElement> => {
-  // Anchor on "Type", which only the studies table has. Since the redesign the
-  // Study column exists on the Recent bookings table too, so "Study" no longer
-  // distinguishes them - Type still does.
-  const typeHeader = await screen.findByRole('columnheader', { name: /^type/i });
-  const table = typeHeader.closest('table');
+  // Anchor on "Progress", which only the studies table has. The Study and
+  // Status columns exist on the Recent bookings table too, and the Type column
+  // the anchor used to be is gone (Admin table Step 1).
+  const progressHeader = await screen.findByRole('columnheader', { name: /^progress$/i });
+  const table = progressHeader.closest('table');
   expect(table).not.toBeNull();
   return table as HTMLElement;
 };
 
 describe('Research Studies table: Capacity and Booked said the same thing', () => {
-  it('has no Capacity column, because Recruitment already carries the capacity as its denominator', async () => {
+  it('has no Capacity column, because Progress already carries the capacity as its denominator', async () => {
     renderAdmin();
     const table = await findStudiesTable();
 
-    // The old "Booked" column is now "Recruitment" - same booked/capacity ratio,
-    // now with the percentage. The guard is unchanged: still no separate Capacity
-    // column re-rendering the denominator.
-    expect(within(table).getByRole('columnheader', { name: /^recruitment$/i })).toBeInTheDocument();
+    // The old "Booked" column became "Recruitment" and is now "Progress" - same
+    // booked/capacity ratio, with the percentage. The guard is unchanged: still
+    // no separate Capacity column re-rendering the denominator.
+    expect(within(table).getByRole('columnheader', { name: /^progress$/i })).toBeInTheDocument();
     expect(within(table).queryByRole('columnheader', { name: /^capacity$/i })).toBeNull();
   });
 
@@ -184,7 +184,7 @@ describe('Research Studies table: Capacity and Booked said the same thing', () =
   });
 });
 
-// The phone layout (audit row 14) reflows this table into cards below 768px,
+// The card layout (audit row 14) reflows this table into cards below 1024px,
 // showing each value under its column name. That name comes from the cell's
 // `data-label`, so a cell added or a label renamed without updating it would
 // leave a phone card field silently unlabelled. jsdom cannot see the CSS, so
@@ -205,13 +205,178 @@ describe('Research Studies table: every body cell is labelled for the phone card
 
     expect(cells.map((td) => td.getAttribute('data-label'))).toEqual([
       'Study',
-      'Type',
       'Status',
-      'Recruitment',
-      'Clicks',
+      'Progress',
       'Next / deadline',
       'Created',
       'Actions',
     ]);
+  });
+});
+
+// Admin table Step 1 (2026-09-23). Under `table-layout: fixed` the <col>
+// widths decide the layout, and the CSS hides Created as one unit (col, th,
+// td) below 1280px - so the colgroup, the header row and every body row must
+// agree on the same six columns in the same order, or a hidden column drags
+// the wrong neighbour with it.
+describe('Research Studies table: six columns, one colgroup', () => {
+  it('declares a <col> per column, in header order, with Study first and Actions last', async () => {
+    renderAdmin();
+    const table = await findStudiesTable();
+
+    const cols = Array.from(table.querySelectorAll('colgroup > col')).map((c) => c.className);
+    expect(cols).toEqual(['col-title', 'col-status', 'col-progress', 'col-next', 'col-date', 'col-actions']);
+
+    const headers = Array.from(table.querySelectorAll('thead th')).map((th) => th.className.replace('admin-th ', ''));
+    expect(headers).toEqual(cols);
+
+    const row = (await within(table).findByText('Checkout usability test')).closest('tr') as HTMLElement;
+    expect(Array.from(row.querySelectorAll('td')).map((td) => td.className)).toEqual(cols);
+  });
+
+  it('has no Type or Clicks column any more', async () => {
+    renderAdmin();
+    const table = await findStudiesTable();
+    expect(within(table).queryByRole('columnheader', { name: /^type$/i })).toBeNull();
+    expect(within(table).queryByRole('columnheader', { name: /^clicks$/i })).toBeNull();
+    expect(within(table).queryByRole('columnheader', { name: /^recruitment$/i })).toBeNull();
+  });
+});
+
+describe('Research Studies table: the Study cell names the row', () => {
+  it('carries the type pill on the meta line, before the purpose, and the full strings in title attributes', async () => {
+    renderAdmin();
+    const table = await findStudiesTable();
+    const title = await within(table).findByText('Checkout usability test');
+    const cell = title.closest('td') as HTMLElement;
+    expect(cell).toHaveClass('col-title');
+
+    // Clamped to two lines and one line by CSS, so the full text must survive
+    // somewhere a pointer can reach it.
+    expect(title).toHaveAttribute('title', 'Checkout usability test');
+    const purpose = within(cell).getByText('See where participants stumble at checkout');
+    expect(purpose).toHaveAttribute('title', 'See where participants stumble at checkout');
+
+    // Type pill ("Live" for a `test` study) then purpose, on one meta line.
+    const meta = cell.querySelector('.admin-study-meta') as HTMLElement;
+    expect(meta).not.toBeNull();
+    const pill = within(meta).getByText('Live').closest('.admin-pill') as HTMLElement;
+    expect(pill).not.toBeNull();
+    expect(meta.firstElementChild).toBe(pill);
+    expect(meta.lastElementChild).toBe(purpose);
+  });
+});
+
+describe('Research Studies table: Progress folds Recruitment and Clicks together', () => {
+  // No `clicks_total` by default: the list endpoint only sends it for the
+  // types it counts clicks for (poll, survey, unmoderated) and leaves it
+  // undefined - not 0 - for the rest.
+  const study = (overrides: Record<string, unknown>) => ({
+    ...fixtures.opportunity,
+    sessions: [],
+    ...overrides,
+  });
+
+  const progressCellFor = async (title: string): Promise<HTMLElement> => {
+    const table = await findStudiesTable();
+    const row = (await within(table).findByText(title)).closest('tr') as HTMLElement;
+    return row.querySelector('td.col-progress') as HTMLElement;
+  };
+
+  it('shows clicks for a published study of a type that never has sessions', async () => {
+    const client = await import('../../api/client');
+    vi.mocked(client.getOpportunities).mockResolvedValueOnce([
+      study({ id: 'opp-poll', type: 'poll', title: 'Pick a name', clicks_total: 18 }),
+      study({ id: 'opp-one', type: 'survey', title: 'One click survey', clicks_total: 1 }),
+    ] as never);
+    renderAdmin();
+
+    expect((await progressCellFor('Pick a name')).textContent).toBe('18 clicks');
+    // Singular, not "1 clicks".
+    expect((await progressCellFor('One click survey')).textContent).toBe('1 click');
+  });
+
+  it('shows the muted dash for a draft and for a session type with no sessions yet - never "0 clicks"', async () => {
+    const client = await import('../../api/client');
+    vi.mocked(client.getOpportunities).mockResolvedValueOnce([
+      study({ id: 'opp-draft', type: 'poll', status: 'draft', title: 'Draft poll', clicks_total: 4 }),
+      study({ id: 'opp-empty', type: 'interview', title: 'Interview with no slots' }),
+    ] as never);
+    renderAdmin();
+
+    for (const title of ['Draft poll', 'Interview with no slots']) {
+      const cell = await progressCellFor(title);
+      expect(cell.textContent, title).toBe('–');
+      expect(cell.querySelector('.admin-cell-empty'), title).not.toBeNull();
+    }
+  });
+
+  it('shows the dash, not "0 clicks", for a published one-question study the server sends no click count for', async () => {
+    // The backend withholds `clicks_total` for `question` studies (it counts
+    // clicks for poll, survey and unmoderated only). Keying Progress on the
+    // study TYPE rendered that absence as "0 clicks" - a number nobody
+    // measured. Keyed on the field being present, it is the dash.
+    const client = await import('../../api/client');
+    vi.mocked(client.getOpportunities).mockResolvedValueOnce([
+      study({ id: 'opp-question', type: 'question', title: 'Name the new space' }),
+    ] as never);
+    renderAdmin();
+
+    const cell = await progressCellFor('Name the new space');
+    expect(cell.textContent).toBe('–');
+    expect(cell.querySelector('.admin-cell-empty')).not.toBeNull();
+    expect(cell.textContent).not.toMatch(/click/);
+  });
+
+  it('keeps booked / capacity for a study with sessions, whatever its clicks', async () => {
+    const client = await import('../../api/client');
+    vi.mocked(client.getOpportunities).mockResolvedValueOnce([
+      study({ ...fixtures.opportunity, clicks_total: 40 }),
+    ] as never);
+    renderAdmin();
+
+    const cell = await progressCellFor('Checkout usability test');
+    expect(within(cell).getByText('2 / 3')).toBeInTheDocument();
+    expect(cell.textContent).not.toMatch(/click/);
+  });
+});
+
+// "Thu 24 Sept 2026 · 16:00" on one line measured ~174px against the Next
+// column's 152px content box (176px col, 12px padding each side); nowrap
+// there spills into Created, wrapping splits the time from its date. The time
+// leads the caption line instead (Admin table Step 1).
+describe('Research Studies table: Next session / deadline keeps the date on one line', () => {
+  it("puts a session's clock time on the caption line, ahead of its relative day - not beside the date", async () => {
+    const client = await import('../../api/client');
+    vi.mocked(client.getOpportunities).mockResolvedValueOnce([
+      {
+        ...fixtures.opportunity,
+        sessions: [
+          {
+            ...fixtures.opportunity.sessions[0],
+            start_time: '2099-01-15T16:00:00.000Z',
+            end_time: '2099-01-15T16:45:00.000Z',
+          },
+        ],
+      },
+    ] as never);
+    renderAdmin();
+    const table = await findStudiesTable();
+    const row = (await within(table).findByText('Checkout usability test')).closest('tr') as HTMLElement;
+    const next = row.querySelector('td.col-next') as HTMLElement;
+
+    const date = next.querySelector('.admin-next__date') as HTMLElement;
+    const note = next.querySelector('.admin-next__note') as HTMLElement;
+    expect(date).not.toBeNull();
+    expect(note).not.toBeNull();
+    // Control: the time is rendered at all (a missing time would pass the
+    // "not in the date line" check below trivially).
+    const time = next.querySelector('.admin-next__time') as HTMLElement;
+    expect(time?.textContent).toMatch(/^\d{2}:\d{2}$/);
+    expect(date.contains(time)).toBe(false);
+    expect(note.contains(time)).toBe(true);
+    expect(date.textContent).not.toMatch(/\d{2}:\d{2}/);
+    // Beyond a week out there is no relative day, so no dangling separator.
+    expect(note.textContent).toBe(time.textContent);
   });
 });

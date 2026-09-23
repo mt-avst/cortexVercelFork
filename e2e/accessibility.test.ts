@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { DASHBOARD, FEEDBACK, PENDING_APPROVALS } from './fixtures/admin-dashboard-seed';
 
 /**
  * Automated Accessibility Testing Suite
@@ -97,6 +98,45 @@ const expectBookingContrastActuallyMeasured = (
   expect(deferred).toEqual([]);
 };
 
+/**
+ * Wait for the page this test scans to have actually rendered, instead of a
+ * fixed sleep. A `waitForTimeout(500)` here scanned whatever had painted by
+ * then: under the CI config's parallel workers the SPA had often not mounted
+ * its route yet, and axe reported `landmark-one-main` / `page-has-heading-one`
+ * on a half-painted page (measured 16/20 and 17/20 failures at 5 workers on
+ * main and the branch). On `/` it could also scan the signed-out landing that
+ * shows before the mocked `/api/me` resolves, not the signed-in page mocked
+ * for it. Each test now names its page's own heading plus one element the
+ * mocked data renders, and a render problem fails here, by name, within 10s.
+ */
+/**
+ * Admin's panels beyond the studies list (which the beforeEach mocks). Both
+ * Admin scans used to mock `/api/dashboard`, a path the page no longer calls,
+ * and nothing mocked pending approvals or feedback: under the catch-all 500
+ * they scanned Admin with "Failed to load pending approvals" showing. The data
+ * is the typed fixture the Admin table specs use.
+ */
+const mockAdminPanels = async (page: import('@playwright/test').Page): Promise<void> => {
+  const json = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  await page.route('**/api/admin/dashboard**', (route) => route.fulfill(json(DASHBOARD)));
+  await page.route('**/api/bookings/pending-approvals**', (route) => route.fulfill(json(PENDING_APPROVALS)));
+  await page.route('**/api/feedback**', (route) => route.fulfill(json(FEEDBACK)));
+};
+
+const expectRendered = async (
+  page: import('@playwright/test').Page,
+  heading: import('@playwright/test').Locator,
+  content: import('@playwright/test').Locator
+): Promise<void> => {
+  await expect(heading, 'the page heading never rendered').toBeAttached({ timeout: 10000 });
+  await expect(content, 'the page content never rendered').toBeVisible({ timeout: 10000 });
+  await expect(page.locator('main .spinner-border'), 'the page is still loading').toHaveCount(0, { timeout: 10000 });
+  // Every unmocked call gets a 500, so a page whose own mock stopped matching
+  // renders its error state - and some error states still show the content
+  // being waited for (My Bookings keeps its empty cards under the alert).
+  await expect(page.locator('main .alert-danger'), 'the page rendered an error').toHaveCount(0);
+};
+
 test.describe('Accessibility Tests', () => {
   test.beforeEach(async ({ page, baseURL }) => {
     // Set viewport size
@@ -105,6 +145,23 @@ test.describe('Accessibility Tests', () => {
     // Mock API responses for consistency (only against a local stack - against
     // a deployment the real API is the thing under test).
     if (baseURL?.includes('localhost')) {
+      // Every API call a test does not mock is answered here, the way the
+      // test-a11y job answers it: that job serves `vite preview` with no
+      // backend, so the preview's /api proxy fails every unmocked call with a
+      // 500. Without this, a local run with a backend on :3001 sent those calls
+      // to it with no session; the 401 tripped the app's sign-in redirect,
+      // which the backend points at ITS frontend (:3000), so the page left the
+      // server under test mid-test and axe scanned a blank document - measured
+      // 16-17/20 `landmark-one-main` failures at 5 workers, on main and the
+      // branch alike, and 0/990 against a backend-less preview. Registered
+      // first so every mock below and in a test takes precedence (Playwright
+      // tries routes in reverse registration order).
+      // A pathname predicate, not the glob '**/api/**': under the Vite dev
+      // server that glob also matches the app's own source modules
+      // (/src/api/client.ts), so the app never booted in a local dev run.
+      await page.route((url) => url.pathname.startsWith('/api/'), async (route) => {
+        await route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"no backend in e2e"}' });
+      });
       await page.route('**/api/me', async (route) => {
         await route.fulfill({
           status: 200,
@@ -155,7 +212,7 @@ test.describe('Accessibility Tests', () => {
     
     // Wait for page to load (use 'load' not 'networkidle' - production often has ongoing requests)
     await page.waitForLoadState('load');
-    await page.waitForTimeout(500);
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Browse studies' }), page.getByText('Accessibility Test Opportunity').first());
     
     // Run accessibility check
     const accessibilityScanResults = await new AxeBuilder({ page }).analyze();
@@ -177,7 +234,7 @@ test.describe('Accessibility Tests', () => {
     
     await page.reload();
     await page.waitForLoadState('load');
-    await page.waitForTimeout(500);
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Browse studies' }), page.getByText('Accessibility Test Opportunity').first());
     
     const accessibilityScanResults = await new AxeBuilder({ page }).analyze();
     
@@ -213,7 +270,7 @@ test.describe('Accessibility Tests', () => {
 
     await page.goto('/opportunities/opp-1');
     await page.waitForLoadState('load');
-    await page.waitForTimeout(500);
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Accessibility Test Opportunity' }), page.getByRole('heading', { level: 2, name: 'Available Sessions' }));
     
     const accessibilityScanResults = await new AxeBuilder({ page }).analyze();
     
@@ -237,22 +294,11 @@ test.describe('Accessibility Tests', () => {
       });
     });
 
-    await page.route('**/api/dashboard', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          totalOpportunities: 5,
-          totalBookings: 10,
-          totalParticipants: 8,
-          availableSlots: 25
-        }),
-      });
-    });
+    await mockAdminPanels(page);
 
     await page.goto('/admin');
     await page.waitForLoadState('load');
-    await page.waitForTimeout(500);
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Admin' }), page.locator('.admin-data-table tbody tr').first());
 
     const accessibilityScanResults = await new AxeBuilder({ page }).analyze();
 
@@ -299,7 +345,9 @@ test.describe('Accessibility Tests', () => {
     // Wait on the rendered badges, not the clock, so the scan cannot race an
     // empty table.
     await expect(page.locator('.admin-study-status').first()).toBeVisible();
-    await expect(page.locator('td.col-type .lozenge')).toHaveCount(types.length);
+    // Admin table Step 1 moved the type lozenge from its own column into the
+    // Study cell's meta line (the first column).
+    await expect(page.locator('td:first-child .lozenge')).toHaveCount(types.length);
 
     // Scope the scan to the studies table and assert specifically on contrast,
     // so an unrelated admin a11y issue elsewhere cannot mask or be blamed for a
@@ -331,14 +379,12 @@ test.describe('Accessibility Tests', () => {
         }),
       });
     });
-    await page.route('**/api/dashboard', async (route) => {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-    });
+    await mockAdminPanels(page);
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/admin');
     await page.waitForLoadState('load');
-    await page.waitForTimeout(500);
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Admin' }), page.locator('.admin-data-table td.col-actions').first());
 
     // The studies table must have reflowed to cards (a real table would carry
     // its intrinsic min-width and re-open the horizontal scroll).
@@ -769,7 +815,7 @@ test.describe('Accessibility Tests', () => {
 
     await page.goto('/admin/opportunities/new');
     await page.waitForLoadState('load');
-    await page.waitForTimeout(500);
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Untitled study' }), page.locator('main form').first());
     
     // Test form accessibility
     const accessibilityScanResults = await new AxeBuilder({ page }).analyze();
@@ -780,7 +826,7 @@ test.describe('Accessibility Tests', () => {
   test('Header navigation should be accessible', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('load');
-    await page.waitForTimeout(500);
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Browse studies' }), page.getByText('Accessibility Test Opportunity').first());
     
     // Test header specifically
     const header = page.locator('header');
@@ -805,7 +851,7 @@ test.describe('Accessibility Tests', () => {
   test('Skip link should be functional', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('load');
-    await page.waitForTimeout(500);
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Browse studies' }), page.getByText('Accessibility Test Opportunity').first());
     
     // Check if skip link exists
     const skipLink = page.locator('a.skip-link');
@@ -818,8 +864,6 @@ test.describe('Accessibility Tests', () => {
     // Skip link should be the first focusable element
     await page.keyboard.press('Tab');
     
-    // Wait a moment for CSS transition
-    await page.waitForTimeout(200);
     
     // Skip link should be visible when focused
     await expect(skipLink).toBeVisible({ timeout: 2000 });
@@ -832,8 +876,6 @@ test.describe('Accessibility Tests', () => {
     // Activate skip link
     await page.keyboard.press('Enter');
     
-    // Wait for navigation
-    await page.waitForTimeout(100);
     
     // Should focus main content
     const mainContent = page.locator('#main-content');
@@ -843,7 +885,7 @@ test.describe('Accessibility Tests', () => {
   test('Keyboard navigation should work', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('load');
-    await page.waitForTimeout(500);
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Browse studies' }), page.getByText('Accessibility Test Opportunity').first());
     
     // Tab through interactive elements
     await page.keyboard.press('Tab');
@@ -857,7 +899,7 @@ test.describe('Accessibility Tests', () => {
   test('Color contrast should meet WCAG AA standards', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('load');
-    await page.waitForTimeout(500);
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Browse studies' }), page.getByText('Accessibility Test Opportunity').first());
     
     // Check accessibility with color contrast rules
     const accessibilityScanResults = await new AxeBuilder({ page })
@@ -870,7 +912,7 @@ test.describe('Accessibility Tests', () => {
   test('Images should have alt text', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('load');
-    await page.waitForTimeout(500);
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Browse studies' }), page.getByText('Accessibility Test Opportunity').first());
     
     // Check image accessibility
     const images = page.locator('img');
@@ -887,7 +929,7 @@ test.describe('Accessibility Tests', () => {
   test('Form inputs should have labels', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('load');
-    await page.waitForTimeout(500);
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Browse studies' }), page.getByText('Accessibility Test Opportunity').first());
     
     // Check form accessibility
     const inputs = page.locator('input[type="text"], input[type="email"], input[type="number"], select, textarea');
@@ -1109,7 +1151,7 @@ test.describe('Accessibility Tests', () => {
     await page.evaluate(() => sessionStorage.setItem('loginRedirect', 'true'));
     await page.goto('/my-bookings');
     await page.waitForLoadState('load');
-    await page.waitForTimeout(500);
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'My bookings' }), page.locator('.booking-card-empty').first());
     await expect(page.locator('.booking-card-empty')).toHaveCount(2);
     const results = await new AxeBuilder({ page }).analyze();
     expectNoViolations(results, 'My Bookings (empty)');
@@ -1121,7 +1163,7 @@ test.describe('Accessibility Tests', () => {
     await page.evaluate(() => sessionStorage.setItem('loginRedirect', 'true'));
     await page.goto('/my-bookings');
     await page.waitForLoadState('load');
-    await page.waitForTimeout(500);
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'My bookings' }), page.locator('.booking-card').first());
     await expectPopulatedBookings(page);
     const results = await new AxeBuilder({ page }).analyze();
     expectNoViolations(results, 'My Bookings (populated, light)');
@@ -1145,7 +1187,7 @@ test.describe('Accessibility Tests', () => {
     });
     await page.goto('/my-bookings');
     await page.waitForLoadState('load');
-    await page.waitForTimeout(500);
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'My bookings' }), page.locator('.booking-card').first());
     await expect(page.locator('body.theme-dark')).toHaveCount(1);
     await expectPopulatedBookings(page);
     /* Remove the decorative background before scanning. It is a fixed,
@@ -1158,7 +1200,21 @@ test.describe('Accessibility Tests', () => {
     await page.evaluate(() => {
       document.querySelectorAll('.slow-neural-background').forEach((node) => node.remove());
     });
-    await page.waitForTimeout(200);
+    /* The same reason, second instance. Admin table Step 1 (2026-09-23)
+       deleted the `body.theme-dark .my-bookings-page { background: #030305 }`
+       fill cited above and moved the dark ground - #030305 plus a faint
+       orange bloom and 24px grid - onto the BODY as a `background-image`
+       (search "painted on the BODY" in _themes.css). axe will not judge
+       contrast over a background image, so it put 11 booking nodes in
+       `incomplete` (4 interleaved runs against main). Removing the image
+       leaves the #030305 fill it sits on. Measured by hand before this line
+       was added (recorded in the MR): all 11 nodes stay >= 5.37:1 against
+       the LIGHTEST colour the image can reach (bloom peak plus both grid
+       lines, read from the computed gradient stops), so this does not hide a
+       failure among them. */
+    await page.evaluate(() => {
+      document.body.style.backgroundImage = 'none';
+    });
     const results = await new AxeBuilder({ page }).analyze();
     expectNoViolations(results, 'My Bookings (populated, dark)');
     expectBookingContrastActuallyMeasured(results, 'My Bookings (populated, dark)');
@@ -1261,7 +1317,7 @@ test.describe('Accessibility Tests', () => {
     await page.evaluate(() => sessionStorage.setItem('loginRedirect', 'true'));
     await page.goto('/feedback');
     await page.waitForLoadState('load');
-    await page.waitForTimeout(500);
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Feedback' }), page.locator('main form').first());
     const results = await new AxeBuilder({ page }).analyze();
     expect(results.violations).toEqual([]);
   });
@@ -1290,7 +1346,7 @@ test.describe('Accessibility Tests', () => {
     await page.evaluate(() => sessionStorage.setItem('loginRedirect', 'true'));
     await page.goto('/admin/settings');
     await page.waitForLoadState('load');
-    await page.waitForTimeout(500);
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Settings' }), page.getByRole('heading', { level: 2, name: 'Profile' }));
     const results = await new AxeBuilder({ page }).analyze();
     expect(results.violations).toEqual([]);
   });
@@ -1415,7 +1471,7 @@ test.describe('Accessibility Tests', () => {
         body: JSON.stringify({ id: 'admin-1', name: 'Admin User', email: 'admin@example.com', role: 'researcher_admin' }),
       });
     });
-    await page.route('**/api/dashboard', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
+    await mockAdminPanels(page);
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/admin');
@@ -1468,7 +1524,9 @@ test.describe('Accessibility Tests', () => {
           body: JSON.stringify({ id: 'admin-1', name: 'Admin User', email: 'admin@example.com', role: 'researcher_admin' }),
         });
       });
-      await page.route('**/api/dashboard', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
+      // The fixture panels first, so this test's own long approval (registered
+      // after, so matched first) replaces the fixture's approvals.
+      await mockAdminPanels(page);
       await page.route('**/api/bookings/pending-approvals', (route) =>
         route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([longApproval]) }));
 
@@ -1572,7 +1630,9 @@ test.describe('Accessibility Tests', () => {
     await page.waitForLoadState('load');
     await expect(page.locator('body.theme-dark')).toHaveCount(1);
     await expect(page.locator('.admin-study-status').first()).toBeVisible();
-    await expect(page.locator('td.col-type .lozenge')).toHaveCount(types.length);
+    // Admin table Step 1 moved the type lozenge from its own column into the
+    // Study cell's meta line (the first column).
+    await expect(page.locator('td:first-child .lozenge')).toHaveCount(types.length);
 
     const scan = await new AxeBuilder({ page })
       .include('.admin-data-table')
@@ -1581,7 +1641,7 @@ test.describe('Accessibility Tests', () => {
     // A scan that resolves nothing reports zero violations too - assert it
     // actually measured something before trusting the empty violations list.
     // Three pre-existing, unrelated exceptions on this table's markup, none
-    // touched by row 23 (the TYPE lozenges, td.col-type .lozenge, which DO
+    // touched by row 23 (the TYPE lozenges, now td:first-child .lozenge, which DO
     // get fully measured with zero incompletes - this filter would not hide
     // a regression there): the sort-caret and kebab icons are decorative
     // glyphs axe cannot contrast-check at all ("non-text characters"), and

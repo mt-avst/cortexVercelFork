@@ -71,9 +71,10 @@ const renderAdmin = () =>
     </MemoryRouter>
   );
 
+// Anchor on "Progress" - a header only the studies table has.
 const findStudiesTable = async (): Promise<HTMLElement> => {
-  const typeHeader = await screen.findByRole('columnheader', { name: /^type/i });
-  const table = typeHeader.closest('table');
+  const progressHeader = await screen.findByRole('columnheader', { name: /^progress$/i });
+  const table = progressHeader.closest('table');
   expect(table).not.toBeNull();
   return table as HTMLElement;
 };
