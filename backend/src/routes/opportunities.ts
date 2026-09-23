@@ -52,7 +52,7 @@ import { parseScreenerAnswers, evaluateScreener } from '../../../shared/screener
 import { assertScreenerPassed, getScreenerStatus, upsertScreenerResponse, hasScreener, SCREENER_NONE_TO_ANSWER } from '../services/screener';
 import type { StudyStep } from '../../../shared/firsthand/contract';
 import { toStudySteps, type InlineStudy } from '../../../shared/firsthand/inline-study';
-import { stepKeysAreComplete } from '../../../shared/firsthand/step-identity';
+import { stepKeysAreComplete, stepKeyOf, stepIdFor } from '../../../shared/firsthand/step-identity';
 import {
   QUESTION_CARRYING_TYPES,
   runsNativeSurvey
@@ -4679,8 +4679,29 @@ router.post('/:id/duplicate', requireAdmin, opportunityWriteLimiter, asyncHandle
     const originalStudy = await getStudyById(opp.firsthand_study_id);
 
     if (originalStudy) {
+      const newStudyId = `study_${crypto.randomUUID()}`;
+
+      // Re-prefix every step id onto the NEW study's namespace, keeping the
+      // ORIGINAL's key - the id is always `${studyId}_${key}` (see
+      // shared/firsthand/step-identity.ts), so copying `originalStudy.steps`
+      // unchanged would leave the new study's rows still carrying the OLD
+      // study's id as their prefix. `stepKeyOf` then fails to recover a key
+      // for any of them under the new study id, `studyRoundTripsCleanly`
+      // refuses the study as unrepresentable, and the duplicate opens
+      // read-only - defeating the point of duplicating it to edit for a
+      // repeat run. The key itself is safe to keep verbatim: two studies
+      // sharing a key is fine, only a shared STORED id (study + key) is not.
+      // A step whose id does not belong to the original study's own
+      // namespace (no prefix match - a legacy/positional id) is left
+      // unchanged, same as the frontend's own round-trip check would treat
+      // it: nothing here can safely re-mint an identity it cannot parse.
+      const steps = originalStudy.steps.map((step) => {
+        const key = stepKeyOf(step.step_id, originalStudy.study.id);
+        return key ? { ...step, step_id: stepIdFor(newStudyId, key) } : step;
+      });
+
       const stored = await createStudy({
-        id: `study_${crypto.randomUUID()}`,
+        id: newStudyId,
         title: originalStudy.study.title,
         intro_text: originalStudy.study.intro_text,
         consent_text: originalStudy.study.consent_text,
@@ -4697,7 +4718,7 @@ router.post('/:id/duplicate', requireAdmin, opportunityWriteLimiter, asyncHandle
         copied_from_study_id: originalStudy.study.id,
         consent_template_id: originalStudy.study.consent_template_id,
         consent_template_version: originalStudy.study.consent_template_version,
-        steps: originalStudy.steps
+        steps
       });
       duplicatedStudyId = stored.study.id;
     } else {
