@@ -9,7 +9,7 @@ import Admin from '../Admin';
  * Row 6: four seeded PUBLISHED studies fail their own publish readiness
  * (zero questions, no external link, two moderated with no meeting location
  * and zero slots), and the dashboard showed every one of them exactly like a
- * working study. This pins the one state word - "Published, not working" -
+ * working study. This pins the one state word - "Broken" (#157) -
  * on the dashboard row, for the two cases this signal CAN prove from the
  * fields the dashboard's own list response already carries: a moderated
  * study with no venue or no slot, and a hand-off with no link and nothing
@@ -104,8 +104,15 @@ describe('Admin dashboard row: published but not working (row 6)', () => {
     const row = (await within(table).findByText('Test the new Jira board view')).closest('tr');
     expect(row).not.toBeNull();
 
-    expect(within(row as HTMLElement).getByText('Published, not working')).toBeInTheDocument();
+    const label = within(row as HTMLElement).getByText('Broken');
     expect(within(row as HTMLElement).queryByText('PUBLISHED')).not.toBeInTheDocument();
+
+    // #157: the fill and glyph are the Draft pill's, so "published" is said
+    // in words - hidden for a screen reader, and as the hover title.
+    const pill = label.closest('.admin-study-status') as HTMLElement;
+    expect(pill.textContent).toBe('Published, Broken');
+    expect(within(pill).getByText('Published,').className).toBe('visually-hidden');
+    expect(label).toHaveAttribute('title', 'Published, not working');
   });
 
   it('shows the ordinary status word for a published study that is actually ready', async () => {
@@ -141,7 +148,7 @@ describe('Admin dashboard row: published but not working (row 6)', () => {
     expect(row).not.toBeNull();
 
     expect(within(row as HTMLElement).getByText('PUBLISHED')).toBeInTheDocument();
-    expect(within(row as HTMLElement).queryByText('Published, not working')).not.toBeInTheDocument();
+    expect(within(row as HTMLElement).queryByText('Broken')).not.toBeInTheDocument();
   });
 
   it('never fires on a draft, however empty its content is', async () => {
@@ -165,6 +172,6 @@ describe('Admin dashboard row: published but not working (row 6)', () => {
     expect(row).not.toBeNull();
 
     expect(within(row as HTMLElement).getByText('DRAFT')).toBeInTheDocument();
-    expect(within(row as HTMLElement).queryByText('Published, not working')).not.toBeInTheDocument();
+    expect(within(row as HTMLElement).queryByText('Broken')).not.toBeInTheDocument();
   });
 });

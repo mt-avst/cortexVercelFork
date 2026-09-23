@@ -69,7 +69,7 @@
   border: 1px solid var(--status-warning);
 }
 
-/* "Published, not working" (row 6): a published study that would itself fail
+/* "Broken" (row 6, worded by #157): a published study that would itself fail
    publish readiness. Reuses the same warning treatment as the Draft pill -
    this is also a state the author needs to act on, not a neutral fact like
    the ordinary Published pill above - so a reader who has learned what the

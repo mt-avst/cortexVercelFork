@@ -130,8 +130,25 @@ export const deriveStepStatus = ({
  * strip each said something different about it, or nothing at all. One
  * spelling, used everywhere the state is shown, so it cannot drift the way the
  * three surfaces already had.
+ *
+ * "Broken" rather than the original "Published, not working" (#157): the
+ * long form needed 147px in a Status pill that leaves its label 53px beside
+ * the warning glyph, so the dashboard read "PUBLIS..." - and "Not working"
+ * (79px) still did not fit. "Broken" measures 45px.
+ *
+ * The pill's amber fill and glyph are the DRAFT pill's, so they do not say
+ * "published" - and published is what makes this urgent: participants can
+ * see the study. Every surface that shows this label therefore also carries
+ * PUBLISHED_NOT_WORKING_PREFIX, visually hidden, for a screen reader, and
+ * PUBLISHED_NOT_WORKING_DESCRIPTION as its hover title.
  */
-export const PUBLISHED_NOT_WORKING_LABEL = 'Published, not working';
+export const PUBLISHED_NOT_WORKING_LABEL = 'Broken';
+
+/** Read before the label by a screen reader: "Published, Broken". */
+export const PUBLISHED_NOT_WORKING_PREFIX = 'Published, ';
+
+/** The full meaning, for the pill's hover `title`. */
+export const PUBLISHED_NOT_WORKING_DESCRIPTION = 'Published, not working';
 
 /**
  * What `isPublishedButNotWorking` needs to know, kept deliberately narrower
@@ -178,7 +195,7 @@ export interface PublishedReadinessSignal {
  * session the study has. Review loads the full set with no such window
  * (`getSessions(opportunityId)`) and counts all of it. A live session or
  * interview whose only slots ended more than 14 days ago is therefore
- * `hasBookableSlot: false` here (dashboard reads "Published, not working")
+ * `hasBookableSlot: false` here (dashboard reads "Broken")
  * while Review, seeing the same old slots, reads `hasBookableSlot: true`
  * and shows no blocker at all - the opposite verdict on the SAME data, from
  * the SAME function, for the SAME study. Not re-architected here: the

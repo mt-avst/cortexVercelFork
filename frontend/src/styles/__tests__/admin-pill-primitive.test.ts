@@ -61,8 +61,9 @@ describe('admin studies table pill primitive (#142)', () => {
   });
 
   it('the status label renders inside its own truncating span, not the pill directly', () => {
-    // Code review HIGH 2 (#142): PUBLISHED_NOT_WORKING_LABEL already
-    // overflowed this fixed-width cell on main; `justify-content: center`
+    // Code review HIGH 2 (#142): PUBLISHED_NOT_WORKING_LABEL ("Published, not
+    // working" until #157, "Broken" now, which fits) overflowed this
+    // fixed-width cell on main; `justify-content: center`
     // on the shared primitive turned that overflow into glyph-on-glyph
     // overlap with the Type lozenge instead of main's harmless rightward
     // spill. `text-overflow: ellipsis` does not paint on the flex pill's
@@ -75,11 +76,14 @@ describe('admin studies table pill primitive (#142)', () => {
     // tag fails on any attribute added beside the class - which is a pin
     // reporting on its own spelling rather than on the structure it is here to
     // hold.
-    expect(ADMIN_TSX).toMatch(/<span className="admin-study-status__label"[^>]*>/);
-    // The hover affordance for the truncated label. The full string is in the
-    // DOM either way, so a screen reader announces it regardless; this is the
-    // sighted-user half, and it must carry the SAME value the span renders.
-    expect(ADMIN_TSX).toMatch(/<span className="admin-study-status__label" title=\{statusLabel\}>\s*\{statusLabel\}\s*<\/span>/);
+    expect(ADMIN_TSX).toMatch(/<span\s+className="admin-study-status__label"[^>]*>/);
+    // The hover title. It carries the label's own value, except for a broken
+    // published study, where it carries the full meaning the short "Broken"
+    // cannot (#157) - the pill's fill and glyph are the Draft pill's and do
+    // not say "published". Behaviour is pinned in Admin.readiness-state.test.
+    expect(ADMIN_TSX).toMatch(
+      /<span\s+className="admin-study-status__label"\s+title=\{notWorking \? PUBLISHED_NOT_WORKING_DESCRIPTION : statusLabel\}\s*>\s*\{statusLabel\}\s*<\/span>/
+    );
     expect(CSS).toMatch(
       /\.admin-study-status__label \{[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap;/
     );
