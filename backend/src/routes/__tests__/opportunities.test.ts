@@ -6082,6 +6082,166 @@ describe('Opportunities API', () => {
     });
 
     /**
+     * cto/AdaptaLabs#160. `getStudyById` throwing (a genuine runtime-pool
+     * outage) used to 500 the WHOLE duplicate request, including the
+     * opportunity-row copy that would have worked fine without a linked
+     * study. Falls back the same way the verified-stale-link branch above
+     * does, but logged at `error` - not `warn` like that branch - because a
+     * thrown error is a real failure, not a verified-gone link.
+     */
+    it('falls back to a plain duplicate and logs at error, when getStudyById throws', async () => {
+      const error = jest.spyOn(logger, 'error').mockImplementation(() => logger);
+
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] }); // ownership check
+      mockQuery.mockResolvedValueOnce({
+        rows: [{
+          id: 'native-opp-7',
+          type: 'survey',
+          title: 'A repeat survey',
+          delivery_mode: 'native',
+          firsthand_study_id: 'study_outage',
+          screener: null,
+          target_roles: null
+        }]
+      }); // original opportunity
+      const outage = new Error('pool outage');
+      mockGetStudyById.mockRejectedValueOnce(outage);
+      mockQuery.mockResolvedValueOnce({
+        rows: [{
+          id: 'native-opp-8',
+          type: 'survey',
+          delivery_mode: 'external',
+          firsthand_study_id: null,
+          created_at: new Date(),
+          updated_at: new Date()
+        }]
+      }); // duplicate INSERT ... RETURNING *
+
+      const response = await request(listening(app))
+        .post('/api/opportunities/native-opp-7/duplicate')
+        .expect(201);
+
+      expect(mockCreateStudy).not.toHaveBeenCalled();
+      expect(response.body.delivery_mode).toBe('external');
+      expect(response.body.firsthand_study_id).toBeNull();
+
+      // THE ACTUAL WRITE, not the mocked read-back - see the stale-link test
+      // above for why the response body alone can't catch a route that
+      // bound the wrong values.
+      const insert = mockQuery.mock.calls.find((call: unknown[]) =>
+        String(call[0]).includes('INSERT INTO opportunities')
+      );
+      const sql = String(insert![0]);
+      const columns = sql
+        .slice(sql.indexOf('('), sql.indexOf(') VALUES'))
+        .split(',')
+        .map((column: string) => column.replace(/[()\s]/g, ''));
+      const values = insert![1] as unknown[];
+      const bound = (column: string) => values[columns.indexOf(column)];
+
+      expect(bound('delivery_mode')).toBe('external');
+      expect(bound('firsthand_study_id')).toBeNull();
+
+      expect(error).toHaveBeenCalledWith(
+        expect.stringMatching(/failed to clone/i),
+        expect.objectContaining({
+          error: String(outage),
+          opportunityId: 'native-opp-7',
+          firsthandStudyId: 'study_outage'
+        })
+      );
+
+      error.mockRestore();
+    });
+
+    /**
+     * cto/AdaptaLabs#160. `createStudy` runs `validateSteps` before its own
+     * try/catch, so a stored study whose steps cannot satisfy it today used
+     * to throw a bare Error straight out of the route and 500 the WHOLE
+     * duplicate request. Same fallback and same error-level logging as the
+     * `getStudyById`-throws case above.
+     */
+    it('falls back to a plain duplicate and logs at error, when createStudy throws', async () => {
+      const error = jest.spyOn(logger, 'error').mockImplementation(() => logger);
+
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] }); // ownership check
+      mockQuery.mockResolvedValueOnce({
+        rows: [{
+          id: 'native-opp-9',
+          type: 'survey',
+          title: 'A repeat survey',
+          delivery_mode: 'native',
+          firsthand_study_id: 'study_unstorable',
+          screener: null,
+          target_roles: null
+        }]
+      }); // original opportunity
+      mockGetStudyById.mockResolvedValueOnce({
+        study: {
+          id: 'study_unstorable',
+          title: 'A repeat survey',
+          intro_text: 'Intro',
+          consent_text: 'Consent',
+          kind: 'survey' as const,
+          estimated_duration_minutes: undefined,
+          status: 'launched' as const,
+          owner_user_id: 'test-user-id',
+          copied_from_study_id: null,
+          created_at: '2026-08-16T10:00:00.000Z',
+          updated_at: '2026-08-16T10:00:00.000Z',
+        },
+        steps: originalStudySteps
+      });
+      const validationFailure = new Error('steps do not validate');
+      mockCreateStudy.mockRejectedValueOnce(validationFailure);
+      mockQuery.mockResolvedValueOnce({
+        rows: [{
+          id: 'native-opp-10',
+          type: 'survey',
+          delivery_mode: 'external',
+          firsthand_study_id: null,
+          created_at: new Date(),
+          updated_at: new Date()
+        }]
+      }); // duplicate INSERT ... RETURNING *
+
+      const response = await request(listening(app))
+        .post('/api/opportunities/native-opp-9/duplicate')
+        .expect(201);
+
+      expect(response.body.delivery_mode).toBe('external');
+      expect(response.body.firsthand_study_id).toBeNull();
+
+      // THE ACTUAL WRITE, not the mocked read-back - see the stale-link test
+      // above for why the response body alone can't catch a route that
+      // bound the wrong values.
+      const insert = mockQuery.mock.calls.find((call: unknown[]) =>
+        String(call[0]).includes('INSERT INTO opportunities')
+      );
+      const sql = String(insert![0]);
+      const columns = sql
+        .slice(sql.indexOf('('), sql.indexOf(') VALUES'))
+        .split(',')
+        .map((column: string) => column.replace(/[()\s]/g, ''));
+      const values = insert![1] as unknown[];
+      const bound = (column: string) => values[columns.indexOf(column)];
+
+      expect(bound('delivery_mode')).toBe('external');
+      expect(bound('firsthand_study_id')).toBeNull();
+
+      expect(error).toHaveBeenCalledWith(
+        expect.stringMatching(/failed to clone/i),
+        expect.objectContaining({
+          error: String(validationFailure),
+          opportunityId: 'native-opp-9',
+          firsthandStudyId: 'study_unstorable'
+        })
+      );
+
+      error.mockRestore();
+    });
+
+    /**
      * cto/AdaptaLabs#156 review pass 1, MEDIUM 2. The compensating
      * `deleteStudyUnchecked` on a failed opportunity INSERT - studies and
      * opportunities sit on different pools, so this is the only thing that
