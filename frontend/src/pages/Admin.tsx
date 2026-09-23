@@ -18,7 +18,9 @@ import {
 } from '../utils/adminDashboard';
 import {
   isPublishedButNotWorking,
-  PUBLISHED_NOT_WORKING_LABEL
+  PUBLISHED_NOT_WORKING_LABEL,
+  PUBLISHED_NOT_WORKING_PREFIX,
+  PUBLISHED_NOT_WORKING_DESCRIPTION
 } from '../lib/opportunity-authoring/step-status';
 import { logger } from '../utils/logger';
 import PendingApprovals from '../components/PendingApprovals';
@@ -970,19 +972,17 @@ const Admin: React.FC = () => {
                                   }`}
                                 >
                                   {/*
-                                    The label is clipped to the pill, and above
-                                    1220px the long one truncates - to
-                                    "PUBLIS..." beside the glyph - so without
-                                    more, a broken published study and a
-                                    healthy one differ by a few letters in an
-                                    identically coloured pill. The distinction therefore
-                                    lives OUTSIDE the label, where truncation
-                                    cannot reach it (cto/AdaptaLabs#149): an
-                                    amber fill, and a warning glyph that does
-                                    not shrink. Not colour alone and not the
-                                    word. The full string stays in the DOM for
-                                    a screen reader, and the `title` covers
-                                    hover; the glyph is decorative beside them.
+                                    A broken published study is marked OUTSIDE
+                                    its label too (cto/AdaptaLabs#149): an amber
+                                    fill and a warning glyph that does not
+                                    shrink, so it is never the word alone. The
+                                    label is "Broken" since #157 and fits the
+                                    pill, but the fill and glyph are the Draft
+                                    pill's and do not say "published" - so a
+                                    visually hidden prefix gives a screen reader
+                                    "Published, Broken", and the `title` gives
+                                    hover the full meaning. The glyph is
+                                    decorative beside them.
                                   */}
                                   {notWorking && (
                                     <Icon
@@ -992,7 +992,13 @@ const Admin: React.FC = () => {
                                       className="admin-study-status__glyph"
                                     />
                                   )}
-                                  <span className="admin-study-status__label" title={statusLabel}>
+                                  {notWorking && (
+                                    <span className="visually-hidden">{PUBLISHED_NOT_WORKING_PREFIX}</span>
+                                  )}
+                                  <span
+                                    className="admin-study-status__label"
+                                    title={notWorking ? PUBLISHED_NOT_WORKING_DESCRIPTION : statusLabel}
+                                  >
                                     {statusLabel}
                                   </span>
                                 </span>

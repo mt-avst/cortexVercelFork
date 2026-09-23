@@ -2853,7 +2853,7 @@ const OpportunityForm: React.FC = () => {
    * every shape that can produce it), but not unreachable FOREVER, the day a
    * code is added to one without the other - used to `.flatMap` straight
    * past silently. That silently shrank `publishProblems`, which is exactly
-   * what `shareLinkStartable` and `ReviewStep`'s "Published, not working"
+   * what `shareLinkStartable` and `ReviewStep`'s "Broken"
    * pill gate on: a code that fails to resolve would have RE-EXPOSED the
    * share link and hidden the pill on a study that is, by the server's own
    * rule, not actually ready. `?? tabs[0]` sends an unresolvable problem to
@@ -6230,6 +6230,14 @@ const OpportunityForm: React.FC = () => {
                         onEdit={goToStepAndFocus}
                         isEdit={isEdit}
                         status={formData.status}
+                        // ponytail: storedFormRef only moves forward through
+                        //   loadOpportunity on the edit path, so if a save succeeds
+                        //   and its re-read then fails, Review's alert heading keeps
+                        //   the pre-save status until the next successful load (a
+                        //   "Failed to load study" banner shows meanwhile). Upgrade:
+                        //   set storedFormRef's status from the PATCH response before
+                        //   the reload. Same staleness autosaveApplies already has.
+                        storedStatus={storedFormRef.current?.status ?? null}
                         onStatusChange={(status) => handleInputChange('status', status)}
                         statusError={validationErrors.status}
                         shareLink={

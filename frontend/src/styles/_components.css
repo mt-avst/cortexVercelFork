@@ -14247,9 +14247,10 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
   box-sizing: border-box;
 }
 
-/* The status pill is the one whose label is not a fixed short word -
-   `PUBLISHED_NOT_WORKING_LABEL` ("Published, not working") already
-   overflowed this fixed-width cell on main. `justify-content: center` on
+/* The status pill is the one whose label is not a fixed short word.
+   `PUBLISHED_NOT_WORKING_LABEL` ("Published, not working" until #157)
+   overflowed this fixed-width cell on main; "Broken" fits, so this clip is
+   now the guard for the next long label. `justify-content: center` on
    the shared primitive turned that overflow into 32px of glyph-on-glyph
    overlap with the Type column's lozenge (#142 code review, HIGH 2) -
    centred overflow spills both ways, where main's plain inline-block only
@@ -14353,12 +14354,15 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
   color: var(--text-muted);
 }
 
-/* "Published, not working" (cto/AdaptaLabs#149). The label truncates above
-   1220px - to "PUBLIS..." once the glyph takes its share - so the mark that
-   says "broken" cannot be the word: it is the draft pill's amber fill plus a warning glyph ahead of the
-   label. Declared AFTER `--published` so that equal-specificity rule loses -
-   the element carries both classes. The column is NOT widened for this; the
-   next long label would re-break it. */
+/* The published-but-broken pill (cto/AdaptaLabs#149). The label used to
+   truncate above 1220px - "Published, not working" read "PUBLIS..." once the
+   glyph took its share - so the mark could not rely on the word alone: it is
+   the draft pill's amber fill plus a warning glyph ahead of the label. The
+   label is "Broken" since #157 and fits in full. The fill and glyph are the
+   Draft pill's, so they do not say "published": a visually hidden prefix
+   and the label's `title` do (Admin.tsx). Declared AFTER `--published` so
+   that equal-specificity rule loses - the element carries both classes. The
+   column is NOT widened for this; a longer label would truncate again. */
 .admin-study-status--not-working {
   background: color-mix(in srgb, var(--status-warning) 18%, transparent);
   border-color: color-mix(in srgb, var(--status-warning) 45%, transparent);
