@@ -119,6 +119,53 @@ check-release-will-deploy:
       when: never
     - if: '$CI_COMMIT_REF_NAME =~ $PROD_REF'
 
+# In-repo mitigation for cto/AdaptaLabs#158 (kept open - the real fix belongs
+# to the Kubera platform component, this only makes the failure visible here).
+#
+# WHAT #158 FOUND. `kubera-playground-frontend` logged "Error lines received
+# while fetching: error: failed to push some refs" as a WARNING, immediately
+# followed it with "Pushed changes to the remote repository", and exited 0.
+# ArgoCD never got the new config, and every pipeline surface - the job, the
+# `trigger-deployment-prod` bridge below, the parent pipeline - reported
+# green. The only signal was the served revision failing to move.
+#
+# WHY THIS CAN GATE ON trigger-deployment-prod AT ALL. It is a `strategy:
+# depend` bridge job: it does not itself finish until the downstream dynamic
+# deploy pipeline finishes, and a job that `needs:` it waits for that same
+# resolution. So `verify-deploy` genuinely starts only once the real
+# kubera-playground-backend/-frontend deploy jobs have run - "green" or not.
+#
+# WHY IT DOES NOT FAIL ON A NON-RELEASING MERGE (ci:/docs:/refactor:/etc).
+# `trigger-deployment-prod` runs unconditionally on every push to main - it
+# does not check whether a release was cut. Its downstream dynamic pipeline
+# (`generate-environment-jobs`) sets `APP_VERSION` from
+# `$SEMREL_INFO_NEXT_VERSION` when a release IS due, and falls back to
+# `$SEMREL_INFO_LAST_VERSION` - the PREVIOUS release - when it is not. A
+# non-releasing merge therefore still runs a "successful" deploy, but it
+# redeploys the old image unchanged, and $CI_COMMIT_SHA of THIS pipeline never
+# appears anywhere. scripts/verify-deploy.mjs reads the same
+# SEMREL_INFO_NEXT_VERSION dotenv check-release-will-deploy above reads (from
+# semantic-release-info, needed here the same way) and skips the poll
+# entirely when it is empty - see releaseWillDeploy() and its test file for
+# both arms.
+#
+# Image: node:20-alpine, same as lint/test-base - only `node`'s global fetch
+# is needed, no curl, no git.
+verify-deploy:
+  stage: production
+  image: registry.hub.docker.com/library/node:20.20.2-alpine3.22
+  needs:
+    - job: trigger-deployment-prod
+    - job: semantic-release-info
+      artifacts: true
+  interruptible: false
+  script:
+    - node scripts/verify-deploy.mjs
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: never
+    - if: '$CI_COMMIT_REF_NAME =~ $PROD_REF'
+
 security_reports_gate:
   timeout: 5m
 
