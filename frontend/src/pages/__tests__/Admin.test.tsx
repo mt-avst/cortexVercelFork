@@ -4,7 +4,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import Admin from '../Admin';
-import { getDashboardStats, getOpportunities } from '../../api/client';
+import { getDashboardStats, getOpportunities, duplicateOpportunity } from '../../api/client';
 
 // Admin is an admin-gated, context-heavy page. It gates on `loading || !initialAuthCheck`
 // (Admin.tsx:225) BEFORE the user/role checks, so the auth mock MUST provide
@@ -364,6 +364,58 @@ describe('Admin page', () => {
     const customContentEl = document.getElementById('modal-custom-content');
     expect(customContentEl).not.toBeNull();
     expect(customContentEl).toHaveTextContent(/recordings and transcripts/i);
+  });
+
+  /**
+   * cto/AdaptaLabs#161. The backend falls back to a plain, questionless
+   * duplicate (no error) when the linked FirstHand study is gone or fails to
+   * clone, flagging it with `study_copy_failed` on the 201 body. Before this
+   * fix `handleDuplicate` just reloaded the list - nothing told the
+   * researcher their copy has no questions until they opened it.
+   */
+  it('warns when a duplicate comes back with study_copy_failed', async () => {
+    vi.mocked(duplicateOpportunity).mockResolvedValueOnce({
+      ...fixtures.opportunity,
+      id: 'opp-2',
+      study_copy_failed: true,
+    } as Awaited<ReturnType<typeof duplicateOpportunity>>);
+    renderAdmin();
+    await screen.findByText('Checkout usability test');
+
+    fireEvent.click(screen.getByRole('button', { name: /Actions for Checkout usability test/i }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Copy' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/could not be copied/i);
+    expect(alert).toHaveClass('alert-warning');
+  });
+
+  /**
+   * Control for the test above: a duplicate that actually got its questions
+   * (no `study_copy_failed` in the response) shows no warning at all - proves
+   * the banner is driven by the flag, not shown on every copy regardless.
+   */
+  it('shows no warning when a duplicate carries its questions across', async () => {
+    vi.mocked(duplicateOpportunity).mockResolvedValueOnce({
+      ...fixtures.opportunity,
+      id: 'opp-2',
+    } as Awaited<ReturnType<typeof duplicateOpportunity>>);
+    renderAdmin();
+    await screen.findByText('Checkout usability test');
+
+    fireEvent.click(screen.getByRole('button', { name: /Actions for Checkout usability test/i }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Copy' }));
+
+    // Anchored on the SECOND getOpportunities call (the reload inside
+    // handleDuplicate), not just on duplicateOpportunity having been called -
+    // the banner decision runs after BOTH awaits in handleDuplicate resolve,
+    // so waiting on duplicateOpportunity alone lets this assertion run before
+    // an always-show mutation would have set the banner, passing for the
+    // wrong reason.
+    await waitFor(() => {
+      expect(vi.mocked(getOpportunities)).toHaveBeenCalledTimes(2);
+    });
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('redirects a non-admin user to the home route', () => {
