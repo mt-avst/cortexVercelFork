@@ -41,18 +41,6 @@ import { formatStudyDate, formatClockTime, formatTimeZoneLabel } from '../utils/
  * sorts on it, and the Sort-by control offers exactly what the headers do. */
 type SortField = 'title' | 'created_at' | 'status';
 
-/** What the Progress column shows for one study (was two columns, Recruitment
- * and Clicks). A study with sessions shows booked against capacity, exactly as
- * the Recruitment cell did. A published or closed study of a type that never
- * has sessions shows its click count, which is the only fill signal that type
- * carries today. Everything else - a draft, or a session type with no sessions
- * yet - has nothing honest to show and renders the muted en dash. */
-const SESSIONLESS_TYPES: ReadonlySet<Opportunity['type']> = new Set<Opportunity['type']>([
-  'poll',
-  'survey',
-  'question',
-  'unmoderated',
-]);
 
 const Admin: React.FC = () => {
   const { user, loading, initialAuthCheck } = useAuth();
@@ -794,6 +782,40 @@ const Admin: React.FC = () => {
                         Clear filters
                       </button>
                     )}
+                    {/* #131: wherever a sortable header is out of view, the Sort-by
+                        control is the way to reach its sort - below 1280px, where
+                        the Created column is hidden, and below 1024px, where the
+                        card view hides <thead> altogether (see the ROW 14 comment
+                        in _components.css). It offers exactly the fields the
+                        headers do. This is not a second sort mechanism: it reads
+                        and writes the SAME sortField/sortDirection state through
+                        the SAME handleSort the header buttons use, so the two
+                        surfaces can never disagree. Hidden from 1280px up by
+                        .admin-card-sort's own default rule in _components.css.
+                        It sits at the right end of the quick-filters row, not on
+                        a row of its own above the table, where at 1024-1279px it
+                        stranded ~48px of height with nothing beside it. Rendered
+                        only when there are rows to sort. */}
+                    {!loadingOpportunities && !error && sortedOpportunities.length > 0 && (
+                      <div className="admin-card-sort" role="group" aria-label="Sort studies">
+                        <label htmlFor="cardSortField" className="form-label mb-0">Sort by</label>
+                        <select
+                          id="cardSortField"
+                          className="form-select"
+                          value={sortField}
+                          onChange={(e) => handleSort(e.target.value as SortField)}
+                        >
+                          <option value="title">Study</option>
+                          <option value="status">Status</option>
+                          <option value="created_at">Created</option>
+                        </select>
+                        <button type="button" className="admin-card-sort-dir" onClick={() => handleSort(sortField)}>
+                          <span className="visually-hidden">Sort direction: </span>
+                          {sortDirection === 'asc' ? 'Ascending' : 'Descending'}
+                          <SortCaret active direction={sortDirection} />
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {/* Error State */}
@@ -841,35 +863,6 @@ const Admin: React.FC = () => {
 
                   {/* Research Studies Table */}
                   {!loadingOpportunities && !error && sortedOpportunities.length > 0 && (
-                    <>
-                    {/* #131: wherever a sortable header is out of view, this is
-                        the way to reach its sort - below 1280px, where the Created
-                        column is hidden, and below 1024px, where the card view
-                        hides <thead> altogether (see the ROW 14 comment in
-                        _components.css). It offers exactly the fields the headers
-                        do. This is not a second sort mechanism: it reads and
-                        writes the SAME sortField/sortDirection state through the
-                        SAME handleSort the header buttons use, so the two
-                        surfaces can never disagree. Hidden from 1280px up by
-                        .admin-card-sort's own default rule in _components.css. */}
-                    <div className="admin-card-sort" role="group" aria-label="Sort studies">
-                      <label htmlFor="cardSortField" className="form-label mb-0">Sort by</label>
-                      <select
-                        id="cardSortField"
-                        className="form-select"
-                        value={sortField}
-                        onChange={(e) => handleSort(e.target.value as SortField)}
-                      >
-                        <option value="title">Study</option>
-                        <option value="status">Status</option>
-                        <option value="created_at">Created</option>
-                      </select>
-                      <button type="button" className="admin-card-sort-dir" onClick={() => handleSort(sortField)}>
-                        <span className="visually-hidden">Sort direction: </span>
-                        {sortDirection === 'asc' ? 'Ascending' : 'Descending'}
-                        <SortCaret active direction={sortDirection} />
-                      </button>
-                    </div>
                     <div className="table-responsive" style={{
                       minHeight: '400px', 
                       overflow: 'visible', 
@@ -922,9 +915,14 @@ const Admin: React.FC = () => {
                         <tbody>
                           {sortedOpportunities.map((opportunity) => {
                             const recruitment = getRecruitment(opportunity);
-                            const showsClicks =
-                              opportunity.status !== 'draft' && SESSIONLESS_TYPES.has(opportunity.type);
-                            const clicks = opportunity.clicks_total ?? 0;
+                            // Progress: booked / capacity when the study has sessions
+                            // (below); otherwise its click count - but only when the
+                            // server actually sent one. The list endpoint withholds
+                            // `clicks_total` (undefined, not 0) for every type it does
+                            // not count clicks for - today everything but poll, survey
+                            // and unmoderated - so a missing count is "nothing to
+                            // show", never "0 clicks". Drafts show nothing either.
+                            const clicks = opportunity.status !== 'draft' ? opportunity.clicks_total : undefined;
                             const milestone = getNextMilestone(opportunity, now);
                             const sessionDayLabel =
                               milestone?.kind === 'session' ? relativeDayLabel(milestone.date, now) : null;
@@ -1059,9 +1057,10 @@ const Admin: React.FC = () => {
                               </td>
                               {/* Progress: booked / capacity across the study's sessions, with
                                   the same progress bar and percentage the Recruitment cell drew.
-                                  A published or closed study of a sessionless type shows its
-                                  clicks instead (the old Clicks column). Anything else - a draft,
-                                  a session type with no sessions yet - shows the muted dash. */}
+                                  A published or closed study the server counts clicks for shows
+                                  them instead (the old Clicks column). Anything else - a draft,
+                                  a study with no sessions and no click count - shows the muted
+                                  dash. */}
                               <td className="col-progress" data-label="Progress">
                                 {recruitment ? (
                                   <div className="admin-recruitment">
@@ -1073,7 +1072,7 @@ const Admin: React.FC = () => {
                                       <div className="progress-mini__fill" style={{ width: `${recruitment.pct}%` }} />
                                     </div>
                                   </div>
-                                ) : showsClicks ? (
+                                ) : clicks !== undefined ? (
                                   <span className="admin-progress-clicks">
                                     {clicks} {clicks === 1 ? 'click' : 'clicks'}
                                   </span>
@@ -1200,7 +1199,6 @@ const Admin: React.FC = () => {
                         </tbody>
                       </table>
                     </div>
-                    </>
                   )}
                 </div>
 

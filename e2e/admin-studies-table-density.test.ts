@@ -2,19 +2,22 @@ import { test, expect, type Page } from '@playwright/test';
 import {
   THEMES,
   SEEDED_STUDY_COUNT,
+  SEEDED_STUDIES,
   contrastRatio,
-  fetchSeededStudies,
   openAdminDashboard,
   resizeTo,
   type Box,
 } from './helpers/admin-dashboard';
+import { FIXTURE_TIMEZONE } from './fixtures/admin-dashboard-seed';
 
 /**
  * Admin Research Studies table, Step 1 (density, width, column set, bands).
  * One named test per acceptance criterion in the build brief
  * (`~/.claude/plans/cortex-admin-table-2026-09-23/BRIEF.md`), measured in a
- * real browser against the seeded dev database (13 owner-scoped studies for
- * admin@test.com), in dark AND light.
+ * real browser against the seeded dev database's 13 owner-scoped studies for
+ * admin@test.com, in dark AND light. The data is route-mocked from a capture of
+ * that seed (`e2e/fixtures/admin-dashboard-seed.ts`), so the spec needs only a
+ * frontend and runs in the `test-a11y` CI job.
  *
  * Every width, count and breakpoint below is a LITERAL. None is read from the
  * CSS: a test that derives its expectation from the stylesheet cannot see the
@@ -35,6 +38,8 @@ const SORT_FIELDS = ['Created', 'Status', 'Study'];
 
 const TABLE_WIDTHS_BELOW_1280 = [1024, 1100, 1152, 1219];
 const TABLE_WIDTHS_FROM_1280 = [1280, 1440, 1920];
+
+test.use({ timezoneId: FIXTURE_TIMEZONE });
 
 const frame = (page: Page) =>
   page.evaluate(() => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
@@ -272,7 +277,7 @@ for (const theme of THEMES) {
       baseURL,
     }) => {
       await openAdminDashboard(page, baseURL, { width: 1440, theme });
-      const studies = await fetchSeededStudies(page);
+      const studies = SEEDED_STUDIES;
       const failures: string[] = [];
       for (const width of [1024, 1280, 1440]) {
         await resizeTo(page, width);
@@ -413,7 +418,7 @@ for (const theme of THEMES) {
       baseURL,
     }) => {
       await openAdminDashboard(page, baseURL, { width: 1440, theme });
-      const studies = await fetchSeededStudies(page);
+      const studies = SEEDED_STUDIES;
       const failures: string[] = [];
       for (const width of [1024, 1280, 1440]) {
         await resizeTo(page, width);
@@ -461,7 +466,7 @@ for (const theme of THEMES) {
       baseURL,
     }) => {
       await openAdminDashboard(page, baseURL, { width: 1440, theme });
-      const studies = await fetchSeededStudies(page);
+      const studies = SEEDED_STUDIES;
       const withSessions = studies.filter((s) => (s.sessions ?? []).length > 0);
       const clicked = studies.filter((s) => (s.sessions ?? []).length === 0 && s.status !== 'draft' && (s.clicks_total ?? 0) > 0);
       const drafts = studies.filter((s) => s.status === 'draft');
@@ -503,7 +508,7 @@ for (const theme of THEMES) {
 
     test(`AUTO-CLOSED stays in closed rows as plain text, not a second pill (${theme})`, async ({ page, baseURL }) => {
       await openAdminDashboard(page, baseURL, { width: 1440, theme });
-      const studies = await fetchSeededStudies(page);
+      const studies = SEEDED_STUDIES;
       const closed = studies.filter((s) => s.status === 'closed').map((s) => s.title);
       expect(closed.length, 'the seed has closed studies').toBeGreaterThanOrEqual(1);
       const failures: string[] = [];
@@ -652,6 +657,46 @@ for (const theme of THEMES) {
       expect(failures).toEqual([]);
     });
 
+    /**
+     * Mav 4.2: `nav-fill` forced four equal-width tabs, which is what wrapped
+     * "Completion Approvals". The fix packs them left at their own content
+     * width, on one row. Equal heights alone cannot see a regression here:
+     * mutation-tested, reverting `width: auto` / `flex: 0 0 auto` brought the
+     * equal-width tabs back (218/240/218/218px at 1024) with every height
+     * still 50px, because `white-space: nowrap` kept the labels on one line.
+     */
+    test(`tabs pack left at their content width, on one row, at 1024, 1240 and 1440 (${theme})`, async ({
+      page,
+      baseURL,
+    }) => {
+      await openAdminDashboard(page, baseURL, { width: 1440, theme });
+      const failures: string[] = [];
+      for (const width of [1024, 1240, 1440]) {
+        await resizeTo(page, width);
+        const tabs = await page.evaluate(() =>
+          [...document.querySelectorAll('.admin-tabs-card .custom-tab-button')].map((b) => {
+            const el = b as HTMLElement;
+            const r = el.getBoundingClientRect();
+            const inline = el.style.width;
+            el.style.width = 'max-content';
+            const content = el.getBoundingClientRect().width;
+            el.style.width = inline;
+            return { label: window.__adminProbe.norm(el.textContent), left: r.left, right: r.right, top: r.top, width: r.width, content };
+          })
+        );
+        if (tabs.length !== 4) failures.push(`${width}px: ${tabs.length} tabs, want 4`);
+        for (const t of tabs) {
+          if (Math.abs(t.top - tabs[0].top) > 0.5) failures.push(`${width}px: "${t.label}" on a second row`);
+          if (t.width > t.content + 1) failures.push(`${width}px: "${t.label}" stretched to ${t.width.toFixed(0)}px for ${t.content.toFixed(0)}px of content`);
+        }
+        tabs.slice(1).forEach((t, i) => {
+          const gap = t.left - tabs[i].right;
+          if (gap < 0 || gap > 16) failures.push(`${width}px: ${gap.toFixed(1)}px between "${tabs[i].label}" and "${t.label}"`);
+        });
+      }
+      expect(failures).toEqual([]);
+    });
+
     test(`the Completion Approvals count badge has >= 4.5:1 computed contrast (${theme})`, async ({ page, baseURL }) => {
       await openAdminDashboard(page, baseURL, { width: 1440, theme });
       const badge = page.locator('#completion-approvals-tab-button .admin-tab-count--alert');
@@ -665,5 +710,113 @@ for (const theme of THEMES) {
         4.5
       );
     });
+
+    /**
+     * The dark page ground (bloom plus 24px grid) is painted on the body under
+     * an admin page. The app-wide atmosphere it replaced (`.App::before` glow,
+     * `.App::after` 40px grid) must be off there, or it paints a second grid
+     * and glow over the first. Dark only: light has no such layer pair here.
+     */
+    if (theme === 'dark') {
+      test('the app-wide glow and 40px grid are switched off over the admin ground (dark)', async ({ page, baseURL }) => {
+        await openAdminDashboard(page, baseURL, { width: 1440, theme });
+        const layers = await page.evaluate(() => {
+          const app = document.querySelector('.App');
+          if (!app) return null;
+          return {
+            before: getComputedStyle(app, '::before').content,
+            after: getComputedStyle(app, '::after').content,
+            appBackground: getComputedStyle(app).backgroundImage,
+          };
+        });
+        expect(layers, 'no .App element').not.toBeNull();
+        expect(layers!.before, '.App::before glow still renders').toBe('none');
+        expect(layers!.after, '.App::after grid still renders').toBe('none');
+      });
+    }
+
+    /**
+     * The Feedback tab's sortable headers are `<button>`s, which reset
+     * text-transform and letter-spacing, so Date / Category / User rendered
+     * mixed case beside the uppercase FEEDBACK header - the same defect the
+     * studies table had. Every header's label must share the non-sortable
+     * header's case and tracking, and the category pills must fit their column.
+     */
+    test(`Feedback tab headers share one case and tracking, and category pills fit (${theme})`, async ({
+      page,
+      baseURL,
+    }) => {
+      await openAdminDashboard(page, baseURL, { width: 1280, theme });
+      await page.locator('#feedback-tab-button').click({ timeout: 3000 });
+      const table = page.locator('.admin-feedback table');
+      await expect(table.locator('tbody tr')).toHaveCount(2, { timeout: 5000 });
+      const m = await table.evaluate((t) => {
+        const heads = [...t.querySelectorAll('thead th')].map((th) => {
+          const el = th.querySelector('button') ?? th;
+          const cs = getComputedStyle(el);
+          return { label: (th.textContent ?? '').trim(), transform: cs.textTransform, spacing: cs.letterSpacing };
+        });
+        const pills = [...t.querySelectorAll('tbody .badge')].map((b) => {
+          const cell = b.closest('td')!.getBoundingClientRect();
+          const r = b.getBoundingClientRect();
+          return {
+            text: (b.textContent ?? '').trim(),
+            clipped: b.scrollWidth > b.clientWidth + 1,
+            outside: r.left < cell.left - 0.5 || r.right > cell.right + 0.5,
+          };
+        });
+        return { heads, pills };
+      });
+      const reference = m.heads.find((h) => h.label === 'Feedback');
+      expect(reference, 'the non-sortable Feedback header').toBeTruthy();
+      expect(m.heads.length).toBeGreaterThanOrEqual(4);
+      const mismatched = m.heads
+        .filter((h) => h.transform !== reference!.transform || h.spacing !== reference!.spacing)
+        .map((h) => `${h.label}: ${h.transform} / ${h.spacing} vs ${reference!.transform} / ${reference!.spacing}`);
+      expect(mismatched).toEqual([]);
+      expect(reference!.transform).toBe('uppercase');
+      expect(m.pills.length).toBe(2);
+      expect(m.pills.filter((p) => p.clipped || p.outside).map((p) => p.text)).toEqual([]);
+    });
+
+    /**
+     * B1 (visual gate, 2026-09-23): on the LAST study row the kebab menu opens
+     * downward into the site feedback footer, and the footer paints over it:
+     * `elementFromPoint` at the Delete item's centre returned
+     * `footer.feedback-footer` / `p.feedback-footer__prompt` at 1024, 1280 and
+     * 1440 in both themes on c1a8cdd4, so Delete could not be clicked. The
+     * hit-test names the defect; the click proves the user outcome.
+     */
+    for (const width of [1024, 1280, 1440]) {
+      test(`B1 the last row's Delete menu item is on top and opens the delete confirmation at ${width}px (${theme})`, async ({
+        page,
+        baseURL,
+      }) => {
+        await openAdminDashboard(page, baseURL, { width, theme });
+        const kebab = page.locator('table.admin-data-table tbody tr').last().locator('.admin-action-btn-kebab');
+        await kebab.scrollIntoViewIfNeeded({ timeout: 3000 });
+        await kebab.click({ timeout: 3000 });
+        const del = page.getByRole('menuitem', { name: /^Delete$/ });
+        await expect(del).toBeVisible({ timeout: 3000 });
+        await del.scrollIntoViewIfNeeded({ timeout: 3000 });
+
+        const hit = await del.evaluate((el) => {
+          const r = el.getBoundingClientRect();
+          const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          return {
+            onTop: !!top && (top === el || el.contains(top)),
+            what: top ? `${top.tagName.toLowerCase()}.${[...top.classList].join('.')}` : 'nothing',
+          };
+        });
+        expect(hit.onTop, `Delete's centre is covered by ${hit.what}`).toBe(true);
+
+        // Bounded: an intercepted click retries until its timeout and then
+        // fails by name here rather than stalling the run.
+        await del.click({ timeout: 3000 });
+        await expect(page.getByText('Delete Research Study'), 'the delete confirmation did not open').toBeVisible({
+          timeout: 3000,
+        });
+      });
+    }
   });
 }

@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { SEEDED_STUDY_COUNT, openAdminDashboard, resizeTo } from './helpers/admin-dashboard';
+import { FIXTURE_TIMEZONE } from './fixtures/admin-dashboard-seed';
 
 /**
  * Row 16 (second-pass fix-first register): the Research Studies table is
@@ -16,11 +17,14 @@ import { SEEDED_STUDY_COUNT, openAdminDashboard, resizeTo } from './helpers/admi
  * under the retired 1220 breakpoint. The type lozenge moved out of its own
  * column into the Study cell's meta line, so it is measured there.
  *
- * Runs against the real seeded dev database. The login helper pins the
- * dashboard to BASE_URL: `/auth/admin-login` redirects to the backend's own
- * FRONTEND_URL, so the previous `goto('/auth/admin-login')` measured
- * localhost:3000 whatever BASE_URL said.
+ * Data is the seeded dev database's 13 studies, route-mocked from a capture
+ * (`e2e/fixtures/admin-dashboard-seed.ts`), so this needs only a frontend and
+ * runs in the `test-a11y` CI job. Before that it drove the real stack through
+ * `/auth/admin-login` - which redirects to the backend's own FRONTEND_URL, so
+ * it measured localhost:3000 whatever BASE_URL said - and ran in no pipeline.
  */
+
+test.use({ timezoneId: FIXTURE_TIMEZONE });
 
 const SCROLL_WIDTHS = [390, 768, 856, 1023, 1024, 1219, 1440];
 const PILL_WIDTHS = [856, 1023, 1024, 1100, 1219, 1279, 1280, 1440];

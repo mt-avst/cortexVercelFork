@@ -17,9 +17,11 @@
 .admin-feedback .feedback-table {
   background-color: transparent !important;
 }
+/* Header treatment matches the Research Studies table (Admin table Step 1,
+   2026-09-23): no filled band, muted ink, one divider under it. */
 .admin-feedback .feedback-table thead th {
-  background-color: var(--bg-table-header) !important;
-  color: var(--text-primary) !important;
+  background-color: transparent !important;
+  color: var(--text-muted) !important;
   border-bottom: 1px solid var(--border-card) !important;
   padding: 12px 16px !important;
 }
@@ -166,6 +168,21 @@
 }
 .admin-feedback .feedback-pagination-text {
   color: var(--text-muted);
+}
+
+/* Table mode: the first column flush with the "Feedback Inbox" heading and
+   the last flush with the Export button, as the studies table sits under its
+   filter row. !important only to beat the 16px !important cell padding above
+   in this same unlayered file. */
+@media (min-width: 768px) {
+  .admin-feedback .feedback-table thead th:first-child,
+  .admin-feedback .feedback-table tbody td:first-child {
+    padding-left: 0 !important;
+  }
+  .admin-feedback .feedback-table thead th:last-child,
+  .admin-feedback .feedback-table tbody td:last-child {
+    padding-right: 0 !important;
+  }
 }
 
 /* Phone: reflow to stacked cards, matching the admin dashboard tables

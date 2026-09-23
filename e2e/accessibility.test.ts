@@ -299,7 +299,9 @@ test.describe('Accessibility Tests', () => {
     // Wait on the rendered badges, not the clock, so the scan cannot race an
     // empty table.
     await expect(page.locator('.admin-study-status').first()).toBeVisible();
-    await expect(page.locator('td.col-type .lozenge')).toHaveCount(types.length);
+    // Admin table Step 1 moved the type lozenge from its own column into the
+    // Study cell's meta line (the first column).
+    await expect(page.locator('td:first-child .lozenge')).toHaveCount(types.length);
 
     // Scope the scan to the studies table and assert specifically on contrast,
     // so an unrelated admin a11y issue elsewhere cannot mask or be blamed for a
@@ -1158,6 +1160,21 @@ test.describe('Accessibility Tests', () => {
     await page.evaluate(() => {
       document.querySelectorAll('.slow-neural-background').forEach((node) => node.remove());
     });
+    /* The same reason, second instance. Admin table Step 1 (2026-09-23)
+       deleted the `body.theme-dark .my-bookings-page { background: #030305 }`
+       fill cited above and moved the dark ground - #030305 plus a faint
+       orange bloom and 24px grid - onto the BODY as a `background-image`
+       (search "painted on the BODY" in _themes.css). axe will not judge
+       contrast over a background image, so it put 11 booking nodes in
+       `incomplete` (4 interleaved runs against main). Removing the image
+       leaves the #030305 fill it sits on. Measured by hand before this line
+       was added (recorded in the MR): all 11 nodes stay >= 5.37:1 against
+       the LIGHTEST colour the image can reach (bloom peak plus both grid
+       lines, read from the computed gradient stops), so this does not hide a
+       failure among them. */
+    await page.evaluate(() => {
+      document.body.style.backgroundImage = 'none';
+    });
     await page.waitForTimeout(200);
     const results = await new AxeBuilder({ page }).analyze();
     expectNoViolations(results, 'My Bookings (populated, dark)');
@@ -1572,7 +1589,9 @@ test.describe('Accessibility Tests', () => {
     await page.waitForLoadState('load');
     await expect(page.locator('body.theme-dark')).toHaveCount(1);
     await expect(page.locator('.admin-study-status').first()).toBeVisible();
-    await expect(page.locator('td.col-type .lozenge')).toHaveCount(types.length);
+    // Admin table Step 1 moved the type lozenge from its own column into the
+    // Study cell's meta line (the first column).
+    await expect(page.locator('td:first-child .lozenge')).toHaveCount(types.length);
 
     const scan = await new AxeBuilder({ page })
       .include('.admin-data-table')
@@ -1581,7 +1600,7 @@ test.describe('Accessibility Tests', () => {
     // A scan that resolves nothing reports zero violations too - assert it
     // actually measured something before trusting the empty violations list.
     // Three pre-existing, unrelated exceptions on this table's markup, none
-    // touched by row 23 (the TYPE lozenges, td.col-type .lozenge, which DO
+    // touched by row 23 (the TYPE lozenges, now td:first-child .lozenge, which DO
     // get fully measured with zero incompletes - this filter would not hide
     // a regression there): the sort-caret and kebab icons are decorative
     // glyphs axe cannot contrast-check at all ("non-text characters"), and

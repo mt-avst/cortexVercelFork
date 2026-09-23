@@ -268,10 +268,12 @@ describe('Research Studies table: the Study cell names the row', () => {
 });
 
 describe('Research Studies table: Progress folds Recruitment and Clicks together', () => {
+  // No `clicks_total` by default: the list endpoint only sends it for the
+  // types it counts clicks for (poll, survey, unmoderated) and leaves it
+  // undefined - not 0 - for the rest.
   const study = (overrides: Record<string, unknown>) => ({
     ...fixtures.opportunity,
     sessions: [],
-    clicks_total: 0,
     ...overrides,
   });
 
@@ -298,7 +300,7 @@ describe('Research Studies table: Progress folds Recruitment and Clicks together
     const client = await import('../../api/client');
     vi.mocked(client.getOpportunities).mockResolvedValueOnce([
       study({ id: 'opp-draft', type: 'poll', status: 'draft', title: 'Draft poll', clicks_total: 4 }),
-      study({ id: 'opp-empty', type: 'interview', title: 'Interview with no slots', clicks_total: 9 }),
+      study({ id: 'opp-empty', type: 'interview', title: 'Interview with no slots' }),
     ] as never);
     renderAdmin();
 
@@ -307,6 +309,23 @@ describe('Research Studies table: Progress folds Recruitment and Clicks together
       expect(cell.textContent, title).toBe('–');
       expect(cell.querySelector('.admin-cell-empty'), title).not.toBeNull();
     }
+  });
+
+  it('shows the dash, not "0 clicks", for a published one-question study the server sends no click count for', async () => {
+    // The backend withholds `clicks_total` for `question` studies (it counts
+    // clicks for poll, survey and unmoderated only). Keying Progress on the
+    // study TYPE rendered that absence as "0 clicks" - a number nobody
+    // measured. Keyed on the field being present, it is the dash.
+    const client = await import('../../api/client');
+    vi.mocked(client.getOpportunities).mockResolvedValueOnce([
+      study({ id: 'opp-question', type: 'question', title: 'Name the new space' }),
+    ] as never);
+    renderAdmin();
+
+    const cell = await progressCellFor('Name the new space');
+    expect(cell.textContent).toBe('–');
+    expect(cell.querySelector('.admin-cell-empty')).not.toBeNull();
+    expect(cell.textContent).not.toMatch(/click/);
   });
 
   it('keeps booked / capacity for a study with sessions, whatever its clicks', async () => {

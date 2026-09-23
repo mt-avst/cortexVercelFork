@@ -14,9 +14,10 @@ import { join } from 'path';
  * outranked a bare class selector on specificity and forced `inline-block` on
  * any direct child of those cells - "Auto-closed" clipped to "AUTO-CLO" in a
  * narrow column as a result. The fix does not fight those two rules or except
- * itself from them; it declares the box on a selector that outranks them
- * (`td.col-type .admin-pill, td.col-status .admin-pill`, 0,4,3), which is the
- * one rule pinned below.
+ * itself from them; it declared the box on a selector that outranked them
+ * (then `td.col-type .admin-pill, td.col-status .admin-pill`, 0,4,3), which is
+ * the one rule pinned below - now `td.col-title .admin-pill` (0,4,3) and
+ * `td.col-status .admin-pill:not(.admin-pill--auto-closed)` (0,5,3).
  *
  * Admin table Step 1 (2026-09-23): the Type column is gone and its pill -
  * unchanged - rides in the Study cell's meta line, so the primitive's first

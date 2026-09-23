@@ -248,9 +248,12 @@ const AdminFeedback: React.FC = () => {
             </span>
           )}
         </h3>
+        {/* Same button family as the Bookings tab's Export CSV. `btn-outline-light`
+            drew no visible border on either theme's card, so the pair read as
+            loose text ending 16px short of the table edge. */}
         <div className="d-flex gap-2">
           <button 
-            className="btn btn-outline-light"
+            className="btn btn-outline-secondary btn-sm"
             onClick={loadFeedback}
             disabled={loading}
           >
@@ -258,7 +261,7 @@ const AdminFeedback: React.FC = () => {
             Refresh
           </button>
           <button 
-            className="btn btn-outline-light"
+            className="btn btn-outline-secondary btn-sm"
             onClick={handleExport}
             disabled={feedback.length === 0}
           >
@@ -308,7 +311,7 @@ const AdminFeedback: React.FC = () => {
                     <SortCaret active={sortField === 'category'} direction={sortDirection} />
                   </button>
                 </th>
-                <th className="sortable" scope="col" aria-sort={ariaSortFor('user_name')} style={{ width: '180px' }}>
+                <th className="sortable" scope="col" aria-sort={ariaSortFor('user_name')} style={{ width: '232px' }}>
                   <button type="button" className="feedback-th-sort" onClick={() => handleSort('user_name')}>
                     User
                     <SortCaret active={sortField === 'user_name'} direction={sortDirection} />

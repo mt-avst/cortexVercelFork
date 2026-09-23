@@ -1283,6 +1283,29 @@ body.theme-dark .admin-dashboard table.admin-data-table tbody td.col-status .adm
   color: var(--text-muted);
 }
 
+/* Next session / deadline cell - dark mode. The blanket `td *` colour
+   further down painted the date, the time and the caption one flat
+   #D4D4D4, so the deadline caption lost the amber it carries in light and
+   the caption had no tonal step under the date. Restated here with the same
+   tokens the base rules in `_components.css` use; `td.col-next` is what lifts
+   these to 0,5,5, past that rule's `td span:not(.badge):not(.lozenge)` at
+   0,4,5. */
+body.theme-dark .admin-dashboard table.admin-data-table tbody td.col-next .admin-next__date {
+  color: var(--text-primary);
+}
+
+body.theme-dark .admin-dashboard table.admin-data-table tbody td.col-next .admin-next__time {
+  color: var(--text-secondary);
+}
+
+body.theme-dark .admin-dashboard table.admin-data-table tbody td.col-next .admin-next__note {
+  color: var(--text-muted);
+}
+
+body.theme-dark .admin-dashboard table.admin-data-table tbody td.col-next .admin-next__note--deadline {
+  color: color-mix(in srgb, var(--status-warning) 80%, var(--text-primary));
+}
+
 /* Admin table headers - dark mode. One colour for every header, sortable or
    not (the sort button inherits it). */
 body.theme-dark .admin-dashboard table.admin-data-table thead th {

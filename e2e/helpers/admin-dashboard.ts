@@ -1,23 +1,39 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type Page, type Route } from '@playwright/test';
+import {
+  ADMIN_ME,
+  DASHBOARD,
+  FEEDBACK,
+  FIXTURE_NOW,
+  OPPORTUNITIES,
+  PENDING_APPROVALS,
+} from '../fixtures/admin-dashboard-seed';
 
 /**
  * Shared set-up and in-page measuring instruments for the Admin Research
- * Studies table specs that run against the REAL seeded dev database (not route
- * mocks): `admin-studies-table-density.test.ts` and
+ * Studies table specs `admin-studies-table-density.test.ts` and
  * `admin-table-chrome-layout.test.ts`.
  *
+ * Every API route the dashboard calls is mocked from
+ * `e2e/fixtures/admin-dashboard-seed.ts` (the seeded dev database, captured),
+ * so these specs need a frontend and nothing else. That is what lets
+ * `playwright.accessibility.config.ts` - and so the `test-a11y` CI job, which
+ * serves `vite preview` with no backend - run them. Before this they drove the
+ * real seeded stack and ran in no pipeline at all.
+ *
  * Paths are relative so `use.baseURL` from the running config decides the
- * target, per the convention in the other e2e specs here.
+ * target, per the convention in the other e2e specs here. Specs using this set
+ * `test.use({ timezoneId: FIXTURE_TIMEZONE })` so a UTC runner renders the
+ * fixture's 16:00 session as 16:00.
  */
 
 export type Theme = 'dark' | 'light';
 export const THEMES: readonly Theme[] = ['dark', 'light'];
 
 /**
- * admin@test.com owns 13 studies in the seeded dev database. Every
- * row-counting criterion (AC6 in particular) was written against exactly this
- * fixture, so a different count fails here, by name, rather than quietly
- * changing what "10 rows visible" means.
+ * admin@test.com owns 13 studies in the seeded dev database, and the fixture
+ * reproduces them. Every row-counting criterion (AC6 in particular) was written
+ * against exactly this set, so a different count fails here, by name, rather
+ * than quietly changing what "10 rows visible" means.
  */
 export const SEEDED_STUDY_COUNT = 13;
 
@@ -31,48 +47,75 @@ export interface SeededStudy {
   sessions?: Array<{ capacity: number; booked_count?: number | null }>;
 }
 
+/** The study list the mocked API serves: the oracle for full strings. */
+export const SEEDED_STUDIES: readonly SeededStudy[] = OPPORTUNITIES;
+
+const json = (route: Route, body: unknown) =>
+  route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+
 /**
- * Sign in as the dev admin and open `/admin` ON `baseURL`.
- *
- * The session cookie is set through `page.request` (it shares the browser
- * context's cookie jar), NOT by navigating to `/auth/admin-login`. That route
- * 302s to the backend's own FRONTEND_URL, which is http://localhost:3000
- * whatever server the test points at: measured, a run with
- * BASE_URL=http://localhost:3100 (the main control arm) finished on :3000 and
- * silently measured the other build. The origin assertion below makes that
- * fail by name if it ever happens again.
+ * Serve every API call the dashboard makes from the fixture. Anything else
+ * under `/api/` is answered 404 and recorded, and `openAdminDashboard` asserts
+ * that list is empty: if the page grows a new backend dependency these specs
+ * fail by name instead of measuring an error state (a frontend-only CI server
+ * has no backend to fall through to).
+ */
+async function mockDashboardApi(page: Page): Promise<string[]> {
+  const unmocked: string[] = [];
+  // Registered first so it matches last: Playwright tries routes in reverse
+  // registration order.
+  await page.route('**/api/**', async (route) => {
+    unmocked.push(`${route.request().method()} ${new URL(route.request().url()).pathname}`);
+    await route.fulfill({ status: 404, contentType: 'application/json', body: '{"error":"unmocked in e2e"}' });
+  });
+  await page.route('**/api/me', (route) => json(route, ADMIN_ME));
+  await page.route('**/api/opportunities?**', (route) => json(route, OPPORTUNITIES));
+  await page.route('**/api/opportunities', (route) => json(route, OPPORTUNITIES));
+  await page.route('**/api/admin/dashboard**', (route) => json(route, DASHBOARD));
+  await page.route('**/api/bookings/pending-approvals**', (route) => json(route, PENDING_APPROVALS));
+  await page.route('**/api/feedback**', (route) => json(route, FEEDBACK));
+  return unmocked;
+}
+
+/**
+ * Open `/admin` on `baseURL` as the fixture's researcher_admin, every route
+ * mocked and the clock pinned to FIXTURE_NOW.
  */
 export async function openAdminDashboard(
   page: Page,
   baseURL: string | undefined,
   opts: { width: number; height?: number; theme?: Theme }
 ): Promise<void> {
-  expect(baseURL, 'baseURL must be set - these specs drive the running stack').toBeTruthy();
+  expect(baseURL, 'baseURL must be set - these specs drive a running frontend').toBeTruthy();
+  expect(OPPORTUNITIES, 'fixture study count').toHaveLength(SEEDED_STUDY_COUNT);
   if (opts.theme) {
     await page.addInitScript((t) => localStorage.setItem('theme', t), opts.theme);
   }
   await page.addInitScript(installProbes);
+  await page.clock.setFixedTime(new Date(FIXTURE_NOW));
+  const unmocked = await mockDashboardApi(page);
   await page.setViewportSize({ width: opts.width, height: opts.height ?? 900 });
 
-  const login = await page.request.get('/auth/admin-login', { maxRedirects: 0, timeout: 15000 });
-  expect(login.status(), 'dev admin login should redirect after setting the session cookie').toBeGreaterThanOrEqual(300);
-  expect(login.status()).toBeLessThan(400);
-
   await page.goto('/admin', { waitUntil: 'load', timeout: 15000 });
-  expect(new URL(page.url()).origin, 'the dashboard must be served by BASE_URL, not a redirect target').toBe(
-    new URL(baseURL!).origin
-  );
+  expect(new URL(page.url()).origin, 'the dashboard must be served by BASE_URL').toBe(new URL(baseURL!).origin);
   expect(new URL(page.url()).pathname).toBe('/admin');
 
   await expect(page.locator('table.admin-data-table')).toBeVisible({ timeout: 10000 });
-  await expect(page.locator('table.admin-data-table tbody tr'), 'seeded owner-scoped study count').toHaveCount(
+  await expect(page.locator('table.admin-data-table tbody tr'), 'fixture study count rendered').toHaveCount(
     SEEDED_STUDY_COUNT,
     { timeout: 10000 }
+  );
+  // The approvals count drives the tab badge; wait for it so the badge and
+  // tab tests never race the fetch.
+  await expect(page.locator('#completion-approvals-tab-button .admin-tab-count')).toHaveText(
+    String(PENDING_APPROVALS.length),
+    { timeout: 5000 }
   );
   if (opts.theme) {
     await expect(page.locator(`body.theme-${opts.theme}`)).toHaveCount(1, { timeout: 5000 });
   }
   await page.evaluate(() => document.fonts.ready);
+  expect(unmocked, 'API calls with no mock - the page has a new backend dependency').toEqual([]);
 }
 
 /** Resize and wait two frames so layout has settled before measuring. */
@@ -81,16 +124,6 @@ export async function resizeTo(page: Page, width: number, height = 900): Promise
   await page.evaluate(
     () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
   );
-}
-
-/** The same study list the table renders, as the oracle for full strings. */
-export async function fetchSeededStudies(page: Page): Promise<SeededStudy[]> {
-  const res = await page.request.get('/api/opportunities?scope=mine', { timeout: 10000 });
-  expect(res.status()).toBe(200);
-  const body = (await res.json()) as SeededStudy[];
-  expect(Array.isArray(body)).toBe(true);
-  expect(body).toHaveLength(SEEDED_STUDY_COUNT);
-  return body;
 }
 
 /** WCAG 2.x relative luminance of an sRGB triple, 0-255 per channel. */
