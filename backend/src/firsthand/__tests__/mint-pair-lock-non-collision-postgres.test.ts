@@ -1,7 +1,25 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 
+import { execFile } from "node:child_process";
+import path from "node:path";
+import { promisify } from "node:util";
+
 import { startTestPostgres, type TestPostgres } from "../../__tests__/helpers/postgres-instance";
+
+const execFileAsync = promisify(execFile);
+const migrateScript = path.resolve(__dirname, "../../../scripts/firsthand-migrate.mjs");
+
+/** Rejects after `ms` so a real collision fails this test BY NAME (a timeout
+ * assertion) instead of hanging the suite forever. */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`${label}: timed out after ${ms}ms - likely blocked on a colliding lock`)), ms)
+    ),
+  ]);
+}
 
 /**
  * THE STRUCTURAL NON-COLLISION cto/AdaptaLabs#159's WHOLE DESIGN RESTS ON,
@@ -45,6 +63,14 @@ describe.skipIf(skipDbTests)(
       postgres = await startTestPostgres("mint-pair-lock-non-collision");
       const pgModule = await import("pg");
       pool = new pgModule.default.Pool({ connectionString: postgres.connectionString });
+
+      // Only the third test below needs the firsthand schema (it calls the
+      // real runSerializedForMintPair, which verifies the schema on
+      // checkout) - the first two work against pg_locks alone.
+      await execFileAsync("node", [migrateScript], {
+        env: { ...process.env, DATABASE_URL: postgres.connectionString },
+        timeout: 60_000,
+      });
     }, 120_000);
 
     afterAll(async () => {
@@ -124,5 +150,52 @@ describe.skipIf(skipDbTests)(
         client.release();
       }
     });
+
+    /**
+     * THE PRODUCTION CODE, not just the two SQL forms in isolation: calls the
+     * REAL `runSerializedForMintPair` (cto/AdaptaLabs#159) while a SEPARATE
+     * connection holds `sessions.ts`'s REAL #128 lock
+     * (`pg_advisory_xact_lock(hashtextextended($1::text, 0))`) for the SAME
+     * opportunity id. If the two forms shared a keyspace, `runSerializedForMintPair`
+     * would block waiting for #128's lock to release - which it never does
+     * here, deliberately, until after the assertion - so a bounded timeout on
+     * the mint call is what turns a collision into a named test failure
+     * instead of a hang. `DATABASE_URL` is pointed at this suite's own
+     * ephemeral Postgres before the dynamic import, matching how
+     * `mint-serializes-concurrent-bursts-postgres.test.ts` wires up the same
+     * runtime pool against a test instance.
+     */
+    it("runSerializedForMintPair does not block on sessions.ts's own #128 lock for the same opportunity id", async () => {
+      const opportunityId = "opp-non-collision-159";
+      const previousDatabaseUrl = process.env.DATABASE_URL;
+      process.env.DATABASE_URL = postgres.connectionString;
+
+      const holder = await pool.connect();
+      try {
+        await holder.query("BEGIN");
+        // sessions.ts's REAL #128 lock, same form, same key, held open.
+        await holder.query("SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))", [
+          opportunityId,
+        ]);
+
+        const { runSerializedForMintPair } = await import("../runtime-database");
+
+        const result = await withTimeout(
+          runSerializedForMintPair(opportunityId, "participant-non-collision-159", async () => "ran"),
+          5_000,
+          "runSerializedForMintPair"
+        );
+
+        expect(result).toBe("ran");
+      } finally {
+        await holder.query("ROLLBACK").catch(() => {});
+        holder.release();
+        if (previousDatabaseUrl === undefined) {
+          delete process.env.DATABASE_URL;
+        } else {
+          process.env.DATABASE_URL = previousDatabaseUrl;
+        }
+      }
+    }, 15_000);
   }
 );

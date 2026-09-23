@@ -282,11 +282,32 @@ describe.skipIf(skipDbTests)("mint-session serializes a concurrent burst for one
   /**
    * THE CONTROL: two DIFFERENT participants minting the SAME opportunity
    * concurrently must not serialize against each OTHER - the lock is keyed
-   * on `(opportunity_id, participant_id)`, not on the opportunity alone. A
-   * lock that accidentally collapsed to opportunity-only would still pass
-   * the burst test above (which uses one participant throughout) while
-   * silently serializing every participant's mint on a busy study through
-   * one lock - this is what would catch that.
+   * on `(opportunity_id, participant_id)`, not on the opportunity alone.
+   *
+   * NOT proven by "both eventually return 200" alone (review pass 1 found
+   * this: an opportunity-only lock still serializes CORRECTLY, it just does
+   * it for the wrong reason, so both requests still succeed with one row
+   * each - Promise.all gives no guarantee either request was actually
+   * running WHILE the other held a lock).
+   *
+   * ALSO NOT proven by holding a manually-constructed lock key in the test
+   * itself (a real first draft of this fix): a test that computes
+   * `pg_advisory_xact_lock(hashtext(opportunity), hashtext(participantA))`
+   * by hand asserts the CORRECT formula never collides with itself, which is
+   * true whether or not production's OWN key derivation has been mutated to
+   * something else entirely (proven: collapsing production to
+   * `hashtext(opportunityId), hashtext(opportunityId)` - dropping
+   * participantId - left that version of this test green, because the
+   * hand-built key never matched what the mutated route actually computes
+   * for anyone).
+   *
+   * So this drives the REAL `runSerializedForMintPair` directly for
+   * participant A, with a deliberately slow operation, so whatever key
+   * production ACTUALLY derives - correct or mutated - is what gets held.
+   * Participant B's REAL HTTP mint, fired while A's hold is still open, must
+   * complete well inside A's hold window if the two are genuinely
+   * pair-scoped; a collapsed key would leave B queued behind A until A's
+   * operation finishes, which the bound below would catch.
    */
   it("does not serialize two different participants' concurrent mints against each other", async () => {
     const owner = await seedUser("researcher_admin");
@@ -298,18 +319,83 @@ describe.skipIf(skipDbTests)("mint-session serializes a concurrent burst for one
     resetParticipantRouteLimits(participantA);
     resetParticipantRouteLimits(participantB);
 
-    const [responseA, responseB] = await Promise.all([
-      mintSurvey(opportunity, participantA),
-      mintSurvey(opportunity, participantB),
-    ]);
+    const { runSerializedForMintPair } = await import("../../firsthand/runtime-database");
+    const holdMs = 3_000;
 
-    expect(responseA.status).toBe(200);
+    const holdA = runSerializedForMintPair(opportunity, participantA, async () => {
+      await new Promise((resolve) => setTimeout(resolve, holdMs));
+      return "held";
+    });
+
+    const startB = Date.now();
+    const responseB = await mintSurvey(opportunity, participantB);
+    const elapsedB = Date.now() - startB;
+
     expect(responseB.status).toBe(200);
-    expect(responseA.body.session_url).not.toBe(responseB.body.session_url);
+    // A genuine opportunity-only collision would make B wait out ~all of
+    // A's hold; a correctly pair-scoped lock lets B run immediately.
+    expect(elapsedB).toBeLessThan(holdMs / 2);
 
-    const rowsA = await rowsForPair(opportunity, participantA);
+    expect(await holdA).toBe("held");
+
     const rowsB = await rowsForPair(opportunity, participantB);
-    expect(rowsA).toHaveLength(1);
     expect(rowsB).toHaveLength(1);
-  });
+  }, 15_000);
+
+  /**
+   * THE POOL-EXHAUSTION REGRESSION (MR !528 review pass 1 HIGH-1), pinned as
+   * its own test rather than left to the two tests above, which both use at
+   * most two participants and so never approach `RUNTIME_POOL_MAX_CONNECTIONS`
+   * (5).
+   *
+   * `runSerializedForMintPair` holds ONE runtime-pool connection for the
+   * whole locked mint decision. Before the HIGH-1 fix, `createSession`'s
+   * `getStudyById` call took a SECOND connection from the same pool while
+   * still inside that lock - and participant traffic is not behind the
+   * admission cap that would otherwise queue a second checkout politely. With
+   * 5+ DIFFERENT participants minting the same study concurrently, every
+   * connection in the pool ended up held by a request waiting on a 6th, and
+   * every one of them timed out at `connectionTimeoutMillis` (10s) and 500'd
+   * - proven directly against this exact test shape before the fix: 8
+   * concurrent participants, all 8 returning 500 after ~10s. After the fix
+   * (`getStudyById` now runs on the SAME locked client), the same 8 succeed
+   * in well under a second.
+   *
+   * 8, not 5: to exceed the pool's ENTIRE capacity, not merely saturate it -
+   * a burst of exactly 5 could plausibly scrape by on timing alone.
+   */
+  it("survives a burst of MORE participants than the runtime pool has connections", async () => {
+    const owner = await seedUser("researcher_admin");
+    const study = await seedStudy();
+    await seedStep(study);
+    const opportunity = await seedOpportunity(owner, study);
+
+    const participantCount = 8;
+    const participants = await Promise.all(
+      Array.from({ length: participantCount }, () => seedUser())
+    );
+    for (const participantId of participants) {
+      resetParticipantRouteLimits(participantId);
+    }
+
+    const start = Date.now();
+    const responses = await Promise.all(
+      participants.map((participantId) => mintSurvey(opportunity, participantId))
+    );
+    const elapsed = Date.now() - start;
+
+    for (const response of responses) {
+      expect(response.status).toBe(200);
+    }
+    // A pool-exhaustion regression times out at connectionTimeoutMillis
+    // (10s) per stranded request - this bound is well under that, so a
+    // reintroduced second checkout under the lock fails this by name rather
+    // than merely running slow.
+    expect(elapsed).toBeLessThan(5_000);
+
+    for (const participantId of participants) {
+      const rows = await rowsForPair(opportunity, participantId);
+      expect(rows).toHaveLength(1);
+    }
+  }, 20_000);
 });
