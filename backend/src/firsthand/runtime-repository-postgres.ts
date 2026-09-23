@@ -448,16 +448,12 @@ export async function findParticipantSessionForOpportunity(input: {
  * count" - the caller (the mint route) owns that policy; this function only
  * owns how to ask Postgres the question once the caller has decided it.
  *
- * DOES NOT CLOSE THE RACE TO ZERO. Two mints that race the row lock each read
- * "no terminal answer-carrying session yet" before either one's abandonment
- * (with an answer) is committed, and both proceed - see the `ponytail:`
- * comment at the mint route call site for the bound and the upgrade path
- * (an advisory lock or a partial unique index over `(opportunity_id,
- * participant_id)`, covering both this read and `createSession`'s write in
- * one critical section, which this function alone cannot provide). What this
- * DOES close is the sequential case entirely, and it reduces the concurrent
- * case from unboundedly repeatable to a single rate-limited burst - a real
- * improvement, not a full fix.
+ * DOES NOT CLOSE THE RACE TO ZERO, AND IT IS NOT A ONE-OFF LEAK - see the
+ * `ponytail:` comment at the mint route call site for the measured shape
+ * (a repeatable per-window gap, not a single bounded burst) and the upgrade
+ * path. What this DOES close is the sequential case entirely: once any
+ * session for the pair carries an answer, every later single-mint-at-a-time
+ * attempt is refused, proven end to end.
  */
 export async function hasAnswerCarryingTerminalSession(input: {
   opportunityId: string;

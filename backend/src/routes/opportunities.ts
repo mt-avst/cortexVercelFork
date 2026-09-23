@@ -4144,14 +4144,22 @@ router.post('/:id/survey-session', requireAuth, participantSessionMintLimiter, p
      * both arms side by side, across all three end events.
      *
      * ponytail: this read-then-mint shape is still racy under CONCURRENT
-     * mints for the same (opportunity, participant) - two requests can each
-     * read "no terminal answer-carrying session yet" before either one's own
-     * answer-then-abandon sequence commits. Bounded by
-     * `participantSessionMintLimiter` (20 mints/min): a rate-limited burst,
-     * not the unbounded repeat #155 fixed. Closing it needs DB-level locking
-     * (an advisory lock on (opportunity_id, participant_id) spanning this
-     * check and createSession, or a partial unique index) rather than another
-     * read-time check -> cto/AdaptaLabs#159.
+     * mints for the same (opportunity, participant) - every request in a
+     * burst can read "no terminal answer-carrying session yet" before any of
+     * them has committed an answer-then-abandon sequence, so a burst of k
+     * concurrent mints can leave up to k-1 answerable sessions behind (the
+     * kth is what the surviving, answer-free latest row belongs to - not
+     * itself a leak, but what lets the NEXT burst start the same way).
+     * REPEATABLE, not a one-off: nothing stops the same participant running
+     * another burst in the next rate-limit window, so this is an ongoing,
+     * unbounded-over-time gap for a scripted client, only throttled to
+     * `participantSessionMintLimiter`'s rate (20 mints/min) rather than
+     * stopped. Measured against this fix directly: six bursts of three
+     * concurrent mints each produced 18 sessions, 12 of them
+     * terminal-with-answers - 2 per burst of 3, matching k-1. Closing it
+     * needs DB-level locking (an advisory lock on (opportunity_id,
+     * participant_id) spanning this check and createSession, or a partial
+     * unique index) rather than another read-time check -> cto/AdaptaLabs#159.
      */
     const hasTerminalAnswerCarryingSession = await hasAnswerCarryingTerminalSession({
       opportunityId: canonicalOpportunityId ?? id,

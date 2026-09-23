@@ -433,4 +433,79 @@ describe.skipIf(skipDbTests)("mint refuses an answer-carrying finished session",
     const secondMint = await mintSurvey(opportunity, participant).expect(409);
     expect(secondMint.body.error).toBe("You have already answered this");
   });
+
+  /*
+   * THE STATUS FILTER IS PINNED (review pass 2): `hasAnswerCarryingTerminalSession`
+   * scopes to `session_status = ANY($3::text[])` - i.e. only a TERMINAL,
+   * unanswered status counts, not any status that happens to carry a
+   * response. Dropping that filter still passed all 69 pre-existing
+   * DB-backed mint tests, because none of them minted, answered, and then
+   * minted again WITHOUT ending the session first - the one shape that
+   * distinguishes "terminal and answered" from "still live and answered".
+   *
+   * A participant who answers a question and simply comes back (closes the
+   * tab, reopens the link, whatever - no `session_abandoned`/`session_failed`
+   * /`upload_failed` ever posted) holds a session that is still `link_opened`
+   * or later, never terminal, and MUST be resumed with the same token, not
+   * refused. Without the status filter, `hasAnswerCarryingTerminalSession`
+   * would see the response, ignore the live status, and refuse this mint
+   * with the terminal-session 409 before `isInFlightRuntimeSession` ever gets
+   * to say otherwise - turning an ordinary, uneventful resume into a hard
+   * dead end.
+   */
+  it("resumes the SAME session after answering without ending it, rather than refusing it", async () => {
+    const owner = await seedUser("researcher_admin");
+    const participant = await seedUser();
+    const study = await seedStudy();
+    await seedStep(study);
+    const opportunity = await seedOpportunity(owner, study);
+    resetParticipantRouteLimits(participant);
+    resetRuntimeRouteLimits(participant);
+
+    const token = await mintAndGetToken(opportunity, participant);
+    await answerStep(token, participant);
+
+    const secondMint = await mintSurvey(opportunity, participant).expect(200);
+    expect(secondMint.body.session_url).toBe(`https://cortex.example.com/survey/${token}`);
+  });
+
+  /*
+   * THE OPPORTUNITY FILTER IS PINNED (review pass 2): `hasAnswerCarryingTerminalSession`
+   * scopes to `opportunity_id = $1`. Dropping that filter also still passed
+   * all 69 pre-existing DB-backed mint tests, for the same reason as the
+   * status filter above - nothing exercised a participant holding an
+   * answer-carrying terminal session on one opportunity while minting on a
+   * DIFFERENT one.
+   *
+   * `freshParticipant` (named for parity with the cross-participant test
+   * above, but cross-OPPORTUNITY here) holds their own clean, in-flight
+   * session on opportunity Y FIRST, so the check's query actually runs for
+   * (Y, freshParticipant) rather than short-circuiting on zero sessions - the
+   * same reasoning the cross-participant control above needed (review pass 1
+   * M2). Without the opportunity filter, the query would find X's
+   * answer-carrying terminal session under NO opportunity scoping at all and
+   * wrongly refuse a participant who has never touched opportunity Y's
+   * terminal states.
+   */
+  it("does not block a fresh mint on a DIFFERENT opportunity over this participant's answer-carrying session elsewhere", async () => {
+    const owner = await seedUser("researcher_admin");
+    const participant = await seedUser();
+    resetParticipantRouteLimits(participant);
+    resetRuntimeRouteLimits(participant);
+
+    const studyX = await seedStudy();
+    await seedStep(studyX);
+    const opportunityX = await seedOpportunity(owner, studyX);
+    const tokenX = await mintAndGetToken(opportunityX, participant);
+    await answerStep(tokenX, participant);
+    await endSession(tokenX, participant, "session_abandoned");
+
+    const studyY = await seedStudy();
+    await seedStep(studyY);
+    const opportunityY = await seedOpportunity(owner, studyY);
+    const tokenY = await mintAndGetToken(opportunityY, participant);
+
+    const secondMintOnY = await mintSurvey(opportunityY, participant).expect(200);
+    expect(secondMintOnY.body.session_url).toBe(`https://cortex.example.com/survey/${tokenY}`);
+  });
 });
