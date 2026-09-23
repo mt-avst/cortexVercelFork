@@ -170,14 +170,17 @@ const arrangePoolReads = () => {
   });
 };
 
-/** The error object `logger.error` was handed under `message`. */
+/** The logging context `logger.error` was handed under `message`. */
 const loggedErrorsFor = (spy: jest.Mock, message: string): unknown[] =>
   spy.mock.calls
     .filter((call: unknown[]) => String(call[0]) === message)
-    .map((call: unknown[]) => (call[1] as { error?: unknown } | undefined)?.error);
+    .map((call: unknown[]) => call[1]);
 
-const messageOf = (error: unknown) => (error as { message?: string } | undefined)?.message;
-const codeOf = (error: unknown) => (error as { code?: string } | undefined)?.code;
+// The handler logs `error: String(error)` - a bare Error spread into a
+// JSON-logged context serialises to "{}", losing the cause - plus a
+// top-level `code` carrying the SQLSTATE, since String(error) drops it.
+const messageOf = (context: unknown) => (context as { error?: string } | undefined)?.error;
+const codeOf = (context: unknown) => (context as { code?: unknown } | undefined)?.code;
 
 describe('a failing ROLLBACK does not mask the error that caused it (#67)', () => {
   let logSpy: jest.Mock;
