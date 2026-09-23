@@ -267,7 +267,15 @@ export const deleteOpportunity = async (id: string): Promise<void> => {
   await api.delete(`/opportunities/${id}`);
 };
 
-export const duplicateOpportunity = async (id: string): Promise<Opportunity> => {
+/**
+ * `study_copy_failed` (cto/AdaptaLabs#161) is response-only and transient -
+ * not a stored Opportunity field - set only when the linked FirstHand study
+ * could not be cloned and the copy came out questionless. Absent on a normal
+ * duplicate, never `false`.
+ */
+export const duplicateOpportunity = async (
+  id: string
+): Promise<Opportunity & { study_copy_failed?: boolean }> => {
   const response = await api.post(`/opportunities/${id}/duplicate`);
   return response.data;
 };

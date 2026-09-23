@@ -5915,6 +5915,12 @@ describe('Opportunities API', () => {
       // route for why carrying the original's id across is unsafe.
       expect(response.body.firsthand_study_id).not.toBe('study_original');
 
+      // cto/AdaptaLabs#161 control: a duplicate that actually got its
+      // questions carries no `study_copy_failed` field at all - only a
+      // fallback response sets it. Absent, not `false`, per the route's own
+      // comment on the field.
+      expect(response.body.study_copy_failed).toBeUndefined();
+
       // createStudy was handed the ORIGINAL's actual question content, not a
       // count or a placeholder - prompt, type and order all carried over
       // verbatim.
@@ -6081,6 +6087,10 @@ describe('Opportunities API', () => {
       expect(mockCreateStudy).not.toHaveBeenCalled();
       expect(response.body.delivery_mode).toBe('external');
       expect(response.body.firsthand_study_id).toBeNull();
+      // cto/AdaptaLabs#161: the researcher gets a signal that this copy came
+      // out questionless, instead of a silent 201 indistinguishable from a
+      // real duplicate.
+      expect(response.body.study_copy_failed).toBe(true);
 
       const insert = mockQuery.mock.calls.find((call: unknown[]) =>
         String(call[0]).includes('INSERT INTO opportunities')
@@ -6144,6 +6154,10 @@ describe('Opportunities API', () => {
       expect(mockCreateStudy).not.toHaveBeenCalled();
       expect(response.body.delivery_mode).toBe('external');
       expect(response.body.firsthand_study_id).toBeNull();
+      // cto/AdaptaLabs#161: same signal as the stale-link fallback - this is
+      // a failure, not a verified-gone link, but the researcher still needs
+      // to know their copy has no questions.
+      expect(response.body.study_copy_failed).toBe(true);
 
       // THE ACTUAL WRITE, not the mocked read-back - see the stale-link test
       // above for why the response body alone can't catch a route that
@@ -6231,6 +6245,8 @@ describe('Opportunities API', () => {
 
       expect(response.body.delivery_mode).toBe('external');
       expect(response.body.firsthand_study_id).toBeNull();
+      // cto/AdaptaLabs#161: same signal as the other two fallback cases.
+      expect(response.body.study_copy_failed).toBe(true);
 
       // THE ACTUAL WRITE, not the mocked read-back - see the stale-link test
       // above for why the response body alone can't catch a route that

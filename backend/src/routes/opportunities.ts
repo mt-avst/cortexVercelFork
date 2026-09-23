@@ -4837,6 +4837,14 @@ router.post('/:id/duplicate', requireAdmin, opportunityWriteLimiter, asyncHandle
   // back by a shared transaction that does not exist.
   let duplicatedStudyId: string | null = null;
 
+  // cto/AdaptaLabs#161: both fallback branches below (stale link, and the
+  // catch below it) leave the duplicate silently questionless - a 201 with no
+  // signal that the copy differs from a real one. Named explicitly so the
+  // caller (Admin.tsx's handleDuplicate) can warn instead of just reloading;
+  // never set for the isStudiesPersistenceConfigured()-false case below, which
+  // is a system-wide config state rather than a per-request failure.
+  let studyCopyFailed = false;
+
   if (opp.firsthand_study_id && isStudiesPersistenceConfigured()) {
     // cto/AdaptaLabs#160: `getStudyById` can throw on a genuine runtime-pool
     // outage (distinct from the `null` return the stale-link branch below
@@ -4913,6 +4921,7 @@ router.post('/:id/duplicate', requireAdmin, opportunityWriteLimiter, asyncHandle
           opportunityId: id,
           firsthandStudyId: opp.firsthand_study_id
         });
+        studyCopyFailed = true;
       }
     } catch (error) {
       // String(error), not the raw Error: the logger JSON-serialises this
@@ -4924,6 +4933,7 @@ router.post('/:id/duplicate', requireAdmin, opportunityWriteLimiter, asyncHandle
         opportunityId: id,
         firsthandStudyId: opp.firsthand_study_id
       });
+      studyCopyFailed = true;
     }
   }
 
@@ -5039,6 +5049,13 @@ router.post('/:id/duplicate', requireAdmin, opportunityWriteLimiter, asyncHandle
 
   // Add empty sessions array for consistency with frontend
   duplicatedOpportunity.sessions = [];
+
+  // cto/AdaptaLabs#161: only set when the fallback actually happened, never
+  // `false` - so a normal duplicate's response shape is unchanged and a
+  // client that doesn't know the field yet reads nothing from its absence.
+  if (studyCopyFailed) {
+    duplicatedOpportunity.study_copy_failed = true;
+  }
 
   res.status(201).json(duplicatedOpportunity);
 }));
