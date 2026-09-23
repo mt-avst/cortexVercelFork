@@ -19,28 +19,21 @@
    same faint 24px orange grid, and one warm bloom of light. Mirrors the hero
    block in _components.css (body.theme-dark .landing-page-wrapper).
 
-   The grid + bloom live on a position:fixed ::before that fills the whole
-   viewport, NOT on the element's own background: every page is nested inside
-   .main > .container (a max-width column), so an element background would be
-   boxed to that column with black gutters. The fixed layer breaks out to the
-   viewport the way the hero's 100vw wrapper does, and reuses the exact pattern
-   the light-mode admin glow already uses below. The bloom is re-anchored to a
-   top horizon (at 50% -12%) rather than the hero's copy hotspot (at 34% 42%),
-   since these pages scroll and a fixed hotspot would land nowhere. Content sits
-   in pods (the glass cards) that float above this ground; the ground carries no
-   text panel of its own. */
-body.theme-dark .study-listing-page,
-body.theme-dark .admin-page-bg {
-  background: #030305;
-}
-
-body.theme-dark .study-listing-page::before,
-body.theme-dark .admin-page-bg::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+   The grid + bloom are painted on the BODY (so on the page canvas), not on
+   the page element: every page is nested inside .main > .container (a
+   max-width column), so an element background is boxed to that column with
+   navy .App gutters beside it. They used to live on a position:fixed ::before
+   one viewport tall, which covered the window live but, in any full-page
+   capture (FireShot, Playwright fullPage), landed as one viewport-sized band
+   with a hard seam under it - the line above the Admin tabs card (Admin
+   table Step 1, 2026-09-23). On the canvas the 24px grid simply repeats down
+   the whole page and the bloom (at 50% -12%, a top horizon rather than the
+   hero's copy hotspot, since these pages scroll) sits in the first viewport
+   of it. `:has()` keys the body to the page marker; the .App gradient goes
+   transparent over it. Content sits in pods (the glass cards) that float
+   above this ground; the ground carries no text panel of its own. */
+body.theme-dark:has(.study-listing-page),
+body.theme-dark:has(.admin-page-bg) {
   background-color: #030305;
   background-image:
     radial-gradient(
@@ -51,14 +44,30 @@ body.theme-dark .admin-page-bg::before {
     ),
     linear-gradient(to right, color-mix(in srgb, var(--brand-orange-500) 5%, transparent) 1px, transparent 1px),
     linear-gradient(to bottom, color-mix(in srgb, var(--brand-orange-500) 5%, transparent) 1px, transparent 1px);
-  background-size: 100% 100%, 24px 24px, 24px 24px;
+  background-size: 100% 100vh, 24px 24px, 24px 24px;
   background-position: center top, 0 0, 0 0;
   background-repeat: no-repeat, repeat, repeat;
-  pointer-events: none;
-  z-index: 0;
 }
 
-/* Content floats above the fixed ground layer */
+body.theme-dark:has(.study-listing-page) .App,
+body.theme-dark:has(.admin-page-bg) .App {
+  background: transparent;
+}
+
+/* The app-wide dark atmosphere (`.App::before` glow, `.App::after` 40px
+   grid, `_base.css`) is this ground's predecessor. The old opaque fixed
+   layer hid both; on a transparent .App they would paint a second grid and
+   glow over this one, so they are switched off wherever this ground is. */
+body.theme-dark:has(.study-listing-page) .App::before,
+body.theme-dark:has(.study-listing-page) .App::after,
+body.theme-dark:has(.admin-page-bg) .App::before,
+body.theme-dark:has(.admin-page-bg) .App::after {
+  content: none;
+}
+
+/* Content stacking kept from when the ground was a fixed ::before layer; the
+   ground is on the body now, so this only preserves the stacking contexts
+   the page's dropdowns were built against. */
 body.theme-dark .study-listing-page > * {
   position: relative;
   z-index: 1;
@@ -1158,8 +1167,14 @@ body.theme-dark .admin-dashboard table td {
   border-color: rgba(255, 255, 255, 0.05);
 }
 
+/* The Research Studies row divider stays on the subtle-border token in both
+   themes (the rule above would otherwise recolour it). */
+body.theme-dark .admin-dashboard table.admin-data-table tbody td {
+  border-bottom-color: var(--border-subtle-current);
+}
+
 body.theme-dark .admin-dashboard table tbody tr:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bg-hover);
 }
 
 body.theme-dark .admin-tabs .nav-link {
@@ -1254,19 +1269,25 @@ body.theme-dark .cortex-page-title {
 
 /* (Dark mode table container defined above with cyan accent) */
 
-/* Admin table text hierarchy - dark mode */
-body.theme-dark .row-title {
-  color: var(--color-text-main);
+/* Research Studies table text hierarchy - dark mode. Scoped as far down as
+   the blanket `.admin-dashboard table tbody td *` / `td strong` / `td small`
+   colours further down this file reach, so these win on specificity: the
+   title in --text-primary, the meta line, the "Auto-closed" caption and
+   every header in --text-muted - the same tokens the light block uses. */
+body.theme-dark .admin-dashboard table.admin-data-table tbody td .row-title {
+  color: var(--text-primary);
 }
 
-body.theme-dark .row-desc {
-  color: rgba(255, 255, 255, 0.7);
+body.theme-dark .admin-dashboard table.admin-data-table tbody td .row-desc,
+body.theme-dark .admin-dashboard table.admin-data-table tbody td.col-status .admin-pill--auto-closed {
+  color: var(--text-muted);
 }
 
-/* Admin table headers - dark mode */
-body.theme-dark .admin-data-table th {
-  color: rgba(255, 255, 255, 0.6);
-  border-bottom: 1px solid var(--border-cortex-glass);
+/* Admin table headers - dark mode. One colour for every header, sortable or
+   not (the sort button inherits it). */
+body.theme-dark .admin-dashboard table.admin-data-table thead th {
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-subtle-current);
 }
 
 /* Admin buttons - dark mode */
@@ -1648,7 +1669,7 @@ body.theme-dark .custom-tab-button.active {
 }
 
 body.theme-dark .custom-tab-button i,
-body.theme-dark .custom-tab-button span {
+body.theme-dark .custom-tab-button span:not(.admin-tab-count--alert) {
   color: inherit;
 }
 
@@ -1761,6 +1782,12 @@ body.theme-light .admin-dashboard table td {
   border-color: rgba(0, 0, 0, 0.06);
 }
 
+/* The Research Studies row divider stays on the subtle-border token (see the
+   dark twin of this rule). */
+body.theme-light .admin-dashboard table.admin-data-table tbody td {
+  border-bottom-color: var(--border-subtle-current);
+}
+
 body.theme-light .admin-dashboard table tbody tr:hover {
   background: rgba(0, 0, 0, 0.02);
 }
@@ -1799,7 +1826,7 @@ body.theme-light .custom-tab-button.active {
 }
 
 body.theme-light .custom-tab-button i,
-body.theme-light .custom-tab-button span {
+body.theme-light .custom-tab-button span:not(.admin-tab-count--alert) {
   color: inherit;
 }
 
@@ -1820,9 +1847,10 @@ body.theme-light .admin-container-wide {
   box-shadow: none;
 }
 
-/* Table row hover - warm grey */
-body.theme-light .admin-data-table tbody tr:hover {
-  background-color: #F9FAFB;
+/* Table row hover - the theme's hover token. Scoped past the blanket
+   `.admin-dashboard table tbody tr:hover` above, which it has to outrank. */
+body.theme-light .admin-dashboard table.admin-data-table tbody tr:hover {
+  background: var(--bg-hover);
 }
 
 body.theme-light .admin-stat-card .stat-value {
@@ -1877,13 +1905,16 @@ body.theme-light .admin-settings-btn:hover {
   border-color: #D1D5DB;
 }
 
-/* Admin table text hierarchy - light mode */
-body.theme-light .row-title {
-  color: var(--text-on-light);
+/* Research Studies table text hierarchy - light mode. Same tokens and the
+   same scoping as the dark block (search "text hierarchy - dark mode"): it
+   has to outrank `.admin-dashboard table td strong` / `td small` above. */
+body.theme-light .admin-dashboard table.admin-data-table tbody td .row-title {
+  color: var(--text-primary);
 }
 
-body.theme-light .row-desc {
-  color: #6B7280;
+body.theme-light .admin-dashboard table.admin-data-table tbody td .row-desc,
+body.theme-light .admin-dashboard table.admin-data-table tbody td.col-status .admin-pill--auto-closed {
+  color: var(--text-muted);
 }
 
 /* Admin table headers - light mode - FORCE WHITE BACKGROUND */
@@ -1904,11 +1935,15 @@ body.theme-light .admin-dashboard .table th {
   background-color: #FFFFFF !important;
 }
 
-body.theme-light .admin-data-table th {
-  color: #64748B; /* Slate-500 */
-  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
-  padding-top: 16px;
-  padding-bottom: 20px;
+/* The Research Studies header: muted, 12px top and bottom like its cells,
+   one divider. !important on colour and border only because the blanket
+   light-table header block above already sets both !important; the padding
+   there is a normal declaration this outranks on specificity. */
+body.theme-light .admin-dashboard table.admin-data-table thead th {
+  color: var(--text-muted) !important;
+  border-bottom: 1px solid var(--border-subtle-current) !important;
+  padding-top: 12px;
+  padding-bottom: 12px;
 }
 
 /* Admin badge type modifiers - light mode (Semantic Simplification) */
@@ -2612,10 +2647,9 @@ body.theme-dark .gamification-page small.text-muted {
    MY BOOKINGS PAGE - Dark Mode (Glassmorphism)
    ============================================================ */
 
-/* Page Background - Inherit from admin-page-bg */
-body.theme-dark .my-bookings-page {
-  background: #030305;
-}
+/* Page Background: none of its own. The page is an `.admin-page-bg`, whose
+   dark ground is painted on the body (search "painted on the BODY"); an
+   opaque fill here would box that ground out of the content column. */
 
 /* Booking Cards - Glassmorphism */
 body.theme-dark .my-bookings-page .booking-card {

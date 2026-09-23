@@ -33,11 +33,26 @@ import { getStudyTypeGlyph } from '../utils/studyTypeIcons';
 
 import { formatStudyDate, formatClockTime, formatTimeZoneLabel } from '../utils/datetime';
 
-/** The Research Studies table's four sortable columns - extracted once so the
- * card-view sort control (#131) and the header buttons/handleSort/ariaSortFor
- * all reference one union, rather than four copies of the same literal that
- * only agreed by convention. */
-type SortField = 'title' | 'created_at' | 'type' | 'status';
+/** The Research Studies table's three sortable columns - extracted once so the
+ * Sort-by control (#131) and the header buttons/handleSort/ariaSortFor all
+ * reference one union, rather than three copies of the same literal that only
+ * agreed by convention. `type` left with the Type column: the type is filterable
+ * (Study Type select) and rides in the Study cell's meta line, but no header
+ * sorts on it, and the Sort-by control offers exactly what the headers do. */
+type SortField = 'title' | 'created_at' | 'status';
+
+/** What the Progress column shows for one study (was two columns, Recruitment
+ * and Clicks). A study with sessions shows booked against capacity, exactly as
+ * the Recruitment cell did. A published or closed study of a type that never
+ * has sessions shows its click count, which is the only fill signal that type
+ * carries today. Everything else - a draft, or a session type with no sessions
+ * yet - has nothing honest to show and renders the muted en dash. */
+const SESSIONLESS_TYPES: ReadonlySet<Opportunity['type']> = new Set<Opportunity['type']>([
+  'poll',
+  'survey',
+  'question',
+  'unmoderated',
+]);
 
 const Admin: React.FC = () => {
   const { user, loading, initialAuthCheck } = useAuth();
@@ -47,11 +62,14 @@ const Admin: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Add admin-page class to body for wider header alignment
+  // Add admin-page class to body for wider header alignment. The second class
+  // is this page's own: it widens the page and header column to 1440px
+  // (_components.css, search "admin-dashboard-page"), which Settings - the
+  // other `admin-page` - does not want.
   useEffect(() => {
-    document.body.classList.add('admin-page');
+    document.body.classList.add('admin-page', 'admin-dashboard-page');
     return () => {
-      document.body.classList.remove('admin-page');
+      document.body.classList.remove('admin-page', 'admin-dashboard-page');
     };
   }, []);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
@@ -824,14 +842,16 @@ const Admin: React.FC = () => {
                   {/* Research Studies Table */}
                   {!loadingOpportunities && !error && sortedOpportunities.length > 0 && (
                     <>
-                    {/* #131: card view (below 1220px - see the ROW 14 comment in
-                        _components.css) hides <thead>, which is where the table's
-                        only sort controls live. This is not a second sort
-                        mechanism: it reads and writes the SAME sortField/
-                        sortDirection state through the SAME handleSort the header
-                        buttons use, so the two surfaces can never disagree. Hidden
-                        above the breakpoint by .admin-card-sort's own default rule
-                        in _components.css. */}
+                    {/* #131: wherever a sortable header is out of view, this is
+                        the way to reach its sort - below 1280px, where the Created
+                        column is hidden, and below 1024px, where the card view
+                        hides <thead> altogether (see the ROW 14 comment in
+                        _components.css). It offers exactly the fields the headers
+                        do. This is not a second sort mechanism: it reads and
+                        writes the SAME sortField/sortDirection state through the
+                        SAME handleSort the header buttons use, so the two
+                        surfaces can never disagree. Hidden from 1280px up by
+                        .admin-card-sort's own default rule in _components.css. */}
                     <div className="admin-card-sort" role="group" aria-label="Sort studies">
                       <label htmlFor="cardSortField" className="form-label mb-0">Sort by</label>
                       <select
@@ -841,7 +861,6 @@ const Admin: React.FC = () => {
                         onChange={(e) => handleSort(e.target.value as SortField)}
                       >
                         <option value="title">Study</option>
-                        <option value="type">Type</option>
                         <option value="status">Status</option>
                         <option value="created_at">Created</option>
                       </select>
@@ -857,6 +876,20 @@ const Admin: React.FC = () => {
                       width: '100%'
                     }}>
                       <table className="table table-hover admin-data-table">
+                        {/* Fixed pixel widths on every column but Study, which
+                            takes the remainder: under `table-layout: fixed` the
+                            <col> widths are the whole story. The numbers live in
+                            _components.css (search "COLUMN WIDTHS"); the classes
+                            here only name the columns, so the Created column can
+                            be dropped below 1280px as one unit (col, th, td). */}
+                        <colgroup>
+                          <col className="col-title" />
+                          <col className="col-status" />
+                          <col className="col-progress" />
+                          <col className="col-next" />
+                          <col className="col-date" />
+                          <col className="col-actions" />
+                        </colgroup>
                         <thead>
                           <tr>
                             <th className="admin-th col-title" scope="col" aria-sort={ariaSortFor('title')}>
@@ -865,24 +898,17 @@ const Admin: React.FC = () => {
                                 <SortCaret active={sortField === 'title'} direction={sortDirection} />
                               </button>
                             </th>
-                            <th className="admin-th col-type" scope="col" aria-sort={ariaSortFor('type')}>
-                              <button type="button" className="admin-th-sort" onClick={() => handleSort('type')}>
-                                Type
-                                <SortCaret active={sortField === 'type'} direction={sortDirection} />
-                              </button>
-                            </th>
                             <th className="admin-th col-status" scope="col" aria-sort={ariaSortFor('status')}>
                               <button type="button" className="admin-th-sort" onClick={() => handleSort('status')}>
                                 Status
                                 <SortCaret active={sortField === 'status'} direction={sortDirection} />
                               </button>
                             </th>
-                            {/* Recruitment replaces the old "Booked" column - same booked/capacity
-                                figure the "Booked" cell showed, now with the percentage the
-                                progress bar was already drawing. There is deliberately no
-                                Capacity column beside it: that duplicated the denominator. */}
-                            <th className="admin-th col-recruitment" scope="col">Recruitment</th>
-                            <th className="admin-th col-metric col-numeric" scope="col">Clicks</th>
+                            {/* Progress folds the old Recruitment and Clicks columns into
+                                one: booked/capacity for a study with sessions, clicks for a
+                                type that has none. There is deliberately no Capacity column
+                                beside it: that duplicated the ratio's denominator. */}
+                            <th className="admin-th col-progress" scope="col">Progress</th>
                             <th className="admin-th col-next" scope="col">Next session / deadline</th>
                             <th className="admin-th col-date" scope="col" aria-sort={ariaSortFor('created_at')}>
                               <button type="button" className="admin-th-sort" onClick={() => handleSort('created_at')}>
@@ -896,7 +922,12 @@ const Admin: React.FC = () => {
                         <tbody>
                           {sortedOpportunities.map((opportunity) => {
                             const recruitment = getRecruitment(opportunity);
+                            const showsClicks =
+                              opportunity.status !== 'draft' && SESSIONLESS_TYPES.has(opportunity.type);
+                            const clicks = opportunity.clicks_total ?? 0;
                             const milestone = getNextMilestone(opportunity, now);
+                            const sessionDayLabel =
+                              milestone?.kind === 'session' ? relativeDayLabel(milestone.date, now) : null;
                             const TypeGlyph = getStudyTypeGlyph(opportunity.type);
                             // One call per row: the status cell renders this and
                             // also carries it as the label's `title`, and the
@@ -952,19 +983,24 @@ const Admin: React.FC = () => {
                                 e.currentTarget.blur();
                               }}
                             >
+                              {/* The Study cell names the row: the title (two lines at
+                                  most) and one meta line - the type pill, then the
+                                  purpose one-liner, truncated. Both carry their full
+                                  text in `title`, so nothing clamped is lost. The type
+                                  pill moved here from its own column, unchanged. */}
                               <td className="col-title" data-label="Study">
-                                <div>
-                                  <strong className="row-title">{opportunity.title}</strong>
-                                  <small className="row-desc">{opportunity.purpose_one_liner}</small>
+                                <strong className="row-title" title={opportunity.title}>{opportunity.title}</strong>
+                                <div className="admin-study-meta">
+                                  <span className={`admin-pill ${getTypeBadgeClass(opportunity.type)} badge--${opportunity.type}`}>
+                                    {TypeGlyph && (
+                                      <Icon icon={TypeGlyph} size={14} aria-hidden="true" className="lozenge__glyph" />
+                                    )}
+                                    {getAdminTypeLabel(opportunity.type)}
+                                  </span>
+                                  <small className="row-desc" title={opportunity.purpose_one_liner}>
+                                    {opportunity.purpose_one_liner}
+                                  </small>
                                 </div>
-                              </td>
-                              <td className="col-type" data-label="Type">
-                                <span className={`admin-pill ${getTypeBadgeClass(opportunity.type)} badge--${opportunity.type}`}>
-                                  {TypeGlyph && (
-                                    <Icon icon={TypeGlyph} size={14} aria-hidden="true" className="lozenge__glyph" />
-                                  )}
-                                  {getAdminTypeLabel(opportunity.type)}
-                                </span>
                               </td>
                               <td className="col-status" data-label="Status">
                                 {/*
@@ -1021,11 +1057,12 @@ const Admin: React.FC = () => {
                                   <span className="admin-pill admin-pill--auto-closed">Auto-closed</span>
                                 )}
                               </td>
-                              {/* Recruitment: booked / capacity across the study's sessions, with
-                                  the same progress bar the old Booked cell drew plus the percentage.
-                                  A study with no sessions (poll, survey, one-question) has no slots
-                                  to recruit into, so it shows a dash rather than "0 / 0". */}
-                              <td className="col-recruitment" data-label="Recruitment">
+                              {/* Progress: booked / capacity across the study's sessions, with
+                                  the same progress bar and percentage the Recruitment cell drew.
+                                  A published or closed study of a sessionless type shows its
+                                  clicks instead (the old Clicks column). Anything else - a draft,
+                                  a session type with no sessions yet - shows the muted dash. */}
+                              <td className="col-progress" data-label="Progress">
                                 {recruitment ? (
                                   <div className="admin-recruitment">
                                     <div className="admin-recruitment__top">
@@ -1036,31 +1073,38 @@ const Admin: React.FC = () => {
                                       <div className="progress-mini__fill" style={{ width: `${recruitment.pct}%` }} />
                                     </div>
                                   </div>
+                                ) : showsClicks ? (
+                                  <span className="admin-progress-clicks">
+                                    {clicks} {clicks === 1 ? 'click' : 'clicks'}
+                                  </span>
                                 ) : (
                                   <span className="admin-cell-empty">–</span>
                                 )}
                               </td>
-                              <td className="col-metric col-numeric" data-label="Clicks">
-                                {opportunity.clicks_total ?? 0}
-                              </td>
                               {/* Next session / deadline: the soonest upcoming slot, else a future
                                   closing time, else "Completed" once every slot has passed. All
                                   from real fields - no invented session ordinal. */}
+                              {/* The date on its own line; a session's clock time leads the
+                                  second line, before its relative day. "Thu 24 Sept 2026 ·
+                                  16:00" on one line measures ~174px against this column's
+                                  152px content box, and a nowrap there spills into Created. */}
                               <td className="col-next" data-label="Next / deadline">
                                 {milestone ? (
                                   <div className="admin-next">
                                     <span className="admin-next__date">
                                       {formatStudyDate(milestone.date.toISOString())}
-                                      {milestone.kind === 'session' && (
-                                        <span className="admin-next__time">{formatClockTime(milestone.date.toISOString())}</span>
-                                      )}
                                     </span>
                                     <span className={`admin-next__note admin-next__note--${milestone.kind}`}>
-                                      {milestone.kind === 'completed'
-                                        ? 'Completed'
-                                        : milestone.kind === 'deadline'
-                                          ? `Closes · ${getTimeRemainingUntil(milestone.date).text ?? 'soon'}`
-                                          : relativeDayLabel(milestone.date, now) ?? ''}
+                                      {milestone.kind === 'session' ? (
+                                        <>
+                                          <span className="admin-next__time">{formatClockTime(milestone.date.toISOString())}</span>
+                                          {sessionDayLabel && ` · ${sessionDayLabel}`}
+                                        </>
+                                      ) : milestone.kind === 'completed' ? (
+                                        'Completed'
+                                      ) : (
+                                        `Closes · ${getTimeRemainingUntil(milestone.date).text ?? 'soon'}`
+                                      )}
                                     </span>
                                   </div>
                                 ) : (

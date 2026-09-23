@@ -29,6 +29,10 @@ import { join } from 'path';
  * off-screen for every card view in that 450px gap. Read the reflow's own
  * breakpoint from its rule rather than hard-coding it a second time, so a
  * future change to one is forced to update the other or fail here by name.
+ *
+ * The Admin table Step 1 fix (2026-09-23) moved both to 1023.98px: the table
+ * now holds its columns down to 1024px, so the card view - and the
+ * left-aligned kebab this override exists for - starts below that.
  */
 
 const CSS_PATH = join(__dirname, '..', '_components.css');
@@ -43,13 +47,13 @@ if (!reflowBreakpointMatch) {
 const REFLOW_BREAKPOINT = reflowBreakpointMatch[1];
 
 describe('admin action dropdown reverses its anchor below the card-reflow breakpoint (row 20)', () => {
-  it('the reflow breakpoint is pinned at row 16\'s measured value (768-1220 band)', () => {
-    // MEASURED (row 16 second-pass): the admin content column's own
-    // max-width holds the table at a fixed rendered width from 1440px
-    // viewport up, so nothing above ~1220px was ever squeezed. A derived
-    // comparison (this test's own REFLOW_BREAKPOINT read above) cannot see
-    // the constant silently drift back toward 767.98px - pin the literal too.
-    expect(REFLOW_BREAKPOINT).toBe('1219.98');
+  it('the reflow breakpoint is pinned at the Step 1 value (table from 1024px up)', () => {
+    // Admin table Step 1 (2026-09-23): fixed pixel columns with Study the only
+    // fluid one keep the table readable - Study >= 300px of content box,
+    // measured 310px at 1024 - so the card view starts below 1024px. A
+    // derived comparison (this test's own REFLOW_BREAKPOINT read above)
+    // cannot see the constant drift - pin the literal too.
+    expect(REFLOW_BREAKPOINT).toBe('1023.98');
   });
 
   it('the desktop rule (right: 0, no !important) is unchanged', () => {

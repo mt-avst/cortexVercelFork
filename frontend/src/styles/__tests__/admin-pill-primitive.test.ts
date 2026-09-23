@@ -18,6 +18,12 @@ import { join } from 'path';
  * (`td.col-type .admin-pill, td.col-status .admin-pill`, 0,4,3), which is the
  * one rule pinned below.
  *
+ * Admin table Step 1 (2026-09-23): the Type column is gone and its pill -
+ * unchanged - rides in the Study cell's meta line, so the primitive's first
+ * selector is `td.col-title .admin-pill`. "Auto-closed" stopped being a pill:
+ * a second pill read as a second status, so it is a muted caption under the
+ * status pill and the primitive excludes it.
+ *
  * jsdom does not do real layout, so source-pin assertions here cannot see a
  * computed height, a pixel-clipped label, a missing gutter or text spilling
  * out of a pill - that is what `e2e/admin-pill-primitive.test.ts` is for, in
@@ -41,23 +47,39 @@ describe('admin studies table pill primitive (#142)', () => {
     expect(ADMIN_TSX).toMatch(/className=\{`admin-pill admin-study-status admin-study-status--\$\{opportunity\.status\}/);
   });
 
-  it('the auto-closed marker uses the shared primitive, not a bootstrap badge', () => {
+  it('the auto-closed marker is not a bootstrap badge', () => {
     expect(ADMIN_TSX).toMatch(/className="admin-pill admin-pill--auto-closed"/);
     expect(ADMIN_TSX).not.toMatch(/badge bg-dark/);
   });
 
-  it('.admin-pill declares one display/height/font-size/line-height contract', () => {
-    expect(CSS).toMatch(
-      /\.admin-dashboard table\.admin-data-table tbody td\.col-type \.admin-pill,\s*\n\.admin-dashboard table\.admin-data-table tbody td\.col-status \.admin-pill \{[^}]*display:\s*inline-flex;[^}]*height:\s*24px;[^}]*font-size:\s*0\.6875rem;[^}]*line-height:\s*1;/
+  it('the type pill lives in the Study cell now - there is no Type column for it', () => {
+    expect(ADMIN_TSX).not.toMatch(/className="col-type"/);
+    // It sits inside the Study cell's meta line, ahead of the purpose text.
+    expect(ADMIN_TSX).toMatch(
+      /<td className="col-title"[\s\S]*?<div className="admin-study-meta">\s*<span className=\{`admin-pill \$\{getTypeBadgeClass/
     );
   });
 
-  it('the auto-closed pill keeps the uppercase/tracking the other two pills carry', () => {
-    // Code review HIGH 1 (#142): the bootstrap badge it replaced had neither,
-    // so this was the one pill of the three still visibly a different style
-    // even once the box metrics matched.
-    expect(CSS).toMatch(/\.admin-pill--auto-closed \{[^}]*text-transform:\s*uppercase;[^}]*letter-spacing:\s*0\.03em;/);
-    expect(CSS).not.toMatch(/\.admin-pill--auto-closed[^{]*\{[^}]*white-space:\s*normal;/);
+  it('.admin-pill declares one display/height/font-size/line-height contract, for the Study-cell type pill and the status pill', () => {
+    expect(CSS).toMatch(
+      /\.admin-dashboard table\.admin-data-table tbody td\.col-title \.admin-pill,\s*\n\.admin-dashboard table\.admin-data-table tbody td\.col-status \.admin-pill:not\(\.admin-pill--auto-closed\) \{[^}]*display:\s*inline-flex;[^}]*height:\s*24px;[^}]*font-size:\s*0\.6875rem;[^}]*line-height:\s*1;/
+    );
+  });
+
+  it('the auto-closed marker is a caption: muted 12px/400 text, block, 2px under the pill, no fill or border', () => {
+    // Step 1 (Mav 3.4): a CLOSED pill with an AUTO-CLOSED pill stacked under it
+    // read as two statuses. The information stays; the box goes.
+    const rule = CSS.match(/\n\.admin-pill--auto-closed \{([^}]*)\}/);
+    expect(rule, 'the .admin-pill--auto-closed rule').not.toBeNull();
+    const body = rule![1];
+    expect(body).toMatch(/display:\s*block;/);
+    expect(body).toMatch(/margin:\s*2px 0 0;/);
+    expect(body).toMatch(/border:\s*0;/);
+    expect(body).toMatch(/background:\s*none;/);
+    expect(body).toMatch(/color:\s*var\(--text-muted\);/);
+    expect(body).toMatch(/font-size:\s*12px;/);
+    expect(body).toMatch(/font-weight:\s*400;/);
+    expect(body).toMatch(/text-transform:\s*none;/);
   });
 
   it('the status label renders inside its own truncating span, not the pill directly', () => {
@@ -89,11 +111,24 @@ describe('admin studies table pill primitive (#142)', () => {
     );
   });
 
-  it('the status column is widened to fit "Auto-closed" on one line at the shared primitive height', () => {
-    expect(CSS).toMatch(/\.admin-data-table \.col-status \{\s*width:\s*12%;/);
+  it('the status column is a fixed 128px <col>, not a percentage', () => {
+    // Percentages under `table-layout: fixed` are what starved the Study
+    // column (14%, 129px at 1440). The widest pill, PUBLISHED, is ~97px of a
+    // 104px content box at 128px.
+    expect(CSS).toMatch(/\.admin-data-table col\.col-status \{\s*width:\s*128px;\s*\}/);
+    expect(CSS).not.toMatch(/\.admin-data-table \.col-status \{\s*width:\s*\d+%/);
   });
 
-  it('the auto-closed pill colours route through tokens, not a raw hex pair', () => {
-    expect(CSS).toMatch(/\.admin-pill--auto-closed \{[^}]*background:\s*var\(--admin-pill-auto-closed-bg\);[^}]*color:\s*var\(--admin-pill-auto-closed-text\);/);
+  it('the auto-closed caption is muted in both themes, past the blanket table-text colours', () => {
+    // `_themes.css` paints every `td *` #D4D4D4 in dark; without these the
+    // caption would read as body text.
+    const THEMES = readFileSync(join(__dirname, '..', '_themes.css'), 'utf8');
+    for (const theme of ['dark', 'light']) {
+      expect(THEMES).toMatch(
+        new RegExp(
+          `body\\.theme-${theme} \\.admin-dashboard table\\.admin-data-table tbody td\\.col-status \\.admin-pill--auto-closed \\{\\s*color:\\s*var\\(--text-muted\\);`
+        )
+      );
+    }
   });
 });

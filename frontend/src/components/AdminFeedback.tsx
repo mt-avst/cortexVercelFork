@@ -302,7 +302,7 @@ const AdminFeedback: React.FC = () => {
                     <SortCaret active={sortField === 'created_at'} direction={sortDirection} />
                   </button>
                 </th>
-                <th className="sortable" scope="col" aria-sort={ariaSortFor('category')} style={{ width: '130px' }}>
+                <th className="sortable" scope="col" aria-sort={ariaSortFor('category')} style={{ width: '168px' }}>
                   <button type="button" className="feedback-th-sort" onClick={() => handleSort('category')}>
                     Category
                     <SortCaret active={sortField === 'category'} direction={sortDirection} />
