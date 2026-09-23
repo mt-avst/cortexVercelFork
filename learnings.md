@@ -406,6 +406,7 @@ Every finding below started as something visible on screen and was only then che
   jsdom has no layout engine, so none of 528 tests could see it; only re-measuring in the browser did.
   Confirmed again on 2026-08-26 renaming to "Recorded session", and **character count is not the measurement**: two extra characters were 11.8px, not the ~15px arithmetic implied ("Recorded study" 125.7px, "Recorded session" 137.5px, measured in Chrome at the badge's own type rules).
   `.admin-data-table .col-type` now carries those numbers in its comment so the next rename starts from a measurement rather than a guess.
+  (The Type column was removed on 2026-09-23 - the type pill now sits on the Study cell's meta line - but the lesson stands: a label change is a layout change, and only a browser can measure it.)
 
 ### One name per type
 
