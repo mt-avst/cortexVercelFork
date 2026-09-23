@@ -45,15 +45,18 @@ const CLOSED = study('Closed study', 'closed');
 
 /**
  * `isPublishedButNotWorking` resolves true for an external-delivery study
- * with no link, which is what renders `PUBLISHED_NOT_WORKING_LABEL`
- * ("Published, not working") - the one status label long enough to overflow
- * the fixed-width Status column.
+ * with no link, which is what renders `PUBLISHED_NOT_WORKING_LABEL`. That was
+ * "Published, not working" - the one status label long enough to overflow the
+ * fixed-width Status column - until #157 shortened it to "Broken", which fits.
  */
 const NOT_WORKING = study('Question study', 'published', {
   delivery_mode: 'external',
   external_link_optional: null,
   meeting_location_optional: null,
 });
+
+/** The pre-#157 label, 147px in the pill's type - long enough to overflow it. */
+const LONG_STATUS_LABEL = 'Published, not working';
 
 const json = (body: unknown) => ({
   status: 200,
@@ -192,17 +195,25 @@ test.describe('admin studies table pills share one box (#142)', () => {
    * `overflow: hidden` cannot paint outside that box, so a label clip-box
    * inside the pill's box plus a live `overflow: hidden`/`text-overflow:
    * ellipsis` on an actually-overflowing label is the ink assertion.
+   *
+   * No shipped status label overflows since #157 ("Broken" fits), so this
+   * test writes the old 147px label into the span itself: the clip is kept as
+   * the guard for the next long label, and this is what proves it still holds.
    */
-  test('a long "Published, not working" status label truncates inside its own pill', async ({ page }) => {
+  test('a status label too long for its pill truncates inside it', async ({ page }) => {
     await serve(page, [NOT_WORKING]);
     await page.setViewportSize({ width: 1440, height: 900 });
     await openAdmin(page);
 
     const statusPill = page.locator('td.col-status .admin-study-status').first();
-    await expect(statusPill).toHaveText(/published, not working/i);
+    await expect(statusPill).toHaveText(/broken/i);
     // Fails by name when the label span is unwrapped rather than by a
     // measurement that quietly reads the pill instead.
     await expect(page.locator('td.col-status .admin-study-status__label')).toHaveCount(1);
+    await page.evaluate((text) => {
+      const label = document.querySelector('td.col-status .admin-study-status__label');
+      if (label) label.textContent = text;
+    }, LONG_STATUS_LABEL);
     // `elementsFromPoint` below takes VIEWPORT coordinates, and this row
     // sits well below the fold of a 900px-tall window: unscrolled, every
     // probe lands outside the viewport, returns an empty stack and the
@@ -279,6 +290,62 @@ test.describe('admin studies table pills share one box (#142)', () => {
       `the label must overflow for this test to mean anything: ${m.scrollWidth}px of text in a ${m.clientWidth}px label`
     ).toBeGreaterThan(m.clientWidth + 1);
   });
+
+  /**
+   * #157: the published-but-broken label reads in full at every width the
+   * table renders at. The table is a fixed 918px from 1220px up, so 1220 is
+   * its narrowest and 1440 a common desktop; measured, "Broken" is 45px of
+   * text where the pill leaves its label 53px beside the warning glyph, and
+   * "Published, not working" was 147px and read "PUBLIS...". The pill's text
+   * also carries a visually hidden "Published, " for a screen reader.
+   */
+  for (const width of [1220, 1440]) {
+    test(`the "Broken" status label renders in full inside its pill at ${width}px`, async ({ page }) => {
+      await serve(page, [NOT_WORKING]);
+      await page.setViewportSize({ width, height: 900 });
+      await openAdmin(page);
+
+      const statusPill = page.locator('td.col-status .admin-study-status').first();
+      await expect(statusPill).toHaveText(/^\s*published,\s+broken\s*$/i);
+      await expect(page.locator('td.col-status .admin-study-status__label')).toHaveCount(1);
+
+      const measure = () =>
+        page.evaluate(() => {
+          const pill = document.querySelector('td.col-status .admin-study-status');
+          const label = document.querySelector('td.col-status .admin-study-status__label') as HTMLElement | null;
+          const typeLozenge = document.querySelector('td.col-type .lozenge');
+          if (!pill || !label || !typeLozenge) return null;
+          const p = pill.getBoundingClientRect();
+          const l = label.getBoundingClientRect();
+          const t = typeLozenge.getBoundingClientRect();
+          return {
+            scrollWidth: label.scrollWidth,
+            clientWidth: label.clientWidth,
+            insidePill: l.left >= p.left - 0.5 && l.right <= p.right + 0.5,
+            overlapWithType: Math.max(0, Math.min(l.right, t.right) - Math.max(l.left, t.left)),
+          };
+        });
+
+      const m = await measure();
+      expect(m).not.toBeNull();
+      expect(
+        m!.scrollWidth,
+        `"Broken" is truncated: ${m!.scrollWidth}px of text in a ${m!.clientWidth}px label`
+      ).toBeLessThanOrEqual(m!.clientWidth);
+      expect(m!.insidePill).toBe(true);
+      expect(m!.overlapWithType).toBe(0);
+
+      // Control: the same instrument, on the same label, does see a
+      // truncation when there is one - so "fits" above is a measurement,
+      // not a probe that can only ever read equal.
+      await page.evaluate((text) => {
+        const label = document.querySelector('td.col-status .admin-study-status__label');
+        if (label) label.textContent = text;
+      }, LONG_STATUS_LABEL);
+      const control = await measure();
+      expect(control!.scrollWidth, 'the control label must overflow').toBeGreaterThan(control!.clientWidth + 1);
+    });
+  }
 
   /**
    * The Status column's width is what decides whether "Auto-closed" fits its
@@ -431,9 +498,12 @@ test.describe('admin studies table pills share one box (#142)', () => {
 
   /**
    * #149: a published study that is not working must read as broken without
-   * relying on its label. Above 1220px the label truncates to PUBLISHED
-   * followed by an ellipsis - the word is not the mark - so the mark is an
-   * amber fill plus a warning glyph that sits outside the truncating label.
+   * relying on its label. When this was written the label ("Published, not
+   * working") truncated above 1220px, so the word could not be the mark; the
+   * mark is an amber fill plus a warning glyph that sits outside the label.
+   * Since #157 the label is "Broken" and fits in full. The fill and glyph are
+   * the Draft pill's, so "published" is carried by a visually hidden prefix
+   * and the label's `title` instead.
    *
    * Asserted in a real browser because #142's lesson was that a source-pin
    * guard stayed green through the real defect. Every property here is a
@@ -595,9 +665,11 @@ test.describe('admin studies table pills share one box (#142)', () => {
             `rendered ink rgb(${ink}) on fill rgb(${fill}) in ${theme} at ${width}px`
           ).toBeGreaterThanOrEqual(4.5);
 
-          // The case #149 exists for: at 1440 the label really is truncated,
-          // so the glyph is doing the work the word cannot.
-          if (width === 1440) expect(m.labelTruncated).toBe(true);
+          // #157: the label no longer truncates at any width the table renders
+          // at, so the word and the glyph now both read. The "Broken" test
+          // above carries the control proving this instrument sees a
+          // truncation when there is one.
+          expect(m.labelTruncated, 'the not-working label is truncated again').toBe(false);
         });
       }
     }

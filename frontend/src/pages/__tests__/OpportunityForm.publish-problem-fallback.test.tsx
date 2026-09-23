@@ -10,7 +10,7 @@ import { getOpportunity, getSessions } from '../../api/client';
  * Code review LOW (fail-closed): `stepForPublishProblem` resolving a code to
  * `null` used to make `OpportunityForm.tsx`'s `.flatMap` drop that problem
  * silently - shrinking `publishProblems`, which both `shareLinkStartable`
- * and `ReviewStep`'s "Published, not working" pill gate on. A single
+ * and `ReviewStep`'s "Broken" pill gate on. A single
  * unresolvable code (unreachable today; not unreachable forever, the day a
  * new `PublishProblemCode` is added to the type without a matching entry in
  * `STEP_KEY_FOR_PROBLEM`) would therefore have RE-EXPOSED the copyable share

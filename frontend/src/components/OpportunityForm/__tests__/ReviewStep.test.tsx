@@ -40,6 +40,7 @@ const baseProps = {
   onEdit: vi.fn(),
   isEdit: false,
   status: 'draft' as const,
+  storedStatus: null,
   onStatusChange: vi.fn(),
   shareLink: null
 };
@@ -178,7 +179,7 @@ describe('ReviewStep - the identity header (WZ-17)', () => {
     expect(within(header).queryByText('Draft')).not.toBeInTheDocument();
   });
 
-  it('shows "Published, not working" instead of Published when a publish blocker exists (row 6)', () => {
+  it('shows "Broken" instead of Published when a publish blocker exists (row 6)', () => {
     render(
       <ReviewStep
         {...baseProps}
@@ -192,11 +193,85 @@ describe('ReviewStep - the identity header (WZ-17)', () => {
     );
 
     const header = screen.getByTestId('review-header');
-    expect(within(header).getByText('Published, not working')).toBeInTheDocument();
+    expect(within(header).getByText('Broken')).toBeInTheDocument();
     expect(within(header).queryByText('Published')).not.toBeInTheDocument();
+
+    // #157: styled exactly like Draft, so "published" is said in words.
+    const pill = within(header).getByText('Broken').closest('.review-header__pill') as HTMLElement;
+    expect(pill.textContent).toBe('Published, Broken');
+    expect(within(pill).getByText('Published,').className).toBe('visually-hidden');
+    expect(pill).toHaveAttribute('title', 'Published, not working');
   });
 
-  it('also reads "Published, not working" from a non-empty checklist, with no singular refusal', () => {
+  it('tells the author of a SAVED published study it has problems, not that it cannot be published yet (#157)', () => {
+    render(
+      <ReviewStep
+        {...baseProps}
+        status="published"
+        storedStatus="published"
+        publishRefusal={null}
+        publishProblems={[
+          { message: 'Add questions before publishing.', stepId: 2, stepTitle: 'Questions' }
+        ]}
+      />
+    );
+
+    expect(screen.getByText('This published study has problems:')).toBeInTheDocument();
+    expect(screen.queryByText('This study cannot be published yet:')).not.toBeInTheDocument();
+  });
+
+  it('keeps saying "this published study has problems" while Draft is chosen but not yet saved', () => {
+    // The study is live until the Draft choice is actually saved.
+    render(
+      <ReviewStep
+        {...baseProps}
+        status="draft"
+        storedStatus="published"
+        publishRefusal={null}
+        publishProblems={[
+          { message: 'Add questions before publishing.', stepId: 2, stepTitle: 'Questions' }
+        ]}
+      />
+    );
+
+    expect(screen.getByText('This published study has problems:')).toBeInTheDocument();
+    expect(screen.queryByText('This study cannot be published yet:')).not.toBeInTheDocument();
+  });
+
+  it('still says "cannot be published yet" when Published is only chosen, not saved', () => {
+    render(
+      <ReviewStep
+        {...baseProps}
+        status="published"
+        storedStatus="draft"
+        publishRefusal={null}
+        publishProblems={[
+          { message: 'Add questions before publishing.', stepId: 2, stepTitle: 'Questions' }
+        ]}
+      />
+    );
+
+    expect(screen.getByText('This study cannot be published yet:')).toBeInTheDocument();
+    expect(screen.queryByText('This published study has problems:')).not.toBeInTheDocument();
+  });
+
+  it('still tells the author of a draft it cannot be published yet', () => {
+    render(
+      <ReviewStep
+        {...baseProps}
+        status="draft"
+        publishRefusal={null}
+        publishProblems={[
+          { message: 'Add questions before publishing.', stepId: 2, stepTitle: 'Questions' }
+        ]}
+      />
+    );
+
+    expect(screen.getByText('This study cannot be published yet:')).toBeInTheDocument();
+    expect(screen.queryByText('This published study has problems:')).not.toBeInTheDocument();
+  });
+
+  it('also reads "Broken" from a non-empty checklist, with no singular refusal', () => {
     render(
       <ReviewStep
         {...baseProps}
@@ -209,7 +284,7 @@ describe('ReviewStep - the identity header (WZ-17)', () => {
     );
 
     const header = screen.getByTestId('review-header');
-    expect(within(header).getByText('Published, not working')).toBeInTheDocument();
+    expect(within(header).getByText('Broken')).toBeInTheDocument();
   });
 
   it('flags a missing title as a problem, never by colour alone, when none is entered', () => {

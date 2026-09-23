@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   PUBLISHED_NOT_WORKING_LABEL,
+  PUBLISHED_NOT_WORKING_PREFIX,
+  PUBLISHED_NOT_WORKING_DESCRIPTION,
   STEP_STATUS_LABEL,
   describeStepPosition,
   deriveStepStatus,
@@ -162,7 +164,12 @@ describe('STEP_STATUS_LABEL', () => {
 
 describe('PUBLISHED_NOT_WORKING_LABEL', () => {
   it('is one fixed word, shared by every surface that shows it (row 6)', () => {
-    expect(PUBLISHED_NOT_WORKING_LABEL).toBe('Published, not working');
+    expect(PUBLISHED_NOT_WORKING_LABEL).toBe('Broken');
+  });
+
+  it('keeps "published" for a screen reader and for hover (#157)', () => {
+    expect(PUBLISHED_NOT_WORKING_PREFIX).toBe('Published, ');
+    expect(PUBLISHED_NOT_WORKING_DESCRIPTION).toBe('Published, not working');
   });
 });
 

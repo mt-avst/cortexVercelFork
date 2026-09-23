@@ -556,6 +556,35 @@ describe('a publish that would be refused is previewed, never blocked', () => {
   });
 });
 
+describe('the problems alert names the study as it is saved, not as the dropdown reads (#157)', () => {
+  it('still says "cannot be published yet" when an unsaved study has Published chosen', () => {
+    // The Status control on Review is an unsaved choice. A new study the
+    // server would refuse to publish is not published, whatever it reads.
+    renderCreate();
+    fillBasics('unmoderated');
+    walkForward();
+    setStatus('published');
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('This study cannot be published yet:');
+    expect(alert).not.toHaveTextContent('This published study has problems:');
+  });
+
+  it('says "this published study has problems" when the SAVED study is published', async () => {
+    // A published poll with no link: live to participants, and broken.
+    vi.mocked(getOpportunity).mockResolvedValue(
+      OPPORTUNITY({ status: 'published', external_link_optional: null }) as never
+    );
+    renderEdit();
+    await screen.findByRole('navigation', { name: 'Form steps' });
+    walkForward();
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('This published study has problems:');
+    expect(alert).not.toHaveTextContent('This study cannot be published yet:');
+  });
+});
+
 /**
  * Row 4: the LIVE Review, wired to `findPublishProblems` (plural) rather than
  * the single-problem `findPublishProblem`. A moderated study missing BOTH its

@@ -2,7 +2,11 @@ import React from 'react';
 import { AlertCircle, AlertTriangle } from 'lucide-react';
 
 import type { ReviewSection } from '../../lib/opportunity-authoring/review-summary';
-import { PUBLISHED_NOT_WORKING_LABEL } from '../../lib/opportunity-authoring/step-status';
+import {
+  PUBLISHED_NOT_WORKING_LABEL,
+  PUBLISHED_NOT_WORKING_PREFIX,
+  PUBLISHED_NOT_WORKING_DESCRIPTION
+} from '../../lib/opportunity-authoring/step-status';
 import FieldError from './FieldError';
 import ShareOpportunityLink from '../ShareOpportunityLink';
 import type { User } from '@shared/types';
@@ -69,6 +73,12 @@ interface ReviewStepProps {
    * only when this step's own submit button is pressed.
    */
   status: 'draft' | 'published';
+  /**
+   * The status the study is SAVED with - null until it has been saved once.
+   * `status` above is the unsaved choice in the Status control, so it cannot
+   * say whether the study is live; this can (#157).
+   */
+  storedStatus: 'draft' | 'published' | null;
   /** Change handler for the control above. */
   onStatusChange: (status: 'draft' | 'published') => void;
   /** A validation error for `status`, if the server or a future check ever raises one. */
@@ -163,6 +173,7 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
   onEdit,
   isEdit,
   status,
+  storedStatus,
   onStatusChange,
   statusError,
   shareLink,
@@ -223,9 +234,15 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
               Draft
             </span>
           ) : hasPublishProblem ? (
-            <span className="review-header__pill review-header__pill--broken">
+            <span
+              className="review-header__pill review-header__pill--broken"
+              title={PUBLISHED_NOT_WORKING_DESCRIPTION}
+            >
               <AlertTriangle size={14} className="me-1" aria-hidden="true" />
-              {PUBLISHED_NOT_WORKING_LABEL}
+              {/* The pill is styled exactly like Draft, so "published" has to
+                  be said: hidden for a screen reader, `title` for hover. */}
+              <span className="visually-hidden">{PUBLISHED_NOT_WORKING_PREFIX}</span>
+              <span>{PUBLISHED_NOT_WORKING_LABEL}</span>
             </span>
           ) : (
             <span className="review-header__pill review-header__pill--published">
@@ -238,7 +255,13 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
       {publishProblems && publishProblems.length > 0 ? (
         <div className="alert alert-warning" role="alert">
           <AlertTriangle size={16} className="me-2" aria-hidden="true" />
-          <p className="mb-2">This study cannot be published yet:</p>
+          {/* A study SAVED as published is already live, so "cannot be
+              published yet" would tell its author the opposite of the truth
+              (#157). Read from the saved status, never the Status control:
+              choosing Published on an unsaved study does not publish it. */}
+          <p className="mb-2">
+            {storedStatus === 'published' ? 'This published study has problems:' : 'This study cannot be published yet:'}
+          </p>
           <ul className="mb-0 ps-3">
             {publishProblems.map((problem) => (
               <li key={problem.stepId}>
