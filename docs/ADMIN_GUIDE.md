@@ -38,12 +38,10 @@ This guide will help you create and manage research opportunities on AdaptaLabs.
 
 ### Admin Dashboard Overview
 
-The dashboard shows:
-- **Total Opportunities**: All opportunities you've created
-- **Total Bookings**: All bookings across your opportunities
-- **Participants**: Unique users who have booked
-- **Available Slots**: Remaining slots across all sessions
-- **Opportunities Table**: Detailed view with statistics
+The dashboard shows, top to bottom:
+- **Needs attention**: completion reports waiting for approval and studies closing soon, each with a link that takes you to them
+- **Operational snapshot**: active studies, participants, sessions this week and open slots. It counts your own studies; **Show all researchers** widens it to everyone's
+- **Four tabs**: Research Studies, Completion Approvals, Feedback and Bookings. See [Research Studies table](#research-studies-table) below
 
 ---
 
@@ -498,22 +496,25 @@ The panel does not appear on a draft or a closed opportunity, because neither ca
 
 ### Dashboard Statistics
 
-The admin dashboard shows:
-- **Total Opportunities**: Count of all your opportunities
-- **Total Bookings**: All bookings across opportunities
-- **Participants**: Unique users who have booked
-- **Available Slots**: Remaining capacity
+The operational snapshot shows four figures for your studies (or every researcher's, with **Show all researchers**):
+- **Active studies**: published and draft studies
+- **Participants**: people who have booked
+- **Sessions this week**: upcoming and completed
+- **Open slots**: capacity left across all published studies
 
-### Opportunities Table
+### Research Studies table
 
-View detailed statistics for each opportunity:
-- **Title**: Opportunity name
-- **Type**: Test, Poll, Survey, etc.
-- **Status**: Draft, Published, or Closed
-- **Sessions**: Number of sessions
-- **Bookings**: Total bookings
-- **Clicks**: For polls/surveys, number of clicks
-- **Actions**: Edit, Delete, Duplicate, Analytics
+One row per study, in these columns:
+- **Study**: the title, then the study type and its one-line purpose underneath. Hover the title or purpose to read it in full
+- **Status**: Draft, Published, Closed or Broken. Broken means the study is published but something stops participants taking part - open it to see what. A study closed automatically at its end date says *Auto-closed* under its status
+- **Progress**: for studies with sessions, places booked out of the total (for example *3 / 4*) with a bar. For polls, surveys and recorded studies, the number of clicks through to the study. A dash means there is nothing to count yet
+- **Next session / deadline**: the next session, or the date recruitment closes, with how long is left
+- **Created**: when the study was created
+- **Actions**: **View** (or **Edit** for a draft), and a menu with View, Edit, Copy, Analytics and Delete
+
+Sort by clicking a column heading.
+On a narrower screen (below 1280px wide) the Created column is hidden and a **Sort by** control appears above the table instead.
+Below 1024px each study shows as a card.
 
 ### Analytics (Polls & Surveys)
 
@@ -527,9 +528,9 @@ For Poll and Survey opportunities:
 
 ### Filtering and Search
 
-- Use **Type filter** to filter by opportunity type
-- Use **Status filter** to filter by status
-- Use **Search** to find specific opportunities
+- Use **Search** to find a study by its title or purpose
+- Use the **Status** and **Study type** filters to narrow the list
+- Use the **Quick filters** - Needs recruitment, Draft, Closing soon and Fully booked - for the common questions. **Clear filters** resets them all
 
 ---
 
