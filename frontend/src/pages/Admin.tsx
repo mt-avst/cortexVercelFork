@@ -81,6 +81,10 @@ const Admin: React.FC = () => {
   // table and the snapshot counts to every researcher, together.
   const [showAllResearchers, setShowAllResearchers] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string>('');
+  // Decoupled from successMessage's own text: the banner used to infer
+  // "warning" purely from the message containing the word 'DRAFT', which
+  // handleDuplicate's copy-failed message has no reason to contain.
+  const [successMessageVariant, setSuccessMessageVariant] = useState<'success' | 'warning'>('success');
   const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Counts for the tab badges and the "Needs attention" panel. Fetched here so
@@ -273,6 +277,7 @@ const Admin: React.FC = () => {
         setSuccessMessage(location.state.message);
         // Clear success message after delay (longer for draft warnings)
         const isDraftWarning = location.state.message.includes('DRAFT');
+        setSuccessMessageVariant(isDraftWarning ? 'warning' : 'success');
         if (successTimerRef.current) clearTimeout(successTimerRef.current);
         successTimerRef.current = setTimeout(() => setSuccessMessage(''), isDraftWarning ? 5000 : 3000);
       }
@@ -324,8 +329,18 @@ const Admin: React.FC = () => {
 
   const handleDuplicate = async (id: string) => {
     try {
-      await duplicateOpportunity(id);
+      const duplicated = await duplicateOpportunity(id);
       await loadOpportunities();
+      // cto/AdaptaLabs#161: the backend falls back to a plain, questionless
+      // copy when the linked FirstHand study is gone or fails to clone,
+      // rather than refusing the whole request - previously with no signal
+      // here at all, so the researcher only found out by opening the copy.
+      if (duplicated.study_copy_failed) {
+        setSuccessMessageVariant('warning');
+        setSuccessMessage('Study duplicated, but its questions could not be copied - the copy is empty and needs its own content before it can run.');
+        if (successTimerRef.current) clearTimeout(successTimerRef.current);
+        successTimerRef.current = setTimeout(() => setSuccessMessage(''), 5000);
+      }
     } catch (error: unknown) {
       // Note this also catches a failure of the RELOAD, where the duplicate did
       // in fact get created - so the message can be wrong, and the cause is the
@@ -402,7 +417,7 @@ const Admin: React.FC = () => {
 
             {/* Success/Warning Message */}
             {successMessage && (
-              <div className={`alert ${successMessage.includes('DRAFT') ? 'alert-warning' : 'alert-success'} mx-4 mt-4 mb-3`} role="alert">
+              <div className={`alert ${successMessageVariant === 'warning' ? 'alert-warning' : 'alert-success'} mx-4 mt-4 mb-3`} role="alert">
                 {successMessage}
               </div>
             )}
