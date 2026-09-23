@@ -99,6 +99,24 @@ const renderAdmin = () =>
     </MemoryRouter>
   );
 
+// The fixture study is a published `test` study with no sessions, so it is
+// Broken (isPublishedButNotWorking: a moderated study with no bookable slot).
+// Since Admin table Step 2 a broken study is ALSO named in the Needs attention
+// panel's "1 study broken" card, so a document-wide findByText for its title
+// finds two elements. Every "the row has loaded" wait is therefore scoped to
+// the Research Studies table, anchored on "Progress" - a header only that
+// table has (Recent bookings carries its own Study and Status headers).
+const findStudiesTable = async (): Promise<HTMLElement> => {
+  const progressHeader = await screen.findByRole('columnheader', { name: /^progress$/i });
+  const table = progressHeader.closest('table');
+  expect(table).not.toBeNull();
+  return table as HTMLElement;
+};
+
+/** The study's title in the studies table - the "row has loaded" anchor. */
+const findStudyInTable = async (title = 'Checkout usability test'): Promise<HTMLElement> =>
+  within(await findStudiesTable()).findByText(title);
+
 /** A Recent-bookings row. Shape matches RecentBookingItem from the server. */
 const recentBooking = (i: number) => ({
   id: `b-${i}`,
@@ -115,6 +133,14 @@ const recentBooking = (i: number) => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // clearAllMocks resets calls, NOT implementations: a test that swaps in
+  // `mockResolvedValue(...)` (the row 8 tests, the truncation tests) would
+  // otherwise leak its fixture into every later test. It did: once Step 2
+  // gated Delete on ownership, the DA-24 dialog tests ran against row 8's
+  // someone-else study, found Delete disabled and failed in file order (only
+  // vitest's retry hid it). Every test now starts from the default fixture.
+  vi.mocked(getOpportunities).mockResolvedValue([fixtures.opportunity] as never);
+  vi.mocked(getDashboardStats).mockResolvedValue(fixtures.stats as never);
   // Reset to the admin default; the non-admin test mutates this.
   auth.value = {
     user: { id: 'admin-1', role: 'researcher_admin', name: 'Admin', email: 'admin@example.com' },
@@ -144,7 +170,7 @@ describe('Admin page', () => {
     expect(screen.getByText('Create Research Study')).toBeInTheDocument();
 
     // Opportunities table renders the mocked row once the async load resolves.
-    expect(await screen.findByText('Checkout usability test')).toBeInTheDocument();
+    expect(await findStudyInTable()).toBeInTheDocument();
     expect(screen.getByText('See where participants stumble at checkout')).toBeInTheDocument();
 
     // "Research Studies" now names only the tab. The stat card that used to
@@ -172,7 +198,7 @@ describe('Admin page', () => {
     // Analytics page and therefore no way to its participant roster. Opening
     // the row's kebab must now surface Analytics for it.
     renderAdmin();
-    await screen.findByText('Checkout usability test');
+    await findStudyInTable();
 
     fireEvent.click(screen.getByRole('button', { name: /Actions for Checkout usability test/i }));
 
@@ -191,7 +217,7 @@ describe('Admin page', () => {
       { ...fixtures.opportunity, owner_user_id: 'someone-else', owner_name: 'Dana Owner' },
     ] as never);
     renderAdmin();
-    await screen.findByText('Checkout usability test');
+    await findStudyInTable();
 
     fireEvent.click(screen.getByRole('button', { name: /Actions for Checkout usability test/i }));
 
@@ -210,7 +236,7 @@ describe('Admin page', () => {
       { ...fixtures.opportunity, owner_user_id: 'someone-else', owner_name: 'Dana Owner' },
     ] as never);
     renderAdmin();
-    await screen.findByText('Checkout usability test');
+    await findStudyInTable();
 
     fireEvent.click(screen.getByRole('button', { name: /Actions for Checkout usability test/i }));
 
@@ -228,7 +254,7 @@ describe('Admin page', () => {
       recent_bookings: fifteen,
     } as never);
     renderAdmin();
-    await screen.findByText('Checkout usability test');
+    await findStudyInTable();
 
     fireEvent.click(screen.getByRole('tab', { name: /Bookings/ }));
 
@@ -247,7 +273,7 @@ describe('Admin page', () => {
       recent_bookings: three,
     } as never);
     renderAdmin();
-    await screen.findByText('Checkout usability test');
+    await findStudyInTable();
 
     fireEvent.click(screen.getByRole('tab', { name: /Bookings/ }));
 
@@ -317,7 +343,7 @@ describe('Admin page', () => {
     // real collateral (sessions/bookings, recordings/transcripts, analytics),
     // while still asking the original question and offering the original button.
     renderAdmin();
-    await screen.findByText('Checkout usability test');
+    await findStudyInTable();
 
     fireEvent.click(screen.getByRole('button', { name: /Actions for Checkout usability test/i }));
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
@@ -350,7 +376,7 @@ describe('Admin page', () => {
     // if that wiring regresses, rather than silently degrading to an
     // unannounced paragraph a sighted reviewer would never notice missing.
     renderAdmin();
-    await screen.findByText('Checkout usability test');
+    await findStudyInTable();
 
     fireEvent.click(screen.getByRole('button', { name: /Actions for Checkout usability test/i }));
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
@@ -380,7 +406,7 @@ describe('Admin page', () => {
       study_copy_failed: true,
     } as Awaited<ReturnType<typeof duplicateOpportunity>>);
     renderAdmin();
-    await screen.findByText('Checkout usability test');
+    await findStudyInTable();
 
     fireEvent.click(screen.getByRole('button', { name: /Actions for Checkout usability test/i }));
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Copy' }));
@@ -401,7 +427,7 @@ describe('Admin page', () => {
       id: 'opp-2',
     } as Awaited<ReturnType<typeof duplicateOpportunity>>);
     renderAdmin();
-    await screen.findByText('Checkout usability test');
+    await findStudyInTable();
 
     fireEvent.click(screen.getByRole('button', { name: /Actions for Checkout usability test/i }));
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Copy' }));
@@ -439,16 +465,23 @@ describe('Admin page', () => {
 describe('Admin dashboard accessibility (row 13)', () => {
   it('exposes each sortable Studies column as a button with a live aria-sort', async () => {
     renderAdmin();
-    await screen.findByText('Checkout usability test');
+    const table = await findStudiesTable();
+    await findStudyInTable();
 
     // The sortable header is a real button (keyboard-operable), not a click-only th.
-    const studySort = screen.getByRole('button', { name: /^Study/ });
+    const studySort = within(table).getByRole('button', { name: /^Study/ });
     const studyHeader = studySort.closest('th') as HTMLElement;
 
-    // Default sort is created_at desc, so Study starts unsorted and Created starts descending -
-    // aria-sort carries that state to a screen reader, which the bare ↑/↓ glyph never did.
+    // Default sort is Status ascending since Admin table Step 2 (Petra 3.2,
+    // AC11/AC12: broken first, then drafts, live, closed) - it was created_at
+    // desc before. So Status starts ascending and Study, Next and Created start
+    // unsorted - aria-sort carries that state to a screen reader, which the
+    // bare ↑/↓ glyph never did. Every header's state is pinned, so a default
+    // that moved to any other column fails here.
+    expect(within(table).getByRole('columnheader', { name: /^Status/ })).toHaveAttribute('aria-sort', 'ascending');
     expect(studyHeader).toHaveAttribute('aria-sort', 'none');
-    expect(screen.getByRole('columnheader', { name: /^Created/ })).toHaveAttribute('aria-sort', 'descending');
+    expect(within(table).getByRole('columnheader', { name: /^Next \/ deadline/ })).toHaveAttribute('aria-sort', 'none');
+    expect(within(table).getByRole('columnheader', { name: /^Created/ })).toHaveAttribute('aria-sort', 'none');
 
     fireEvent.click(studySort);
     expect(studySort.closest('th')).toHaveAttribute('aria-sort', 'ascending');
@@ -458,7 +491,7 @@ describe('Admin dashboard accessibility (row 13)', () => {
 
   it('marks the Studies column headers as column headers with scope', async () => {
     renderAdmin();
-    await screen.findByText('Checkout usability test');
+    await findStudyInTable();
     // A non-sortable header and a sortable one both carry scope=col; a plain <th>
     // without scope is what the audit flagged.
     expect(screen.getByRole('columnheader', { name: 'Progress' })).toHaveAttribute('scope', 'col');
@@ -467,7 +500,7 @@ describe('Admin dashboard accessibility (row 13)', () => {
 
   it('names the row actions menu after the study, not the ⋮ glyph', async () => {
     renderAdmin();
-    await screen.findByText('Checkout usability test');
+    await findStudyInTable();
 
     expect(
       screen.getByRole('button', { name: /Actions for Checkout usability test/i })
@@ -484,7 +517,7 @@ describe('Admin dashboard accessibility (row 13)', () => {
     // id on the tab button itself), so this checks all four rather than only
     // the one the report named.
     renderAdmin();
-    await screen.findByText('Checkout usability test');
+    await findStudyInTable();
 
     for (const tabpanel of screen.getAllByRole('tabpanel', { hidden: true })) {
       const labelId = tabpanel.getAttribute('aria-labelledby');
@@ -534,24 +567,52 @@ describe('the Show all researchers toggle (Decision 2)', () => {
 });
 
 describe('Retry after a failed load keeps the admin\'s filters (cto/AdaptaLabs#145)', () => {
-  it('refetches with the Status filter still applied, not cleared', async () => {
-    // ErrorState's Retry button is wired onClick={onAction}, so React hands it
-    // the click's MouseEvent. loadOpportunities's first parameter is
-    // forceClearFilter - a plain onAction={loadOpportunities} makes that event
-    // object the (truthy) argument, silently clearing the Status filter on
-    // every Retry. This pins the params a Retry actually sends.
+  // Since Admin table Step 2 the Status and Study Type selects filter
+  // CLIENT-side: only `scope` goes to the server, so "N of M" and Needs
+  // attention read the whole in-scope list. The #145 pin used to be the wire
+  // params a Retry sends ({ status: 'draft', scope }); with no status on the
+  // wire the same defect - Retry passing its click event as forceClearFilter
+  // - now shows as the Status select being reset and the table widening, so
+  // that is what is pinned.
+  const draftStudy = {
+    ...fixtures.opportunity,
+    id: 'opp-draft',
+    title: 'Draft onboarding survey',
+    status: 'draft',
+  };
+
+  it('narrows the TABLE to drafts client-side and sends no status on the wire', async () => {
+    vi.mocked(getOpportunities).mockResolvedValue([fixtures.opportunity, draftStudy] as never);
     renderAdmin();
-    await screen.findByText('Checkout usability test');
+    const table = await findStudiesTable();
+    // Control: both rows are there before the filter.
+    await within(table).findByText('Draft onboarding survey');
+    expect(within(table).getByText('Checkout usability test')).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'draft' } });
-    await waitFor(() =>
-      expect(vi.mocked(getOpportunities)).toHaveBeenLastCalledWith({ status: 'draft', scope: 'mine' })
-    );
 
-    // Force the next load (triggered by the filter change above having already
-    // resolved) to fail, then trigger a second one that genuinely fails.
+    await waitFor(() => expect(within(table).queryByText('Checkout usability test')).toBeNull());
+    expect(within(table).getByText('Draft onboarding survey')).toBeInTheDocument();
+    // No refetch for a status change, and nothing but the scope ever sent.
+    expect(vi.mocked(getOpportunities)).toHaveBeenCalledTimes(1);
+    for (const [params] of vi.mocked(getOpportunities).mock.calls) {
+      expect(params).toEqual({ scope: 'mine' });
+    }
+  });
+
+  it('keeps the Status filter applied through a Retry, not cleared', async () => {
+    vi.mocked(getOpportunities).mockResolvedValue([fixtures.opportunity, draftStudy] as never);
+    renderAdmin();
+    const table = await findStudiesTable();
+    await within(table).findByText('Draft onboarding survey');
+
+    fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'draft' } });
+    await waitFor(() => expect(within(table).queryByText('Checkout usability test')).toBeNull());
+
+    // A load that genuinely fails: the scope toggle is now the one filter
+    // that goes back to the server.
     vi.mocked(getOpportunities).mockRejectedValueOnce(new Error('network down'));
-    fireEvent.change(screen.getByLabelText('Study Type'), { target: { value: 'survey' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Show all researchers' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Failed to load studies');
 
@@ -559,12 +620,13 @@ describe('Retry after a failed load keeps the admin\'s filters (cto/AdaptaLabs#1
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
 
     await waitFor(() => expect(vi.mocked(getOpportunities)).toHaveBeenCalled());
-    // The measured regression: status:draft (and type:survey) dropped, leaving only scope.
-    expect(vi.mocked(getOpportunities)).toHaveBeenLastCalledWith({
-      status: 'draft',
-      type: 'survey',
-      scope: 'mine',
-    });
+    expect(vi.mocked(getOpportunities)).toHaveBeenLastCalledWith({ scope: 'all' });
+    // The measured regression, as it would show now: the Status select reset
+    // to All Statuses and the published study back in the table.
+    expect(screen.getByLabelText('Status')).toHaveValue('draft');
+    const reloaded = await findStudiesTable();
+    await within(reloaded).findByText('Draft onboarding survey');
+    expect(within(reloaded).queryByText('Checkout usability test')).toBeNull();
   });
 });
 

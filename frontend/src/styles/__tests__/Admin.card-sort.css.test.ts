@@ -127,14 +127,34 @@ describe('.filter-field-sm floor (found alongside #131)', () => {
 });
 
 describe('.admin-card-sort shared control height (#131)', () => {
-  it('keeps the select and direction pill one height, 2rem, and out-specifies the phone select rule', () => {
-    expect(mediaBlock(SORT_CONTROL_MEDIA)).toMatch(/--admin-card-sort-height:\s*2rem\s*;/);
+  it('keeps the select and direction pill one height, 2.125rem, and out-specifies the phone select rule', () => {
+    // 2rem until Admin table Step 2, which gave the chips beside the control
+    // an explicit 2.125rem and the control the same (handover section 4:
+    // "the Sort-by control's height and radius match the chips").
+    expect(mediaBlock(SORT_CONTROL_MEDIA)).toMatch(/--admin-card-sort-height:\s*2\.125rem\s*;/);
     // The `.admin-dashboard` prefix is load-bearing: without it the phone
     // `.admin-dashboard .form-select` rule wins, and its side padding sits
     // over the chevron and clips the selected field's name.
     const shared = blockFor(CSS, '.admin-dashboard .admin-card-sort .form-select,\n  .admin-dashboard .admin-card-sort-dir');
     expect(shared).toMatch(/height:\s*var\(--admin-card-sort-height\)\s*;/);
     expect(shared).toMatch(/min-height:\s*0\s*;/);
+  });
+
+  it('matches the quick-filter chips it sits beside: 2.125rem tall, pill-shaped (Admin table Step 2)', () => {
+    // Both heights pinned as literals, not compared to each other: two values
+    // drifting together would pass a comparison.
+    const chip = blockFor(CSS, '.admin-chip');
+    expect(chip).toMatch(/(^|\n)\s*height:\s*2\.125rem\s*;/);
+    expect(chip).toMatch(/border-radius:\s*var\(--radius-full\)\s*;/);
+    // The select was the one square-cornered piece of the family; the
+    // direction pill already carried --radius-full (control, below).
+    const select = blockFor(mediaBlock(SORT_CONTROL_MEDIA), '.admin-dashboard .admin-card-sort .form-select');
+    expect(select).toMatch(/border-radius:\s*var\(--radius-full\)\s*;/);
+    // Anchored at the line start: `.admin-dashboard .admin-card-sort-dir {`
+    // (the shared-height rule) also contains the bare selector.
+    expect(mediaBlock(SORT_CONTROL_MEDIA)).toMatch(
+      /\n\s*\.admin-card-sort-dir \{[^}]*border-radius:\s*var\(--radius-full\)\s*;/
+    );
   });
 
   it('grows both controls to 2.5rem on a phone, matching every other admin select there', () => {
