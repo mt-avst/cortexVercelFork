@@ -4451,6 +4451,18 @@ const OpportunityForm: React.FC = () => {
             status: savedOpportunity.status === 'closed' ? 'draft' : savedOpportunity.status
           };
         }
+
+        // Moving `storedFormRef`'s status above can itself flip
+        // `autosaveApplies` true (a published-and-broken study just saved
+        // as Draft), and if the reload below then fails, the form is left
+        // reading as dirty with nothing having re-stamped `savedSignatureRef` -
+        // so autosave becomes newly eligible to fire on its own timer, with
+        // no further edit. `linkedStudyUpdatedAt` must be current before
+        // that can happen, or that autosave sends the revision this form
+        // loaded with - already spent by the save that just succeeded - and
+        // the server 409s, blaming a colleague who does not exist. This is
+        // the same adoption the reload would otherwise be the only path to.
+        adoptStudyRevision(savedOpportunity);
       } else {
         // Create as a DRAFT when this Finish would publish a bookable type, so
         // the slots can be seated before the publish gate runs; every other

@@ -631,6 +631,60 @@ describe('the problems alert names the study as it is saved, not as the dropdown
     expect(alert).toHaveTextContent('This study cannot be published yet:');
     expect(alert).not.toHaveTextContent('This published study has problems:');
   });
+
+  it('reads the SERVER status from a save response that differs from what the form intended', async () => {
+    /*
+     * The coverage gap the sibling test above leaves: there,
+     * `savedOpportunity.status` and `formData.status` happen to agree (both
+     * end up 'draft'), so a fix that read `formData.status` instead of the
+     * response would pass it too, undetected. This is the case where they
+     * genuinely differ.
+     *
+     * Driven from the DRAFT side, deliberately. Every code `publishProblems`
+     * can report (missing link, missing task list or questions, missing
+     * venue or slot) is ALSO enforced as a hard block on submit whenever
+     * `formData.status === 'published'` (this file's own `validateForm` -
+     * see the `formData.status === 'published' && ...` guards around line
+     * 2116) - so a study broken enough to keep `publishProblems` non-empty
+     * can never actually reach `updateOpportunity` with a published intent;
+     * the click is refused locally first, before any request. A DRAFT save
+     * has no such gate (row 4: `findPublishProblems` never reads
+     * `willBePublished`, so a draft previews the same checklist a publish
+     * attempt would meet, and still saves regardless), so this keeps the
+     * author's real, SENDABLE intent on Draft and puts the mismatch on the
+     * mocked response instead: it comes back 'published', disagreeing with
+     * what was sent.
+     */
+    vi.mocked(getOpportunity)
+      .mockResolvedValueOnce(
+        OPPORTUNITY({ status: 'draft', external_link_optional: null }) as never
+      )
+      // The reload `loadOpportunity` issues after the save below.
+      .mockRejectedValueOnce(new Error('503 from the opportunities endpoint'));
+    // The response disagrees with what was sent: the author left Status on
+    // Draft, and the row that comes back reports published.
+    vi.mocked(updateOpportunity).mockResolvedValueOnce(
+      OPPORTUNITY({ status: 'published', external_link_optional: null }) as never
+    );
+
+    renderEdit();
+    await screen.findByRole('navigation', { name: 'Form steps' });
+    walkForward();
+    // Status stays Draft - no setStatus call. The missing link is what
+    // keeps `publishProblems` non-empty; leaving Status on Draft is what
+    // lets THIS save through at all (see above).
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(vi.mocked(updateOpportunity)).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(vi.mocked(getOpportunity)).toHaveBeenCalledTimes(2));
+
+    const alert = within(screen.getByTestId('review-step')).getByRole('alert');
+    // If the fix read `formData.status` (draft) instead of the response's
+    // (published), this would wrongly keep saying "This study cannot be
+    // published yet:".
+    expect(alert).toHaveTextContent('This published study has problems:');
+    expect(alert).not.toHaveTextContent('This study cannot be published yet:');
+  });
 });
 
 /**
