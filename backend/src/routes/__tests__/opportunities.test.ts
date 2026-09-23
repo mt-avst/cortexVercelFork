@@ -6125,10 +6125,27 @@ describe('Opportunities API', () => {
       expect(response.body.delivery_mode).toBe('external');
       expect(response.body.firsthand_study_id).toBeNull();
 
+      // THE ACTUAL WRITE, not the mocked read-back - see the stale-link test
+      // above for why the response body alone can't catch a route that
+      // bound the wrong values.
+      const insert = mockQuery.mock.calls.find((call: unknown[]) =>
+        String(call[0]).includes('INSERT INTO opportunities')
+      );
+      const sql = String(insert![0]);
+      const columns = sql
+        .slice(sql.indexOf('('), sql.indexOf(') VALUES'))
+        .split(',')
+        .map((column: string) => column.replace(/[()\s]/g, ''));
+      const values = insert![1] as unknown[];
+      const bound = (column: string) => values[columns.indexOf(column)];
+
+      expect(bound('delivery_mode')).toBe('external');
+      expect(bound('firsthand_study_id')).toBeNull();
+
       expect(error).toHaveBeenCalledWith(
         expect.stringMatching(/failed to clone/i),
         expect.objectContaining({
-          error: outage,
+          error: String(outage),
           opportunityId: 'native-opp-7',
           firsthandStudyId: 'study_outage'
         })
@@ -6195,10 +6212,27 @@ describe('Opportunities API', () => {
       expect(response.body.delivery_mode).toBe('external');
       expect(response.body.firsthand_study_id).toBeNull();
 
+      // THE ACTUAL WRITE, not the mocked read-back - see the stale-link test
+      // above for why the response body alone can't catch a route that
+      // bound the wrong values.
+      const insert = mockQuery.mock.calls.find((call: unknown[]) =>
+        String(call[0]).includes('INSERT INTO opportunities')
+      );
+      const sql = String(insert![0]);
+      const columns = sql
+        .slice(sql.indexOf('('), sql.indexOf(') VALUES'))
+        .split(',')
+        .map((column: string) => column.replace(/[()\s]/g, ''));
+      const values = insert![1] as unknown[];
+      const bound = (column: string) => values[columns.indexOf(column)];
+
+      expect(bound('delivery_mode')).toBe('external');
+      expect(bound('firsthand_study_id')).toBeNull();
+
       expect(error).toHaveBeenCalledWith(
         expect.stringMatching(/failed to clone/i),
         expect.objectContaining({
-          error: validationFailure,
+          error: String(validationFailure),
           opportunityId: 'native-opp-9',
           firsthandStudyId: 'study_unstorable'
         })

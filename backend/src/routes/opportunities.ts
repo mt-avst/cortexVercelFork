@@ -4863,8 +4863,14 @@ router.post('/:id/duplicate', requireAdmin, opportunityWriteLimiter, asyncHandle
         });
       }
     } catch (error) {
+      // String(error), not the raw Error: the logger JSON-serialises this
+      // metadata object, and Error.prototype has no own enumerable
+      // properties, so passing the object itself logs "{}" - the one line
+      // meant to say WHY the clone failed would carry no cause at all. Every
+      // other catch in this file already does this (see e.g. the outage
+      // handler a few hundred lines up).
       logger.error('Duplicate: failed to clone linked FirstHand study, duplicating opportunity without it', {
-        error,
+        error: String(error),
         opportunityId: id,
         firsthandStudyId: opp.firsthand_study_id
       });
