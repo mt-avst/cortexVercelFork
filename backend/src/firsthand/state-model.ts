@@ -108,6 +108,14 @@ export function isAnsweredRuntimeStatus(status: string): boolean {
  * the same as if the participant had never started). See
  * `isInFlightRuntimeSession`, which is neither of these plus the expiry check
  * no status value carries.
+ *
+ * DEAD is not the whole story for `abandoned` specifically
+ * (cto/AdaptaLabs#155): a fresh attempt is right for a session that never
+ * received an answer, but an `abandoned` session that already holds one is
+ * refused rather than re-minted, because letting it repeat is how one account
+ * piles up answer-carrying abandoned sessions without limit. That refusal
+ * reads `hasResponses` alongside this status, not through it - see the
+ * survey-session mint route, next to its `isInFlightRuntimeSession` call.
  */
 export const terminalUnansweredRuntimeStates = ["abandoned", "failed"] as const;
 

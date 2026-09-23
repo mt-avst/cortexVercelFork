@@ -4068,6 +4068,45 @@ router.post('/:id/survey-session', requireAuth, participantSessionMintLimiter, p
     }
 
     /*
+     * ABANDONED-WITH-ANSWERS IS REFUSED, NOT RESUMED (cto/AdaptaLabs#155).
+     *
+     * `abandoned` is one of `terminalUnansweredRuntimeStates` (state-model.ts):
+     * DEAD rather than DONE, so a fresh mint is normally exactly right - see
+     * `isInFlightRuntimeSession` just below. That was unconditional until now,
+     * and it was the bug: mint, answer a question, post `session_abandoned`,
+     * mint again - the second mint saw a DEAD session and started a THIRD,
+     * fresh runtime_sessions row, indistinguishable from someone who had never
+     * begun. Repeating that is bounded only by the rate limiters (20 mints and
+     * 120 runtime writes a minute), which slow it, not stop it, and it is the
+     * root cause behind the answer-length heap risk `.max()` bounds elsewhere
+     * (cto/AdaptaLabs#152) and a route to the 200,000-session CSV ceiling
+     * (`MAX_CSV_PARTICIPANTS`) for one participant alone.
+     *
+     * NOT resumed: `refuseAnswerToFinishedSession` (runtime-repository-postgres.ts)
+     * treats `abandoned` as write-terminal - it 409s any response mutation
+     * against it, inside the row lock, so two submissions racing cannot both
+     * see "not finished". Handing back the SAME token would return a link that
+     * can accept no further answers, which is a broken resume, not a working
+     * one - reviving it would mean carving an exemption into a guard that also
+     * protects `completed` and `failed`, a change with its own consequences
+     * this fix does not need to make. Refusing costs nothing an abandoned
+     * session was owed: nobody can answer it further either way, and the
+     * participant already got the message their own `session_abandoned` event
+     * declared.
+     *
+     * `hasResponses`, not the status alone, is what makes this narrow: an
+     * abandoned session that never received an answer is still exactly the
+     * DEAD case below and still earns a fresh mint - see
+     * `mint-refuses-answer-carrying-abandoned-session-postgres.test.ts` for
+     * both arms side by side.
+     */
+    if (existing.sessionStatus === 'abandoned' && existing.hasResponses) {
+      return res.status(409).json({
+        error: 'You started this and abandoned it before finishing, so it cannot be restarted.'
+      });
+    }
+
+    /*
      * IN-FLIGHT, not merely unanswered (cto/AdaptaLabs#129, LOW-8).
      *
      * Before this, ANY unanswered row was resumed - an abandoned session from
@@ -4081,7 +4120,9 @@ router.post('/:id/survey-session', requireAuth, participantSessionMintLimiter, p
      *
      * A session that fails this check is neither answered (caught above) nor
      * live: it falls through to the deadline gate and a fresh mint below,
-     * exactly as if this participant had never started.
+     * exactly as if this participant had never started - UNLESS it is the
+     * answer-carrying abandoned case just above, which is refused before this
+     * check ever runs.
      */
     if (
       isInFlightRuntimeSession({

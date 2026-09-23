@@ -371,6 +371,18 @@ export async function resetRuntimeSession(payload: SessionPayload) {
  * by `reports inProgress as boolean false rather than null when the session
  * carries no expiry`, which is the only test in either DB suite that can see
  * this word: dropping it left all 40 green before that test existed.
+ *
+ * `hasResponses` (cto/AdaptaLabs#155) is the fact `isInFlightRuntimeSession`
+ * cannot see and does not try to: that predicate only tells DEAD (abandoned
+ * or failed, fresh attempt is exactly right) from LIVE, and every DEAD
+ * session earned a fresh mint whether or not it ever answered anything - so a
+ * participant who minted, answered, and posted `session_abandoned` could mint
+ * again indefinitely, each attempt a fresh row the same fresh way as someone
+ * who had never started. The mint route reads this ALONGSIDE
+ * `isInFlightRuntimeSession`, not through it, to refuse exactly that one
+ * case - see the route for why abandoned-with-answers is refused rather than
+ * resumed. `EXISTS`, not a COUNT, because the caller only ever asks a
+ * yes/no question and a session can hold many response rows, one per step.
  */
 export async function findParticipantSessionForOpportunity(input: {
   opportunityId: string;
@@ -380,6 +392,14 @@ export async function findParticipantSessionForOpportunity(input: {
   sessionStatus: string;
   completedAt: string | null;
   sessionNotExpired: boolean;
+  // Optional in the TYPE, never in a real row: the live query below always
+  // projects it. Optional here only so an existing mocked
+  // `findParticipantSessionForOpportunity` resolved value - built before this
+  // field existed - still type-checks without every call site being touched;
+  // an absent value reads as falsy at the one place that reads it (the
+  // abandoned-with-answers mint refusal), which is the same outcome those
+  // fixtures had before this field existed.
+  hasResponses?: boolean;
 } | null> {
   return withRuntimeDatabaseClient(async (client) => {
     const result = await client.query<{
@@ -387,13 +407,18 @@ export async function findParticipantSessionForOpportunity(input: {
       session_status: string;
       completed_at: Date | null;
       session_not_expired: boolean;
+      has_responses: boolean;
     }>(
       `
         SELECT token, session_status, completed_at,
                (
                  try_timestamptz(session_payload->'session'->>'expires_at') > NOW()
                  IS TRUE
-               ) AS session_not_expired
+               ) AS session_not_expired,
+               EXISTS (
+                 SELECT 1 FROM participant_responses
+                 WHERE participant_responses.session_id = runtime_sessions.session_id
+               ) AS has_responses
         FROM runtime_sessions
         WHERE opportunity_id = $1
           AND participant_id = $2
@@ -409,7 +434,8 @@ export async function findParticipantSessionForOpportunity(input: {
           token: row.token,
           sessionStatus: row.session_status,
           completedAt: row.completed_at ? row.completed_at.toISOString() : null,
-          sessionNotExpired: row.session_not_expired
+          sessionNotExpired: row.session_not_expired,
+          hasResponses: row.has_responses
         }
       : null;
   });
