@@ -18,7 +18,8 @@
  *
  * Typed with `satisfies` against the shared API types (`shared/types`), so a
  * field renamed or retyped there fails typecheck here instead of leaving the
- * fixture describing an API that no longer exists. `Wire<T>` admits `null`
+ * fixture describing an API that no longer exists. `npm run typecheck` (the
+ * CI typecheck job) covers e2e/ through e2e/tsconfig.json. `Wire<T>` admits `null`
  * wherever the type has a field: the API sends null for an empty nullable
  * column where the TypeScript type marks the field optional.
  */

@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { DASHBOARD, FEEDBACK, PENDING_APPROVALS } from './fixtures/admin-dashboard-seed';
 
 /**
  * Automated Accessibility Testing Suite
@@ -108,6 +109,20 @@ const expectBookingContrastActuallyMeasured = (
  * for it. Each test now names its page's own heading plus one element the
  * mocked data renders, and a render problem fails here, by name, within 10s.
  */
+/**
+ * Admin's panels beyond the studies list (which the beforeEach mocks). Both
+ * Admin scans used to mock `/api/dashboard`, a path the page no longer calls,
+ * and nothing mocked pending approvals or feedback: under the catch-all 500
+ * they scanned Admin with "Failed to load pending approvals" showing. The data
+ * is the typed fixture the Admin table specs use.
+ */
+const mockAdminPanels = async (page: import('@playwright/test').Page): Promise<void> => {
+  const json = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  await page.route('**/api/admin/dashboard**', (route) => route.fulfill(json(DASHBOARD)));
+  await page.route('**/api/bookings/pending-approvals**', (route) => route.fulfill(json(PENDING_APPROVALS)));
+  await page.route('**/api/feedback**', (route) => route.fulfill(json(FEEDBACK)));
+};
+
 const expectRendered = async (
   page: import('@playwright/test').Page,
   heading: import('@playwright/test').Locator,
@@ -116,6 +131,10 @@ const expectRendered = async (
   await expect(heading, 'the page heading never rendered').toBeAttached({ timeout: 10000 });
   await expect(content, 'the page content never rendered').toBeVisible({ timeout: 10000 });
   await expect(page.locator('main .spinner-border'), 'the page is still loading').toHaveCount(0, { timeout: 10000 });
+  // Every unmocked call gets a 500, so a page whose own mock stopped matching
+  // renders its error state - and some error states still show the content
+  // being waited for (My Bookings keeps its empty cards under the alert).
+  await expect(page.locator('main .alert-danger'), 'the page rendered an error').toHaveCount(0);
 };
 
 test.describe('Accessibility Tests', () => {
@@ -137,7 +156,10 @@ test.describe('Accessibility Tests', () => {
       // branch alike, and 0/990 against a backend-less preview. Registered
       // first so every mock below and in a test takes precedence (Playwright
       // tries routes in reverse registration order).
-      await page.route('**/api/**', async (route) => {
+      // A pathname predicate, not the glob '**/api/**': under the Vite dev
+      // server that glob also matches the app's own source modules
+      // (/src/api/client.ts), so the app never booted in a local dev run.
+      await page.route((url) => url.pathname.startsWith('/api/'), async (route) => {
         await route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"no backend in e2e"}' });
       });
       await page.route('**/api/me', async (route) => {
@@ -272,18 +294,7 @@ test.describe('Accessibility Tests', () => {
       });
     });
 
-    await page.route('**/api/dashboard', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          totalOpportunities: 5,
-          totalBookings: 10,
-          totalParticipants: 8,
-          availableSlots: 25
-        }),
-      });
-    });
+    await mockAdminPanels(page);
 
     await page.goto('/admin');
     await page.waitForLoadState('load');
@@ -368,9 +379,7 @@ test.describe('Accessibility Tests', () => {
         }),
       });
     });
-    await page.route('**/api/dashboard', async (route) => {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-    });
+    await mockAdminPanels(page);
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/admin');
@@ -1462,7 +1471,7 @@ test.describe('Accessibility Tests', () => {
         body: JSON.stringify({ id: 'admin-1', name: 'Admin User', email: 'admin@example.com', role: 'researcher_admin' }),
       });
     });
-    await page.route('**/api/dashboard', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
+    await mockAdminPanels(page);
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/admin');
@@ -1515,7 +1524,9 @@ test.describe('Accessibility Tests', () => {
           body: JSON.stringify({ id: 'admin-1', name: 'Admin User', email: 'admin@example.com', role: 'researcher_admin' }),
         });
       });
-      await page.route('**/api/dashboard', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
+      // The fixture panels first, so this test's own long approval (registered
+      // after, so matched first) replaces the fixture's approvals.
+      await mockAdminPanels(page);
       await page.route('**/api/bookings/pending-approvals', (route) =>
         route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([longApproval]) }));
 

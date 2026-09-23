@@ -772,6 +772,10 @@ for (const theme of THEMES) {
         );
         // The fixed set alone is the heading plus four tab labels and counts.
         expect(m.measured, 'text nodes measured').toBeGreaterThanOrEqual(5);
+        // Control: an unparseable gradient would read no stops and fall back to
+        // the flat body colour, passing every node against a darker ground than
+        // the page really paints.
+        expect(m.stopsRead.length, 'colour stops read from the dark ground').toBeGreaterThan(0);
         expect(m.failures).toEqual([]);
       });
     }

@@ -870,9 +870,9 @@ const Admin: React.FC = () => {
                   {/* Research Studies Table. No min-height: a 400px floor once
                       kept room under a short filtered list for the last row's
                       kebab menu, and left ~200px of empty card under two rows.
-                      The menu may now hang past the card - `.main` stacks the
-                      page above the feedback footer (_components.css, search
-                      "stacks above the site feedback footer"). */}
+                      The menu may now hang past the card - the page content
+                      stacks above the feedback footer (_themes.css, search
+                      "admin-dashboard-page .admin-page-bg > *"). */}
                   {!loadingOpportunities && !error && sortedOpportunities.length > 0 && (
                     <div className="table-responsive" style={{
                       overflow: 'visible', 

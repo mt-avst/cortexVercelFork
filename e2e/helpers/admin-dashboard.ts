@@ -81,7 +81,9 @@ async function mockDashboardApi(page: Page): Promise<string[]> {
   unmockedByPage.set(page, unmocked);
   // Registered first so it matches last: Playwright tries routes in reverse
   // registration order.
-  await page.route('**/api/**', async (route) => {
+  // A pathname predicate, not the glob '**/api/**', which under the Vite dev
+  // server also matches the app's own /src/api/*.ts modules.
+  await page.route((url) => url.pathname.startsWith('/api/'), async (route) => {
     unmocked.push(`${route.request().method()} ${new URL(route.request().url()).pathname}`);
     await route.fulfill({ status: 404, contentType: 'application/json', body: '{"error":"unmocked in e2e"}' });
   });

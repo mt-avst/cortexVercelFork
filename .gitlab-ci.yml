@@ -420,7 +420,9 @@ typecheck:
     # them at all - a fixture naming a field that does not exist compiled, ran,
     # and reported green while asserting nothing. No other job runs tsc: the
     # kaniko builds do compile the source, but later in the pipeline and never
-    # over the tests.
+    # over the tests. The same script also checks e2e/ (e2e/tsconfig.json):
+    # Playwright strips types without checking them, so an e2e fixture typed
+    # against shared/types was otherwise checked by nothing.
     - cd "$CI_PROJECT_DIR" && npm run typecheck
 
 # Accessibility. axe-core over the pages in e2e/accessibility.test.ts, and the
