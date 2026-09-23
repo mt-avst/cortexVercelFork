@@ -109,13 +109,17 @@ export function isAnsweredRuntimeStatus(status: string): boolean {
  * `isInFlightRuntimeSession`, which is neither of these plus the expiry check
  * no status value carries.
  *
- * DEAD is not the whole story for `abandoned` specifically
+ * DEAD is not the whole story for EITHER of these states
  * (cto/AdaptaLabs#155): a fresh attempt is right for a session that never
- * received an answer, but an `abandoned` session that already holds one is
- * refused rather than re-minted, because letting it repeat is how one account
- * piles up answer-carrying abandoned sessions without limit. That refusal
- * reads `hasResponses` alongside this status, not through it - see the
- * survey-session mint route, next to its `isInFlightRuntimeSession` call.
+ * received an answer, but a terminal-unanswered session that already holds
+ * one is refused rather than re-minted, because letting it repeat is how one
+ * account piles up answer-carrying finished sessions without limit - and
+ * that is true of `failed` as well as `abandoned`, since both land here and
+ * both are equally write-terminal (`FINISHED_SESSION_STATES`,
+ * runtime-repository-postgres.ts). That refusal reads
+ * `hasAnswerCarryingTerminalSession` (runtime-repository-postgres.ts)
+ * alongside this whole array, not through `isInFlightRuntimeSession` - see
+ * the survey-session mint route, next to its `isInFlightRuntimeSession` call.
  */
 export const terminalUnansweredRuntimeStates = ["abandoned", "failed"] as const;
 

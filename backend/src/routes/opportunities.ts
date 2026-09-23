@@ -25,9 +25,14 @@ import { toPublicOpportunity, toPublicSession } from '../utils/publicOpportunity
 import { createSession } from '../firsthand/session-create';
 import {
   findParticipantCompletionsForOpportunities,
-  findParticipantSessionForOpportunity
+  findParticipantSessionForOpportunity,
+  hasAnswerCarryingTerminalSession
 } from '../firsthand/runtime-repository-postgres';
-import { isAnsweredRuntimeStatus, isInFlightRuntimeSession } from '../firsthand/state-model';
+import {
+  isAnsweredRuntimeStatus,
+  isInFlightRuntimeSession,
+  terminalUnansweredRuntimeStates
+} from '../firsthand/state-model';
 import {
   listResponsesForOpportunity,
   openSurveyCsvExport,
@@ -3672,6 +3677,16 @@ function refuseClosedStudyMint(res: Response, opportunityId: string, route: 'rec
 }
 
 /**
+ * The survey-session mint refusal for a terminal, answer-carrying session
+ * (cto/AdaptaLabs#155, review pass 1 M1). No frontend reads this yet - the
+ * survey client has no branch for it - so it is a plain string today, but a
+ * `code` alongside it, the same shape `OPPORTUNITY_CLOSED_CODE` already uses,
+ * means a future frontend fix has something to switch on instead of matching
+ * the sentence.
+ */
+const UNFINISHED_SESSION_HAS_RESPONSES_CODE = 'UNFINISHED_SESSION_HAS_RESPONSES';
+
+/**
  * The participant block both mints send to createSession.
  *
  * `external_ref` is canonicalised for the same reason `opportunityId` is. It is
@@ -4068,41 +4083,86 @@ router.post('/:id/survey-session', requireAuth, participantSessionMintLimiter, p
     }
 
     /*
-     * ABANDONED-WITH-ANSWERS IS REFUSED, NOT RESUMED (cto/AdaptaLabs#155).
+     * A TERMINAL, ANSWER-CARRYING SESSION IS REFUSED, NOT RESUMED
+     * (cto/AdaptaLabs#155).
      *
-     * `abandoned` is one of `terminalUnansweredRuntimeStates` (state-model.ts):
-     * DEAD rather than DONE, so a fresh mint is normally exactly right - see
-     * `isInFlightRuntimeSession` just below. That was unconditional until now,
-     * and it was the bug: mint, answer a question, post `session_abandoned`,
-     * mint again - the second mint saw a DEAD session and started a THIRD,
-     * fresh runtime_sessions row, indistinguishable from someone who had never
-     * begun. Repeating that is bounded only by the rate limiters (20 mints and
-     * 120 runtime writes a minute), which slow it, not stop it, and it is the
-     * root cause behind the answer-length heap risk `.max()` bounds elsewhere
+     * `terminalUnansweredRuntimeStates` (state-model.ts) - `abandoned` and
+     * `failed` - are DEAD rather than DONE, so a fresh mint is normally
+     * exactly right - see `isInFlightRuntimeSession` just below. That was
+     * unconditional until #155, and it was the bug: mint, answer a question,
+     * post `session_abandoned`, mint again - the second mint saw a DEAD
+     * session and started a THIRD, fresh runtime_sessions row,
+     * indistinguishable from someone who had never begun. Repeating that is
+     * bounded only by the rate limiters (20 mints and 120 runtime writes a
+     * minute), which slow it, not stop it, and it is the root cause behind
+     * the answer-length heap risk `.max()` bounds elsewhere
      * (cto/AdaptaLabs#152) and a route to the 200,000-session CSV ceiling
      * (`MAX_CSV_PARTICIPANTS`) for one participant alone.
      *
-     * NOT resumed: `refuseAnswerToFinishedSession` (runtime-repository-postgres.ts)
-     * treats `abandoned` as write-terminal - it 409s any response mutation
-     * against it, inside the row lock, so two submissions racing cannot both
-     * see "not finished". Handing back the SAME token would return a link that
-     * can accept no further answers, which is a broken resume, not a working
-     * one - reviving it would mean carving an exemption into a guard that also
-     * protects `completed` and `failed`, a change with its own consequences
-     * this fix does not need to make. Refusing costs nothing an abandoned
-     * session was owed: nobody can answer it further either way, and the
-     * participant already got the message their own `session_abandoned` event
-     * declared.
+     * BOTH terminal-unanswered statuses, not `'abandoned'` alone (#155 review
+     * pass 1, HIGH-1). `POST /api/firsthand/session/:token/runtime`
+     * (firsthand-session.ts) accepts `session_failed` and `upload_failed` on
+     * a survey session exactly as it accepts `session_abandoned`, landing the
+     * session on `failed` (`applyDerivedStatusFromEvent`,
+     * runtime-session-model.ts) - a status this check missed on its first
+     * pass, which let a crafted request send `session_failed` instead of
+     * `session_abandoned` and mint again unbounded. The real survey client
+     * never sends either event (frontend/src/components/survey has no
+     * caller), so this is reachable only by a request that does not go
+     * through the UI - which is exactly the threat model #155 is about: a
+     * participant deliberately gaming the mint limit, not an accident.
      *
-     * `hasResponses`, not the status alone, is what makes this narrow: an
-     * abandoned session that never received an answer is still exactly the
-     * DEAD case below and still earns a fresh mint - see
+     * ACROSS EVERY SESSION FOR THIS PARTICIPANT AND OPPORTUNITY, not just the
+     * most recent one (#155 review pass 1, HIGH-2). `existing` above is the
+     * LATEST row only; a participant who mints, answers, and abandons more
+     * than once holds several terminal-unanswered rows, and checking only the
+     * latest let an answer-free abandonment sitting on top of an
+     * answer-carrying one underneath slip a fresh mint through - proven both
+     * sequentially and under concurrent mints (three rounds of three parallel
+     * mints produced six answer-carrying abandoned sessions against the
+     * latest-row-only version of this check). `hasAnswerCarryingTerminalSession`
+     * scans every row for the pair instead - see its own docblock for what
+     * that closes (the sequential case, entirely) and what it still cannot
+     * (the concurrent one, see the ponytail comment below).
+     *
+     * NOT resumed: `refuseAnswerToFinishedSession` (runtime-repository-postgres.ts)
+     * treats every state in `FINISHED_SESSION_STATES` (completed, abandoned,
+     * failed) as write-terminal - it 409s any response mutation against one,
+     * inside the row lock, so two submissions racing cannot both see "not
+     * finished". Handing back the SAME token would return a link that can
+     * accept no further answers, which is a broken resume, not a working one
+     * - reviving it would mean carving an exemption into a guard that also
+     * protects `completed`, a change with its own consequences this fix does
+     * not need to make. Refusing costs nothing a terminal session was owed:
+     * nobody can answer it further either way, and the participant already
+     * got the message their own end event declared.
+     *
+     * ONLY WHEN THE SESSION HOLDS AN ANSWER: a terminal session that never
+     * received one is still exactly the DEAD case below and still earns a
+     * fresh mint - see
      * `mint-refuses-answer-carrying-abandoned-session-postgres.test.ts` for
-     * both arms side by side.
+     * both arms side by side, across all three end events.
+     *
+     * ponytail: this read-then-mint shape is still racy under CONCURRENT
+     * mints for the same (opportunity, participant) - two requests can each
+     * read "no terminal answer-carrying session yet" before either one's own
+     * answer-then-abandon sequence commits. Bounded by
+     * `participantSessionMintLimiter` (20 mints/min): a rate-limited burst,
+     * not the unbounded repeat #155 fixed. Closing it needs DB-level locking
+     * (an advisory lock on (opportunity_id, participant_id) spanning this
+     * check and createSession, or a partial unique index) rather than another
+     * read-time check -> cto/AdaptaLabs#159.
      */
-    if (existing.sessionStatus === 'abandoned' && existing.hasResponses) {
+    const hasTerminalAnswerCarryingSession = await hasAnswerCarryingTerminalSession({
+      opportunityId: canonicalOpportunityId ?? id,
+      participantId: req.user.id,
+      terminalUnansweredStates: terminalUnansweredRuntimeStates
+    });
+
+    if (hasTerminalAnswerCarryingSession) {
       return res.status(409).json({
-        error: 'You started this and abandoned it before finishing, so it cannot be restarted.'
+        error: 'You already started this and it cannot be restarted from here.',
+        code: UNFINISHED_SESSION_HAS_RESPONSES_CODE
       });
     }
 
@@ -4120,9 +4180,10 @@ router.post('/:id/survey-session', requireAuth, participantSessionMintLimiter, p
      *
      * A session that fails this check is neither answered (caught above) nor
      * live: it falls through to the deadline gate and a fresh mint below,
-     * exactly as if this participant had never started - UNLESS it is the
-     * answer-carrying abandoned case just above, which is refused before this
-     * check ever runs.
+     * exactly as if this participant had never started - UNLESS this
+     * participant holds a terminal, answer-carrying session somewhere in
+     * their history for this opportunity, which is refused just above,
+     * before this check ever runs.
      */
     if (
       isInFlightRuntimeSession({

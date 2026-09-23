@@ -371,18 +371,6 @@ export async function resetRuntimeSession(payload: SessionPayload) {
  * by `reports inProgress as boolean false rather than null when the session
  * carries no expiry`, which is the only test in either DB suite that can see
  * this word: dropping it left all 40 green before that test existed.
- *
- * `hasResponses` (cto/AdaptaLabs#155) is the fact `isInFlightRuntimeSession`
- * cannot see and does not try to: that predicate only tells DEAD (abandoned
- * or failed, fresh attempt is exactly right) from LIVE, and every DEAD
- * session earned a fresh mint whether or not it ever answered anything - so a
- * participant who minted, answered, and posted `session_abandoned` could mint
- * again indefinitely, each attempt a fresh row the same fresh way as someone
- * who had never started. The mint route reads this ALONGSIDE
- * `isInFlightRuntimeSession`, not through it, to refuse exactly that one
- * case - see the route for why abandoned-with-answers is refused rather than
- * resumed. `EXISTS`, not a COUNT, because the caller only ever asks a
- * yes/no question and a session can hold many response rows, one per step.
  */
 export async function findParticipantSessionForOpportunity(input: {
   opportunityId: string;
@@ -392,14 +380,6 @@ export async function findParticipantSessionForOpportunity(input: {
   sessionStatus: string;
   completedAt: string | null;
   sessionNotExpired: boolean;
-  // Optional in the TYPE, never in a real row: the live query below always
-  // projects it. Optional here only so an existing mocked
-  // `findParticipantSessionForOpportunity` resolved value - built before this
-  // field existed - still type-checks without every call site being touched;
-  // an absent value reads as falsy at the one place that reads it (the
-  // abandoned-with-answers mint refusal), which is the same outcome those
-  // fixtures had before this field existed.
-  hasResponses?: boolean;
 } | null> {
   return withRuntimeDatabaseClient(async (client) => {
     const result = await client.query<{
@@ -407,18 +387,13 @@ export async function findParticipantSessionForOpportunity(input: {
       session_status: string;
       completed_at: Date | null;
       session_not_expired: boolean;
-      has_responses: boolean;
     }>(
       `
         SELECT token, session_status, completed_at,
                (
                  try_timestamptz(session_payload->'session'->>'expires_at') > NOW()
                  IS TRUE
-               ) AS session_not_expired,
-               EXISTS (
-                 SELECT 1 FROM participant_responses
-                 WHERE participant_responses.session_id = runtime_sessions.session_id
-               ) AS has_responses
+               ) AS session_not_expired
         FROM runtime_sessions
         WHERE opportunity_id = $1
           AND participant_id = $2
@@ -434,10 +409,80 @@ export async function findParticipantSessionForOpportunity(input: {
           token: row.token,
           sessionStatus: row.session_status,
           completedAt: row.completed_at ? row.completed_at.toISOString() : null,
-          sessionNotExpired: row.session_not_expired,
-          hasResponses: row.has_responses
+          sessionNotExpired: row.session_not_expired
         }
       : null;
+  });
+}
+
+/**
+ * Whether this participant holds ANY session for this opportunity, in one of
+ * the given (terminal-unanswered) statuses, that already carries a stored
+ * answer (cto/AdaptaLabs#155, review pass 1 HIGH-1 and HIGH-2).
+ *
+ * NOT folded into `findParticipantSessionForOpportunity` above, which reads
+ * only the single most recent row (`ORDER BY created_at DESC LIMIT 1`) - that
+ * was the HIGH-2 gap. A participant who mints, answers, and abandons more
+ * than once holds SEVERAL terminal-unanswered rows for the same opportunity;
+ * checking only the latest one lets an answer-free abandonment on top of an
+ * answer-carrying one underneath it slip a fresh mint through, sequentially
+ * (mint, answer, abandon, mint again without answering, abandon again, mint a
+ * third time - the second abandonment is what the latest-row read sees, and
+ * it is clean) or concurrently (several mints in flight, the newest of which
+ * happens to be the one left unanswered when all of them are abandoned).
+ * Proven end to end on the unwidened version of this check: three rounds of
+ * three parallel mints produced six answer-carrying abandoned sessions.
+ * `EXISTS` over every row for the pair, not the latest one, is what closes
+ * the SEQUENTIAL half of that gap.
+ *
+ * NOT status `'abandoned'` alone, which was the HIGH-1 gap: `POST
+ * /api/firsthand/session/:token/runtime` (firsthand-session.ts) accepts
+ * `session_failed` and `upload_failed` on a survey session exactly as it
+ * accepts `session_abandoned`, and both land the session on `failed`
+ * (`applyDerivedStatusFromEvent`, runtime-session-model.ts) - a state
+ * `FINISHED_SESSION_STATES` above treats identically to `abandoned` for
+ * write-immutability, but the first version of this check did not. Passed as
+ * a parameter (`terminalUnansweredStates`) rather than imported directly, so
+ * this repository file does not reach up into `state-model.ts`'s
+ * `terminalUnansweredRuntimeStates` for its own definition of "which statuses
+ * count" - the caller (the mint route) owns that policy; this function only
+ * owns how to ask Postgres the question once the caller has decided it.
+ *
+ * DOES NOT CLOSE THE RACE TO ZERO. Two mints that race the row lock each read
+ * "no terminal answer-carrying session yet" before either one's abandonment
+ * (with an answer) is committed, and both proceed - see the `ponytail:`
+ * comment at the mint route call site for the bound and the upgrade path
+ * (an advisory lock or a partial unique index over `(opportunity_id,
+ * participant_id)`, covering both this read and `createSession`'s write in
+ * one critical section, which this function alone cannot provide). What this
+ * DOES close is the sequential case entirely, and it reduces the concurrent
+ * case from unboundedly repeatable to a single rate-limited burst - a real
+ * improvement, not a full fix.
+ */
+export async function hasAnswerCarryingTerminalSession(input: {
+  opportunityId: string;
+  participantId: string;
+  terminalUnansweredStates: readonly string[];
+}): Promise<boolean> {
+  return withRuntimeDatabaseClient(async (client) => {
+    const result = await client.query<{ has_answer_carrying_terminal_session: boolean }>(
+      `
+        SELECT EXISTS (
+          SELECT 1
+          FROM runtime_sessions
+          WHERE opportunity_id = $1
+            AND participant_id = $2
+            AND session_status = ANY($3::text[])
+            AND EXISTS (
+              SELECT 1 FROM participant_responses
+              WHERE participant_responses.session_id = runtime_sessions.session_id
+            )
+        ) AS has_answer_carrying_terminal_session
+      `,
+      [input.opportunityId, input.participantId, input.terminalUnansweredStates]
+    );
+
+    return result.rows[0]?.has_answer_carrying_terminal_session ?? false;
   });
 }
 
