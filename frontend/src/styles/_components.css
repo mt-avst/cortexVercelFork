@@ -1980,6 +1980,21 @@ body.theme-light .badge--question {
   left: auto;
 }
 
+/* Collision flip-up: `ui/Dropdown.tsx` adds this when opening downward would
+   run past the viewport bottom or into a `[data-dropdown-boundary]` (the site
+   feedback footer), and there is more room above. `.show` (every rendered
+   menu carries it) lifts this to 0,3,0, past the admin table's
+   `.admin-data-table .dropdown-menu { top: 100% }` at 0,2,0. The shadow
+   flips with it: every menu shadow rule reads `--menu-shadow-y` (the themes
+   layer's), so it falls away from the trigger, not onto it. */
+.dropdown-menu.show.dropdown-menu--up {
+  top: auto;
+  bottom: 100%;
+  margin-top: 0;
+  margin-bottom: var(--spacing-1);
+  --menu-shadow-y: -8px;
+}
+
 .dropdown-header {
   padding: var(--spacing-2) var(--spacing-4);
   color: var(--text-primary);
@@ -2007,7 +2022,11 @@ body.theme-light .badge--question {
 }
 
 .dropdown-item:focus-visible {
-  outline: none;
+  /* Keyboard focus in a menu is a ring inside the item, over the hover fill
+     each theme gives it (_themes.css). The ring is the brand orange here
+     (about 5:1 on the dark menu's fill) and the text-safe accent in light. */
+  outline: 2px solid var(--brand-orange-500);
+  outline-offset: -2px;
   background: rgba(255, 78, 80, 0.1);
 }
 
@@ -2526,11 +2545,6 @@ body.admin-dashboard-page .header .container,
 body.admin-dashboard-page .main > .container {
   max-width: 1440px;
 }
-
-/* The page content stacks above the site feedback footer - see
-   `_themes.css`, search "stacks the Admin page content above". That rule
-   lives in the themes layer because the `.admin-page-bg > *` z-index it
-   raises is declared there. */
 
 /* ...and the header's side padding takes the main card's 24px inset too, so
    the logo sits on the same edge as the "Admin" heading and the table below,
@@ -3098,6 +3112,16 @@ body.admin-dashboard-page .main > .container {
   margin-right: 0 !important;
 }
 
+/* Out of scroll anchoring, but ONLY while a Close notice is up or focus is
+   being handed across its re-sort (`holdScroll`, hooks/useCloseStudyUndo.ts).
+   Then the row the reader is at moves, and with it as the anchor Chrome
+   scrolled the page to follow (-501px in the 390 card view). At every other
+   time anchoring stays on: a reader who has scrolled on to another card keeps
+   it still when a notice they left behind lapses (-604px without it). */
+.admin-data-table.admin-data-table--hold-scroll {
+  overflow-anchor: none;
+}
+
 .admin-dashboard table.admin-data-table thead th,
 .admin-dashboard table.admin-data-table tbody td {
   padding: 12px;
@@ -3148,25 +3172,35 @@ body.admin-dashboard-page .main > .container {
    Measured against the widest content each column holds:
    - Status 128: the widest pill ("PUBLISHED") is ~80px; the auto-closed
      caption sits under it, never beside it
-   - Progress 140: "12 / 20" + "60%" over the bar, or "N clicks"
-   - Next 176: "Thu 24 Sept 2026" on the first line, the session time and
-     relative day on the second (Admin.tsx) - on one line the date and time
-     are ~174px, more than this column's 152px content box
+   - Progress 136: "12 / 20" + "60%" over the bar, or "N clicks"
+   - Next 160: "Thu 24 Sept" on the first line (the year only when it is not
+     this one, "Wed 30 Sept 2027" 119px), the session time or closing note on
+     the second (a bold closing-soon "Closes · 23 hours left" is ~121px)
+     against this column's 136px content box. Its header reads "Next /
+     deadline" (~99px) so it stays on one line. It was 176 while the date
+     carried its year on every row, and it cannot be wider while Study keeps
+     its 300px floor at 1024px
    - Created 136: the widest date, "Wed 30 Sept 2026", is 108.7px at 13px
      Manrope (measured), so 112 (88px of content box) wrapped the year onto
      a second line on every row
-   - Actions 120: View/Edit + the kebab, flush right with no right padding
+   - Actions 148: the state's button (Fix / Edit / Analytics / Preview) + the
+     kebab, flush right with no right padding. "Analytics" is the widest
+     label: 86px (its min-width) in Manrope, 90px in the DejaVu Sans a CI
+     runner falls back to (measured), + an 8px gap + the 34px kebab, leaving
+     4px of slack on the fallback. At 120 it was squeezed inside its own
+     border. Progress gave up 4px for it, so Study keeps its 300px floor at
+     1024px
    Below 1280px Created is dropped (see the media block below). */
 .admin-data-table col.col-status {
   width: 128px;
 }
 
 .admin-data-table col.col-progress {
-  width: 140px;
+  width: 136px;
 }
 
 .admin-data-table col.col-next {
-  width: 176px;
+  width: 160px;
 }
 
 .admin-data-table col.col-date {
@@ -3174,7 +3208,7 @@ body.admin-dashboard-page .main > .container {
 }
 
 .admin-data-table col.col-actions {
-  width: 120px;
+  width: 148px;
 }
 
 /* 1024-1279.98px: still the table, minus Created - the column, its header
@@ -3190,17 +3224,38 @@ body.admin-dashboard-page .main > .container {
 }
 
 /* Row dividers and the table-mode row box. Table mode only: the card view
-   below 1024px draws its own card border instead. */
+   below 1024px draws its own card border instead.
+
+   The header row sticks to the top of the viewport as the page scrolls, so
+   the sort controls stay in reach past the tenth row. `top: 0` because the
+   site header is not sticky (position: relative); nothing between the table
+   and the page scroll clips (the table wrapper is `overflow: visible` on
+   purpose, for the unportalled row menus). Its opaque fill is per theme
+   (`_themes.css`, "Admin table headers"), so rows pass underneath rather than
+   showing through. z-index 2 keeps it above the rows; a row's open menu
+   (z 9999, same stacking context) still paints over it. */
 @media (min-width: 1024px) {
   .admin-dashboard table.admin-data-table tbody td {
     border-bottom: 1px solid var(--border-subtle-current);
+  }
+
+  .admin-dashboard table.admin-data-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
   }
 }
 
 /* Study: title (two lines at most) over one meta line - the type pill and the
    purpose one-liner. Full strings ride in `title` attributes (Admin.tsx). */
+/* The title is the row's link (Admin.tsx): an inline box, so its focus ring
+   and hit area hug the title rather than spanning the whole Study cell. */
 .admin-data-table .row-title {
-  display: -webkit-box;
+  display: -webkit-inline-box;
+  max-width: 100%;
+  vertical-align: top;
+  color: inherit;
+  text-decoration: none;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   line-clamp: 2;
@@ -3210,6 +3265,30 @@ body.admin-dashboard-page .main > .container {
   line-height: 20px;
   font-weight: 600;
   overflow-wrap: anywhere;
+}
+
+.admin-data-table .row-title:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* The focus ring sits INSIDE the title's line box: the type pill overhangs
+   the meta line to 1px under the title, so an outside ring (3px + 2px
+   offset) ran across the pill. 2px inset clears the glyphs (14px type on a
+   20px line); the 3px inline padding, taken back by the negative margin so
+   the text does not move, gives the ring room beside the first and last
+   letters. The max-width is 100% plus that padding, so the padding costs the title
+   no width; this selector has to outrank the shared
+   `.admin-dashboard table.table-hover tbody td > * { max-width: 100% }`. */
+.admin-dashboard table.admin-data-table tbody td > .row-title {
+  padding-inline: 3px;
+  margin-inline: -3px;
+  max-width: calc(100% + 6px);
+}
+
+.admin-data-table a.row-title:focus-visible {
+  outline-width: 2px;
+  outline-offset: -2px;
 }
 
 /* The meta line's box is the purpose text's own 18px line; the 24px type
@@ -3229,6 +3308,21 @@ body.admin-dashboard-page .main > .container {
 
 .admin-study-meta .admin-pill {
   flex: none;
+}
+
+/* The owner, only under Show all researchers (Admin.tsx): between the type
+   pill and the purpose, a step brighter than the purpose so the two muted
+   strings read as two things. Capped so a long name cannot take the line. */
+.admin-data-table .admin-study-meta .admin-study-owner {
+  flex: 0 1 auto;
+  max-width: 40%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
 }
 
 .admin-data-table .admin-study-meta .row-desc {
@@ -3289,13 +3383,14 @@ body.admin-dashboard-page .main > .container {
     font-weight: 600;
   }
 
-  /* One shared height so the select and the direction pill sit flush:
-     left to their own padding they measured 32.4px and 34.2px. The extra
-     .admin-dashboard beats the phone `.admin-dashboard .form-select` rule,
-     which otherwise lays 14px of side padding over the chevron and clips
-     the selected field's name. */
+  /* One shared height so the select and the direction pill sit flush, and
+     the same height as the quick-filter chips they sit beside (`.admin-chip`,
+     2.125rem). Left to their own padding they measured 32.4px and 34.2px. The
+     extra .admin-dashboard beats the phone `.admin-dashboard .form-select`
+     rule, which otherwise lays 14px of side padding over the chevron and
+     clips the selected field's name. */
   .admin-card-sort {
-    --admin-card-sort-height: 2rem;
+    --admin-card-sort-height: 2.125rem;
   }
 
   .admin-dashboard .admin-card-sort .form-select,
@@ -3307,9 +3402,11 @@ body.admin-dashboard-page .main > .container {
     padding-bottom: 0;
   }
 
+  /* Pill-shaped, like the chips and the direction button. */
   .admin-dashboard .admin-card-sort .form-select {
     width: auto;
     padding-right: 2rem;
+    border-radius: var(--radius-full);
   }
 
   /* Deliberately one class less specific than the rule above, so the later
@@ -5865,7 +5962,13 @@ body.theme-dark .legend-label-past {
   content: none;
 }
 
-/* Admin action dropdown positioning */
+/* Admin action dropdown positioning. Items stay on one line
+   ("Preview as participant" wrapped at the 140px floor); the menu grows to
+   its longest item instead. */
+.admin-action-dropdown-menu .dropdown-item {
+  white-space: nowrap;
+}
+
 .admin-action-dropdown-menu {
   position: absolute;
   z-index: var(--z-dropdown);
@@ -11770,7 +11873,11 @@ body.theme-dark .opportunity-form small:not(.badge) {
   position: absolute !important;
   right: 0 !important;
   left: auto !important;
-  top: 100% !important;
+  /* Not !important: nothing outside this layer sets `top` on these menus,
+     and the phone `.admin-dashboard .dropdown-menu { top: auto }` rule is
+     earlier at equal specificity. Leaving it normal is what lets the
+     collision flip-up (`.dropdown-menu.show.dropdown-menu--up`) win. */
+  top: 100%;
   z-index: 9999 !important;
   min-width: 160px;
   background: var(--color-surface-white);
@@ -11779,6 +11886,7 @@ body.theme-dark .opportunity-form small:not(.badge) {
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
   padding: var(--spacing-1) 0;
 }
+
 
 /* Below the .admin-data-table card-reflow breakpoint (row 14 above this
    table's own rules; raised to 1219.98px by row 16 second-pass, moved to
@@ -11805,11 +11913,14 @@ body.theme-dark .opportunity-form small:not(.badge) {
   }
 }
 
-/* Menu Items - Base state (Light Mode) */
-body.theme-light .admin-action-dropdown-menu .dropdown-item,
-body.theme-light .admin-action-dropdown .dropdown-item,
-body.theme-light .admin-data-table .dropdown-menu .dropdown-item,
-body.theme-light .col-actions .dropdown-menu .dropdown-item {
+/* Menu Items - Base state, both themes: one item size (14px text, 8px x
+   12px padding). Dark once fell through to the generic 15px / 16px item, so
+   the same menu measured 186px wide in dark and 168px in light. The colour
+   here is light's; the dark theme's `!important` item colour wins over it. */
+.admin-action-dropdown-menu .dropdown-item,
+.admin-action-dropdown .dropdown-item,
+.admin-data-table .dropdown-menu .dropdown-item,
+.col-actions .dropdown-menu .dropdown-item {
   display: flex;
   align-items: center;
   gap: var(--spacing-2);
@@ -11821,10 +11932,14 @@ body.theme-light .col-actions .dropdown-menu .dropdown-item {
   border: none;
   cursor: pointer;
   text-align: left;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  /* No fade: the highlight tracks the pointer and the arrow keys at once, so
+     keyboard focus shows its fill with its ring rather than 150ms behind it. */
+  transition: none;
 }
 
-/* Menu Items - Hover: Brand Orange highlight (Light Mode) */
+/* Menu Items - Hover and focus (Light Mode): a visible fill with the ink
+   kept on the primary text colour. It was the brand orange on slate-50,
+   2.98:1; the orange now rides a 2px rule at the item's left edge. */
 body.theme-light .admin-action-dropdown-menu .dropdown-item:hover,
 body.theme-light .admin-action-dropdown .dropdown-item:hover,
 body.theme-light .admin-data-table .dropdown-menu .dropdown-item:hover,
@@ -11833,8 +11948,9 @@ body.theme-light .admin-action-dropdown-menu .dropdown-item:focus,
 body.theme-light .admin-action-dropdown .dropdown-item:focus,
 body.theme-light .admin-data-table .dropdown-menu .dropdown-item:focus,
 body.theme-light .col-actions .dropdown-menu .dropdown-item:focus {
-  background: var(--color-slate-50) !important;
-  color: var(--brand-orange-500) !important;
+  background: var(--color-slate-100) !important;
+  color: var(--text-primary) !important;
+  box-shadow: inset 2px 0 0 var(--brand-orange-500);
 }
 
 /* Danger item styling (Light Mode) */
@@ -11861,6 +11977,7 @@ body.theme-light .col-actions .dropdown-menu .dropdown-item.text-danger:focus {
   /* red 600 on red 50 is 4.41 - under by a hair, and this is a destructive
      action's hover state. Red 700 on the same wash is 5.91. */
   color: #B91C1C !important;
+  box-shadow: inset 2px 0 0 #B91C1C;
 }
 
 /* Menu Divider (Light Mode) */
@@ -14040,6 +14157,19 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
   color: var(--text-secondary);
 }
 
+/* The Broken card's icon speaks the Broken pill's language - its amber fill
+   and ink - so the most urgent card is not dressed like the approvals one.
+   Only the disc: the card itself stays one of the set. */
+.admin-attention__icon--broken {
+  background: color-mix(in srgb, var(--status-warning) 18%, transparent);
+  border-color: color-mix(in srgb, var(--status-warning) 45%, transparent);
+  color: color-mix(in srgb, var(--status-warning) 80%, var(--text-primary));
+}
+
+body.theme-light .admin-attention__icon--broken {
+  color: #8a5a29;
+}
+
 .admin-attention__body {
   display: flex;
   flex-direction: column;
@@ -14112,10 +14242,6 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
   margin-left: auto;
 }
 
-.admin-quick-filters__end:empty {
-  display: none;
-}
-
 .admin-quick-filters {
   display: flex;
   align-items: center;
@@ -14132,7 +14258,13 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
 }
 
 .admin-chip {
-  padding: 0.35rem 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  /* One explicit height, shared with the Sort-by control beside the chips
+     (`--admin-card-sort-height`), so the two read as one control family. */
+  height: 2.125rem;
+  padding: 0 0.85rem;
   border-radius: var(--radius-full);
   border: 1px solid var(--border-strong-current);
   background: var(--surface-glass-current);
@@ -14143,9 +14275,95 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
   transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 
-.admin-chip:hover {
+.admin-chip:hover:not(:disabled) {
   border-color: var(--color-cortex-orange);
   color: var(--text-primary);
+}
+
+/* Every chip's count (Admin.tsx). Tabular figures, so a count changing
+   between 1 and 9 never moves the chips after it. */
+.admin-chip__count {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.admin-chip--active .admin-chip__count {
+  color: inherit;
+}
+
+/* A chip with nothing to show stays in place, disabled rather than hidden,
+   so the row does not reflow as counts change (Petra 3.3). Disabled
+   controls are exempt from the contrast minimum; the dimming is the signal. */
+.admin-chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Close study's notices (components/StudyRowNotices.tsx): a full-width row
+   directly under the study they are about. One box on the page's own
+   tokens in both themes - the glass fill and strong border every admin
+   control uses, primary ink - with the failure alert marked by the danger
+   border and text instead. No Bootstrap alert: its info teal is off-palette
+   and its light variant drew no box on the white table. */
+.admin-dashboard table.admin-data-table tbody td.admin-inline-notice-cell {
+  padding: 0 0 12px;
+  text-align: left;
+}
+
+.admin-row-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 8px 6px 16px;
+  border: 1px solid var(--border-strong-current);
+  border-radius: var(--radius-md);
+  background: var(--surface-glass-current);
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.admin-row-notice__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+
+.admin-action-error {
+  border-color: var(--status-danger);
+  color: var(--status-danger-text);
+}
+
+.admin-action-error:focus {
+  outline: none;
+}
+
+.admin-action-error:focus-visible {
+  outline: 2px solid var(--focus-ring, var(--brand-headline));
+  outline-offset: 2px;
+}
+
+.admin-row-notice__dismiss {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  color: inherit;
+}
+
+/* "4 of 13 studies" - shown while any filter or chip is narrowing the list. */
+.admin-result-count {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .admin-chip--active {
@@ -14454,12 +14672,18 @@ body.theme-light .admin-study-status--not-working {
   color: var(--text-muted);
 }
 
-.admin-next__note--deadline {
+/* Inside CLOSING_SOON_DAYS (adminDashboard.ts) - the same horizon as the
+   Closing soon chip and card - the note takes the warning colour, a
+   session's clock time included. The themes layer restates the colour per
+   theme (search "closing-soon caption"). */
+.admin-next__note--soon,
+.admin-next__note--soon .admin-next__time {
   color: color-mix(in srgb, var(--status-warning) 80%, var(--text-primary));
   font-weight: 600;
 }
 
-.admin-next__note--completed {
+.admin-next__note--completed,
+.admin-next__note--closed {
   color: var(--text-muted);
   font-style: italic;
 }
@@ -14473,25 +14697,34 @@ body.theme-light .admin-study-status--not-working {
   display: inline-flex;
   flex-wrap: nowrap;
   align-items: center;
-  /* The View + kebab pair has to fit the Actions column's ~103px content box
-     (13% at 1240px) with slack. The old 0.4rem (~5.5px) gap spent the whole
-     margin, so on the FALLBACK font - what a CI runner with no Google Fonts
-     egress renders, and wider than Manrope - the pair overflowed the cell by
-     0.42px at 1240 and 1440px. Measured in the pinned CI image
-     (node:20.20.2-bookworm), 2px leaves ~3.5px of slack. The column width and
-     the cell padding are the wrong lever: %-driven, the cell tracks neither,
-     so trimming them shrinks the box with the buttons. Pinned by
-     e2e/admin-pill-primitive.test.ts on both fonts at both widths. */
-  gap: 2px;
+  /* 8px between the state's button and the kebab: at 2px the two bordered
+     boxes read as a split button that does not split (Step 2 visual gate).
+     The pair has to fit the Actions column's 136px content box with slack on
+     the FALLBACK font too - what a CI runner with no Google Fonts egress
+     renders, wider than Manrope: "Analytics" is 90px there at 8px side
+     padding, + 8 + the 34px kebab = 132px (DejaVu Sans, measured). Pinned by
+     e2e/admin-pill-primitive.test.ts on both fonts. */
+  gap: 8px;
   justify-content: center;
 }
 
 .admin-action-primary {
   font-weight: 600;
-  /* One width for every label ("View" measured 57px, "Edit" 52px), so the
-     inline buttons' left edges line up down the column instead of stepping
-     by 5px. Fits the Actions column's 108px content box with the kebab. */
-  min-width: 60px;
+  /* One width for every label, so the inline buttons' left edges line up
+     down the column instead of stepping: 86px holds "Analytics", the widest
+     (80.8px in Manrope at this padding). 8px sides rather than btn-sm's
+     12px, so the pair fits the Actions column with slack on the wider
+     fallback font too (see `.admin-action-group`). It is a link styled as a
+     button (Admin.tsx), so the inline-flex keeps a glyph and label on one
+     centred line. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 86px;
+  padding-left: 8px;
+  padding-right: 8px;
+  text-decoration: none;
 }
 
 /* --- Tabbed panel card ---------------------------------------------------

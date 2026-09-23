@@ -611,10 +611,13 @@ body.theme-dark .feedback-footer .feedback-footer__textarea::placeholder {
 }
 
 /* Dropdown Menu - Glass effect */
+/* The shadow's y-offset is `--menu-shadow-y`, flipped to -8px on a menu that
+   opens upward (`.dropdown-menu--up`, _components.css), so its shadow falls
+   away from the trigger. Every menu shadow rule below reads it. */
 body.theme-light .dropdown-menu {
   background: rgba(255, 255, 255, 0.95);
   border: 1px solid rgba(0, 0, 0, 0.1);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 var(--menu-shadow-y, 8px) 32px rgba(0, 0, 0, 0.15);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   color: var(--text-body);
@@ -637,9 +640,20 @@ body.theme-light .dropdown-item:not(.text-danger) {
   color: var(--text-body);
 }
 
-body.theme-light .dropdown-item:hover:not(.text-danger) {
-  background: var(--color-slate-50);
-  color: var(--brand-orange-500);
+/* Hover and keyboard focus: a visible fill with the ink kept on the primary
+   text colour (orange text on this fill measured 2.98:1), the orange carried
+   by a 2px rule at the item's left edge instead. Focus adds its ring, below. */
+body.theme-light .dropdown-item:hover:not(.text-danger),
+body.theme-light .dropdown-item:focus-visible:not(.text-danger) {
+  background: var(--color-slate-100);
+  color: var(--text-primary);
+  box-shadow: inset 2px 0 0 var(--brand-orange-500);
+}
+
+/* The focus ring in light: the text-safe accent (5.18:1 on white), where the
+   brand orange is under 3:1 against the item fill. */
+body.theme-light .dropdown-item:focus-visible {
+  outline-color: var(--accent-fill-text-safe);
 }
 
 body.theme-light .dropdown-item i {
@@ -658,9 +672,11 @@ body.theme-light a.dropdown-item:not(.text-danger) {
   color: var(--text-body);
 }
 
-body.theme-light a.dropdown-item:hover:not(.text-danger) {
-  background: var(--color-slate-50);
-  color: var(--brand-orange-500);
+body.theme-light a.dropdown-item:hover:not(.text-danger),
+body.theme-light a.dropdown-item:focus-visible:not(.text-danger) {
+  background: var(--color-slate-100);
+  color: var(--text-primary);
+  box-shadow: inset 2px 0 0 var(--brand-orange-500);
 }
 
 /* Buttons */
@@ -673,6 +689,20 @@ body.theme-light .btn-outline-secondary:hover {
   background: var(--accent-fill-text-safe);
   border-color: var(--accent-fill-text-safe);
   color: #FFFFFF;
+}
+
+/* Fix, light: the Broken pill's own light ink (#8a5a29, see
+   `.admin-study-status--not-working`) and a darkened warning amber border,
+   so the button reads as the pill's action rather than the brand orange. */
+body.theme-light .admin-dashboard table .admin-action-primary--fix {
+  color: #8a5a29;
+  border-color: color-mix(in srgb, var(--status-warning) 80%, #000000);
+}
+
+body.theme-light .admin-dashboard table .admin-action-primary--fix:hover {
+  color: #8a5a29;
+  border-color: color-mix(in srgb, var(--status-warning) 80%, #000000);
+  background: color-mix(in srgb, var(--status-warning) 18%, #ffffff);
 }
 
 /* Forms - Light mode: input/select value text must be dark (WCAG AA) */
@@ -1073,28 +1103,6 @@ body.theme-light .admin-page-bg > * {
   z-index: 1;
 }
 
-/* This stacks the Admin page content above the site feedback footer. The row
-   kebab menus are not portalled, so the last row's menu hangs below the
-   table and can cross into the footer. The content's own stacking context
-   (the rules above, z 1) never beat `.feedback-footer` (position: relative,
-   z 10, later in the DOM), so however high the menu's z-index, Delete was
-   painted and hit-tested under the footer. At 11 the content - menus
-   included - sits over the footer where they overlap; the header
-   (`--z-sticky`, 1020) and its own dropdown still sit above both.
-
-   Raised on the content, NOT on `.main`: the light theme's fixed
-   atmosphere layer (`.admin-page-bg::before` above, z 0) is a sibling of this
-   content, so it stays in the app-level stacking order under the footer. A
-   z-index on `.main` (the first fix) lifted that layer over the footer too
-   and tinted it by up to 5/255. Declared after both theme rules above so it
-   wins them on source order at equal specificity.
-
-   Exposed, not caused, by Step 1: the shorter page left less room under the
-   last row. The durable fix is collision flip-up in Dropdown.tsx (Step 2). */
-body.admin-dashboard-page .admin-page-bg > * {
-  z-index: 11;
-}
-
 /* ============================================================
    ADMIN DASHBOARD - Dark Theme (Explicit)
    ============================================================ */
@@ -1307,6 +1315,21 @@ body.theme-dark .admin-dashboard table.admin-data-table tbody td.col-status .adm
   color: var(--text-muted);
 }
 
+body.theme-dark .admin-dashboard table.admin-data-table tbody td .admin-study-owner {
+  color: var(--text-secondary);
+}
+
+/* Close study's in-place notices (components/StudyRowNotices.tsx): primary
+   ink, and the danger text on a failure - restated here because the blanket
+   dark `td span` colour below (0,4,5) otherwise paints both one flat grey. */
+body.theme-dark .admin-dashboard table.admin-data-table tbody td .admin-undo-notice .admin-row-notice__text {
+  color: var(--text-primary);
+}
+
+body.theme-dark .admin-dashboard table.admin-data-table tbody td .admin-action-error .admin-row-notice__text {
+  color: var(--status-danger-text);
+}
+
 /* Next session / deadline cell - dark mode. The blanket `td *` colour
    further down painted the date, the time and the caption one flat
    #D4D4D4, so the deadline caption lost the amber it carries in light and
@@ -1326,7 +1349,11 @@ body.theme-dark .admin-dashboard table.admin-data-table tbody td.col-next .admin
   color: var(--text-muted);
 }
 
-body.theme-dark .admin-dashboard table.admin-data-table tbody td.col-next .admin-next__note--deadline {
+/* Inside CLOSING_SOON_DAYS the whole note - a session's clock time too -
+   takes the warning colour; outside it the note stays muted, whatever kind
+   of milestone it is. */
+body.theme-dark .admin-dashboard table.admin-data-table tbody td.col-next .admin-next__note--soon,
+body.theme-dark .admin-dashboard table.admin-data-table tbody td.col-next .admin-next__note--soon .admin-next__time {
   color: color-mix(in srgb, var(--status-warning) 80%, var(--text-primary));
 }
 
@@ -1347,10 +1374,15 @@ body.theme-dark .admin-dashboard table.admin-cards-phone tbody td.col-recent-stu
 }
 
 /* Admin table headers - dark mode. One colour for every header, sortable or
-   not (the sort button inherits it). */
+   not (the sort button inherits it). The fill is the card's own
+   rgba(12, 12, 14, 0.92) made opaque: the header row is sticky
+   (`_components.css`, search "header row sticks"), and rows scrolling under a
+   transparent one showed through it. Light mode's header block already
+   paints these white. */
 body.theme-dark .admin-dashboard table.admin-data-table thead th {
   color: var(--text-muted);
-  border-bottom: 1px solid var(--border-subtle-current);
+  background: rgb(12, 12, 14);
+  border-bottom: 1px solid var(--border-strong-current);
 }
 
 /* Admin buttons - dark mode */
@@ -1428,6 +1460,21 @@ body.theme-dark .admin-dashboard .dropdown > .btn:hover {
   background: rgba(255, 255, 255, 0.1);
 }
 
+/* Fix - the inline action on a Broken row - speaks the Broken pill's amber,
+   not the orange of selection and the brand: the same ink as the pill and
+   the soon note, with the full warning amber as its border. The light pair is
+   in the light block (search "Fix, light"). */
+body.theme-dark .admin-dashboard table .admin-action-primary--fix {
+  color: color-mix(in srgb, var(--status-warning) 80%, var(--text-primary));
+  border-color: var(--status-warning);
+}
+
+body.theme-dark .admin-dashboard table .admin-action-primary--fix:hover {
+  color: color-mix(in srgb, var(--status-warning) 80%, var(--text-primary));
+  border-color: var(--status-warning);
+  background: color-mix(in srgb, var(--status-warning) 18%, transparent);
+}
+
 /* Admin table date text - dark mode */
 body.theme-dark .admin-dashboard table tbody td small {
   color: rgba(224, 224, 224, 0.85);
@@ -1454,7 +1501,7 @@ body.theme-dark .dropdown-menu {
   background: #121214 !important;
   background-color: #121214 !important;
   border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7) !important;
+  box-shadow: 0 var(--menu-shadow-y, 8px) 32px rgba(0, 0, 0, 0.7) !important;
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
 }
@@ -1470,13 +1517,18 @@ body.theme-dark .dropdown-menu button.dropdown-item {
   background-color: transparent !important;
 }
 
+/* Hover and keyboard focus: a neutral lift, not the red tint this once was -
+   red is Delete's alone (its own rule below). Focus adds its ring
+   (`.dropdown-item:focus-visible`, _components.css). */
 body.theme-dark .admin-dashboard .dropdown-item:hover,
 body.theme-dark .admin-dashboard .dropdown-menu .dropdown-item:hover,
 body.theme-dark .admin-dashboard .dropdown-menu button.dropdown-item:hover,
 body.theme-dark .dropdown-menu .dropdown-item:hover,
-body.theme-dark .dropdown-menu button.dropdown-item:hover {
-  background: rgba(255, 78, 80, 0.25) !important;
-  background-color: rgba(255, 78, 80, 0.25) !important;
+body.theme-dark .dropdown-menu button.dropdown-item:hover,
+body.theme-dark .dropdown-menu .dropdown-item:focus-visible,
+body.theme-dark .dropdown-menu button.dropdown-item:focus-visible {
+  background: rgba(255, 255, 255, 0.08) !important;
+  background-color: rgba(255, 255, 255, 0.08) !important;
   color: #FFFFFF !important;
 }
 
@@ -1493,7 +1545,9 @@ body.theme-dark .dropdown-menu button.dropdown-item.text-danger {
 
 body.theme-dark .admin-dashboard .dropdown-item.text-danger:hover,
 body.theme-dark .dropdown-menu .dropdown-item.text-danger:hover,
-body.theme-dark .dropdown-menu button.dropdown-item.text-danger:hover {
+body.theme-dark .dropdown-menu button.dropdown-item.text-danger:hover,
+body.theme-dark .dropdown-menu .dropdown-item.text-danger:focus-visible,
+body.theme-dark .dropdown-menu button.dropdown-item.text-danger:focus-visible {
   background: rgba(239, 68, 68, 0.25) !important;
   background-color: rgba(239, 68, 68, 0.25) !important;
   color: #F87171 !important;
@@ -1503,7 +1557,7 @@ body.theme-dark .dropdown-menu button.dropdown-item.text-danger:hover {
 .admin-action-dropdown {
   background: #121214 !important;
   border: 1px solid rgba(255, 255, 255, 0.12) !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7) !important;
+  box-shadow: 0 var(--menu-shadow-y, 8px) 32px rgba(0, 0, 0, 0.7) !important;
 }
 
 /* :not(.text-danger): this base rule has no body.theme-* qualifier, so it
@@ -1517,13 +1571,17 @@ body.theme-dark .dropdown-menu button.dropdown-item.text-danger:hover {
    few lines up is exactly that case, in the same layer, so it wins there on
    specificity once importance ties - see the light-mode sibling below for
    the case where no such rule exists and the exception is load-bearing. */
+.admin-action-dropdown a.dropdown-item,
 .admin-action-dropdown button:not(.text-danger) {
   color: #E0E0E0 !important;
   background: transparent !important;
 }
 
+.admin-action-dropdown a.dropdown-item:hover,
+.admin-action-dropdown a.dropdown-item:focus-visible,
+.admin-action-dropdown button:focus-visible:not(.text-danger),
 .admin-action-dropdown button:hover:not(.text-danger) {
-  background: rgba(255, 78, 80, 0.2) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
   color: #FFFFFF !important;
 }
 
@@ -1531,7 +1589,7 @@ body.theme-dark .dropdown-menu button.dropdown-item.text-danger:hover {
 body.theme-light .admin-action-dropdown {
   background: #FFFFFF !important;
   border: 1px solid rgba(0, 0, 0, 0.1) !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15) !important;
+  box-shadow: 0 var(--menu-shadow-y, 8px) 32px rgba(0, 0, 0, 0.15) !important;
 }
 
 /* :not(.text-danger): row 15 "Then" - Delete rendered this grey instead of
@@ -1548,29 +1606,35 @@ body.theme-light .admin-action-dropdown {
    never had this bug: its .text-danger override IS `!important`, in the
    SAME layer as the button rule it competes with, so it wins on specificity
    once importance ties. */
+body.theme-light .admin-action-dropdown a.dropdown-item,
 body.theme-light .admin-action-dropdown button:not(.text-danger) {
   color: #374151 !important;
 }
 
+body.theme-light .admin-action-dropdown a.dropdown-item:hover,
 body.theme-light .admin-action-dropdown button:hover:not(.text-danger) {
-  background: var(--color-slate-50) !important;
-  color: var(--brand-orange-500) !important;
+  background: var(--color-slate-100) !important;
+  color: var(--text-primary) !important;
 }
 
 /* Admin action dropdown - dark mode (explicit) */
 body.theme-dark .admin-action-dropdown {
   background: #121214 !important;
   border: 1px solid rgba(255, 255, 255, 0.12) !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7) !important;
+  box-shadow: 0 var(--menu-shadow-y, 8px) 32px rgba(0, 0, 0, 0.7) !important;
 }
 
+body.theme-dark .admin-action-dropdown a.dropdown-item,
 body.theme-dark .admin-action-dropdown button {
   color: #E0E0E0 !important;
   background: transparent !important;
 }
 
-body.theme-dark .admin-action-dropdown button:hover {
-  background: rgba(255, 78, 80, 0.2) !important;
+body.theme-dark .admin-action-dropdown a.dropdown-item:hover,
+body.theme-dark .admin-action-dropdown a.dropdown-item:focus-visible,
+body.theme-dark .admin-action-dropdown button:hover:not(.text-danger),
+body.theme-dark .admin-action-dropdown button:focus-visible:not(.text-danger) {
+  background: rgba(255, 255, 255, 0.08) !important;
   color: #FFFFFF !important;
 }
 
@@ -2005,11 +2069,12 @@ body.theme-light .admin-dashboard table.admin-cards-phone thead th {
   border-bottom: 1px solid var(--border-subtle-current) !important;
 }
 
-/* The deadline caption, light mode: 65% of the warning amber into the ink,
-   not the base rule's 80%. At 80% it measured 4.67:1 on a white row and
+/* The closing-soon caption, light mode: 65% of the warning amber into the
+   ink, not the base rule's 80%. At 80% it measured 4.67:1 on a white row and
    4.24:1 on a hovered one (the --bg-hover wash, sampled rgb(243,244,245));
    65% is 5.93:1 and 5.38:1. Dark keeps the 80% mix (its own rule). */
-body.theme-light .admin-dashboard table.admin-data-table tbody td.col-next .admin-next__note--deadline {
+body.theme-light .admin-dashboard table.admin-data-table tbody td.col-next .admin-next__note--soon,
+body.theme-light .admin-dashboard table.admin-data-table tbody td.col-next .admin-next__note--soon .admin-next__time {
   color: color-mix(in srgb, var(--status-warning) 65%, var(--text-primary));
 }
 
@@ -2023,6 +2088,10 @@ body.theme-light .admin-dashboard table.admin-data-table tbody td .row-title {
 body.theme-light .admin-dashboard table.admin-data-table tbody td .row-desc,
 body.theme-light .admin-dashboard table.admin-data-table tbody td.col-status .admin-pill--auto-closed {
   color: var(--text-muted);
+}
+
+body.theme-light .admin-dashboard table.admin-data-table tbody td .admin-study-owner {
+  color: var(--text-secondary);
 }
 
 /* Admin table headers - light mode - FORCE WHITE BACKGROUND */
@@ -2047,9 +2116,12 @@ body.theme-light .admin-dashboard .table th {
    one divider. !important on colour and border only because the blanket
    light-table header block above already sets both !important; the padding
    there is a normal declaration this outranks on specificity. */
+/* The header's divider is the STRONG border in both themes: the header row
+   is sticky, and once rows run under it the rows' own subtle line (1.27:1
+   here, 1.13:1 in dark) let the two merge. */
 body.theme-light .admin-dashboard table.admin-data-table thead th {
   color: var(--text-muted) !important;
-  border-bottom: 1px solid var(--border-subtle-current) !important;
+  border-bottom: 1px solid var(--border-strong-current) !important;
   padding-top: 12px;
   padding-bottom: 12px;
 }

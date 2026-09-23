@@ -10,8 +10,9 @@ import {
 
 /**
  * Shared set-up and in-page measuring instruments for the Admin Research
- * Studies table specs `admin-studies-table-density.test.ts` and
- * `admin-table-chrome-layout.test.ts`.
+ * Studies table specs `admin-studies-table-density.test.ts`,
+ * `admin-table-chrome-layout.test.ts` and (Step 2)
+ * `admin-studies-table-triage.test.ts`.
  *
  * Every API route the dashboard calls is mocked from
  * `e2e/fixtures/admin-dashboard-seed.ts` (the seeded dev database, captured),
@@ -76,7 +77,20 @@ export function expectNoUnmockedCalls(page: Page): void {
   expect(unmockedByPage.get(page) ?? [], 'API calls with no mock - the page has a new backend dependency').toEqual([]);
 }
 
-async function mockDashboardApi(page: Page): Promise<string[]> {
+/**
+ * What `GET /api/opportunities` answers, given the request's query string.
+ * The default is the Step 1 behaviour: the 13-study seed for any query.
+ * `null` answers that request with a 500, for a failed reload.
+ */
+export type StudySource = (query: URLSearchParams) => readonly unknown[] | null;
+
+const seedSource: StudySource = () => OPPORTUNITIES;
+
+async function mockDashboardApi(
+  page: Page,
+  studies: StudySource = seedSource,
+  me: unknown = ADMIN_ME
+): Promise<string[]> {
   const unmocked: string[] = [];
   unmockedByPage.set(page, unmocked);
   // Registered first so it matches last: Playwright tries routes in reverse
@@ -87,9 +101,20 @@ async function mockDashboardApi(page: Page): Promise<string[]> {
     unmocked.push(`${route.request().method()} ${new URL(route.request().url()).pathname}`);
     await route.fulfill({ status: 404, contentType: 'application/json', body: '{"error":"unmocked in e2e"}' });
   });
-  await page.route('**/api/me', (route) => json(route, ADMIN_ME));
-  await page.route('**/api/opportunities?**', (route) => json(route, OPPORTUNITIES));
-  await page.route('**/api/opportunities', (route) => json(route, OPPORTUNITIES));
+  await page.route('**/api/me', (route) => json(route, me));
+  // The list endpoint only (GET, no id segment); anything else under
+  // /api/opportunities/ falls through to the recorder above unless a spec
+  // mocks it.
+  await page.route(
+    (url) => url.pathname === '/api/opportunities',
+    (route) => {
+      if (route.request().method() !== 'GET') return route.fallback();
+      const body = studies(new URL(route.request().url()).searchParams);
+      return body === null
+        ? route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"e2e: list failed"}' })
+        : json(route, body);
+    }
+  );
   await page.route('**/api/admin/dashboard**', (route) => json(route, DASHBOARD));
   await page.route('**/api/bookings/pending-approvals**', (route) => json(route, PENDING_APPROVALS));
   await page.route('**/api/feedback**', (route) => json(route, FEEDBACK));
@@ -103,16 +128,30 @@ async function mockDashboardApi(page: Page): Promise<string[]> {
 export async function openAdminDashboard(
   page: Page,
   baseURL: string | undefined,
-  opts: { width: number; height?: number; theme?: Theme }
+  opts: {
+    width: number;
+    height?: number;
+    theme?: Theme;
+    /**
+     * Serve a different study list (the Step 2 spec does, and honours the
+     * query). Omitted: the 13-study seed, which the Step 1 specs pin.
+     */
+    studies?: StudySource;
+    /** Rows the table must render before the page counts as loaded. Default SEEDED_STUDY_COUNT. */
+    expectedRows?: number;
+    /** The signed-in user `/api/me` returns. Default ADMIN_ME, a researcher_admin. */
+    me?: { id: string; role: string } & Record<string, unknown>;
+  }
 ): Promise<void> {
   expect(baseURL, 'baseURL must be set - these specs drive a running frontend').toBeTruthy();
   expect(OPPORTUNITIES, 'fixture study count').toHaveLength(SEEDED_STUDY_COUNT);
+  const expectedRows = opts.expectedRows ?? SEEDED_STUDY_COUNT;
   if (opts.theme) {
     await page.addInitScript((t) => localStorage.setItem('theme', t), opts.theme);
   }
   await page.addInitScript(installProbes);
   await page.clock.setFixedTime(new Date(FIXTURE_NOW));
-  const unmocked = await mockDashboardApi(page);
+  const unmocked = await mockDashboardApi(page, opts.studies, opts.me);
   await page.setViewportSize({ width: opts.width, height: opts.height ?? 900 });
 
   await page.goto('/admin', { waitUntil: 'load', timeout: 15000 });
@@ -121,7 +160,7 @@ export async function openAdminDashboard(
 
   await expect(page.locator('table.admin-data-table')).toBeVisible({ timeout: 10000 });
   await expect(page.locator('table.admin-data-table tbody tr'), 'fixture study count rendered').toHaveCount(
-    SEEDED_STUDY_COUNT,
+    expectedRows,
     { timeout: 10000 }
   );
   // The approvals count drives the tab badge; wait for it so the badge and
@@ -216,9 +255,13 @@ function installProbes(): void {
   };
   const headerLabels = () => headerCells().map((th) => norm(th.textContent));
   const colIndex = (label: string) => headerLabels().indexOf(label);
+  // Study rows only. Step 2's Close study notices are full-width rows in the
+  // same <tbody> (`.admin-inline-notice-row`), and are not studies.
   const rows = () => {
     const body = table()?.tBodies[0];
-    return body ? ([...body.rows] as HTMLTableRowElement[]) : [];
+    return body
+      ? ([...body.rows] as HTMLTableRowElement[]).filter((r) => !r.classList.contains('admin-inline-notice-row'))
+      : [];
   };
   const cell = (row: HTMLTableRowElement, label: string) => {
     const i = colIndex(label);

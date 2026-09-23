@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { useLocation } from 'react-router-dom';
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 
 export interface DropdownProps {
   trigger: React.ReactNode;
@@ -19,9 +19,81 @@ export interface DropdownProps {
   menu?: boolean;
 }
 
+/**
+ * Marks an element that a dropdown menu must not open over - the site feedback
+ * footer, which sits above the page content in the stacking order, so a menu
+ * hanging into it is painted underneath and cannot be clicked. Put it on any
+ * such element: `<footer data-dropdown-boundary>`.
+ */
+export const DROPDOWN_BOUNDARY_ATTRIBUTE = 'data-dropdown-boundary';
+
+export type DropdownPlacement = 'bottom' | 'top';
+
+/**
+ * Where a menu opens: below its trigger unless that would run past
+ * `bottomLimit` (the viewport bottom, or a boundary's top edge if one is in
+ * view) AND there is more room above. A menu too tall for either side opens
+ * on the roomier one. Pure, so the collision rule is unit-testable apart from
+ * layout.
+ */
+export interface MenuPlacementInput {
+  triggerTop: number;
+  triggerBottom: number;
+  /** The menu's full content height, unclamped. */
+  menuHeight: number;
+  bottomLimit: number;
+  topLimit?: number;
+  gap?: number;
+}
+
+export const chooseMenuPlacement = ({
+  triggerTop,
+  triggerBottom,
+  menuHeight,
+  bottomLimit,
+  topLimit = 0,
+  gap = 4,
+}: MenuPlacementInput): DropdownPlacement => {
+  const roomBelow = bottomLimit - triggerBottom - gap;
+  const roomAbove = triggerTop - topLimit - gap;
+  if (menuHeight <= roomBelow) return 'bottom';
+  return roomAbove > roomBelow ? 'top' : 'bottom';
+};
+
+/**
+ * The placement plus, when the menu fits on NEITHER side, a max-height equal
+ * to the room on the chosen side (the menu then scrolls inside itself rather
+ * than running off screen or under the footer). Null when it fits.
+ */
+export const chooseMenuLayout = (
+  input: MenuPlacementInput
+): { placement: DropdownPlacement; maxHeight: number | null } => {
+  const { triggerTop, triggerBottom, menuHeight, bottomLimit, topLimit = 0, gap = 4 } = input;
+  const placement = chooseMenuPlacement(input);
+  const room = placement === 'bottom' ? bottomLimit - triggerBottom - gap : triggerTop - topLimit - gap;
+  return { placement, maxHeight: menuHeight > room ? Math.max(0, Math.floor(room)) : null };
+};
+
+/** The viewport bottom, or the top of the highest boundary element in view. */
+const measureBottomLimit = (): number => {
+  let limit = window.innerHeight;
+  document.querySelectorAll<HTMLElement>(`[${DROPDOWN_BOUNDARY_ATTRIBUTE}]`).forEach((el) => {
+    const top = el.getBoundingClientRect().top;
+    if (top > 0 && top < limit) limit = top;
+  });
+  return limit;
+};
+
 export interface DropdownItemProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   as?: 'button' | 'link';
   href?: string;
+  /**
+   * An in-app route: renders a router <Link role="menuitem">, so the item
+   * navigates without a reload and a modifier-click opens a new tab. Takes
+   * precedence over `as`/`href`. A disabled item stays a button (a link
+   * cannot be disabled).
+   */
+  to?: string;
   icon?: React.ReactNode;
 }
 
@@ -38,6 +110,8 @@ export const Dropdown: React.FC<DropdownProps> = ({
   menu = false
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [placement, setPlacement] = useState<DropdownPlacement>('bottom');
+  const [maxHeight, setMaxHeight] = useState<number | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -70,6 +144,39 @@ export const Dropdown: React.FC<DropdownProps> = ({
     const items = menuItems();
     if (items.length > 0) focusItemAt(items, 0);
   }, [isOpen, menu, menuItems, focusItemAt]);
+
+  // Collision flip-up. Measured before paint (layout effect), so a menu that
+  // must open upward is never drawn downward first, and again whenever the
+  // window resizes while it is open. Reset on close, so every open starts from
+  // 'bottom' and measures afresh from where the trigger is now. The larger of
+  // scrollHeight and offsetHeight: a clamped menu's scrollHeight is still its
+  // full content height, and offsetHeight covers an unclamped one wherever
+  // scrollHeight is not laid out.
+  const measurePlacement = useCallback(() => {
+    const trigger = dropdownRef.current;
+    const menuEl = menuRef.current;
+    if (!trigger || !menuEl) return;
+    const rect = trigger.getBoundingClientRect();
+    const layout = chooseMenuLayout({
+      triggerTop: rect.top,
+      triggerBottom: rect.bottom,
+      menuHeight: Math.max(menuEl.scrollHeight, menuEl.offsetHeight),
+      bottomLimit: measureBottomLimit(),
+    });
+    setPlacement(layout.placement);
+    setMaxHeight(layout.maxHeight);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!isOpen) {
+      setPlacement('bottom');
+      setMaxHeight(null);
+      return;
+    }
+    measurePlacement();
+    window.addEventListener('resize', measurePlacement);
+    return () => window.removeEventListener('resize', measurePlacement);
+  }, [isOpen, measurePlacement]);
 
   // Close on route change (e.g., when clicking a Link inside the dropdown)
   useEffect(() => {
@@ -135,7 +242,8 @@ export const Dropdown: React.FC<DropdownProps> = ({
 
   // Arrow-key roving within the open menu (WAI-ARIA menu-button). Escape is
   // handled by the global effect above (close + return focus to the trigger);
-  // Enter/Space activate the focused item natively (it is a real <button>).
+  // Enter activates the focused item natively (a <button> or a link), and
+  // Space is handled below.
   const handleMenuKeyDown = useCallback((event: React.KeyboardEvent) => {
     const items = menuItems();
     if (items.length === 0) return;
@@ -157,6 +265,16 @@ export const Dropdown: React.FC<DropdownProps> = ({
         event.preventDefault();
         focusItemAt(items, items.length - 1);
         break;
+      case ' ': {
+        // Space activates the focused item. A <button> does that natively, but
+        // a link item (`to`) does not - Space on a link scrolls the page. So
+        // take Space over for both: no scroll, and exactly one activation
+        // (preventing the default also stops the button's own keyup click).
+        event.preventDefault();
+        const focused = document.activeElement as HTMLElement | null;
+        if (focused && items.includes(focused)) focused.click();
+        break;
+      }
       case 'Tab':
         // Tab leaves the menu: close it and let focus move on naturally.
         setIsOpen(false);
@@ -203,7 +321,11 @@ export const Dropdown: React.FC<DropdownProps> = ({
       {isOpen && (
         <div
           ref={menuRef}
-          className={`dropdown-menu show ${align === 'end' ? 'dropdown-menu-end' : ''} ${menuClassName}`.trim()}
+          className={`dropdown-menu show ${align === 'end' ? 'dropdown-menu-end' : ''} ${
+            placement === 'top' ? 'dropdown-menu--up' : ''
+          } ${menuClassName}`.replace(/\s+/g, ' ').trim()}
+          data-placement={placement}
+          style={maxHeight === null ? undefined : { maxHeight, overflowY: 'auto' }}
           role="menu"
           onKeyDown={menu ? handleMenuKeyDown : undefined}
         >
@@ -233,8 +355,24 @@ export const Dropdown: React.FC<DropdownProps> = ({
 };
 
 export const DropdownItem = React.forwardRef<HTMLButtonElement, DropdownItemProps>(
-  ({ children, as = 'button', href, icon, className = '', onClick, ...props }, ref) => {
+  ({ children, as = 'button', href, to, icon, className = '', onClick, ...props }, ref) => {
     const classes = `dropdown-item ${className}`.trim();
+
+    if (to && !props.disabled) {
+      return (
+        <Link
+          to={to}
+          className={classes}
+          role="menuitem"
+          title={props.title}
+          aria-label={props['aria-label']}
+          onClick={onClick as unknown as React.MouseEventHandler<HTMLAnchorElement>}
+        >
+          {icon && <span className="me-2">{icon}</span>}
+          {children}
+        </Link>
+      );
+    }
 
     if (as === 'link' && href) {
       return (

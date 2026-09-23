@@ -566,8 +566,12 @@ test.describe('admin studies table pills share one box (#142)', () => {
         // group's own box where it was (measured - asserting on the group
         // passed with the column back at 11%). And BOTH edges: the group is
         // centred, so an overflow splits and half of it goes left, into the
-        // Created column.
-        const buttons = [...cell.querySelectorAll('button')].map((b) => b.getBoundingClientRect());
+        // Created column. The row's action is a link since Step 2's fix round
+        // (it opens a page, so a modifier-click opens a tab); it and the
+        // kebab button are the two controls, whatever their tags.
+        const buttons = [...cell.querySelectorAll('.admin-action-primary, .admin-action-btn-kebab')].map((b) =>
+          b.getBoundingClientRect()
+        );
         return {
           iconWidth: icon ? icon.getBoundingClientRect().width : -1,
           buttonWidth: button.getBoundingClientRect().width,
@@ -585,7 +589,7 @@ test.describe('admin studies table pills share one box (#142)', () => {
       expect(m.iconWidth, 'the kebab icon is squeezed to nothing - the row menu renders as an empty box').toBeGreaterThanOrEqual(14);
       // No tolerance: the fix gives the pair several pixels of slack, and a
       // half-pixel allowance is exactly what hid a pair that fitted by 0.1px.
-      expect(m.buttonCount, 'View and the kebab').toBe(2);
+      expect(m.buttonCount, "the row state's action (Step 2: Fix / Edit / Analytics / Preview) and the kebab").toBe(2);
       expect(m.rightmost, 'the row actions overflow the Actions cell on the right').toBeLessThanOrEqual(m.cellContentRight);
       expect(m.leftmost, 'the row actions overflow the Actions cell on the left').toBeGreaterThanOrEqual(m.cellContentLeft);
       // Slack, not a fit by a fraction of a pixel.
