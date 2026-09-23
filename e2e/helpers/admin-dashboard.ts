@@ -60,8 +60,25 @@ const json = (route: Route, body: unknown) =>
  * fail by name instead of measuring an error state (a frontend-only CI server
  * has no backend to fall through to).
  */
+/**
+ * Unmocked API calls per page, for `expectNoUnmockedCalls`. Keyed by page so
+ * a call made at ANY point in a test - a tab switch, a Delete, a later fetch -
+ * is still attributed to that test, not only the ones made while it loaded.
+ */
+const unmockedByPage = new WeakMap<Page, string[]>();
+
+/**
+ * Fails the current test, by name, if its page made any API call with no mock
+ * at any point. Specs using `openAdminDashboard` call it from `test.afterEach`.
+ * A page that never opened the dashboard has nothing recorded and passes.
+ */
+export function expectNoUnmockedCalls(page: Page): void {
+  expect(unmockedByPage.get(page) ?? [], 'API calls with no mock - the page has a new backend dependency').toEqual([]);
+}
+
 async function mockDashboardApi(page: Page): Promise<string[]> {
   const unmocked: string[] = [];
+  unmockedByPage.set(page, unmocked);
   // Registered first so it matches last: Playwright tries routes in reverse
   // registration order.
   await page.route('**/api/**', async (route) => {
@@ -115,6 +132,9 @@ export async function openAdminDashboard(
     await expect(page.locator(`body.theme-${opts.theme}`)).toHaveCount(1, { timeout: 5000 });
   }
   await page.evaluate(() => document.fonts.ready);
+  // Checked here too, so a load-time dependency fails before any measurement
+  // runs against an error state; `expectNoUnmockedCalls` in each spec's
+  // afterEach covers everything after this point.
   expect(unmocked, 'API calls with no mock - the page has a new backend dependency').toEqual([]);
 }
 

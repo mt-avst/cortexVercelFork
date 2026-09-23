@@ -15,7 +15,18 @@
  * Dates are absolute, so the specs pin the browser clock to FIXTURE_NOW and the
  * timezone to FIXTURE_TIMEZONE: "next session" and "closes in" read the same
  * on any day and on a UTC runner.
+ *
+ * Typed with `satisfies` against the shared API types (`shared/types`), so a
+ * field renamed or retyped there fails typecheck here instead of leaving the
+ * fixture describing an API that no longer exists. `Wire<T>` admits `null`
+ * wherever the type has a field: the API sends null for an empty nullable
+ * column where the TypeScript type marks the field optional.
  */
+
+import type { Opportunity, Session, SessionUser } from '../../shared/types';
+
+type Wire<T> = { [K in keyof T]: T[K] | null };
+type WireOpportunity = Omit<Wire<Opportunity>, 'sessions'> & { sessions: Array<Wire<Session>> };
 
 export const FIXTURE_NOW = '2026-09-23T09:00:00.000Z';
 export const FIXTURE_TIMEZONE = 'Europe/London';
@@ -27,7 +38,7 @@ export const ADMIN_ME = {
   business_unit: 'Research',
   role_title: 'Research Manager',
   role: 'researcher_admin',
-};
+} satisfies SessionUser;
 
 export const OPPORTUNITIES = [
   {
@@ -186,6 +197,10 @@ export const OPPORTUNITIES = [
         end_time: '2026-09-24T16:00:00.000Z',
         capacity: 1,
         booked_count: 0,
+        location_or_meet_link_optional: 'https://meet.google.com/mig-rate-now',
+        created_at: '2026-09-16T23:32:19.891Z',
+        updated_at: '2026-09-16T23:32:19.891Z',
+        remaining: 1,
       },
       {
         id: '05e00001-0000-4000-8000-00000000000e',
@@ -194,6 +209,10 @@ export const OPPORTUNITIES = [
         end_time: '2026-09-26T11:00:00.000Z',
         capacity: 1,
         booked_count: 1,
+        location_or_meet_link_optional: 'https://meet.google.com/mig-rate-now',
+        created_at: '2026-09-16T23:32:19.891Z',
+        updated_at: '2026-09-16T23:32:19.891Z',
+        remaining: 0,
       },
     ],
   },
@@ -269,6 +288,10 @@ export const OPPORTUNITIES = [
         end_time: '2026-09-11T18:45:00.000Z',
         capacity: 1,
         booked_count: 1,
+        location_or_meet_link_optional: 'https://meet.google.com/abc-defg-hij',
+        created_at: '2026-09-16T23:32:19.891Z',
+        updated_at: '2026-09-16T23:32:19.891Z',
+        remaining: 0,
       },
       {
         id: '05e00001-0000-4000-8000-000000000001',
@@ -277,6 +300,10 @@ export const OPPORTUNITIES = [
         end_time: '2026-09-19T08:45:00.000Z',
         capacity: 1,
         booked_count: 1,
+        location_or_meet_link_optional: 'https://meet.google.com/abc-defg-hij',
+        created_at: '2026-09-16T23:32:19.891Z',
+        updated_at: '2026-09-16T23:32:19.891Z',
+        remaining: 0,
       },
       {
         id: '05e00001-0000-4000-8000-000000000002',
@@ -285,6 +312,10 @@ export const OPPORTUNITIES = [
         end_time: '2026-09-20T10:45:00.000Z',
         capacity: 1,
         booked_count: 1,
+        location_or_meet_link_optional: 'https://meet.google.com/abc-defg-hij',
+        created_at: '2026-09-16T23:32:19.891Z',
+        updated_at: '2026-09-16T23:32:19.891Z',
+        remaining: 0,
       },
       {
         id: '05e00001-0000-4000-8000-000000000003',
@@ -293,6 +324,10 @@ export const OPPORTUNITIES = [
         end_time: '2026-09-22T13:45:00.000Z',
         capacity: 1,
         booked_count: 0,
+        location_or_meet_link_optional: 'https://meet.google.com/abc-defg-hij',
+        created_at: '2026-09-16T23:32:19.891Z',
+        updated_at: '2026-09-16T23:32:19.891Z',
+        remaining: 1,
       },
     ],
   },
@@ -362,7 +397,7 @@ export const OPPORTUNITIES = [
     default_duration_minutes: 45,
     sessions: [],
   },
-];
+] satisfies WireOpportunity[];
 
 export const DASHBOARD = {
   success: true,

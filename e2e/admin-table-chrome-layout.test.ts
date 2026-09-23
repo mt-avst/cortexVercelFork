@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { SEEDED_STUDY_COUNT, openAdminDashboard, resizeTo } from './helpers/admin-dashboard';
+import { SEEDED_STUDY_COUNT, expectNoUnmockedCalls, openAdminDashboard, resizeTo } from './helpers/admin-dashboard';
 import { FIXTURE_TIMEZONE } from './fixtures/admin-dashboard-seed';
 
 /**
@@ -25,6 +25,12 @@ import { FIXTURE_TIMEZONE } from './fixtures/admin-dashboard-seed';
  */
 
 test.use({ timezoneId: FIXTURE_TIMEZONE });
+
+// Any API call with no mock, made at any point in a test, fails that test by
+// name - not only the calls made while the dashboard loaded.
+test.afterEach(async ({ page }) => {
+  expectNoUnmockedCalls(page);
+});
 
 const SCROLL_WIDTHS = [390, 768, 856, 1023, 1024, 1219, 1440];
 const PILL_WIDTHS = [856, 1023, 1024, 1100, 1219, 1279, 1280, 1440];

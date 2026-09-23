@@ -1,14 +1,17 @@
 import { test, expect, type Page } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
 import {
   THEMES,
   SEEDED_STUDY_COUNT,
   SEEDED_STUDIES,
   contrastRatio,
+  expectNoUnmockedCalls,
   openAdminDashboard,
   resizeTo,
   type Box,
 } from './helpers/admin-dashboard';
 import { FIXTURE_TIMEZONE } from './fixtures/admin-dashboard-seed';
+import { measureGroundContrast } from './helpers/ground-contrast';
 
 /**
  * Admin Research Studies table, Step 1 (density, width, column set, bands).
@@ -40,6 +43,12 @@ const TABLE_WIDTHS_BELOW_1280 = [1024, 1100, 1152, 1219];
 const TABLE_WIDTHS_FROM_1280 = [1280, 1440, 1920];
 
 test.use({ timezoneId: FIXTURE_TIMEZONE });
+
+// Any API call with no mock, made at any point in a test, fails that test by
+// name - not only the calls made while the dashboard loaded.
+test.afterEach(async ({ page }) => {
+  expectNoUnmockedCalls(page);
+});
 
 const frame = (page: Page) =>
   page.evaluate(() => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
@@ -732,6 +741,38 @@ for (const theme of THEMES) {
         expect(layers, 'no .App element').not.toBeNull();
         expect(layers!.before, '.App::before glow still renders').toBe('none');
         expect(layers!.after, '.App::after grid still renders').toBe('none');
+      });
+    }
+
+    /**
+     * The dark Admin ground is a gradient `background-image` on the body (Step
+     * 1's seam fix), and axe will not judge contrast over a background image:
+     * on 6282291c it filed 32-35 Admin text nodes (the h1, the subtitle, the
+     * attention cards, the tab labels) under `incomplete`, where main had 0,
+     * and nothing failed on that bucket. So every node axe declines is measured
+     * here by hand - against its nearest opaque background and against the
+     * lightest colour the gradient's own stops can reach - plus a fixed set
+     * (the page heading and every tab) so the instrument is exercised even on
+     * a day axe declines nothing. Brightening a stop fails this by name.
+     */
+    if (theme === 'dark') {
+      test('text axe cannot judge over the dark Admin ground still clears AA against its lightest colour (dark)', async ({
+        page,
+        baseURL,
+      }) => {
+        await openAdminDashboard(page, baseURL, { width: 1440, theme });
+        const scan = await new AxeBuilder({ page }).withRules(['color-contrast']).analyze();
+        const declined = scan.incomplete.flatMap((rule) =>
+          rule.nodes.map((node) => node.target[0]).filter((t): t is string => typeof t === 'string')
+        );
+        const m = await measureGroundContrast(page, [...declined, 'main h1', '.admin-tabs-card .custom-tab-button']);
+        console.log(
+          `Admin dark ground: axe declined ${declined.length}; measured ${m.measured}; lightest ${m.lightestGround}; ` +
+            `lowest ${Math.min(...m.rows.map((r) => r.overLightestGround))}`
+        );
+        // The fixed set alone is the heading plus four tab labels and counts.
+        expect(m.measured, 'text nodes measured').toBeGreaterThanOrEqual(5);
+        expect(m.failures).toEqual([]);
       });
     }
 

@@ -97,6 +97,27 @@ const expectBookingContrastActuallyMeasured = (
   expect(deferred).toEqual([]);
 };
 
+/**
+ * Wait for the page this test scans to have actually rendered, instead of a
+ * fixed sleep. A `waitForTimeout(500)` here scanned whatever had painted by
+ * then: under the CI config's parallel workers the SPA had often not mounted
+ * its route yet, and axe reported `landmark-one-main` / `page-has-heading-one`
+ * on a half-painted page (measured 16/20 and 17/20 failures at 5 workers on
+ * main and the branch). On `/` it could also scan the signed-out landing that
+ * shows before the mocked `/api/me` resolves, not the signed-in page mocked
+ * for it. Each test now names its page's own heading plus one element the
+ * mocked data renders, and a render problem fails here, by name, within 10s.
+ */
+const expectRendered = async (
+  page: import('@playwright/test').Page,
+  heading: import('@playwright/test').Locator,
+  content: import('@playwright/test').Locator
+): Promise<void> => {
+  await expect(heading, 'the page heading never rendered').toBeAttached({ timeout: 10000 });
+  await expect(content, 'the page content never rendered').toBeVisible({ timeout: 10000 });
+  await expect(page.locator('main .spinner-border'), 'the page is still loading').toHaveCount(0, { timeout: 10000 });
+};
+
 test.describe('Accessibility Tests', () => {
   test.beforeEach(async ({ page, baseURL }) => {
     // Set viewport size
@@ -105,6 +126,20 @@ test.describe('Accessibility Tests', () => {
     // Mock API responses for consistency (only against a local stack - against
     // a deployment the real API is the thing under test).
     if (baseURL?.includes('localhost')) {
+      // Every API call a test does not mock is answered here, the way the
+      // test-a11y job answers it: that job serves `vite preview` with no
+      // backend, so the preview's /api proxy fails every unmocked call with a
+      // 500. Without this, a local run with a backend on :3001 sent those calls
+      // to it with no session; the 401 tripped the app's sign-in redirect,
+      // which the backend points at ITS frontend (:3000), so the page left the
+      // server under test mid-test and axe scanned a blank document - measured
+      // 16-17/20 `landmark-one-main` failures at 5 workers, on main and the
+      // branch alike, and 0/990 against a backend-less preview. Registered
+      // first so every mock below and in a test takes precedence (Playwright
+      // tries routes in reverse registration order).
+      await page.route('**/api/**', async (route) => {
+        await route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"no backend in e2e"}' });
+      });
       await page.route('**/api/me', async (route) => {
         await route.fulfill({
           status: 200,
@@ -155,7 +190,7 @@ test.describe('Accessibility Tests', () => {
     
     // Wait for page to load (use 'load' not 'networkidle' - production often has ongoing requests)
     await page.waitForLoadState('load');
-    await page.waitForTimeout(500);
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Browse studies' }), page.getByText('Accessibility Test Opportunity').first());
     
     // Run accessibility check
     const accessibilityScanResults = await new AxeBuilder({ page }).analyze();
@@ -177,7 +212,7 @@ test.describe('Accessibility Tests', () => {
     
     await page.reload();
     await page.waitForLoadState('load');
-    await page.waitForTimeout(500);
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Browse studies' }), page.getByText('Accessibility Test Opportunity').first());
     
     const accessibilityScanResults = await new AxeBuilder({ page }).analyze();
     
@@ -213,7 +248,7 @@ test.describe('Accessibility Tests', () => {
 
     await page.goto('/opportunities/opp-1');
     await page.waitForLoadState('load');
-    await page.waitForTimeout(500);
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Accessibility Test Opportunity' }), page.getByRole('heading', { level: 2, name: 'Available Sessions' }));
     
     const accessibilityScanResults = await new AxeBuilder({ page }).analyze();
     
@@ -252,7 +287,7 @@ test.describe('Accessibility Tests', () => {
 
     await page.goto('/admin');
     await page.waitForLoadState('load');
-    await page.waitForTimeout(500);
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Admin' }), page.locator('.admin-data-table tbody tr').first());
 
     const accessibilityScanResults = await new AxeBuilder({ page }).analyze();
 
@@ -340,7 +375,7 @@ test.describe('Accessibility Tests', () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/admin');
     await page.waitForLoadState('load');
-    await page.waitForTimeout(500);
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Admin' }), page.locator('.admin-data-table td.col-actions').first());
 
     // The studies table must have reflowed to cards (a real table would carry
     // its intrinsic min-width and re-open the horizontal scroll).
@@ -771,7 +806,7 @@ test.describe('Accessibility Tests', () => {
 
     await page.goto('/admin/opportunities/new');
     await page.waitForLoadState('load');
-    await page.waitForTimeout(500);
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Untitled study' }), page.locator('main form').first());
     
     // Test form accessibility
     const accessibilityScanResults = await new AxeBuilder({ page }).analyze();
@@ -782,7 +817,7 @@ test.describe('Accessibility Tests', () => {
   test('Header navigation should be accessible', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('load');
-    await page.waitForTimeout(500);
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Browse studies' }), page.getByText('Accessibility Test Opportunity').first());
     
     // Test header specifically
     const header = page.locator('header');
@@ -807,7 +842,7 @@ test.describe('Accessibility Tests', () => {
   test('Skip link should be functional', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('load');
-    await page.waitForTimeout(500);
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Browse studies' }), page.getByText('Accessibility Test Opportunity').first());
     
     // Check if skip link exists
     const skipLink = page.locator('a.skip-link');
@@ -820,8 +855,6 @@ test.describe('Accessibility Tests', () => {
     // Skip link should be the first focusable element
     await page.keyboard.press('Tab');
     
-    // Wait a moment for CSS transition
-    await page.waitForTimeout(200);
     
     // Skip link should be visible when focused
     await expect(skipLink).toBeVisible({ timeout: 2000 });
@@ -834,8 +867,6 @@ test.describe('Accessibility Tests', () => {
     // Activate skip link
     await page.keyboard.press('Enter');
     
-    // Wait for navigation
-    await page.waitForTimeout(100);
     
     // Should focus main content
     const mainContent = page.locator('#main-content');
@@ -845,7 +876,7 @@ test.describe('Accessibility Tests', () => {
   test('Keyboard navigation should work', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('load');
-    await page.waitForTimeout(500);
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Browse studies' }), page.getByText('Accessibility Test Opportunity').first());
     
     // Tab through interactive elements
     await page.keyboard.press('Tab');
@@ -859,7 +890,7 @@ test.describe('Accessibility Tests', () => {
   test('Color contrast should meet WCAG AA standards', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('load');
-    await page.waitForTimeout(500);
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Browse studies' }), page.getByText('Accessibility Test Opportunity').first());
     
     // Check accessibility with color contrast rules
     const accessibilityScanResults = await new AxeBuilder({ page })
@@ -872,7 +903,7 @@ test.describe('Accessibility Tests', () => {
   test('Images should have alt text', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('load');
-    await page.waitForTimeout(500);
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Browse studies' }), page.getByText('Accessibility Test Opportunity').first());
     
     // Check image accessibility
     const images = page.locator('img');
@@ -889,7 +920,7 @@ test.describe('Accessibility Tests', () => {
   test('Form inputs should have labels', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('load');
-    await page.waitForTimeout(500);
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Browse studies' }), page.getByText('Accessibility Test Opportunity').first());
     
     // Check form accessibility
     const inputs = page.locator('input[type="text"], input[type="email"], input[type="number"], select, textarea');
@@ -1111,7 +1142,7 @@ test.describe('Accessibility Tests', () => {
     await page.evaluate(() => sessionStorage.setItem('loginRedirect', 'true'));
     await page.goto('/my-bookings');
     await page.waitForLoadState('load');
-    await page.waitForTimeout(500);
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'My bookings' }), page.locator('.booking-card-empty').first());
     await expect(page.locator('.booking-card-empty')).toHaveCount(2);
     const results = await new AxeBuilder({ page }).analyze();
     expectNoViolations(results, 'My Bookings (empty)');
@@ -1123,7 +1154,7 @@ test.describe('Accessibility Tests', () => {
     await page.evaluate(() => sessionStorage.setItem('loginRedirect', 'true'));
     await page.goto('/my-bookings');
     await page.waitForLoadState('load');
-    await page.waitForTimeout(500);
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'My bookings' }), page.locator('.booking-card').first());
     await expectPopulatedBookings(page);
     const results = await new AxeBuilder({ page }).analyze();
     expectNoViolations(results, 'My Bookings (populated, light)');
@@ -1147,7 +1178,7 @@ test.describe('Accessibility Tests', () => {
     });
     await page.goto('/my-bookings');
     await page.waitForLoadState('load');
-    await page.waitForTimeout(500);
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'My bookings' }), page.locator('.booking-card').first());
     await expect(page.locator('body.theme-dark')).toHaveCount(1);
     await expectPopulatedBookings(page);
     /* Remove the decorative background before scanning. It is a fixed,
@@ -1175,7 +1206,6 @@ test.describe('Accessibility Tests', () => {
     await page.evaluate(() => {
       document.body.style.backgroundImage = 'none';
     });
-    await page.waitForTimeout(200);
     const results = await new AxeBuilder({ page }).analyze();
     expectNoViolations(results, 'My Bookings (populated, dark)');
     expectBookingContrastActuallyMeasured(results, 'My Bookings (populated, dark)');
@@ -1278,7 +1308,7 @@ test.describe('Accessibility Tests', () => {
     await page.evaluate(() => sessionStorage.setItem('loginRedirect', 'true'));
     await page.goto('/feedback');
     await page.waitForLoadState('load');
-    await page.waitForTimeout(500);
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Feedback' }), page.locator('main form').first());
     const results = await new AxeBuilder({ page }).analyze();
     expect(results.violations).toEqual([]);
   });
@@ -1307,7 +1337,7 @@ test.describe('Accessibility Tests', () => {
     await page.evaluate(() => sessionStorage.setItem('loginRedirect', 'true'));
     await page.goto('/admin/settings');
     await page.waitForLoadState('load');
-    await page.waitForTimeout(500);
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Settings' }), page.getByRole('heading', { level: 2, name: 'Profile' }));
     const results = await new AxeBuilder({ page }).analyze();
     expect(results.violations).toEqual([]);
   });
