@@ -35,6 +35,23 @@ export const getRecruitment = (opportunity: Opportunity): Recruitment | null => 
   return { booked, capacity, pct };
 };
 
+/**
+ * What the Progress cell shows: the study's all-time booked / capacity when the
+ * server sent the totals, else the recent-window sum `getRecruitment` makes.
+ *
+ * Deliberately NOT what the Needs recruitment and Fully booked chips read. Those
+ * ask about open slots, and a slot that passed unfilled weeks ago is not one -
+ * so they stay on `getRecruitment`. Progress asks how the study filled, which is
+ * the only question a closed study can still answer.
+ */
+export const getStudyProgress = (opportunity: Opportunity): Recruitment | null => {
+  const { total_booked: booked, total_capacity: capacity } = opportunity;
+  if (booked === undefined || capacity === undefined) return getRecruitment(opportunity);
+
+  const pct = capacity > 0 ? Math.round((booked / capacity) * 100) : 0;
+  return { booked, capacity, pct };
+};
+
 /** The soonest session that starts at or after `now`. Null if none upcoming. */
 export const getNextSession = (opportunity: Opportunity, now: Date): Session | null => {
   const upcoming = (opportunity.sessions ?? [])

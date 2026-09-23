@@ -2990,5 +2990,78 @@
     "runner": "vitest",
     "spec": "src/firsthand/survey-answers.test.ts",
     "test": "rejects an open_text answer smuggling selectedOptions"
+  },
+  {
+    "id": "patch-status-write-records-manual-close",
+    "why": "Admin table Step 2 (MR A). `auto_closed` says whether the system or a person closed a study, and the admin table captions it \"Auto-closed\". The PATCH handler derives it: a real change of status is a person's decision, so it appends the literal `auto_closed = false`. Deleting that one push leaves every PATCH working, every status write landing and no request refused - the only effect is that a study a researcher reopens keeps the sweep's `true`, and a later manual close of it is captioned as automatic. No gate reading for authorisation or validity would flag a missing line in a SET clause.",
+    "file": "backend/src/routes/opportunities.ts",
+    "anchor": "      updateFields.push('auto_closed = false');",
+    "mutation": "",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/opportunities.patch-column-allowlist.test.ts",
+    "test": "writes auto_closed as the literal false, taking no value from the request"
+  },
+  {
+    "id": "patch-same-status-write-keeps-auto-close",
+    "why": "Admin table Step 2 (MR A), from the review gate. The derived `auto_closed = false` fires only when the status written DIFFERS from the stored one: an admin pressing Close on a stale \"published\" row minutes after the sweep closed it writes `closed` over `closed`, and that no-op must not relabel the sweep close as manual. Flipping `!==` to `===` is a one-character edit that keeps the SET clause well formed and every request succeeding, and inverts the rule - real changes stop clearing the flag, no-op writes start clearing it.",
+    "file": "backend/src/routes/opportunities.ts",
+    "anchor": "    if (data.status !== undefined && data.status !== existingOpp.rows[0].status) {",
+    "mutation": "    if (data.status !== undefined && data.status === existingOpp.rows[0].status) {",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/opportunities.patch-column-allowlist.test.ts",
+    "test": "leaves auto_closed out of the SET clause when the status written is the one the row has"
+  },
+  {
+    "id": "last-session-close-records-auto-closed",
+    "why": "Admin table Step 2 (MR A). `autoCloseOpportunityIfNeeded` closes a study once every session is over, and sets `auto_closed = true` in the SAME UPDATE so the study can never be observed closed-by-the-rule but unmarked. `true` -> `false` keeps the statement valid, the close landing and every status test green; the only casualty is the admin table's \"Auto-closed\" caption, which silently disappears for every study this path closes. Needs a real database: the flag exists only in the real schema.",
+    "file": "backend/src/utils/opportunityLifecycle.ts",
+    "anchor": "SET status = $1, auto_closed = true WHERE id = $2 AND status = 'published'",
+    "mutation": "SET status = $1, auto_closed = false WHERE id = $2 AND status = 'published'",
+    "runner": "vitest",
+    "spec": "src/routes/__tests__/opportunities.auto-closed-postgres.test.ts",
+    "test": "the last-session close, reached through close-if-past",
+    "needsDatabase": true
+  },
+  {
+    "id": "end-date-sweep-records-auto-closed",
+    "why": "Admin table Step 2 (MR A). The hourly end-date sweep is the other automatic close and sets `auto_closed = true` in the same set-based UPDATE. `true` -> `false` keeps the sweep closing exactly the right studies - the existing end-date suite stays green - while every study it closes loses its \"Auto-closed\" caption and reads as closed by hand.",
+    "file": "backend/src/utils/opportunityLifecycle.ts",
+    "anchor": "SET status = 'closed', auto_closed = true",
+    "mutation": "SET status = 'closed', auto_closed = false",
+    "runner": "vitest",
+    "spec": "src/routes/__tests__/opportunities.auto-closed-postgres.test.ts",
+    "test": "the end-date sweep",
+    "needsDatabase": true
+  },
+  {
+    "id": "progress-totals-count-capacity-once-per-session",
+    "why": "Admin table Step 2 (MR A). `total_capacity` sums `sessions.capacity`, and bookings are collapsed to one count per session (the LATERAL) BEFORE that sum. The obvious flat rewrite - `sessions LEFT JOIN bookings ... SUM(s.capacity)` - is valid SQL, returns one row per study and reads naturally, and repeats a session's capacity once per booking: a capacity-4 session with 2 bookings reports 2/8, so every study's Progress looks half as full as it is. A mocked pool cannot see it; only a real join can.",
+    "file": "backend/src/utils/opportunityProgressTotals.ts",
+    "anchor": "            COALESCE(SUM(per_session.booked), 0)::int AS total_booked,\n            COALESCE(SUM(s.capacity), 0)::int AS total_capacity\n     FROM sessions s\n     CROSS JOIN LATERAL (\n       SELECT COUNT(*)::int AS booked\n       FROM bookings b\n       WHERE b.session_id = s.id\n         AND b.status = 'booked'\n     ) per_session",
+    "mutation": "            COUNT(b.id)::int AS total_booked,\n            COALESCE(SUM(s.capacity), 0)::int AS total_capacity\n     FROM sessions s\n     LEFT JOIN bookings b ON b.session_id = s.id AND b.status = 'booked'",
+    "runner": "vitest",
+    "spec": "src/routes/__tests__/opportunities.list-progress-totals-postgres.test.ts",
+    "test": "counts a session's capacity once, not once per booking: 2 of 4, not 2 of 8",
+    "needsDatabase": true
+  },
+  {
+    "id": "progress-totals-batch-is-admin-only",
+    "why": "Admin table Step 2 (MR A). The all-time totals batch runs only for an admin caller. `if (isAdmin)` -> `if (true)` leaks nothing today, because `toPublicOpportunity` strips the fields for everyone else - which is exactly why it would pass review: it silently adds a lifetime bookings aggregate to every participant and anonymous list request, and leaves the serialiser as the only thing between those counts and the public payload.",
+    "file": "backend/src/routes/opportunities.ts",
+    "anchor": "    if (isAdmin) {\n      try {\n        progressTotalsMap",
+    "mutation": "    if (true) {\n      try {\n        progressTotalsMap",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/opportunities.list-progress-totals.test.ts",
+    "test": "never asks the database for totals on behalf of a participant, and sends none"
+  },
+  {
+    "id": "public-view-strips-progress-totals",
+    "why": "Admin table Step 2 (MR A), from the review gate. `toPublicOpportunity` is the redaction layer for participant payloads, and it strips `total_booked` (with `total_capacity` and `auto_closed`) by KEY. Deleting the one destructure line compiles, changes no admin response and leaks nothing while the route's `if (isAdmin)` holds - so it reads as dead code. It is the layer that still holds when a refactor hoists the totals batch.",
+    "file": "backend/src/utils/publicOpportunity.ts",
+    "anchor": "    total_booked: _totalBooked,\n",
+    "mutation": "",
+    "runner": "jest",
+    "spec": "src/utils/__tests__/publicOpportunity.test.ts",
+    "test": "removes the admin progress totals and auto_closed, non-zero totals, auto-closed"
   }
 ]

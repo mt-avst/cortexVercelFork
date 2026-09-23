@@ -352,6 +352,72 @@ export async function runMigrations() {
       ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS external_consent_confirmed BOOLEAN
     `);
 
+    // HOW A STUDY CLOSED. `true` means a lifecycle sweep closed it
+    // (`autoCloseOpportunityIfNeeded` / `autoClosePublishedStudiesPastEndDate`
+    // in utils/opportunityLifecycle.ts, which set it in the same UPDATE as the
+    // status); any status written through PATCH /api/opportunities/:id sets it
+    // false. The admin table's "Auto-closed" caption reads it. Not
+    // client-writable: it is absent from UPDATABLE_OPPORTUNITY_COLUMNS and the
+    // update schema, and the PATCH handler derives it.
+    //
+    // THE BACKFILL MUST RUN EXACTLY ONCE, which is why this is a guarded DO
+    // block rather than `ADD COLUMN IF NOT EXISTS` plus an UPDATE. This file
+    // re-runs on every deploy, and an unconditional
+    // `UPDATE ... WHERE status = 'closed'` would re-mark every MANUAL close as
+    // automatic on the next deploy. The backfill itself is true for every row
+    // already closed because, until this column shipped, no UI could close a
+    // study by hand - every existing close was a sweep.
+    //
+    // One statement, so the add and the backfill commit or roll back together
+    // even though this file has no BEGIN. The updated_at trigger is disabled
+    // around the backfill only: stamping every closed study as "just updated"
+    // by a schema change would be a lie in any view that shows it, and the
+    // disable is transactional, so a failure cannot leave it off.
+    //
+    // The catch is for two deploys racing: both see the column absent, the
+    // second's ADD COLUMN waits on the first's lock and then fails 42701
+    // (duplicate_column), rolling back its whole block - including its
+    // backfill - which is exactly right.
+    try {
+      await client.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = current_schema()
+              AND table_name = 'opportunities'
+              AND column_name = 'auto_closed'
+          ) THEN
+            ALTER TABLE opportunities
+              ADD COLUMN auto_closed BOOLEAN NOT NULL DEFAULT false;
+            ALTER TABLE opportunities DISABLE TRIGGER update_opportunities_updated_at;
+            UPDATE opportunities SET auto_closed = true WHERE status = 'closed';
+            ALTER TABLE opportunities ENABLE TRIGGER update_opportunities_updated_at;
+          END IF;
+        END $$;
+      `);
+    } catch (error) {
+      // Only the race above is tolerated. The shared class-42 predicate would
+      // also swallow a missing trigger (42704) or a privilege error (42501) and
+      // deploy without the column, after which every status PATCH and both
+      // auto-close sweeps fail on 42703.
+      if ((error as { code?: unknown } | null)?.code !== '42701') throw error;
+      console.log('ℹ️  auto_closed column added by a concurrent migration:', (error as Error).message);
+    }
+    // Asked of pg_catalog, not information_schema, which hides a column the
+    // role lacks privileges on - the same rule as the click_type check below.
+    const autoClosedColumn = await client.query(`
+      SELECT 1
+      FROM pg_attribute
+      WHERE attrelid = to_regclass('opportunities')
+        AND attname = 'auto_closed'
+        AND attnum > 0
+        AND NOT attisdropped
+    `);
+    if (autoClosedColumn.rowCount !== 1) {
+      throw new Error('Migration left the auto_closed column missing');
+    }
+
     // Per-participant screener verdicts - the enforcement key. The three apply
     // chokepoints refuse anyone without a 'qualified' row here. questions_snapshot
     // records the screener as it was evaluated, so editing the opportunity's

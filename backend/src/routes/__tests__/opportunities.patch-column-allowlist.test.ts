@@ -55,6 +55,7 @@ jest.mock('../../validation/schemas', () => {
 import opportunitiesRouter, {
   resetParticipantRouteLimits,
   UPDATABLE_OPPORTUNITY_COLUMNS,
+  SERVER_DERIVED_OPPORTUNITY_COLUMNS,
   NON_COLUMN_OPPORTUNITY_BODY_KEYS,
 } from '../opportunities';
 import { pool } from '../../config';
@@ -62,6 +63,7 @@ import { isDatabaseAvailable } from '../../utils/database';
 import { errorHandler } from '../../utils/errorHandler';
 import { UpdateOpportunitySchema } from '../../validation/schemas';
 import { wireConnectThroughQuery } from '../../__tests__/helpers/pooled-client-mock';
+import { getMockOpportunity, updateMockOpportunity } from '../../../../demo/mock-data';
 
 const mockQuery = pool.query as unknown as jest.Mock;
 const mockConnect = pool.connect as unknown as jest.Mock;
@@ -327,7 +329,61 @@ describe('PATCH /api/opportunities/:id column allow-list', () => {
   // input in the request at all, survived all 987 tests and rebuilt the entire
   // original vulnerability, returning the exfiltrated address through
   // `RETURNING *`. No arm anywhere asked what the SET clause named.
-  it('emits a SET clause naming only allow-listed columns', async () => {
+  //
+  // A column is legitimate in the SET clause iff the body could name it (the
+  // allow-list) OR the handler writes it itself (`SERVER_DERIVED_...`). The
+  // second set exists because a status write now appends `auto_closed = false`
+  // - a column no body may name. It widens what may APPEAR in the statement,
+  // never what a body may REQUEST: the arms further down prove a body naming
+  // `auto_closed` is still refused at the door, and the literal pins below
+  // prove the server-derived set cannot quietly grow into a second allow-list.
+  //
+  // The arranged row is a DRAFT, so `status: 'closed'` is a real change of
+  // status - the only write that derives the flag (see the same-status arm
+  // below).
+  it('emits a SET clause naming only allow-listed or server-derived columns', async () => {
+    await request(listening(appAs('researcher_admin')))
+      .patch(PATH)
+      .send({ title: 'A retitled study', product_optional: 'Cortex', status: 'closed' })
+      .expect(200);
+
+    const [sql] = updateStatements();
+    const setClause = sql.slice(sql.indexOf('SET ') + 4, sql.indexOf('WHERE'));
+    const named = setClause.split(',').map((f) => f.trim().split(/\s*=/)[0]);
+
+    // THE CONTROL, and now a literal. Without it an empty or unparsed SET
+    // clause makes the loop below vacuous, and a test that iterates nothing
+    // passes forever. Pinned as the exact list rather than a length, so a
+    // fifth column appearing - derived or injected - fails here by name.
+    expect(named).toEqual(['title', 'product_optional', 'status', 'auto_closed']);
+    named.forEach((column) => {
+      expect(
+        UPDATABLE_OPPORTUNITY_COLUMNS.has(column) || SERVER_DERIVED_OPPORTUNITY_COLUMNS.has(column)
+      ).toBe(true);
+    });
+  });
+
+  // THE SERVER-DERIVED FRAGMENT IS A LITERAL, NOT A PARAMETER. Nothing from the
+  // request may reach it, so it must not consume a `$n` placeholder or push a
+  // value: the parameter list is exactly the three body values plus the id.
+  it('writes auto_closed as the literal false, taking no value from the request', async () => {
+    await request(listening(appAs('researcher_admin')))
+      .patch(PATH)
+      .send({ title: 'A retitled study', product_optional: 'Cortex', status: 'closed' })
+      .expect(200);
+
+    const updateCall = mockQuery.mock.calls.find((call: unknown[]) =>
+      String(call[0]).includes('UPDATE opportunities')
+    ) as unknown[];
+    expect(String(updateCall[0])).toMatch(/auto_closed = false/);
+    expect(updateCall[1]).toEqual(['A retitled study', 'Cortex', 'closed', 'opp-1']);
+  });
+
+  // A WRITE OF THE STATUS THE ROW ALREADY HAS IS NOT A DECISION. An admin
+  // pressing Close on a stale "published" row after the sweep closed it must
+  // not relabel that sweep close as manual, so the flag is derived only on a
+  // real change. The arranged row is a draft; this body writes draft again.
+  it('leaves auto_closed out of the SET clause when the status written is the one the row has', async () => {
     await request(listening(appAs('researcher_admin')))
       .patch(PATH)
       .send({ title: 'A retitled study', product_optional: 'Cortex', status: 'draft' })
@@ -337,11 +393,70 @@ describe('PATCH /api/opportunities/:id column allow-list', () => {
     const setClause = sql.slice(sql.indexOf('SET ') + 4, sql.indexOf('WHERE'));
     const named = setClause.split(',').map((f) => f.trim().split(/\s*=/)[0]);
 
-    // THE CONTROL. Without it an empty or unparsed SET clause makes the loop
-    // below vacuous, and a test that iterates nothing passes forever.
-    expect(named).toHaveLength(3);
-    named.forEach((column) => {
-      expect([...UPDATABLE_OPPORTUNITY_COLUMNS]).toContain(column);
+    // Literal, so the absence below is read from a parsed clause and not from
+    // an empty string.
+    expect(named).toEqual(['title', 'product_optional', 'status']);
+    expect(sql).not.toContain('auto_closed');
+  });
+
+  // THE CONTROL FOR THE DERIVATION: only a STATUS write says how the study
+  // closed. A title-only save must leave `auto_closed` alone, or retitling an
+  // auto-closed study would silently rewrite why it closed.
+  it('does not touch auto_closed on a save that writes no status', async () => {
+    await request(listening(appAs('researcher_admin')))
+      .patch(PATH)
+      .send({ title: 'A retitled study' })
+      .expect(200);
+
+    const [sql] = updateStatements();
+    expect(sql).toMatch(/title = \$1/);
+    expect(sql).not.toContain('auto_closed');
+  });
+
+  describe('auto_closed is server-derived and never client-writable', () => {
+    // Pinned as a LITERAL for the reason the allow-list's own pin gives below:
+    // a test that derives its expectation from the set cannot see the set
+    // grow. A second name here would be a column the handler writes with no
+    // test saying why.
+    it('names exactly one server-derived column, auto_closed', () => {
+      expect([...SERVER_DERIVED_OPPORTUNITY_COLUMNS]).toEqual(['auto_closed']);
+    });
+
+    // A name in both sets would be client-writable AND server-derived, and the
+    // body's value would race the handler's literal in one SET clause.
+    it('never overlaps the client allow-list or the consumed non-columns', () => {
+      expect(
+        [...SERVER_DERIVED_OPPORTUNITY_COLUMNS].filter((c) => UPDATABLE_OPPORTUNITY_COLUMNS.has(c))
+      ).toEqual([]);
+      expect(
+        [...SERVER_DERIVED_OPPORTUNITY_COLUMNS].filter((c) => NON_COLUMN_OPPORTUNITY_BODY_KEYS.has(c))
+      ).toEqual([]);
+      // And the schema does not declare it, so `validateRequest` strips it
+      // from every live body before the handler runs.
+      expect(Object.keys(UpdateOpportunitySchema.shape)).not.toContain('auto_closed');
+      // THE CONTROL: the overlap filter is not vacuous - the set it iterates
+      // is non-empty, so an empty result means "no overlap", not "nothing read".
+      expect(SERVER_DERIVED_OPPORTUNITY_COLUMNS.size).toBe(1);
+    });
+
+    // With the strip neutralised (as everywhere in this file), a body naming
+    // `auto_closed` reaches the allow-list and must be refused there like any
+    // other column the caller does not own - alone, and riding beside a
+    // legitimate status write. The live-stack answer with the strip in place
+    // ("No fields to update", and a stored false) is asserted against a real
+    // database in `opportunities.auto-closed-postgres.test.ts`.
+    it.each([
+      ['alone', { auto_closed: true }],
+      ['beside a status write', { status: 'closed', auto_closed: true }],
+    ])('refuses a body carrying auto_closed %s, and builds no SQL', async (_label, body) => {
+      const res = await request(listening(appAs('researcher_admin')))
+        .patch(PATH)
+        .send(body)
+        .expect(400);
+
+      expect(res.body.error).toBe('Validation failed');
+      expect(updateStatements()).toHaveLength(0);
+      expect(mockQuery).not.toHaveBeenCalled();
     });
   });
 
@@ -424,5 +539,34 @@ describe('PATCH /api/opportunities/:id column allow-list', () => {
       .expect(400);
 
     expect(mockQuery).not.toHaveBeenCalled();
+  });
+
+  // THE MOCK-DATA PATH derives the flag the same way: only a real change of
+  // status writes `auto_closed: false`. `mock-3` is a published demo study,
+  // given a sweep's `true` first so both directions are observable.
+  describe('with no database, auto_closed follows the same rule', () => {
+    const MOCK_ID = 'mock-3';
+    const patchMock = (body: Record<string, unknown>) =>
+      request(listening(appAs('superadmin'))).patch(`/api/opportunities/${MOCK_ID}`).send(body);
+
+    beforeEach(() => {
+      mockIsDatabaseAvailable.mockResolvedValue(false as never);
+      updateMockOpportunity(MOCK_ID, { status: 'published', auto_closed: true });
+    });
+
+    it('leaves auto_closed alone when the status written is the one the study has', async () => {
+      const res = await patchMock({ status: 'published' }).expect(200);
+
+      expect(res.body.auto_closed).toBe(true);
+      expect(getMockOpportunity(MOCK_ID)?.auto_closed).toBe(true);
+    });
+
+    it('writes auto_closed false on a real change of status', async () => {
+      const res = await patchMock({ status: 'closed' }).expect(200);
+
+      expect(res.body.status).toBe('closed');
+      expect(res.body.auto_closed).toBe(false);
+      expect(mockQuery).not.toHaveBeenCalled();
+    });
   });
 });

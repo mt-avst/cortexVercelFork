@@ -339,6 +339,46 @@ describe('Research Studies table: Progress folds Recruitment and Clicks together
     expect(within(cell).getByText('2 / 3')).toBeInTheDocument();
     expect(cell.textContent).not.toMatch(/click/);
   });
+
+  it('reports a closed study from its all-time totals once its sessions have aged out of the list', async () => {
+    // The admin list only carries sessions from the last 14 days, so a study
+    // that closed a month ago arrives with `sessions: []` - and drew the dash.
+    const client = await import('../../api/client');
+    vi.mocked(client.getOpportunities).mockResolvedValueOnce([
+      study({ id: 'opp-closed', status: 'closed', title: 'Closed last month', total_booked: 3, total_capacity: 4 }),
+      // Control: the same closed study without totals is still the dash.
+      study({ id: 'opp-closed-bare', status: 'closed', title: 'Closed without totals' }),
+    ] as never);
+    renderAdmin();
+
+    const cell = await progressCellFor('Closed last month');
+    expect(within(cell).getByText('3 / 4')).toBeInTheDocument();
+    expect(within(cell).getByText('75%')).toBeInTheDocument();
+    expect((await progressCellFor('Closed without totals')).textContent).toBe('–');
+  });
+});
+
+describe('Research Studies table: the auto-closed caption says how the study closed', () => {
+  const statusCellFor = async (title: string): Promise<HTMLElement> => {
+    const table = await findStudiesTable();
+    const row = (await within(table).findByText(title)).closest('tr') as HTMLElement;
+    return row.querySelector('td.col-status') as HTMLElement;
+  };
+
+  it('captions a study the system closed, and not one a researcher closed by hand', async () => {
+    const client = await import('../../api/client');
+    vi.mocked(client.getOpportunities).mockResolvedValueOnce([
+      { ...fixtures.opportunity, id: 'opp-auto', status: 'closed', title: 'Closed by its end date', auto_closed: true },
+      { ...fixtures.opportunity, id: 'opp-manual', status: 'closed', title: 'Closed by hand', auto_closed: false },
+    ] as never);
+    renderAdmin();
+
+    expect(within(await statusCellFor('Closed by its end date')).getByText('Auto-closed')).toBeInTheDocument();
+    const manual = await statusCellFor('Closed by hand');
+    expect(within(manual).queryByText('Auto-closed')).toBeNull();
+    // Still reads as closed - only the reason is withheld.
+    expect(within(manual).getByText('CLOSED')).toBeInTheDocument();
+  });
 });
 
 // "Thu 24 Sept 2026 · 16:00" on one line measured ~174px against the Next

@@ -74,6 +74,35 @@ describe('toPublicOpportunity', () => {
     }
   });
 
+  /**
+   * The admin dashboard fields. The list route attaches the all-time totals
+   * only for an admin caller, but that `if` is not a redaction layer - this
+   * serialiser is, so a refactor that hoists the totals batch still cannot
+   * send lifetime booking counts to a participant. `auto_closed` is how a
+   * study closed, an admin concern.
+   *
+   * Zero and false included, because the redaction is about the KEY: a strip
+   * guarded on truthiness would pass a non-zero arm and publish every 0.
+   */
+  it.each([
+    ['non-zero totals, auto-closed', { total_booked: 3, total_capacity: 7, auto_closed: true }],
+    ['zero totals, closed by hand', { total_booked: 0, total_capacity: 0, auto_closed: false }],
+  ])('removes the admin progress totals and auto_closed, %s', (_label, adminFields) => {
+    const view = toPublicOpportunity({ ...opportunity, ...adminFields }) as Record<string, unknown>;
+
+    expect(view).not.toHaveProperty('total_booked');
+    expect(view).not.toHaveProperty('total_capacity');
+    expect(view).not.toHaveProperty('auto_closed');
+    // THE CONTROL: the owner identity beside them is still stripped, so the
+    // new names did not displace the old ones from the destructure.
+    expect(view).not.toHaveProperty('owner_user_id');
+    expect(view).not.toHaveProperty('owner_name');
+    expect(view).not.toHaveProperty('owner_email');
+    // And it is not simply dropping everything.
+    expect(view.title).toBe('Checkout flow walkthrough');
+    expect(view.status).toBe('published');
+  });
+
   it('removes the joining link from every session, not just the first', () => {
     const view = toPublicOpportunity(opportunity) as { sessions: Record<string, unknown>[] };
 

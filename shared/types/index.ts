@@ -261,6 +261,21 @@ export interface Opportunity {
   sessions?: Session[];
   clicks_total?: number; // Click count for polls/surveys (M6)
   /**
+   * Booked places and capacity across EVERY session the study has ever had,
+   * not only the recent window `sessions` carries. Admin list responses only,
+   * and only for a study with at least one session - absent means "no sessions",
+   * never "0 of 0". The dashboard's Progress cell reads these so a closed study,
+   * whose sessions have all aged out of `sessions`, still reports how it filled.
+   */
+  total_booked?: number;
+  total_capacity?: number;
+  /**
+   * True when the system closed the study (its end date passed, or its last
+   * session ended); false when a researcher closed it by hand, or it is not
+   * closed. Set by the server only - no client can write it.
+   */
+  auto_closed?: boolean;
+  /**
    * The signed-in participant's own completion of THIS study, present only on
    * native survey/poll/one-question responses (the three types that leave no
    * booking) and only when someone is signed in (audit row 10). `completed` is

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   getRecruitment,
+  getStudyProgress,
   getNextSession,
   weekBounds,
   getSessionsThisWeek,
@@ -60,6 +61,36 @@ describe('getRecruitment', () => {
 
   it('reports 0% when capacity is zero rather than dividing by zero', () => {
     expect(getRecruitment(opp({ sessions: [session({ capacity: 0, booked_count: 0 })] }))?.pct).toBe(0);
+  });
+});
+
+describe('getStudyProgress', () => {
+  it('reports the all-time totals for a closed study whose sessions have aged out of the list', () => {
+    expect(getStudyProgress(opp({ status: 'closed', sessions: [], total_booked: 3, total_capacity: 4 }))).toEqual({
+      booked: 3,
+      capacity: 4,
+      pct: 75,
+    });
+  });
+
+  it('prefers the totals over the recent-window sessions when both are present', () => {
+    const withBoth = opp({ sessions: [session({ capacity: 2, booked_count: 1 })], total_booked: 5, total_capacity: 8 });
+    expect(getStudyProgress(withBoth)).toEqual({ booked: 5, capacity: 8, pct: 63 });
+    // Control: the chips' reading of the same study is still the window.
+    expect(getRecruitment(withBoth)).toEqual({ booked: 1, capacity: 2, pct: 50 });
+  });
+
+  it('falls back to the session sum when the server sent no totals, and is null with neither', () => {
+    expect(getStudyProgress(opp({ sessions: [session({ capacity: 3, booked_count: 2 })] }))).toEqual({
+      booked: 2,
+      capacity: 3,
+      pct: 67,
+    });
+    expect(getStudyProgress(opp({ sessions: [] }))).toBeNull();
+  });
+
+  it('reports 0% when the total capacity is zero rather than dividing by zero', () => {
+    expect(getStudyProgress(opp({ total_booked: 0, total_capacity: 0 }))?.pct).toBe(0);
   });
 });
 
