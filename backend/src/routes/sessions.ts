@@ -814,10 +814,20 @@ router.post('/sync-booked-counts', requireSuperadmin, asyncHandler(async (req: R
   //
   // ponytail: holds a lock on every session row for the length of the sweep, so
   // new bookings are briefly rejected (retryable) table-wide while it runs - it
-  // is superadmin-only and rare. It can also deadlock (40P01) against reschedule
-  // and delete-sessions, which lock several session rows in a different order;
-  // tracked in cto/AdaptaLabs#34. Per-opportunity batching is the upgrade path
-  // if either matters.
+  // is superadmin-only and rare. Per-opportunity batching is the upgrade path if
+  // that ever matters.
+  //
+  // The 40P01 deadlock risk this comment used to name - this sweep's ascending
+  // ORDER BY id FOR UPDATE against reschedule and delete-sessions locking
+  // several session rows in a DIFFERENT order - is closed, not deferred:
+  // delete-sessions takes its sibling lock ORDER BY id too (opportunities.ts,
+  // matching this scan), and reschedule's second session lock is FOR UPDATE
+  // NOWAIT (bookings.ts), so it can never hold one session lock while waiting on
+  // another - the one thing a party needs to be able to do to sit in a wait-for
+  // cycle. book/cancel lock a single row each, never a cycle. Proved against a
+  // real Postgres in reschedule-sync-booked-counts-lock-order-postgres.test.ts
+  // and opportunities.delete-sessions-lock-order-postgres.test.ts.
+  // cto/AdaptaLabs#34.
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
