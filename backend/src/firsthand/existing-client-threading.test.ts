@@ -327,3 +327,73 @@ describe("existingClient threading (cto/AdaptaLabs#159)", () => {
     });
   });
 });
+
+/**
+ * MR !528 review pass 2 HIGH-1: `checkoutRuntimeClient`'s split out of
+ * `withRuntimeDatabaseClient` (cto/AdaptaLabs#159) moved `prepareRuntimeSession`
+ * OUTSIDE the try/finally that used to wrap checkout+prepare together, so a
+ * connection that connects fine but then fails its `SET search_path` (a
+ * connection dropped mid-handshake - the SAME event class the checkout
+ * failure branch just above it already guards) leaked BOTH the pg client and
+ * the admission permit. `ADMIN_CONCURRENCY_LIMIT` is 2
+ * (`RUNTIME_POOL_MAX_CONNECTIONS - PARTICIPANT_RESERVED_CONNECTIONS`), so two
+ * such failures in a row exhausted admin runtime-pool access for the life of
+ * the process - proven directly against the unfixed code: `available` stuck
+ * at 0 after two failed checkouts, never recovering.
+ */
+describe("checkoutRuntimeClient releases the admission permit when prepareRuntimeSession fails (MR !528 review pass 2 HIGH-1)", () => {
+  beforeEach(() => {
+    process.env.DATABASE_URL = "postgres://firsthand:firsthand@localhost:5432/firsthand";
+  });
+
+  afterEach(() => {
+    resetRuntimeDatabaseGlobals();
+    vi.clearAllMocks();
+    vi.resetModules();
+  });
+
+  it("releases both the connection and the admission permit when the SET search_path query fails", async () => {
+    const { client: verificationClient } = createFakeClient();
+    connectMock.mockResolvedValue(verificationClient);
+
+    const db = await import("./runtime-database");
+    const admission = await import("./runtime-pool-admission");
+    await db.ensureRuntimeDatabase();
+    connectMock.mockClear();
+    admission.resetRuntimeAdmissionForTests();
+
+    const baseline = admission.runtimeAdmissionStats().available;
+    expect(baseline).toBe(admission.ADMIN_CONCURRENCY_LIMIT);
+
+    const prepareFailure = new Error("connection dropped before SET search_path");
+    const brokenClient = {
+      query: vi.fn(async (sql: string) => {
+        if (sql.startsWith("SET search_path TO firsthand")) {
+          throw prepareFailure;
+        }
+        return { rowCount: 0, rows: [] };
+      }),
+      release: vi.fn()
+    };
+    connectMock.mockResolvedValue(brokenClient);
+
+    // ADMIN_CONCURRENCY_LIMIT failures, not just one: the leak is a
+    // per-failure permit loss, so this is what actually reaches 0 available
+    // and would hang every later admin checkout on the unfixed code.
+    for (let i = 0; i < admission.ADMIN_CONCURRENCY_LIMIT; i++) {
+      await expect(db.withRuntimeDatabaseClient(async () => "unreachable")).rejects.toBe(
+        prepareFailure
+      );
+    }
+
+    expect(brokenClient.release).toHaveBeenCalledTimes(admission.ADMIN_CONCURRENCY_LIMIT);
+    expect(admission.runtimeAdmissionStats().available).toBe(admission.ADMIN_CONCURRENCY_LIMIT);
+
+    // And a healthy checkout right after still succeeds - the actual
+    // consequence a leak has in production: not just a number in a stats
+    // object, but every later admin request refusing to run at all.
+    const { client: healthyClient } = createFakeClient();
+    connectMock.mockResolvedValue(healthyClient);
+    await expect(db.withRuntimeDatabaseClient(async () => "ok")).resolves.toBe("ok");
+  });
+});

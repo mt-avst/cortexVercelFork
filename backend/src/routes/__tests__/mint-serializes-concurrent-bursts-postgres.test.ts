@@ -322,10 +322,26 @@ describe.skipIf(skipDbTests)("mint-session serializes a concurrent burst for one
     const { runSerializedForMintPair } = await import("../../firsthand/runtime-database");
     const holdMs = 3_000;
 
+    // MR !528 review pass 2 MEDIUM-1: firing B immediately after CALLING
+    // runSerializedForMintPair, rather than after A's operation has actually
+    // started (i.e. after the lock is actually held - the callback only runs
+    // once BEGIN and the advisory lock both succeed), let this test pass for
+    // the wrong reason when B happened to be sent before A's transaction
+    // reached the lock. Proven: collapsing the lock to opportunity-only
+    // failed this test reliably when the whole file ran (A warmed up first),
+    // but passed when this test ran alone. Waiting on `lockHeld` removes that
+    // ordering dependency.
+    let signalLockHeld!: () => void;
+    const lockHeld = new Promise<void>((resolve) => {
+      signalLockHeld = resolve;
+    });
+
     const holdA = runSerializedForMintPair(opportunity, participantA, async () => {
+      signalLockHeld();
       await new Promise((resolve) => setTimeout(resolve, holdMs));
       return "held";
     });
+    await lockHeld;
 
     const startB = Date.now();
     const responseB = await mintSurvey(opportunity, participantB);

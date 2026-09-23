@@ -219,7 +219,26 @@ async function checkoutRuntimeClient(
     throw error;
   }
 
-  await prepareRuntimeSession(client, options?.statementTimeoutMs);
+  try {
+    await prepareRuntimeSession(client, options?.statementTimeoutMs);
+  } catch (error) {
+    // MR !528 review pass 2 HIGH-1: this used to sit inside the same
+    // try/finally as the checkout above, before the split that made
+    // `checkoutRuntimeClient` reusable pulled it out. A `SET` that fails on a
+    // connection dropped mid-handshake (an RDS failover, the same event the
+    // checkout-failure branch above exists for) then leaked BOTH the pool
+    // connection and the admission slot - proven directly: two such failures
+    // in a row left the pool with connections held and 0 idle, and the next
+    // healthy checkout waiting the full admission timeout before failing.
+    // Same double-release discipline as the `release` closure below - client
+    // first, admission always, even if `client.release()` throws.
+    try {
+      client.release();
+    } finally {
+      admission.release();
+    }
+    throw error;
+  }
 
   return {
     client,

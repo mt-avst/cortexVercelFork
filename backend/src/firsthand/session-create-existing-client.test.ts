@@ -23,14 +23,21 @@ vi.mock('./runtime-repository-postgres', () => ({
 import { createSession } from './session-create';
 
 /**
- * `createSession`'s only change for cto/AdaptaLabs#159 is an additive third
- * argument threaded straight through to `seedRuntimeSession` - the route
- * calls it from inside `runSerializedForMintPair`'s locked transaction and
- * needs the seed to land ON that client, not a fresh one racing the lock.
- * `getStudyById` deliberately does NOT receive it (see session-create.ts's
- * own docblock): it reads `studies`, not `runtime_sessions`, so it carries no
- * part of the race this fix closes and stays on its own pooled read either
- * way.
+ * `createSession`'s additive third argument (cto/AdaptaLabs#159) is threaded
+ * to BOTH `getStudyById` and `seedRuntimeSession` - the route calls it from
+ * inside `runSerializedForMintPair`'s locked transaction and needs both to
+ * run ON that client.
+ *
+ * `seedRuntimeSession`'s reason is race-safety: the seed has to land on the
+ * caller's actual locked transaction, not a fresh one racing the lock.
+ * `getStudyById`'s reason is connection BUDGET, not a race (MR !528 review
+ * pass 1 HIGH-1 corrected an earlier version of this comment that claimed
+ * otherwise): it reads `studies`, not `runtime_sessions`, but leaving it on
+ * its own pooled read meant every locked mint held TWO runtime-pool
+ * connections at once, which exhausted the pool outright at 5+ concurrent
+ * participants - see `mint-serializes-concurrent-bursts-postgres.test.ts`'s
+ * "survives a burst of MORE participants than the runtime pool has
+ * connections" for the real-database proof.
  */
 const validStudy = {
   study: {
@@ -75,9 +82,13 @@ describe('createSession - existingClient threading (cto/AdaptaLabs#159)', () => 
     expect(result.ok).toBe(true);
     expect(seedRuntimeSessionMock).toHaveBeenCalledTimes(1);
     expect(seedRuntimeSessionMock.mock.calls[0][1]).toBeUndefined();
+    // getStudyById also omits it and behaves exactly as before - the whole
+    // point of "additive" (MR !528 review pass 2 LOW-1: this assertion was
+    // missing, so a regression here had nothing in this file to catch it).
+    expect(getStudyByIdMock.mock.calls[0][1]).toBeUndefined();
   });
 
-  it('threads a supplied existingClient straight through to seedRuntimeSession, unchanged', async () => {
+  it('threads a supplied existingClient straight through to BOTH getStudyById and seedRuntimeSession, unchanged', async () => {
     const fakeClient = { query: vi.fn(), release: vi.fn() };
 
     const result = await createSession(
@@ -87,9 +98,11 @@ describe('createSession - existingClient threading (cto/AdaptaLabs#159)', () => 
 
     expect(result.ok).toBe(true);
     expect(seedRuntimeSessionMock).toHaveBeenCalledTimes(1);
-    // The SAME object, not a copy or a wrapper - seedRuntimeSession has to
-    // run its writes on the caller's actual locked transaction.
+    // The SAME object, not a copy or a wrapper - both have to run their work
+    // on the caller's actual locked transaction, not a fresh checkout racing
+    // the lock (getStudyById: MR !528 review pass 1 HIGH-1's fix).
     expect(seedRuntimeSessionMock.mock.calls[0][1]).toBe(fakeClient);
+    expect(getStudyByIdMock).toHaveBeenCalledWith('study_abc', fakeClient);
   });
 
   it('never calls seedRuntimeSession at all on an early refusal, existingClient or not', async () => {
