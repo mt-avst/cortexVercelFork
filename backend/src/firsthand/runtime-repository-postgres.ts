@@ -92,7 +92,40 @@ type PendingRecordingUploadRow = {
   valid_until: Date | string;
 };
 
-export async function seedRuntimeSession(payload: SessionPayload) {
+/**
+ * `existingClient` (cto/AdaptaLabs#159) is additive only: every existing
+ * no-argument caller (both `firsthand-session.ts` call sites) is unaffected,
+ * byte-for-byte - this still checks out its own client and owns its own
+ * `BEGIN`/`COMMIT`/`ROLLBACK` exactly as before.
+ *
+ * Given an `existingClient`, this does NOT open a transaction or check out a
+ * connection at all: it runs `ensureRuntimeSessionRow` directly on the
+ * caller's client and returns without a `COMMIT`. That client's transaction -
+ * and whatever `BEGIN` and lock started it - is the caller's to finish. A
+ * nested `BEGIN` here on an already-open transaction would only warn and stay
+ * in the outer one, but the `COMMIT` this function used to issue would still
+ * commit (and release the caller's advisory lock) early, before the rest of
+ * the caller's own transaction runs - so the client-accepting path skips both
+ * rather than relying on Postgres to ignore the inner `BEGIN`.
+ */
+export async function seedRuntimeSession(
+  payload: SessionPayload,
+  existingClient?: PoolClient
+) {
+  if (existingClient) {
+    await ensureRuntimeSessionRow(existingClient, payload);
+    const session = await getLatestRuntimeSessionForLogicalSessionId(
+      existingClient,
+      payload.session.session_id
+    );
+
+    if (!session) {
+      throw new Error("Runtime session could not be loaded after seeding.");
+    }
+
+    return session;
+  }
+
   return withRuntimeDatabaseClient(async (client) => {
     await client.query("BEGIN");
 
@@ -372,16 +405,27 @@ export async function resetRuntimeSession(payload: SessionPayload) {
  * carries no expiry`, which is the only test in either DB suite that can see
  * this word: dropping it left all 40 green before that test existed.
  */
-export async function findParticipantSessionForOpportunity(input: {
-  opportunityId: string;
-  participantId: string;
-}): Promise<{
+/**
+ * `existingClient` (cto/AdaptaLabs#159) is additive: omit it and this checks
+ * out its own client exactly as before, for the existing no-lock callers
+ * (`opportunities.ts`'s participant-detail read, `survey-results.ts`).
+ * Passed one, it queries directly on it instead - the caller is expected to
+ * already hold whatever transaction/lock this read needs to run inside, most
+ * often `runSerializedForMintPair`'s advisory-locked transaction.
+ */
+export async function findParticipantSessionForOpportunity(
+  input: {
+    opportunityId: string;
+    participantId: string;
+  },
+  existingClient?: PoolClient
+): Promise<{
   token: string;
   sessionStatus: string;
   completedAt: string | null;
   sessionNotExpired: boolean;
 } | null> {
-  return withRuntimeDatabaseClient(async (client) => {
+  const query = async (client: PoolClient) => {
     const result = await client.query<{
       token: string;
       session_status: string;
@@ -412,7 +456,11 @@ export async function findParticipantSessionForOpportunity(input: {
           sessionNotExpired: row.session_not_expired
         }
       : null;
-  });
+  };
+
+  return existingClient
+    ? query(existingClient)
+    : withRuntimeDatabaseClient(query);
 }
 
 /**
@@ -455,12 +503,20 @@ export async function findParticipantSessionForOpportunity(input: {
  * session for the pair carries an answer, every later single-mint-at-a-time
  * attempt is refused, proven end to end.
  */
-export async function hasAnswerCarryingTerminalSession(input: {
-  opportunityId: string;
-  participantId: string;
-  terminalUnansweredStates: readonly string[];
-}): Promise<boolean> {
-  return withRuntimeDatabaseClient(async (client) => {
+/**
+ * `existingClient` (cto/AdaptaLabs#159) is additive - see
+ * `findParticipantSessionForOpportunity`'s docblock just above for what that
+ * means and why.
+ */
+export async function hasAnswerCarryingTerminalSession(
+  input: {
+    opportunityId: string;
+    participantId: string;
+    terminalUnansweredStates: readonly string[];
+  },
+  existingClient?: PoolClient
+): Promise<boolean> {
+  const query = async (client: PoolClient) => {
     const result = await client.query<{ has_answer_carrying_terminal_session: boolean }>(
       `
         SELECT EXISTS (
@@ -479,7 +535,11 @@ export async function hasAnswerCarryingTerminalSession(input: {
     );
 
     return result.rows[0]?.has_answer_carrying_terminal_session ?? false;
-  });
+  };
+
+  return existingClient
+    ? query(existingClient)
+    : withRuntimeDatabaseClient(query);
 }
 
 /**

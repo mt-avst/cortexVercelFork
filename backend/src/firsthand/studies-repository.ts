@@ -281,9 +281,36 @@ export async function listStudies(): Promise<StudyListItem[]> {
   });
 }
 
-export async function getStudyById(studyId: string): Promise<StudyWithSteps | null> {
+/**
+ * `existingClient` (cto/AdaptaLabs#159, MR !528 review pass 1 HIGH-1) is
+ * additive - omit it and this checks out its own client exactly as before.
+ *
+ * Passed one, this queries directly on it instead of taking a SECOND
+ * checkout from the runtime pool (`RUNTIME_POOL_MAX_CONNECTIONS = 5`).
+ * `createSession`'s caller in the survey-session route already holds one
+ * connection for the whole locked mint decision
+ * (`runSerializedForMintPair`); leaving this as its own pooled read meant
+ * every mint under that lock held TWO connections at once, and participant
+ * work is not behind the admission cap that would otherwise queue it
+ * politely. Proven end to end: 8 different participants minting the same
+ * survey concurrently exhausted the pool - every connection ended up held by
+ * a request waiting on a 6th, so all 8 timed out at `connectionTimeoutMillis`
+ * (10s) and 500'd. Passing the caller's client through removes the second
+ * checkout entirely; the same 8 concurrent participants then succeed in
+ * milliseconds. (The pool exhaustion, not a data race: `getStudyById` reads
+ * `studies`, not `runtime_sessions`, so there was never a correctness reason
+ * to serialize it - only a connection-budget one.)
+ */
+export async function getStudyById(
+  studyId: string,
+  existingClient?: PoolClient
+): Promise<StudyWithSteps | null> {
   if (!isPostgresRuntimeConfigured()) {
     return null;
+  }
+
+  if (existingClient) {
+    return loadStudyWithSteps(existingClient, studyId);
   }
 
   return withRuntimeDatabaseClient(async (client) => {
