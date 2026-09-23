@@ -1073,6 +1073,28 @@ body.theme-light .admin-page-bg > * {
   z-index: 1;
 }
 
+/* This stacks the Admin page content above the site feedback footer. The row
+   kebab menus are not portalled, so the last row's menu hangs below the
+   table and can cross into the footer. The content's own stacking context
+   (the rules above, z 1) never beat `.feedback-footer` (position: relative,
+   z 10, later in the DOM), so however high the menu's z-index, Delete was
+   painted and hit-tested under the footer. At 11 the content - menus
+   included - sits over the footer where they overlap; the header
+   (`--z-sticky`, 1020) and its own dropdown still sit above both.
+
+   Raised on the content, NOT on `.main`: the light theme's fixed
+   atmosphere layer (`.admin-page-bg::before` above, z 0) is a sibling of this
+   content, so it stays in the app-level stacking order under the footer. A
+   z-index on `.main` (the first fix) lifted that layer over the footer too
+   and tinted it by up to 5/255. Declared after both theme rules above so it
+   wins them on source order at equal specificity.
+
+   Exposed, not caused, by Step 1: the shorter page left less room under the
+   last row. The durable fix is collision flip-up in Dropdown.tsx (Step 2). */
+body.admin-dashboard-page .admin-page-bg > * {
+  z-index: 11;
+}
+
 /* ============================================================
    ADMIN DASHBOARD - Dark Theme (Explicit)
    ============================================================ */
@@ -1167,9 +1189,11 @@ body.theme-dark .admin-dashboard table td {
   border-color: rgba(255, 255, 255, 0.05);
 }
 
-/* The Research Studies row divider stays on the subtle-border token in both
-   themes (the rule above would otherwise recolour it). */
-body.theme-dark .admin-dashboard table.admin-data-table tbody td {
+/* The Research Studies and Recent bookings row dividers stay on the
+   subtle-border token in both themes (the rule above would otherwise
+   recolour them). */
+body.theme-dark .admin-dashboard table.admin-data-table tbody td,
+body.theme-dark .admin-dashboard table.admin-cards-phone tbody td {
   border-bottom-color: var(--border-subtle-current);
 }
 
@@ -1304,6 +1328,22 @@ body.theme-dark .admin-dashboard table.admin-data-table tbody td.col-next .admin
 
 body.theme-dark .admin-dashboard table.admin-data-table tbody td.col-next .admin-next__note--deadline {
   color: color-mix(in srgb, var(--status-warning) 80%, var(--text-primary));
+}
+
+/* The Recent bookings header, dark mode: muted like the studies and
+   Feedback headers rather than the white `.admin-dashboard table th` above
+   gives every other dashboard table. */
+body.theme-dark .admin-dashboard table.admin-cards-phone thead th {
+  color: var(--text-muted);
+  border-bottom-color: var(--border-subtle-current);
+}
+
+/* Recent bookings study names are links (buttons styled as links) - the
+   blanket `td *` colour below painted them the same grey as plain cell text
+   in dark, where light shows them in the link colour. `td.col-recent-study`
+   lifts this past that rule's 0,4,5. */
+body.theme-dark .admin-dashboard table.admin-cards-phone tbody td.col-recent-study .admin-recent-study-link {
+  color: var(--link);
 }
 
 /* Admin table headers - dark mode. One colour for every header, sortable or
@@ -1652,6 +1692,23 @@ body.theme-dark .admin-dashboard table tbody td span:not(.badge):not(.lozenge) {
   color: #D4D4D4;
 }
 
+/* The Feedback category badges keep the ink their own badge classes give
+   them (white on the danger/primary/secondary fills, dark on `bg-info
+   text-dark`). The blanket rule above painted them #D4D4D4, which measured
+   3.89:1 on the Feature Request fill and 4.21:1 on Bug Report; their own ink
+   is 5.77:1 and 6.24:1. `revert-layer` rolls the colour back to the lower
+   layers' value rather than restating each badge's colour here. */
+body.theme-dark .admin-dashboard .admin-feedback .feedback-table tbody td .badge {
+  color: revert-layer;
+}
+
+/* ...except the Question badge: dark's `bg-info` is a light teal, and the
+   `text-dark` it is paired with resolves no colour in this build, so it
+   reverts to white at 3.04:1. Dark ink on the teal instead. */
+body.theme-dark .admin-dashboard .admin-feedback .feedback-table tbody td .badge.bg-info {
+  color: #111418;
+}
+
 /* Admin table primary text (titles) - brighter */
 body.theme-dark .admin-dashboard table tbody td strong {
   color: #E8E8E8;
@@ -1805,9 +1862,10 @@ body.theme-light .admin-dashboard table td {
   border-color: rgba(0, 0, 0, 0.06);
 }
 
-/* The Research Studies row divider stays on the subtle-border token (see the
-   dark twin of this rule). */
-body.theme-light .admin-dashboard table.admin-data-table tbody td {
+/* The Research Studies and Recent bookings row dividers stay on the
+   subtle-border token (see the dark twin of this rule). */
+body.theme-light .admin-dashboard table.admin-data-table tbody td,
+body.theme-light .admin-dashboard table.admin-cards-phone tbody td {
   border-bottom-color: var(--border-subtle-current);
 }
 
@@ -1926,6 +1984,33 @@ body.theme-light .admin-settings-btn {
 body.theme-light .admin-settings-btn:hover {
   background: #F9FAFB;
   border-color: #D1D5DB;
+}
+
+/* The Recent bookings and Feedback headers, light mode: the same muted token
+   as the studies header (its twin below), not the blanket block's slate
+   #64748B. !important only because that blanket block sets its colour
+   !important (and a layered !important beats admin-feedback.css's unlayered
+   one). */
+body.theme-light .admin-dashboard table.admin-cards-phone thead th,
+body.theme-light .admin-dashboard .admin-feedback .feedback-table thead th {
+  color: var(--text-muted) !important;
+}
+
+/* ...and the Recent bookings header box matches the studies header: 12px top
+   and bottom, the subtle divider (see `_components.css`, "The studies
+   table's header box"). */
+body.theme-light .admin-dashboard table.admin-cards-phone thead th {
+  padding-top: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-subtle-current) !important;
+}
+
+/* The deadline caption, light mode: 65% of the warning amber into the ink,
+   not the base rule's 80%. At 80% it measured 4.67:1 on a white row and
+   4.24:1 on a hovered one (the --bg-hover wash, sampled rgb(243,244,245));
+   65% is 5.93:1 and 5.38:1. Dark keeps the 80% mix (its own rule). */
+body.theme-light .admin-dashboard table.admin-data-table tbody td.col-next .admin-next__note--deadline {
+  color: color-mix(in srgb, var(--status-warning) 65%, var(--text-primary));
 }
 
 /* Research Studies table text hierarchy - light mode. Same tokens and the

@@ -2527,21 +2527,10 @@ body.admin-dashboard-page .main > .container {
   max-width: 1440px;
 }
 
-/* The page body stacks above the site feedback footer. The row kebab menus
-   are not portalled, so the last row's menu hangs below the table and can
-   cross into the footer. Everything in the page sits in low stacking
-   contexts (`.admin-page-bg > *` at z 1, `.admin-dashboard` at z 10) that
-   never beat `.feedback-footer` (position: relative, z 10, and later in the
-   DOM), so however high the menu's own z-index, Delete was painted and
-   hit-tested under the footer. Making `.main` one stacking context at 11 puts
-   the whole page, menus included, over the footer where they overlap; the
-   header (`--z-sticky`, 1020) and its own dropdown still sit above both.
-   Exposed, not caused, by Step 1: the shorter page left less room under the
-   last row. The durable fix is collision flip-up in Dropdown.tsx (Step 2). */
-body.admin-dashboard-page .main {
-  position: relative;
-  z-index: 11;
-}
+/* The page content stacks above the site feedback footer - see
+   `_themes.css`, search "stacks the Admin page content above". That rule
+   lives in the themes layer because the `.admin-page-bg > *` z-index it
+   raises is declared there. */
 
 /* ...and the header's side padding takes the main card's 24px inset too, so
    the logo sits on the same edge as the "Admin" heading and the table below,
@@ -2754,6 +2743,32 @@ body.admin-dashboard-page .main {
    column flush with the "Recent bookings" heading and the last flush with the
    Export CSV button, like the studies table under its filter row. */
 @media (min-width: 768px) {
+  /* Headers take the cells' 8px side padding, so every header sits on its
+     column's text edge (the shared `table thead th` rule gives 6px below
+     1400px, which left PARTICIPANT and STATUS 2px left of their values). The
+     first/last rules below still win for the outer edges. */
+  .admin-dashboard table.admin-cards-phone thead th {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  /* The studies table's header box: 12px above and below, one subtle
+     divider. `thead tr th` outranks the shared "Table cells - transparent"
+     reset that strips header borders; the light theme restates this in
+     `_themes.css`, whose blanket header block would otherwise win. */
+  .admin-dashboard table.admin-cards-phone thead tr th {
+    padding-top: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border-subtle-current);
+  }
+
+  /* Row dividers on the cells: the table is `border-collapse: separate`, so
+     the `tbody tr` border the shared rules declare never paints. Same 1px
+     subtle divider as the studies table (colour held in `_themes.css`). */
+  .admin-dashboard table.admin-cards-phone tbody tr td {
+    border-bottom: 1px solid var(--border-subtle-current);
+  }
+
   .admin-dashboard table.admin-cards-phone thead th:first-child,
   .admin-dashboard table.admin-cards-phone tbody td:first-child {
     padding-left: 0;
@@ -3258,22 +3273,14 @@ body.admin-dashboard-page .main {
 }
 
 @media (max-width: 1279.98px) {
-  /* At the right end of the quick-filters row (Admin.tsx). The auto margin
-     pushes it right; when "Clear filters" is showing, that link already
-     carries the auto margin, so the control just sits a gap after it. If the
-     row runs out of room the control wraps onto its own line, still right-
-     aligned. */
+  /* Inside the quick-filters row's end group (`.admin-quick-filters__end`,
+     which does the right-alignment and wrapping). */
   .admin-card-sort {
     display: flex;
     align-items: center;
     justify-content: flex-end;
     flex-wrap: wrap;
     gap: 0.5rem;
-    margin-left: auto;
-  }
-
-  .admin-clear-filters + .admin-card-sort {
-    margin-left: var(--spacing-3);
   }
 
   .admin-card-sort .form-label {
@@ -6042,8 +6049,12 @@ body.theme-light .study-summary-line {
    inset. The extra 12px each side left 153px of a 225px tile at 1024px, which
    wrapped "SESSIONS THIS / WEEK" and "Across all published / studies" and
    dropped that tile's baselines out of line with its neighbours (Admin table
-   Step 1 fix round, 2026-09-23). */
-.stat-card-body {
+   Step 1 fix round, 2026-09-23). Scoped `.admin-dashboard` so it also
+   outranks - by source order at equal specificity - the
+   `.admin-dashboard .card-body` side padding that the 1400/1920/2560px media
+   rules near the top of this file add (24/32/40px): without it the double
+   inset came back at the widths most admins use. */
+.admin-dashboard .stat-card-body {
   padding: 0.25rem 0;
 }
 
@@ -11623,10 +11634,8 @@ body.theme-dark .form-control::placeholder {
   padding-bottom: 20px;
 }
 
-/* First row "Soft Entrance" - Hero row gets breathing room */
-.admin-dashboard table:where(:not(.admin-data-table)) tbody tr:first-child td {
-  padding-top: 24px;
-}
+/* No first-row "soft entrance" padding: it made the first Recent bookings
+   row 8px taller than every other and doubled the gap under the header. */
 
 /* Table Rows - Glass Hover Effect */
 .admin-dashboard table:where(:not(.admin-data-table)) tbody tr {
@@ -14091,6 +14100,22 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
 }
 
 /* --- Quick-filter chips ------------------------------------------------- */
+/* The row's right end: "Clear filters" and the Sort-by control as one group.
+   The auto margin pushes it to the right edge; it wraps as a unit, and
+   stays right-aligned when it drops to its own line. */
+.admin-quick-filters__end {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--spacing-3);
+  margin-left: auto;
+}
+
+.admin-quick-filters__end:empty {
+  display: none;
+}
+
 .admin-quick-filters {
   display: flex;
   align-items: center;
@@ -14130,7 +14155,6 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
 }
 
 .admin-clear-filters {
-  margin-left: auto;
   padding: 0.35rem 0.25rem;
   border: none;
   background: none;

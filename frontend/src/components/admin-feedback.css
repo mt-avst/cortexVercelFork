@@ -38,9 +38,17 @@
   color: var(--text-primary) !important;
   padding: 16px !important;
   vertical-align: middle !important;
+  /* The divider lives on the cells: the table is `border-collapse: separate`,
+     so the `tbody tr` border above never paints. Same 1px subtle divider as
+     the studies table. The phone card rule below clears it with its own
+     `border: 0 !important`. */
+  border-bottom: 1px solid var(--border-subtle-current);
 }
 .admin-feedback .feedback-preview {
-  max-width: 400px;
+  /* A comfortable measure rather than a fixed 400px, which - left-aligned in
+     a 750px column at 1440 - clamped messages at two lines while half the
+     column sat empty. The two-line clamp itself stays. */
+  max-width: 72ch;
   white-space: pre-wrap;
   word-break: break-word;
   line-height: 1.5;

@@ -773,49 +773,55 @@ const Admin: React.FC = () => {
                         {chip.label}
                       </button>
                     ))}
-                    {hasActiveFilters && (
-                      <button
-                        type="button"
-                        className="admin-clear-filters"
-                        onClick={clearAllFilters}
-                      >
-                        Clear filters
-                      </button>
-                    )}
-                    {/* #131: wherever a sortable header is out of view, the Sort-by
-                        control is the way to reach its sort - below 1280px, where
-                        the Created column is hidden, and below 1024px, where the
-                        card view hides <thead> altogether (see the ROW 14 comment
-                        in _components.css). It offers exactly the fields the
-                        headers do. This is not a second sort mechanism: it reads
-                        and writes the SAME sortField/sortDirection state through
-                        the SAME handleSort the header buttons use, so the two
-                        surfaces can never disagree. Hidden from 1280px up by
-                        .admin-card-sort's own default rule in _components.css.
-                        It sits at the right end of the quick-filters row, not on
-                        a row of its own above the table, where at 1024-1279px it
-                        stranded ~48px of height with nothing beside it. Rendered
-                        only when there are rows to sort. */}
-                    {!loadingOpportunities && !error && sortedOpportunities.length > 0 && (
-                      <div className="admin-card-sort" role="group" aria-label="Sort studies">
-                        <label htmlFor="cardSortField" className="form-label mb-0">Sort by</label>
-                        <select
-                          id="cardSortField"
-                          className="form-select"
-                          value={sortField}
-                          onChange={(e) => handleSort(e.target.value as SortField)}
+                    {/* Clear filters and Sort by are one right-aligned group, so
+                        when the row runs out of room they wrap together to the
+                        right edge - not Sort by alone, packed left, on a line of
+                        its own. */}
+                    <div className="admin-quick-filters__end">
+                      {hasActiveFilters && (
+                        <button
+                          type="button"
+                          className="admin-clear-filters"
+                          onClick={clearAllFilters}
                         >
-                          <option value="title">Study</option>
-                          <option value="status">Status</option>
-                          <option value="created_at">Created</option>
-                        </select>
-                        <button type="button" className="admin-card-sort-dir" onClick={() => handleSort(sortField)}>
-                          <span className="visually-hidden">Sort direction: </span>
-                          {sortDirection === 'asc' ? 'Ascending' : 'Descending'}
-                          <SortCaret active direction={sortDirection} />
+                          Clear filters
                         </button>
-                      </div>
-                    )}
+                      )}
+                      {/* #131: wherever a sortable header is out of view, the Sort-by
+                          control is the way to reach its sort - below 1280px, where
+                          the Created column is hidden, and below 1024px, where the
+                          card view hides <thead> altogether (see the ROW 14 comment
+                          in _components.css). It offers exactly the fields the
+                          headers do. This is not a second sort mechanism: it reads
+                          and writes the SAME sortField/sortDirection state through
+                          the SAME handleSort the header buttons use, so the two
+                          surfaces can never disagree. Hidden from 1280px up by
+                          .admin-card-sort's own default rule in _components.css.
+                          It sits at the right end of the quick-filters row, not on
+                          a row of its own above the table, where at 1024-1279px it
+                          stranded ~48px of height with nothing beside it. Rendered
+                          only when there are rows to sort. */}
+                      {!loadingOpportunities && !error && sortedOpportunities.length > 0 && (
+                        <div className="admin-card-sort" role="group" aria-label="Sort studies">
+                          <label htmlFor="cardSortField" className="form-label mb-0">Sort by</label>
+                          <select
+                            id="cardSortField"
+                            className="form-select"
+                            value={sortField}
+                            onChange={(e) => handleSort(e.target.value as SortField)}
+                          >
+                            <option value="title">Study</option>
+                            <option value="status">Status</option>
+                            <option value="created_at">Created</option>
+                          </select>
+                          <button type="button" className="admin-card-sort-dir" onClick={() => handleSort(sortField)}>
+                            <span className="visually-hidden">Sort direction: </span>
+                            {sortDirection === 'asc' ? 'Ascending' : 'Descending'}
+                            <SortCaret active direction={sortDirection} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Error State */}
@@ -861,10 +867,14 @@ const Admin: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Research Studies Table */}
+                  {/* Research Studies Table. No min-height: a 400px floor once
+                      kept room under a short filtered list for the last row's
+                      kebab menu, and left ~200px of empty card under two rows.
+                      The menu may now hang past the card - `.main` stacks the
+                      page above the feedback footer (_components.css, search
+                      "stacks above the site feedback footer"). */}
                   {!loadingOpportunities && !error && sortedOpportunities.length > 0 && (
                     <div className="table-responsive" style={{
-                      minHeight: '400px', 
                       overflow: 'visible', 
                       width: '100%'
                     }}>
