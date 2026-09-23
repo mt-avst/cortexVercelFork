@@ -120,6 +120,9 @@ const surveyDraft = {
   firsthand_study_id: 'study_questions'
 };
 
+/** The published twin, for the #157 ponytail follow-up below. */
+const publishedSurveyDraft = { ...surveyDraft, status: 'published' };
+
 const storedStudy = (updatedAt: string) => ({
   study: {
     id: 'study_questions',
@@ -814,6 +817,73 @@ describe('the concurrency precondition across a sequence of saves', () => {
       unknown
     >;
     expect(second.expected_study_updated_at).toBe('2026-08-19T09:30:00.000Z');
+  }, 30_000);
+});
+
+describe('a deliberate save that makes autosave newly eligible (#157 ponytail follow-up)', () => {
+  /**
+   * The manual-save handler now moves `storedFormRef.current.status` forward
+   * from the save's own PATCH response, BEFORE the re-read that can fail -
+   * fixing Review's stale heading (see OpportunityForm.review.test.tsx). But
+   * that status move has a side effect on THIS opportunity: it makes
+   * `autosaveApplies` true the moment a published-and-broken study is saved
+   * as Draft, and a reload that then fails leaves `savedSignatureRef` un-
+   * restamped - so the form reads as dirty and autosave is newly eligible to
+   * fire, on its own timer, with nobody having typed anything.
+   *
+   * If that autosave carries the revision the form LOADED with rather than
+   * the one the manual save's own response just returned, the server 409s
+   * ("Somebody else saved changes...") and blames a colleague for the
+   * author's own save. `adoptStudyRevision(savedOpportunity)`, called next to
+   * the status move, is what keeps `linkedStudyUpdatedAt` current before
+   * that autosave can fire - the same helper the reload would otherwise be
+   * the only path to.
+   */
+  it('sends the revision the manual save returned, not the one the form loaded with', async () => {
+    vi.mocked(getOpportunity)
+      .mockResolvedValueOnce(publishedSurveyDraft as never)
+      // The reload `loadOpportunity` issues from inside the save handler.
+      .mockRejectedValueOnce(new Error('503 from the opportunities endpoint'));
+    vi.mocked(getFirstHandStudy).mockResolvedValue(
+      storedStudy('2026-08-19T09:30:00.000Z') as never
+    );
+    vi.mocked(updateOpportunity).mockResolvedValueOnce({
+      id: 'opp-2',
+      status: 'draft',
+      linked_study_updated_at: '2026-08-21T18:30:00.000Z'
+    } as never);
+
+    render(
+      <MemoryRouter initialEntries={['/admin/opportunities/opp-2/edit']}>
+        <Routes>{opportunityFormRoutes(<OpportunityForm />)}</Routes>
+      </MemoryRouter>
+    );
+    await goToBasicInfoOnceLoaded();
+
+    setStatus('draft');
+    fireEvent.click(screen.getByRole('button', { name: /^Save changes$/i }));
+
+    await waitFor(() => expect(updateOpportunity).toHaveBeenCalledTimes(1), {
+      timeout: PAST_THE_DEBOUNCE
+    });
+    // The reload, and specifically its failure - this is what left
+    // `savedSignatureRef` un-restamped and the form reading as dirty.
+    await waitFor(() => expect(getOpportunity).toHaveBeenCalledTimes(2), {
+      timeout: PAST_THE_DEBOUNCE
+    });
+
+    // No further edit: `autosaveApplies` flipping true and the leftover
+    // dirty signature are enough on their own to arm the timer.
+    await waitFor(() => expect(updateOpportunity).toHaveBeenCalledTimes(2), {
+      timeout: PAST_THE_DEBOUNCE
+    });
+
+    const autosaveBody = vi.mocked(updateOpportunity).mock.calls[1][1] as unknown as Record<
+      string,
+      unknown
+    >;
+    expect(autosaveBody.expected_study_updated_at).toBe('2026-08-21T18:30:00.000Z');
+    expect(autosaveBody.expected_study_updated_at).not.toBe('2026-08-19T09:30:00.000Z');
   }, 30_000);
 });
 

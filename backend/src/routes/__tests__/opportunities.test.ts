@@ -211,6 +211,12 @@ import { logger } from '../../utils/logger';
 // actually computes rather than a hand-built shape that could never match.
 import { toStudySteps } from '../../../../shared/firsthand/inline-study';
 import { toSurveySteps } from '../../../../shared/firsthand/survey-authoring';
+// The real primitive the frontend's `withStoredIdentity`/`studyRoundTripsCleanly`
+// (frontend/src/lib/opportunity-authoring/hydrate-study.ts) are built on: a step
+// only round-trips through the edit form if `stepKeyOf` recovers its key under
+// the STUDY IT IS ACTUALLY STORED AGAINST. Used here rather than importing the
+// frontend module itself, which is out of a backend route's dependency graph.
+import { stepKeyOf } from '../../../../shared/firsthand/step-identity';
 
 const mockQuery = pool.query as jest.MockedFunction<any>;
 const mockConnect = pool.connect as jest.MockedFunction<any>;
@@ -5622,9 +5628,42 @@ describe('Opportunities API', () => {
     superadminApp.use('/api/opportunities', opportunitiesRouter);
     superadminApp.use(errorHandler);
 
+    // The linked study `duplicateInsert` finds via `originalRow.firsthand_study_id`,
+    // and the fresh one the (mocked) clone mints in its place - distinct ids,
+    // so a test asserting on the duplicate's `firsthand_study_id` can tell a
+    // genuine clone apart from an accidental copy-through of the original's.
+    const ORIGINAL_STUDY_ID = 'study-original';
+    const DUPLICATED_STUDY_ID = 'duplicated-study-id';
+
     const duplicateInsert = async (): Promise<{ columns: string[]; values: unknown[] }> => {
       mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: originalRow.owner_user_id }] });
       mockQuery.mockResolvedValueOnce({ rows: [originalRow] });
+      mockGetStudyById.mockResolvedValueOnce({
+        study: {
+          id: ORIGINAL_STUDY_ID,
+          title: 'A study',
+          intro_text: 'Intro',
+          consent_text: 'Consent',
+          kind: 'survey' as const,
+          estimated_duration_minutes: undefined,
+          status: 'launched' as const,
+          owner_user_id: 'some-other-owner',
+          copied_from_study_id: null,
+          created_at: '2026-08-16T10:00:00.000Z',
+          updated_at: '2026-08-16T10:00:00.000Z',
+        },
+        // PREFIXED, not a bare key: a real stored step id is always
+        // `${studyId}_${key}` (shared/firsthand/step-identity.ts). A bare
+        // `q1` fixture would pass `stepKeyOf` trivially by accident and hide
+        // a route that forgot to re-prefix onto the new study id at all.
+        steps: [
+          { step_id: `${ORIGINAL_STUDY_ID}_q1`, order: 1, type: 'nps', prompt: 'Would you recommend it?' }
+        ]
+      });
+      mockCreateStudy.mockResolvedValueOnce({
+        study: { id: DUPLICATED_STUDY_ID, updated_at: '2026-09-23T00:00:00.000Z' },
+        steps: []
+      } as never);
       mockQuery.mockResolvedValueOnce({
         rows: [{ id: 'duplicate-id', created_at: new Date(), updated_at: new Date() }]
       });
@@ -5645,15 +5684,17 @@ describe('Opportunities API', () => {
     };
 
     // Reset to a fixed value rather than copied from the source row.
+    // `delivery_mode` is NOT here: cto/AdaptaLabs#156 made it PRESERVED
+    // whenever the linked study is duplicated alongside the opportunity - see
+    // the "derives" test below.
     const RESET: Record<string, unknown> = {
       status: 'draft',
-      owner_user_id: 'superadmin-id',
-      delivery_mode: 'external'
+      owner_user_id: 'superadmin-id'
     };
 
     // Named at the site in routes/opportunities.ts; repeated here only as a
     // key set, so this test can assert coverage without restating the prose.
-    const EXCLUDED_COLUMNS = ['external_consent_confirmed', 'firsthand_study_id'];
+    const EXCLUDED_COLUMNS = ['external_consent_confirmed'];
 
     /**
      * THE COVERAGE ASSERTION. Every column create's INSERT names must appear
@@ -5711,7 +5752,7 @@ describe('Opportunities API', () => {
       }
     });
 
-    it('resets status, owner and delivery mode rather than copying the original\'s', async () => {
+    it('resets status and owner rather than copying the original\'s', async () => {
       mockQuery.mockClear();
       const { columns, values } = await duplicateInsert();
       const bound = (column: string) => {
@@ -5729,13 +5770,426 @@ describe('Opportunities API', () => {
       }
     });
 
-    it('excludes external_consent_confirmed and firsthand_study_id from the insert entirely', async () => {
+    /**
+     * cto/AdaptaLabs#156. `firsthand_study_id` and `delivery_mode` are neither
+     * blindly copied (the new study is a fresh row, never the original's) nor
+     * blindly reset (a native duplicate must still point at a real study) -
+     * they are DERIVED from duplicating the linked study.
+     */
+    it('links the duplicate to a NEW study id and preserves delivery_mode, when the linked study is duplicated', async () => {
+      mockQuery.mockClear();
+      const { columns, values } = await duplicateInsert();
+      const bound = (column: string) => {
+        const index = columns.indexOf(column);
+        expect(index).toBeGreaterThan(-1);
+        return values[index];
+      };
+
+      expect(bound('firsthand_study_id')).toBe(DUPLICATED_STUDY_ID);
+      expect(bound('firsthand_study_id')).not.toBe(originalRow.firsthand_study_id);
+      expect(bound('delivery_mode')).toBe(originalRow.delivery_mode);
+
+      expect(mockCreateStudy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          copied_from_study_id: ORIGINAL_STUDY_ID,
+          owner_user_id: 'superadmin-id'
+        })
+      );
+
+      // The step id is re-prefixed onto the NEW study id the route itself
+      // minted (the `id` it handed `createStudy` - NOT `DUPLICATED_STUDY_ID`,
+      // which is only what the mock claims got stored), not left carrying
+      // the original's - see the dedicated round-trip test below for why.
+      const createStudyCall = mockCreateStudy.mock.calls[0][0] as {
+        id: string;
+        steps: { step_id: string }[];
+      };
+      expect(createStudyCall.steps[0].step_id).toBe(`${createStudyCall.id}_q1`);
+      expect(createStudyCall.id).not.toBe(ORIGINAL_STUDY_ID);
+    });
+
+    it('excludes external_consent_confirmed from the insert entirely', async () => {
       mockQuery.mockClear();
       const { columns } = await duplicateInsert();
 
       for (const column of EXCLUDED_COLUMNS) {
         expect(columns).not.toContain(column);
       }
+    });
+  });
+
+  describe('POST /api/opportunities/:id/duplicate - cloning the linked study (cto/AdaptaLabs#156)', () => {
+    const ORIGINAL_STUDY_ID = 'study_original';
+
+    // PREFIXED with the study they actually belong to, not bare keys - a real
+    // stored step id is always `${studyId}_${key}`
+    // (shared/firsthand/step-identity.ts). A bare `step_1`/`q1` fixture would
+    // let a route that forgot to re-prefix onto the NEW study id pass by
+    // accident, which is exactly how this bug survived review pass 1.
+    const originalStudySteps = [
+      { step_id: `${ORIGINAL_STUDY_ID}_step_1`, order: 1, type: 'nps' as const, prompt: 'Would you recommend it?' },
+      { step_id: `${ORIGINAL_STUDY_ID}_step_2`, order: 2, type: 'open_text' as const, prompt: 'What would you change?' }
+    ];
+
+    const queueDuplicateOfNativeOpportunity = (
+      originalStudyStatus: 'draft' | 'launched' | 'archived' = 'launched'
+    ) => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] }); // ownership check
+      mockQuery.mockResolvedValueOnce({
+        rows: [{
+          id: 'native-opp-1',
+          type: 'survey',
+          title: 'A repeat survey',
+          purpose_one_liner: 'A purpose long enough to satisfy the minimum length rule',
+          delivery_mode: 'native',
+          firsthand_study_id: 'study_original',
+          screener: null,
+          target_roles: null
+        }]
+      }); // original opportunity
+      mockGetStudyById.mockResolvedValueOnce({
+        study: {
+          id: 'study_original',
+          title: 'A repeat survey',
+          intro_text: 'Intro',
+          consent_text: 'Your answers are stored for research analysis.',
+          kind: 'survey' as const,
+          estimated_duration_minutes: undefined,
+          status: originalStudyStatus,
+          owner_user_id: 'test-user-id',
+          copied_from_study_id: null,
+          created_at: '2026-08-16T10:00:00.000Z',
+          updated_at: '2026-08-16T10:00:00.000Z',
+        },
+        steps: originalStudySteps
+      });
+      mockCreateStudy.mockResolvedValueOnce({
+        study: { id: 'study_duplicate', updated_at: '2026-09-23T00:00:00.000Z' },
+        steps: originalStudySteps
+      } as never);
+      mockQuery.mockResolvedValueOnce({
+        rows: [{
+          id: 'native-opp-2',
+          type: 'survey',
+          title: 'A repeat survey (copy)',
+          delivery_mode: 'native',
+          firsthand_study_id: 'study_duplicate',
+          created_at: new Date(),
+          updated_at: new Date()
+        }]
+      }); // duplicate INSERT ... RETURNING *
+    };
+
+    it('duplicates a native opportunity with a NEW study carrying the same question set', async () => {
+      queueDuplicateOfNativeOpportunity();
+
+      const response = await request(listening(app))
+        .post('/api/opportunities/native-opp-1/duplicate')
+        .expect(201);
+
+      // The copy stays native and points at a study - not reset to external
+      // pointing at nothing, which is the content-loss bug #156 reports.
+      expect(response.body.delivery_mode).toBe('native');
+      expect(response.body.firsthand_study_id).toBe('study_duplicate');
+      // A NEW study, never the original's - see the block comment in the
+      // route for why carrying the original's id across is unsafe.
+      expect(response.body.firsthand_study_id).not.toBe('study_original');
+
+      // createStudy was handed the ORIGINAL's actual question content, not a
+      // count or a placeholder - prompt, type and order all carried over
+      // verbatim.
+      expect(mockCreateStudy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: 'survey',
+          consent_text: 'Your answers are stored for research analysis.',
+          copied_from_study_id: 'study_original',
+          owner_user_id: 'test-user-id',
+          steps: [
+            expect.objectContaining({ order: 1, type: 'nps', prompt: 'Would you recommend it?' }),
+            expect.objectContaining({ order: 2, type: 'open_text', prompt: 'What would you change?' })
+          ]
+        })
+      );
+    });
+
+    /**
+     * cto/AdaptaLabs#156 final review pass, MEDIUM. Copying the original
+     * study's own `status` through would let an ARCHIVED or DRAFT study's
+     * status survive onto the duplicate - and the native-survey session gate
+     * (`opportunities.ts`, `if (linked.study.status !== 'launched')`) refuses
+     * any study that isn't launched, so publishing that duplicate would 404
+     * "Survey" for every participant with nothing warning the author. Same
+     * fix, same reasoning, as the create path's own inline_study/inline_survey
+     * branches: the new study is always minted `launched`.
+     */
+    it('launches the duplicated study regardless of the original\'s own status', async () => {
+      queueDuplicateOfNativeOpportunity('archived');
+
+      await request(listening(app))
+        .post('/api/opportunities/native-opp-1/duplicate')
+        .expect(201);
+
+      expect(mockCreateStudy).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'launched' })
+      );
+    });
+
+    /**
+     * cto/AdaptaLabs#156 review pass 1, HIGH. A step id is always
+     * `${studyId}_${key}` (shared/firsthand/step-identity.ts). Copying
+     * `originalStudy.steps` unchanged into the new study left every step still
+     * carrying the ORIGINAL study's id as its prefix, so `stepKeyOf` could
+     * never recover a key for any of them under the NEW study - the opportunity
+     * form's `studyRoundTripsCleanly` check
+     * (frontend/src/lib/opportunity-authoring/hydrate-study.ts) then refuses
+     * the study and opens the duplicate READ-ONLY, defeating the entire point
+     * of duplicating a study to edit it for a repeat run.
+     *
+     * `stepKeyOf` is the exact primitive `studyRoundTripsCleanly`'s
+     * `withStoredIdentity` is built on: a step round-trips through the edit
+     * form if and only if this recovers its key under the study it is actually
+     * stored against. That equivalence is asserted here rather than importing
+     * the frontend module itself, which sits outside a backend route's
+     * dependency graph.
+     */
+    it('re-prefixes every step id onto the NEW study, so the duplicate round-trips through the edit form', async () => {
+      queueDuplicateOfNativeOpportunity();
+
+      await request(listening(app))
+        .post('/api/opportunities/native-opp-1/duplicate')
+        .expect(201);
+
+      const createStudyCall = mockCreateStudy.mock.calls[0][0] as {
+        id: string;
+        steps: { step_id: string }[];
+      };
+
+      // A NEW namespace, never the original's.
+      expect(createStudyCall.id).not.toBe(ORIGINAL_STUDY_ID);
+      expect(createStudyCall.steps).toHaveLength(originalStudySteps.length);
+
+      createStudyCall.steps.forEach((step, index) => {
+        const originalKey = stepKeyOf(originalStudySteps[index].step_id, ORIGINAL_STUDY_ID);
+        const newKey = stepKeyOf(step.step_id, createStudyCall.id);
+
+        // The ROUND-TRIP CONDITION: a key recoverable under the id the step is
+        // actually stored against now, not null (which is what sends the form
+        // to `mintClientId()` and a step that no longer matches on save) and
+        // not merely present but different (which would silently rename the
+        // question's identity across the copy).
+        expect(newKey).not.toBeNull();
+        expect(newKey).toBe(originalKey);
+        // And the id itself really did change - proves this isn't passing
+        // because the step_id was left untouched.
+        expect(step.step_id).not.toBe(originalStudySteps[index].step_id);
+        expect(step.step_id).toBe(`${createStudyCall.id}_${originalKey}`);
+      });
+    });
+
+    it('leaves the original study\'s link and its questions unchanged', async () => {
+      queueDuplicateOfNativeOpportunity();
+
+      await request(listening(app))
+        .post('/api/opportunities/native-opp-1/duplicate')
+        .expect(201);
+
+      // The original is only ever READ, by its own id - never updated or
+      // deleted, and never re-read under the new duplicate's id.
+      expect(mockGetStudyById).toHaveBeenCalledTimes(1);
+      expect(mockGetStudyById).toHaveBeenCalledWith('study_original');
+      expect(mockUpdateStudy).not.toHaveBeenCalled();
+      expect(mockDeleteStudyUnchecked).not.toHaveBeenCalled();
+
+      // createStudy mints a SEPARATE row rather than touching the original's.
+      expect(mockCreateStudy).toHaveBeenCalledTimes(1);
+      expect(mockCreateStudy).toHaveBeenCalledWith(
+        expect.not.objectContaining({ id: 'study_original' })
+      );
+
+      // No UPDATE/DELETE against the opportunities table either - every
+      // pool.query call this request makes is a SELECT or the duplicate's own
+      // INSERT.
+      for (const call of mockQuery.mock.calls) {
+        const sql = String(call[0]).trim().toUpperCase();
+        expect(sql.startsWith('UPDATE') || sql.startsWith('DELETE')).toBe(false);
+      }
+    });
+
+    /**
+     * cto/AdaptaLabs#156 review pass 1, MEDIUM 1.
+     *
+     * Asserts on the ACTUAL bound INSERT values (the same technique
+     * `duplicateInsert` above uses), not on `response.body` - the mocked
+     * INSERT's `RETURNING *` row is a fixed fixture below, so a route that
+     * computed the WRONG `delivery_mode`/`firsthand_study_id` and sent them to
+     * the database would still get back this test's hardcoded response and
+     * pass. Mutation-proven gap: `const deliveryMode = opp.delivery_mode`
+     * (always copying, dropping the `duplicatedStudyId ? ... : 'external'`
+     * guard) produces a NATIVE opportunity bound to NO study - exactly the
+     * content-loss shape #156 reports - and the response-body-only version of
+     * this test still passed all 353 cases.
+     */
+    it('falls back to a plain duplicate, delivery_mode reset to external, when the linked study is gone', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{
+          id: 'native-opp-3',
+          type: 'survey',
+          title: 'An orphaned link',
+          delivery_mode: 'native',
+          firsthand_study_id: 'study_deleted',
+          screener: null,
+          target_roles: null
+        }]
+      });
+      mockGetStudyById.mockResolvedValueOnce(null);
+      mockQuery.mockResolvedValueOnce({
+        rows: [{
+          id: 'native-opp-4',
+          type: 'survey',
+          delivery_mode: 'external',
+          firsthand_study_id: null,
+          created_at: new Date(),
+          updated_at: new Date()
+        }]
+      });
+
+      const response = await request(listening(app))
+        .post('/api/opportunities/native-opp-3/duplicate')
+        .expect(201);
+
+      expect(mockCreateStudy).not.toHaveBeenCalled();
+      expect(response.body.delivery_mode).toBe('external');
+      expect(response.body.firsthand_study_id).toBeNull();
+
+      const insert = mockQuery.mock.calls.find((call: unknown[]) =>
+        String(call[0]).includes('INSERT INTO opportunities')
+      );
+      const sql = String(insert![0]);
+      const columns = sql
+        .slice(sql.indexOf('('), sql.indexOf(') VALUES'))
+        .split(',')
+        .map((column: string) => column.replace(/[()\s]/g, ''));
+      const values = insert![1] as unknown[];
+      const bound = (column: string) => values[columns.indexOf(column)];
+
+      // THE ACTUAL WRITE, not the mocked read-back: a route that copied
+      // `opp.delivery_mode` ('native') straight through here would bind a
+      // native opportunity to a null study, and only reading the real bound
+      // values catches it.
+      expect(bound('delivery_mode')).toBe('external');
+      expect(bound('firsthand_study_id')).toBeNull();
+    });
+
+    /**
+     * cto/AdaptaLabs#156 review pass 1, MEDIUM 2. The compensating
+     * `deleteStudyUnchecked` on a failed opportunity INSERT - studies and
+     * opportunities sit on different pools, so this is the only thing that
+     * stops a duplicated study surviving with no opportunity referencing it.
+     * Mirrors the create path's own equivalent test
+     * ("deletes the study it just created when the opportunity insert fails").
+     */
+    it('cleans up the duplicated study when the opportunity insert fails', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{
+          id: 'native-opp-5',
+          type: 'survey',
+          title: 'A repeat survey',
+          delivery_mode: 'native',
+          firsthand_study_id: ORIGINAL_STUDY_ID,
+          screener: null,
+          target_roles: null
+        }]
+      });
+      mockGetStudyById.mockResolvedValueOnce({
+        study: {
+          id: ORIGINAL_STUDY_ID,
+          title: 'A repeat survey',
+          intro_text: 'Intro',
+          consent_text: 'Consent',
+          kind: 'survey' as const,
+          estimated_duration_minutes: undefined,
+          status: 'launched' as const,
+          owner_user_id: 'test-user-id',
+          copied_from_study_id: null,
+          created_at: '2026-08-16T10:00:00.000Z',
+          updated_at: '2026-08-16T10:00:00.000Z',
+        },
+        steps: originalStudySteps
+      });
+      mockCreateStudy.mockResolvedValueOnce({
+        study: { id: 'study_dup_orphan', updated_at: '2026-09-23T00:00:00.000Z' },
+        steps: []
+      } as never);
+      const insertFailure = new Error('insert exploded');
+      mockQuery.mockRejectedValueOnce(insertFailure);
+
+      const response = await request(listening(app))
+        .post('/api/opportunities/native-opp-5/duplicate')
+        .expect(500);
+
+      // THE ORIGINAL ERROR reaches the caller, not something the cleanup
+      // itself raised or swallowed.
+      expect(response.body.error).toBe('insert exploded');
+      expect(mockDeleteStudyUnchecked).toHaveBeenCalledWith('study_dup_orphan');
+    });
+
+    it('does not mask the original insert failure when the cleanup delete itself fails', async () => {
+      const error = jest.spyOn(logger, 'error').mockImplementation(() => logger);
+
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{
+          id: 'native-opp-6',
+          type: 'survey',
+          title: 'A repeat survey',
+          delivery_mode: 'native',
+          firsthand_study_id: ORIGINAL_STUDY_ID,
+          screener: null,
+          target_roles: null
+        }]
+      });
+      mockGetStudyById.mockResolvedValueOnce({
+        study: {
+          id: ORIGINAL_STUDY_ID,
+          title: 'A repeat survey',
+          intro_text: 'Intro',
+          consent_text: 'Consent',
+          kind: 'survey' as const,
+          estimated_duration_minutes: undefined,
+          status: 'launched' as const,
+          owner_user_id: 'test-user-id',
+          copied_from_study_id: null,
+          created_at: '2026-08-16T10:00:00.000Z',
+          updated_at: '2026-08-16T10:00:00.000Z',
+        },
+        steps: originalStudySteps
+      });
+      mockCreateStudy.mockResolvedValueOnce({
+        study: { id: 'study_dup_orphan_2', updated_at: '2026-09-23T00:00:00.000Z' },
+        steps: []
+      } as never);
+      const insertFailure = new Error('insert exploded');
+      mockQuery.mockRejectedValueOnce(insertFailure);
+      mockDeleteStudyUnchecked.mockRejectedValueOnce(new Error('cleanup exploded'));
+
+      const response = await request(listening(app))
+        .post('/api/opportunities/native-opp-6/duplicate')
+        .expect(500);
+
+      // The ORIGINAL error is still what the caller gets - the cleanup
+      // failure is swallowed, not thrown in its place.
+      expect(response.body.error).toBe('insert exploded');
+
+      // And the cleanup failure was not silently dropped either: it is
+      // logged, with the orphaned study id, so it can be found by hand.
+      expect(error).toHaveBeenCalledWith(
+        'Failed to remove duplicated study after opportunity insert failed',
+        expect.objectContaining({ studyId: 'study_dup_orphan_2' })
+      );
+
+      error.mockRestore();
     });
   });
 

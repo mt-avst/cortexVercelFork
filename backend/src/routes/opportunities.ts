@@ -57,7 +57,7 @@ import { parseScreenerAnswers, evaluateScreener } from '../../../shared/screener
 import { assertScreenerPassed, getScreenerStatus, upsertScreenerResponse, hasScreener, SCREENER_NONE_TO_ANSWER } from '../services/screener';
 import type { StudyStep } from '../../../shared/firsthand/contract';
 import { toStudySteps, type InlineStudy } from '../../../shared/firsthand/inline-study';
-import { stepKeysAreComplete } from '../../../shared/firsthand/step-identity';
+import { stepKeysAreComplete, stepKeyOf, stepIdFor } from '../../../shared/firsthand/step-identity';
 import {
   QUESTION_CARRYING_TYPES,
   runsNativeSurvey
@@ -4767,16 +4767,119 @@ router.post('/:id/duplicate', requireAdmin, opportunityWriteLimiter, asyncHandle
 
   const opp = original.rows[0];
 
+  // Duplicate the linked FirstHand study too (cto/AdaptaLabs#156), the same
+  // way the create path's own `inline_study`/`inline_survey` branches mint a
+  // fresh study with `copied_from_study_id` set. Without this, a native poll
+  // or survey lost its entire question set on duplicate - not just its
+  // native flag - because the copy pointed at no study at all.
+  //
+  // The new study is a FRESH row, never the original's: linking the copy to
+  // the SAME study id would leave two opportunities pointing at one study,
+  // one edit away from a researcher silently rewriting content the other
+  // opportunity still relies on. That hazard is exactly why this was left out
+  // of the simpler column-census fix in #147.
+  //
+  // Lives on a separate pool from `opportunities` (see the create path's own
+  // comment on this), so a failure after the study is minted but before the
+  // opportunity insert commits is cleaned up by hand below rather than rolled
+  // back by a shared transaction that does not exist.
+  let duplicatedStudyId: string | null = null;
+
+  // ponytail: neither call below is wrapped in error handling. `getStudyById`
+  //   can throw on a genuine runtime-pool outage (distinct from the `null`
+  //   return the stale-link branch already handles - that is a study
+  //   verifiably deleted, not a database that is unreachable), and
+  //   `createStudy` runs `validateSteps` before its own try/catch, so a stored
+  //   study whose steps cannot satisfy it today throws a bare Error straight
+  //   out of the route. Either throw currently 500s the WHOLE duplicate
+  //   request, including the opportunity-row copy that would have worked fine
+  //   without a linked study. Upgrade: map to a clear AppError (503 for the
+  //   outage, 422 for an unstorable copy) or fall back to the stale-link path
+  //   instead of refusing outright. -> cto/AdaptaLabs#160
+  if (opp.firsthand_study_id && isStudiesPersistenceConfigured()) {
+    const originalStudy = await getStudyById(opp.firsthand_study_id);
+
+    if (originalStudy) {
+      const newStudyId = `study_${crypto.randomUUID()}`;
+
+      // Re-prefix every step id onto the NEW study's namespace, keeping the
+      // ORIGINAL's key - the id is always `${studyId}_${key}` (see
+      // shared/firsthand/step-identity.ts), so copying `originalStudy.steps`
+      // unchanged would leave the new study's rows still carrying the OLD
+      // study's id as their prefix. `stepKeyOf` then fails to recover a key
+      // for any of them under the new study id, `studyRoundTripsCleanly`
+      // refuses the study as unrepresentable, and the duplicate opens
+      // read-only - defeating the point of duplicating it to edit for a
+      // repeat run. The key itself is safe to keep verbatim: two studies
+      // sharing a key is fine, only a shared STORED id (study + key) is not.
+      // A step whose id does not belong to the original study's own
+      // namespace (no prefix match - a legacy/positional id) is left
+      // unchanged, same as the frontend's own round-trip check would treat
+      // it: nothing here can safely re-mint an identity it cannot parse.
+      const steps = originalStudy.steps.map((step) => {
+        const key = stepKeyOf(step.step_id, originalStudy.study.id);
+        return key ? { ...step, step_id: stepIdFor(newStudyId, key) } : step;
+      });
+
+      const stored = await createStudy({
+        id: newStudyId,
+        title: originalStudy.study.title,
+        intro_text: originalStudy.study.intro_text,
+        consent_text: originalStudy.study.consent_text,
+        brand_name: originalStudy.study.brand_name,
+        estimated_duration_minutes: originalStudy.study.estimated_duration_minutes,
+        locale: originalStudy.study.locale,
+        // Launched rather than the original's own status: only launched
+        // studies are selectable, and a study authored as part of duplicating
+        // an opportunity has no separate review step to wait for. Copying an
+        // archived or draft status through would produce a native duplicate
+        // that 404s "Survey" for every participant once published - the
+        // native-survey session gate earlier in this file refuses any study
+        // that isn't launched - with nothing warning the author. Same
+        // reasoning, same value, as the
+        // create path's own inline_study/inline_survey branches.
+        status: 'launched',
+        kind: originalStudy.study.kind,
+        // The duplicating caller becomes the new study's owner too, same as
+        // the opportunity itself becomes theirs below.
+        owner_user_id: req.user!.id,
+        // Provenance, exactly like the create path's copy-on-select branches:
+        // this new study was copied from the original, not authored blank.
+        copied_from_study_id: originalStudy.study.id,
+        consent_template_id: originalStudy.study.consent_template_id,
+        consent_template_version: originalStudy.study.consent_template_version,
+        steps
+      });
+      duplicatedStudyId = stored.study.id;
+    } else {
+      // The link is stale - the study behind it is gone. Duplicate the
+      // opportunity anyway rather than refusing the whole request; same
+      // fallback as no link at all, logged so an orphaned link is
+      // discoverable rather than silently swallowed.
+      logger.warn('Duplicate: linked FirstHand study not found, duplicating opportunity without it', {
+        opportunityId: id,
+        firsthandStudyId: opp.firsthand_study_id
+      });
+    }
+  }
+
+  // `delivery_mode` is bound to `firsthand_study_id`: carried through only
+  // when this request actually minted a new study for the copy to point at,
+  // otherwise reset to 'external' - the same fallback create uses for an
+  // opportunity with no linked study - so a native opportunity never ends up
+  // pointing at no study at all.
+  const deliveryMode = duplicatedStudyId ? opp.delivery_mode : 'external';
+
   // Create duplicate as draft.
   //
   // The column list below is graded against create's own INSERT by a census
   // test (cto/AdaptaLabs#147): every column create writes must appear here or
-  // in the two-column exclusion note right below, or the test fails by name.
-  // That is what stopped `screener`, `target_roles`, `start_date`, `end_date`
-  // and `meeting_location_optional` silently going missing from every
-  // duplicate before this comment existed.
+  // in the exclusion note right below, or the test fails by name. That is
+  // what stopped `screener`, `target_roles`, `start_date`, `end_date` and
+  // `meeting_location_optional` silently going missing from every duplicate
+  // before this comment existed.
   //
-  // Two columns are DELIBERATELY ABSENT:
+  // One column is DELIBERATELY ABSENT:
   //
   // `external_consent_confirmed` (cto/AdaptaLabs#136): a copy starts at NULL -
   // "never recorded" - and the author has to re-affirm. That looks
@@ -4787,40 +4890,14 @@ router.post('/:id/duplicate', requireAdmin, opportunityWriteLimiter, asyncHandle
   // copy's link is editable from the moment it exists, so carrying the tick
   // across would hand the author a pre-affirmed study and let them point it
   // anywhere - exactly the drift the PATCH path resets for.
-  //
-  // `firsthand_study_id` (cto/AdaptaLabs#147): this endpoint copies the
-  // `opportunities` row only - it does not duplicate the FirstHand study the
-  // original links to, unlike the create path's own `inline_study`/
-  // `inline_survey` branches, which mint a fresh study with
-  // `copied_from_study_id` set. Carrying the id across would leave two
-  // opportunities pointing at the SAME study - one edit away from a
-  // researcher silently rewriting content the other opportunity still relies
-  // on. A duplicate is a fresh draft with no study of its own until the
-  // author attaches one.
-  //
-  // `delivery_mode` is COPIED FOR MOST TYPES, but RESET to 'external' rather
-  // than carried through: it is bound to `firsthand_study_id`, which is
-  // excluded above, so preserving 'native' here would produce a native
-  // opportunity pointing at no study at all. 'external' is the same fallback
-  // create uses for an opportunity with no linked study.
-  //
-  // ponytail: this makes duplicating a native poll/survey lose its question
-  //   set, not just its native flag - the researcher has to rebuild it from
-  //   scratch. The upgrade is to duplicate the linked study too (createStudy
-  //   with copied_from_study_id, exactly as create's own inline_survey branch
-  //   already does), keep delivery_mode as copied, and link the new study
-  //   instead of the original's. Not built here: this endpoint currently
-  //   duplicates the `opportunities` row alone, and reaching into the
-  //   FirstHand runtime pool is a larger change than a column census fix.
-  //   -> cto/AdaptaLabs#156
   const query = `
     INSERT INTO opportunities (
       type, title, purpose_one_liner, description_optional,
       product_optional, meeting_location_optional, default_duration_minutes, status,
-      owner_user_id, external_link_optional, participant_type_required, participant_type_specific_details,
-      start_date, end_date, delivery_mode, consent_text,
-      consent_template_id, consent_template_version, screener, target_roles
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19::jsonb, $20::jsonb)
+      owner_user_id, external_link_optional, firsthand_study_id, participant_type_required,
+      participant_type_specific_details, start_date, end_date, delivery_mode,
+      consent_text, consent_template_id, consent_template_version, screener, target_roles
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20::jsonb, $21::jsonb)
     RETURNING *
   `;
 
@@ -4848,12 +4925,14 @@ router.post('/:id/duplicate', requireAdmin, opportunityWriteLimiter, asyncHandle
     isPublishableExternalLink(opp.external_link_optional)
       ? opp.external_link_optional
       : null,
+    // The FRESHLY DUPLICATED study's id, or null - never the original's. See
+    // the block comment above the duplication branch for why.
+    duplicatedStudyId,
     opp.participant_type_required,
     opp.participant_type_specific_details,
     opp.start_date,
     opp.end_date,
-    // Reset, not copied - see the block comment above.
-    'external',
+    deliveryMode,
     // Moderated consent (#79) is COPIED, not re-derived. Duplicating is how a
     // researcher runs a repeat study; a copy that silently dropped consent
     // would recruit and ingest recordings with no consent text at all - the
@@ -4863,16 +4942,35 @@ router.post('/:id/duplicate', requireAdmin, opportunityWriteLimiter, asyncHandle
     opp.consent_text ?? null,
     opp.consent_template_id ?? null,
     opp.consent_template_version ?? null,
-    // Eligibility screener (JSONB, $19::jsonb) - content of the study, copied
+    // Eligibility screener (JSONB, $20::jsonb) - content of the study, copied
     // verbatim like consent_text above.
     opp.screener ? JSON.stringify(opp.screener) : null,
-    // Roles/skills wanted (JSONB, $20::jsonb) - same treatment as screener.
+    // Roles/skills wanted (JSONB, $21::jsonb) - same treatment as screener.
     opp.target_roles && opp.target_roles.length > 0
       ? JSON.stringify(opp.target_roles)
       : null
   ];
 
-  const result = await pool.query(query, values);
+  let result;
+  try {
+    result = await pool.query(query, values);
+  } catch (error) {
+    if (duplicatedStudyId) {
+      try {
+        await deleteStudyUnchecked(duplicatedStudyId);
+      } catch (cleanupError) {
+        // Swallowed deliberately: the caller needs the original insert
+        // failure, not this one. Logged with the id so an orphan can be found
+        // by hand - same pattern as the create path's own compensating
+        // delete.
+        logger.error('Failed to remove duplicated study after opportunity insert failed', {
+          studyId: duplicatedStudyId,
+          error: String(cleanupError)
+        });
+      }
+    }
+    throw error;
+  }
   const duplicatedOpportunity = result.rows[0];
 
   // Add empty sessions array for consistency with frontend
