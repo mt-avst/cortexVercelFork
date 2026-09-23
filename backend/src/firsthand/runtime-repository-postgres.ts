@@ -416,6 +416,73 @@ export async function findParticipantSessionForOpportunity(input: {
 }
 
 /**
+ * Whether this participant holds ANY session for this opportunity, in one of
+ * the given (terminal-unanswered) statuses, that already carries a stored
+ * answer (cto/AdaptaLabs#155, review pass 1 HIGH-1 and HIGH-2).
+ *
+ * NOT folded into `findParticipantSessionForOpportunity` above, which reads
+ * only the single most recent row (`ORDER BY created_at DESC LIMIT 1`) - that
+ * was the HIGH-2 gap. A participant who mints, answers, and abandons more
+ * than once holds SEVERAL terminal-unanswered rows for the same opportunity;
+ * checking only the latest one lets an answer-free abandonment on top of an
+ * answer-carrying one underneath it slip a fresh mint through, sequentially
+ * (mint, answer, abandon, mint again without answering, abandon again, mint a
+ * third time - the second abandonment is what the latest-row read sees, and
+ * it is clean) or concurrently (several mints in flight, the newest of which
+ * happens to be the one left unanswered when all of them are abandoned).
+ * Proven end to end on the unwidened version of this check: three rounds of
+ * three parallel mints produced six answer-carrying abandoned sessions.
+ * `EXISTS` over every row for the pair, not the latest one, is what closes
+ * the SEQUENTIAL half of that gap.
+ *
+ * NOT status `'abandoned'` alone, which was the HIGH-1 gap: `POST
+ * /api/firsthand/session/:token/runtime` (firsthand-session.ts) accepts
+ * `session_failed` and `upload_failed` on a survey session exactly as it
+ * accepts `session_abandoned`, and both land the session on `failed`
+ * (`applyDerivedStatusFromEvent`, runtime-session-model.ts) - a state
+ * `FINISHED_SESSION_STATES` above treats identically to `abandoned` for
+ * write-immutability, but the first version of this check did not. Passed as
+ * a parameter (`terminalUnansweredStates`) rather than imported directly, so
+ * this repository file does not reach up into `state-model.ts`'s
+ * `terminalUnansweredRuntimeStates` for its own definition of "which statuses
+ * count" - the caller (the mint route) owns that policy; this function only
+ * owns how to ask Postgres the question once the caller has decided it.
+ *
+ * DOES NOT CLOSE THE RACE TO ZERO, AND IT IS NOT A ONE-OFF LEAK - see the
+ * `ponytail:` comment at the mint route call site for the measured shape
+ * (a repeatable per-window gap, not a single bounded burst) and the upgrade
+ * path. What this DOES close is the sequential case entirely: once any
+ * session for the pair carries an answer, every later single-mint-at-a-time
+ * attempt is refused, proven end to end.
+ */
+export async function hasAnswerCarryingTerminalSession(input: {
+  opportunityId: string;
+  participantId: string;
+  terminalUnansweredStates: readonly string[];
+}): Promise<boolean> {
+  return withRuntimeDatabaseClient(async (client) => {
+    const result = await client.query<{ has_answer_carrying_terminal_session: boolean }>(
+      `
+        SELECT EXISTS (
+          SELECT 1
+          FROM runtime_sessions
+          WHERE opportunity_id = $1
+            AND participant_id = $2
+            AND session_status = ANY($3::text[])
+            AND EXISTS (
+              SELECT 1 FROM participant_responses
+              WHERE participant_responses.session_id = runtime_sessions.session_id
+            )
+        ) AS has_answer_carrying_terminal_session
+      `,
+      [input.opportunityId, input.participantId, input.terminalUnansweredStates]
+    );
+
+    return result.rows[0]?.has_answer_carrying_terminal_session ?? false;
+  });
+}
+
+/**
  * The most recent runtime session this participant holds for each of the given
  * opportunities, if any. Batched by `ANY(...)` so a listing of N opportunities
  * costs one query, not N - the same shape as the sessions batch in
