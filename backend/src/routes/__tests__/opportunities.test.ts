@@ -5613,9 +5613,38 @@ describe('Opportunities API', () => {
     superadminApp.use('/api/opportunities', opportunitiesRouter);
     superadminApp.use(errorHandler);
 
+    // The linked study `duplicateInsert` finds via `originalRow.firsthand_study_id`,
+    // and the fresh one the (mocked) clone mints in its place - distinct ids,
+    // so a test asserting on the duplicate's `firsthand_study_id` can tell a
+    // genuine clone apart from an accidental copy-through of the original's.
+    const ORIGINAL_STUDY_ID = 'study-original';
+    const DUPLICATED_STUDY_ID = 'duplicated-study-id';
+
     const duplicateInsert = async (): Promise<{ columns: string[]; values: unknown[] }> => {
       mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: originalRow.owner_user_id }] });
       mockQuery.mockResolvedValueOnce({ rows: [originalRow] });
+      mockGetStudyById.mockResolvedValueOnce({
+        study: {
+          id: ORIGINAL_STUDY_ID,
+          title: 'A study',
+          intro_text: 'Intro',
+          consent_text: 'Consent',
+          kind: 'survey' as const,
+          estimated_duration_minutes: undefined,
+          status: 'launched' as const,
+          owner_user_id: 'some-other-owner',
+          copied_from_study_id: null,
+          created_at: '2026-08-16T10:00:00.000Z',
+          updated_at: '2026-08-16T10:00:00.000Z',
+        },
+        steps: [
+          { step_id: 'q1', order: 1, type: 'nps', prompt: 'Would you recommend it?' }
+        ]
+      });
+      mockCreateStudy.mockResolvedValueOnce({
+        study: { id: DUPLICATED_STUDY_ID, updated_at: '2026-09-23T00:00:00.000Z' },
+        steps: []
+      } as never);
       mockQuery.mockResolvedValueOnce({
         rows: [{ id: 'duplicate-id', created_at: new Date(), updated_at: new Date() }]
       });
@@ -5636,15 +5665,17 @@ describe('Opportunities API', () => {
     };
 
     // Reset to a fixed value rather than copied from the source row.
+    // `delivery_mode` is NOT here: cto/AdaptaLabs#156 made it PRESERVED
+    // whenever the linked study is duplicated alongside the opportunity - see
+    // the "derives" test below.
     const RESET: Record<string, unknown> = {
       status: 'draft',
-      owner_user_id: 'superadmin-id',
-      delivery_mode: 'external'
+      owner_user_id: 'superadmin-id'
     };
 
     // Named at the site in routes/opportunities.ts; repeated here only as a
     // key set, so this test can assert coverage without restating the prose.
-    const EXCLUDED_COLUMNS = ['external_consent_confirmed', 'firsthand_study_id'];
+    const EXCLUDED_COLUMNS = ['external_consent_confirmed'];
 
     /**
      * THE COVERAGE ASSERTION. Every column create's INSERT names must appear
@@ -5702,7 +5733,7 @@ describe('Opportunities API', () => {
       }
     });
 
-    it('resets status, owner and delivery mode rather than copying the original\'s', async () => {
+    it('resets status and owner rather than copying the original\'s', async () => {
       mockQuery.mockClear();
       const { columns, values } = await duplicateInsert();
       const bound = (column: string) => {
@@ -5720,13 +5751,185 @@ describe('Opportunities API', () => {
       }
     });
 
-    it('excludes external_consent_confirmed and firsthand_study_id from the insert entirely', async () => {
+    /**
+     * cto/AdaptaLabs#156. `firsthand_study_id` and `delivery_mode` are neither
+     * blindly copied (the new study is a fresh row, never the original's) nor
+     * blindly reset (a native duplicate must still point at a real study) -
+     * they are DERIVED from duplicating the linked study.
+     */
+    it('links the duplicate to a NEW study id and preserves delivery_mode, when the linked study is duplicated', async () => {
+      mockQuery.mockClear();
+      const { columns, values } = await duplicateInsert();
+      const bound = (column: string) => {
+        const index = columns.indexOf(column);
+        expect(index).toBeGreaterThan(-1);
+        return values[index];
+      };
+
+      expect(bound('firsthand_study_id')).toBe(DUPLICATED_STUDY_ID);
+      expect(bound('firsthand_study_id')).not.toBe(originalRow.firsthand_study_id);
+      expect(bound('delivery_mode')).toBe(originalRow.delivery_mode);
+
+      expect(mockCreateStudy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          copied_from_study_id: ORIGINAL_STUDY_ID,
+          owner_user_id: 'superadmin-id'
+        })
+      );
+    });
+
+    it('excludes external_consent_confirmed from the insert entirely', async () => {
       mockQuery.mockClear();
       const { columns } = await duplicateInsert();
 
       for (const column of EXCLUDED_COLUMNS) {
         expect(columns).not.toContain(column);
       }
+    });
+  });
+
+  describe('POST /api/opportunities/:id/duplicate - cloning the linked study (cto/AdaptaLabs#156)', () => {
+    const originalStudySteps = [
+      { step_id: 'step_1', order: 1, type: 'nps' as const, prompt: 'Would you recommend it?' },
+      { step_id: 'step_2', order: 2, type: 'open_text' as const, prompt: 'What would you change?' }
+    ];
+
+    const queueDuplicateOfNativeOpportunity = () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] }); // ownership check
+      mockQuery.mockResolvedValueOnce({
+        rows: [{
+          id: 'native-opp-1',
+          type: 'survey',
+          title: 'A repeat survey',
+          purpose_one_liner: 'A purpose long enough to satisfy the minimum length rule',
+          delivery_mode: 'native',
+          firsthand_study_id: 'study_original',
+          screener: null,
+          target_roles: null
+        }]
+      }); // original opportunity
+      mockGetStudyById.mockResolvedValueOnce({
+        study: {
+          id: 'study_original',
+          title: 'A repeat survey',
+          intro_text: 'Intro',
+          consent_text: 'Your answers are stored for research analysis.',
+          kind: 'survey' as const,
+          estimated_duration_minutes: undefined,
+          status: 'launched' as const,
+          owner_user_id: 'test-user-id',
+          copied_from_study_id: null,
+          created_at: '2026-08-16T10:00:00.000Z',
+          updated_at: '2026-08-16T10:00:00.000Z',
+        },
+        steps: originalStudySteps
+      });
+      mockCreateStudy.mockResolvedValueOnce({
+        study: { id: 'study_duplicate', updated_at: '2026-09-23T00:00:00.000Z' },
+        steps: originalStudySteps
+      } as never);
+      mockQuery.mockResolvedValueOnce({
+        rows: [{
+          id: 'native-opp-2',
+          type: 'survey',
+          title: 'A repeat survey (copy)',
+          delivery_mode: 'native',
+          firsthand_study_id: 'study_duplicate',
+          created_at: new Date(),
+          updated_at: new Date()
+        }]
+      }); // duplicate INSERT ... RETURNING *
+    };
+
+    it('duplicates a native opportunity with a NEW study carrying the same question set', async () => {
+      queueDuplicateOfNativeOpportunity();
+
+      const response = await request(listening(app))
+        .post('/api/opportunities/native-opp-1/duplicate')
+        .expect(201);
+
+      // The copy stays native and points at a study - not reset to external
+      // pointing at nothing, which is the content-loss bug #156 reports.
+      expect(response.body.delivery_mode).toBe('native');
+      expect(response.body.firsthand_study_id).toBe('study_duplicate');
+      // A NEW study, never the original's - see the block comment in the
+      // route for why carrying the original's id across is unsafe.
+      expect(response.body.firsthand_study_id).not.toBe('study_original');
+
+      // createStudy was handed the ORIGINAL's actual question content, not a
+      // count or a placeholder.
+      expect(mockCreateStudy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: 'survey',
+          consent_text: 'Your answers are stored for research analysis.',
+          copied_from_study_id: 'study_original',
+          owner_user_id: 'test-user-id',
+          steps: originalStudySteps
+        })
+      );
+    });
+
+    it('leaves the original study\'s link and its questions unchanged', async () => {
+      queueDuplicateOfNativeOpportunity();
+
+      await request(listening(app))
+        .post('/api/opportunities/native-opp-1/duplicate')
+        .expect(201);
+
+      // The original is only ever READ, by its own id - never updated or
+      // deleted, and never re-read under the new duplicate's id.
+      expect(mockGetStudyById).toHaveBeenCalledTimes(1);
+      expect(mockGetStudyById).toHaveBeenCalledWith('study_original');
+      expect(mockUpdateStudy).not.toHaveBeenCalled();
+      expect(mockDeleteStudyUnchecked).not.toHaveBeenCalled();
+
+      // createStudy mints a SEPARATE row rather than touching the original's.
+      expect(mockCreateStudy).toHaveBeenCalledTimes(1);
+      expect(mockCreateStudy).toHaveBeenCalledWith(
+        expect.not.objectContaining({ id: 'study_original' })
+      );
+
+      // No UPDATE/DELETE against the opportunities table either - every
+      // pool.query call this request makes is a SELECT or the duplicate's own
+      // INSERT.
+      for (const call of mockQuery.mock.calls) {
+        const sql = String(call[0]).trim().toUpperCase();
+        expect(sql.startsWith('UPDATE') || sql.startsWith('DELETE')).toBe(false);
+      }
+    });
+
+    it('falls back to a plain duplicate, delivery_mode reset to external, when the linked study is gone', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{
+          id: 'native-opp-3',
+          type: 'survey',
+          title: 'An orphaned link',
+          delivery_mode: 'native',
+          firsthand_study_id: 'study_deleted',
+          screener: null,
+          target_roles: null
+        }]
+      });
+      mockGetStudyById.mockResolvedValueOnce(null);
+      mockQuery.mockResolvedValueOnce({
+        rows: [{
+          id: 'native-opp-4',
+          type: 'survey',
+          delivery_mode: 'external',
+          firsthand_study_id: null,
+          created_at: new Date(),
+          updated_at: new Date()
+        }]
+      });
+
+      const response = await request(listening(app))
+        .post('/api/opportunities/native-opp-3/duplicate')
+        .expect(201);
+
+      expect(mockCreateStudy).not.toHaveBeenCalled();
+      expect(response.body.delivery_mode).toBe('external');
+      expect(response.body.firsthand_study_id).toBeNull();
     });
   });
 
