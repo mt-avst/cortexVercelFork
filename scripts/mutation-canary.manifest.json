@@ -929,12 +929,13 @@
   {
     "id": "reschedule-locks-the-old-session-nowait-against-deadlock",
     "file": "backend/src/routes/bookings.ts",
-    "runner": "jest",
-    "spec": "src/routes/__tests__/bookings.reschedule-writes-are-row-scoped.test.ts",
+    "runner": "vitest",
+    "spec": "src/routes/__tests__/reschedule-sync-booked-counts-lock-order-postgres.test.ts",
     "anchor": "      SELECT * FROM sessions WHERE id = $1 FOR UPDATE NOWAIT",
     "mutation": "      SELECT * FROM sessions WHERE id = $1 FOR UPDATE",
-    "test": "locks the old session NOWAIT, so a reschedule never waits on a session lock",
-    "why": "reschedule locks two session rows (target then current); the target is already FOR UPDATE NOWAIT. Making the current lock NOWAIT too means a reschedule never holds one session lock while WAITING on another, so it cannot be a party in a deadlock cycle with the multi-row lockers (sync-booked-counts, delete-sessions). cto/AdaptaLabs#34. Dropping NOWAIT reintroduces a blocking wait; the test asserts the current-session lock is FOR UPDATE NOWAIT and fails without it. A contended old session then fails fast as a retryable 409 via the existing 55P03 handler."
+    "test": "never blocks holding the target lock while waiting on the old session, so a sweep holding that row cannot cycle with it",
+    "needsDatabase": true,
+    "why": "reschedule locks two session rows (target then current); the target is already FOR UPDATE NOWAIT. Making the current lock NOWAIT too means a reschedule never holds one session lock while WAITING on another, so it cannot be a party in a deadlock cycle with the multi-row lockers (sync-booked-counts, delete-sessions). cto/AdaptaLabs#34. This entry USED TO NAME bookings.reschedule-writes-are-row-scoped.test.ts, a jest test over a mocked pool that asserts the SQL TEXT contains the substring 'FOR UPDATE NOWAIT' - the same hole cto/AdaptaLabs#52 closed for delete-sessions' ORDER BY: a mocked pool cannot race, so it cannot see a blocking wait, only the string. It now names a real-Postgres test that stands a locker in for the sync-booked-counts sweep already holding the old session, fires the real handler, and asserts the handler's lock attempt is never OBSERVED BLOCKED (not merely that the SQL contains a keyword) before a second lock request completes the cycle. Measured: dropping NOWAIT makes the handler block on the old session within the test's bounded window and fails 'never blocks holding the target lock...' by name in ~1s, rather than a hang; restored NOWAIT passes both tests in the file in under 5s."
   },
   {
     "id": "cancel-decrements-the-current-session-not-the-stale-read",
