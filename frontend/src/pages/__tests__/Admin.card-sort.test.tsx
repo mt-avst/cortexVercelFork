@@ -6,28 +6,26 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import Admin from '../Admin';
 
 /**
- * #131: the Research Studies table reflows to cards below 1220px (ROW 14,
- * `_components.css`), which hides `<thead>` - the table's only sort control.
- * This pins the replacement: a compact "Sort by" control shown only in card
- * view, wired to the SAME sortField/sortDirection state and the SAME
- * handleSort the header buttons already use - never a parallel mechanism.
+ * #131: the "Sort by" control stands in for sort headers that are out of view:
+ * below 1024px the Research Studies table reflows to cards (ROW 14,
+ * `_components.css`) and hides `<thead>`; between 1024 and 1279.98px the
+ * Created column, and so its sort button, is dropped (Admin table Step 1,
+ * 2026-09-23). The control is wired to the SAME sortField/sortDirection state
+ * and the SAME handleSort the header buttons use - never a parallel mechanism.
  *
- * jsdom applies no layout, so nothing here can see the 1220px breakpoint
- * itself (that is pinned as a literal in Admin.card-sort.css.test.ts
- * instead). What is asserted is behaviour: selecting a field re-orders the
- * rendered rows, the direction button reverses them, and the header cells
- * and the card control never disagree about which field/direction is
- * active.
+ * jsdom applies no layout, so nothing here can see those breakpoints (they
+ * are pinned as literals in Admin.card-sort.css.test.ts instead). What is
+ * asserted is behaviour: selecting a field re-orders the rendered rows, the
+ * direction button reverses them, the header cells and the control never
+ * disagree about which field/direction is active, and the control offers
+ * exactly the fields the headers do (sort parity, AC14).
  *
- * Three fixtures, each field's ascending order a DIFFERENT permutation of
- * the other three, so a control wired to the wrong field is caught by the
- * rendered order rather than merely "it re-sorted to something". With three
- * rows that cannot also keep the initial order (created_at descending) apart
- * from every other field ascending - it equals type ascending - so each case
- * also asserts the select's value and the matching header's aria-sort.
+ * Three fixtures, each field's ascending order a DIFFERENT permutation, so a
+ * control wired to the wrong field is caught by the rendered order rather
+ * than merely "it re-sorted to something". Each case also asserts the
+ * select's value and the matching header's aria-sort.
  *
  *   title       (alpha):  Alpha, Beta, Gamma
- *   type        (alpha):  Beta (interview), Gamma (poll), Alpha (test)
  *   status      (alpha):  Gamma (closed), Alpha (draft), Beta (published)
  *   created_at  (asc):    Alpha (Jan), Gamma (Feb), Beta (Mar)
  */
@@ -126,9 +124,11 @@ beforeEach(() => {
   };
 });
 
+// Anchor on "Progress" - a header only the studies table has (Recent bookings
+// has its own Study and Status headers).
 const findStudiesTable = async (): Promise<HTMLElement> => {
-  const typeHeader = await screen.findByRole('columnheader', { name: /^type/i });
-  const table = typeHeader.closest('table');
+  const progressHeader = await screen.findByRole('columnheader', { name: /^progress$/i });
+  const table = progressHeader.closest('table');
   expect(table).not.toBeNull();
   return table as HTMLElement;
 };
@@ -141,7 +141,6 @@ const renderedTitles = (table: HTMLElement): string[] =>
 
 const HEADER_NAME = {
   title: /^study$/i,
-  type: /^type$/i,
   status: /^status$/i,
   created_at: /^created$/i,
 } as const;
@@ -149,7 +148,6 @@ const HEADER_NAME = {
 describe('Research Studies card-view sort control (#131)', () => {
   it.each([
     ['title', ['Alpha study', 'Beta study', 'Gamma study']],
-    ['type', ['Beta study', 'Gamma study', 'Alpha study']],
     ['status', ['Gamma study', 'Alpha study', 'Beta study']],
     ['created_at', ['Alpha study', 'Gamma study', 'Beta study']],
   ] as const)('selecting %s in the card control sorts the rows to that field ascending', async (field, expected) => {
@@ -204,10 +202,11 @@ describe('Research Studies card-view sort control (#131)', () => {
     fireEvent.click(screen.getByRole('button', { name: /Ascending/ }));
     expect(renderedTitles(table)).toEqual(['Gamma study', 'Beta study', 'Alpha study']);
 
-    fireEvent.change(select, { target: { value: 'type' } });
+    fireEvent.change(select, { target: { value: 'created_at' } });
 
-    // type ascending, not descending - parity with a header click on a new column.
-    expect(renderedTitles(table)).toEqual(['Beta study', 'Gamma study', 'Alpha study']);
+    // created_at ascending, not descending - parity with a header click on a
+    // new column.
+    expect(renderedTitles(table)).toEqual(['Alpha study', 'Gamma study', 'Beta study']);
     expect(screen.getByRole('button', { name: /Ascending/ })).toBeInTheDocument();
   });
 
@@ -220,12 +219,10 @@ describe('Research Studies card-view sort control (#131)', () => {
     fireEvent.change(select, { target: { value: 'status' } });
     const statusHeader = within(table).getByRole('columnheader', { name: /^status$/i });
     const titleHeader = within(table).getByRole('columnheader', { name: /^study$/i });
-    const typeHeader = within(table).getByRole('columnheader', { name: /^type$/i });
     const createdHeader = within(table).getByRole('columnheader', { name: /^created$/i });
 
     expect(statusHeader).toHaveAttribute('aria-sort', 'ascending');
     expect(titleHeader).toHaveAttribute('aria-sort', 'none');
-    expect(typeHeader).toHaveAttribute('aria-sort', 'none');
     expect(createdHeader).toHaveAttribute('aria-sort', 'none');
 
     // Header click -> card select and direction word follow.
@@ -242,6 +239,29 @@ describe('Research Studies card-view sort control (#131)', () => {
     fireEvent.click(titleSortButton);
     expect(screen.getByRole('button', { name: /Descending/ })).toBeInTheDocument();
     expect(titleHeader).toHaveAttribute('aria-sort', 'descending');
+  });
+
+  it('offers exactly the fields the headers sort by - no more, no fewer (sort parity, AC14)', async () => {
+    renderAdmin();
+    const table = await findStudiesTable();
+    const select = await screen.findByLabelText('Sort by') as HTMLSelectElement;
+
+    const selectFields = Array.from(select.options).map((o) => o.value);
+    // The header side: every <th> carrying a sort button, named by the field
+    // its aria-sort follows. Clicking each and reading the select back maps a
+    // header to its field without trusting the header's label text.
+    const sortHeaders = within(table)
+      .getAllByRole('columnheader')
+      .filter((th) => th.querySelector('button.admin-th-sort'));
+    const headerFields = sortHeaders.map((th) => {
+      fireEvent.click(th.querySelector('button.admin-th-sort') as HTMLElement);
+      return select.value;
+    });
+
+    // Pinned as literals: a set derived from either side could not see the
+    // other drift. Type left with its column (Step 1).
+    expect([...selectFields].sort()).toEqual(['created_at', 'status', 'title']);
+    expect([...headerFields].sort()).toEqual(['created_at', 'status', 'title']);
   });
 
   it('is absent when there are no studies', async () => {

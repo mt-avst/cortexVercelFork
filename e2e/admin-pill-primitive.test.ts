@@ -1,8 +1,12 @@
 import { test, expect } from '@playwright/test';
 
 /**
- * #142: the studies table's three pills - the Type lozenge, the status pill
- * and the "Auto-closed" marker - share one box primitive (`.admin-pill`).
+ * #142: the studies table's pills - the Type lozenge and the status pill -
+ * share one box primitive (`.admin-pill`). Until admin table Step 1
+ * (2026-09-23) the "Auto-closed" marker was a third pill stacked beside the
+ * status pill; it is now plain muted text under the status pill, and Step 1
+ * moved the Type lozenge out of its own column into the Study cell (the first
+ * column), so the lozenge is located there. Table from 1024px up, cards below.
  *
  * This spec is the one place that measures that in a real browser. The
  * source-pin guard beside it
@@ -132,50 +136,96 @@ test.describe('admin studies table pills share one box (#142)', () => {
     await expect(page.locator('table.admin-data-table')).toBeVisible({ timeout: 10000 });
   };
 
-  test('type, status and auto-closed pills compute the same display/height/font-size/vertical-align', async ({ page }) => {
+  test('the type pill (in the Study cell) and the status pill compute the same display/height/font-size/vertical-align', async ({ page }) => {
     await serve(page, [CLOSED]);
     await openAdmin(page);
 
     // Positive control: fail here, not on a selector match count of zero
     // reading as "no misalignment found".
-    const pillCount = await page.locator(
-      'td.col-type .lozenge, td.col-status .admin-study-status, td.col-status .admin-pill--auto-closed'
-    ).count();
-    expect(pillCount).toBe(3);
+    const pillCount = await page.locator('td:first-child .lozenge, td.col-status .admin-study-status').count();
+    expect(pillCount).toBe(2);
 
     const metrics = await page.evaluate(() => {
       const read = (el: Element) => {
         const cs = getComputedStyle(el);
         return {
           display: cs.display,
+          parentDisplay: el.parentElement ? getComputedStyle(el.parentElement).display : '',
           height: el.getBoundingClientRect().height,
           fontSize: cs.fontSize,
           verticalAlign: cs.verticalAlign,
         };
       };
-      const type = document.querySelector('td.col-type .lozenge');
+      const type = document.querySelector('td:first-child .lozenge');
       const status = document.querySelector('td.col-status .admin-study-status');
-      const autoClosed = document.querySelector('td.col-status .admin-pill--auto-closed');
       return {
         type: type && read(type),
         status: status && read(status),
-        autoClosed: autoClosed && read(autoClosed),
       };
     });
 
     expect(metrics.type).not.toBeNull();
     expect(metrics.status).not.toBeNull();
-    expect(metrics.autoClosed).not.toBeNull();
 
-    for (const pill of [metrics.type, metrics.status, metrics.autoClosed] as const) {
-      expect(pill!.display).toBe('inline-flex');
+    for (const pill of [metrics.type, metrics.status] as const) {
+      // A pill declared inline-flex is blockified to `flex` when its parent is
+      // a flex container (CSS Display 3, "blockification of flex items") - the
+      // type pill sits in the flex meta line under the title. The box is the
+      // same; only an inline-flex pill in a non-flex parent, or a flex pill in
+      // a non-flex parent, is a real drift.
+      const parentIsFlex = /^(inline-)?flex$/.test(pill!.parentDisplay);
+      expect(pill!.display).toBe(parentIsFlex ? 'flex' : 'inline-flex');
       expect(pill!.verticalAlign).toBe('middle');
       expect(pill!.height).toBeGreaterThan(23);
       expect(pill!.height).toBeLessThan(25);
     }
     expect(metrics.status!.fontSize).toBe(metrics.type!.fontSize);
-    expect(metrics.autoClosed!.fontSize).toBe(metrics.type!.fontSize);
   });
+
+  /**
+   * Step 1 (Mav 3.4): "Auto-closed" was a second pill stacked against the
+   * status pill. It keeps its information but loses the box: plain muted
+   * text, 12px / 400, no fill, no border, directly under the status pill.
+   * Measured at both edges of the table band and a common desktop width.
+   */
+  for (const width of [1024, 1279, 1440]) {
+    test(`the auto-closed marker is plain text under the status pill, not a second pill, at ${width}px`, async ({ page }) => {
+      await serve(page, [CLOSED]);
+      await page.setViewportSize({ width, height: 900 });
+      await openAdmin(page);
+
+      const marker = page.locator('td.col-status').getByText(/^auto-closed$/i);
+      // Information is not lost: the marker still renders, once.
+      await expect(marker).toHaveCount(1);
+
+      const m = await marker.evaluate((el) => {
+        const cs = getComputedStyle(el);
+        const pill = el.closest('td')!.querySelector('.admin-study-status')!.getBoundingClientRect();
+        const r = el.getBoundingClientRect();
+        const alpha = (css: string) => {
+          const c = document.createElement('canvas').getContext('2d')!;
+          c.fillStyle = css;
+          c.fillRect(0, 0, 1, 1);
+          return c.getImageData(0, 0, 1, 1).data[3];
+        };
+        return {
+          fillAlpha: alpha(cs.backgroundColor),
+          borders: [cs.borderTopWidth, cs.borderRightWidth, cs.borderBottomWidth, cs.borderLeftWidth].map(parseFloat),
+          fontSize: cs.fontSize,
+          fontWeight: cs.fontWeight,
+          gapBelowPill: r.top - pill.bottom,
+        };
+      });
+
+      expect(m.fillAlpha, 'the auto-closed marker still paints a pill fill').toBe(0);
+      expect(m.borders, 'the auto-closed marker still paints a pill border').toEqual([0, 0, 0, 0]);
+      expect(m.fontSize).toBe('12px');
+      expect(m.fontWeight).toBe('400');
+      // Under the pill (not beside it), and close under it.
+      expect(m.gapBelowPill).toBeGreaterThanOrEqual(-0.5);
+      expect(m.gapBelowPill).toBeLessThanOrEqual(6);
+    });
+  }
 
   /**
    * Measured on the fix's own branch, and the reason this test asserts on the
@@ -200,106 +250,111 @@ test.describe('admin studies table pills share one box (#142)', () => {
    * test writes the old 147px label into the span itself: the clip is kept as
    * the guard for the next long label, and this is what proves it still holds.
    */
-  test('a status label too long for its pill truncates inside it', async ({ page }) => {
-    await serve(page, [NOT_WORKING]);
-    await page.setViewportSize({ width: 1440, height: 900 });
-    await openAdmin(page);
+  // 1024 is the narrowest the table renders at since Step 1; 1440 a common desktop.
+  for (const width of [1024, 1440]) {
+    test(`a status label too long for its pill truncates inside it at ${width}px`, async ({ page }) => {
+      await serve(page, [NOT_WORKING]);
+      await page.setViewportSize({ width, height: 900 });
+      await openAdmin(page);
 
-    const statusPill = page.locator('td.col-status .admin-study-status').first();
-    await expect(statusPill).toHaveText(/broken/i);
-    // Fails by name when the label span is unwrapped rather than by a
-    // measurement that quietly reads the pill instead.
-    await expect(page.locator('td.col-status .admin-study-status__label')).toHaveCount(1);
-    await page.evaluate((text) => {
-      const label = document.querySelector('td.col-status .admin-study-status__label');
-      if (label) label.textContent = text;
-    }, LONG_STATUS_LABEL);
-    // `elementsFromPoint` below takes VIEWPORT coordinates, and this row
-    // sits well below the fold of a 900px-tall window: unscrolled, every
-    // probe lands outside the viewport, returns an empty stack and the
-    // hit-test can never fail (measured - it did exactly that).
-    await statusPill.scrollIntoViewIfNeeded();
+      const statusPill = page.locator('td.col-status .admin-study-status').first();
+      await expect(statusPill).toHaveText(/broken/i);
+      // Fails by name when the label span is unwrapped rather than by a
+      // measurement that quietly reads the pill instead.
+      await expect(page.locator('td.col-status .admin-study-status__label')).toHaveCount(1);
+      await page.evaluate((text) => {
+        const label = document.querySelector('td.col-status .admin-study-status__label');
+        if (label) label.textContent = text;
+      }, LONG_STATUS_LABEL);
+      // `elementsFromPoint` below takes VIEWPORT coordinates, and this row
+      // sits well below the fold of a 900px-tall window: unscrolled, every
+      // probe lands outside the viewport, returns an empty stack and the
+      // hit-test can never fail (measured - it did exactly that).
+      await statusPill.scrollIntoViewIfNeeded();
 
-    const measured = await page.evaluate(() => {
-      const pill = document.querySelector('td.col-status .admin-study-status') as HTMLElement | null;
-      const label = document.querySelector('td.col-status .admin-study-status__label') as HTMLElement | null;
-      const typeLozenge = document.querySelector('td.col-type .lozenge');
-      if (!pill || !label || !typeLozenge) return null;
-      const cs = getComputedStyle(label);
-      const p = pill.getBoundingClientRect();
-      const l = label.getBoundingClientRect();
-      const t = typeLozenge.getBoundingClientRect();
-      // Chrome hit-tests the overflowing part of an unclipped inline text
-      // run, so a point beyond the pill that resolves to the label means
-      // the label's ink is painting out there. Measured with the clip
-      // removed: the label box grows to its full 147px and reaches ~27px
-      // past each end of the pill, which both probes below land inside.
-      const probeY = (p.top + p.bottom) / 2;
-      const hitsBeyondPill = [6, 16].some((dx) =>
-        document
-          .elementsFromPoint(p.right + dx, probeY)
-          .some((el) => el === label || el.classList.contains('admin-study-status__label'))
-      );
-      return {
-        overflowX: cs.overflowX,
-        overflowY: cs.overflowY,
-        textOverflow: cs.textOverflow,
-        whiteSpace: cs.whiteSpace,
-        scrollWidth: label.scrollWidth,
-        clientWidth: label.clientWidth,
-        labelLeft: l.left,
-        labelRight: l.right,
-        pillLeft: p.left,
-        pillRight: p.right,
-        hitsBeyondPill,
-        // Measured on the LABEL, not the pill. The pill boxes are capped at
-        // their cells (see the docblock above) so they never move, and a
-        // pill-to-pill comparison therefore read 0 even with the clip removed
-        // and the ink hanging ~27px off each end - a witness that could not
-        // testify. The label's own box is the thing that grows.
-        overlapWithType: Math.max(0, Math.min(l.right, t.right) - Math.max(l.left, t.left)),
-      };
+      const measured = await page.evaluate(() => {
+        const pill = document.querySelector('td.col-status .admin-study-status') as HTMLElement | null;
+        const label = document.querySelector('td.col-status .admin-study-status__label') as HTMLElement | null;
+        const typeLozenge = document.querySelector('td:first-child .lozenge');
+        if (!pill || !label || !typeLozenge) return null;
+        const cs = getComputedStyle(label);
+        const p = pill.getBoundingClientRect();
+        const l = label.getBoundingClientRect();
+        const t = typeLozenge.getBoundingClientRect();
+        // Chrome hit-tests the overflowing part of an unclipped inline text
+        // run, so a point beyond the pill that resolves to the label means
+        // the label's ink is painting out there. Measured with the clip
+        // removed: the label box grows to its full 147px and reaches ~27px
+        // past each end of the pill, which both probes below land inside.
+        const probeY = (p.top + p.bottom) / 2;
+        const hitsBeyondPill = [6, 16].some((dx) =>
+          document
+            .elementsFromPoint(p.right + dx, probeY)
+            .some((el) => el === label || el.classList.contains('admin-study-status__label'))
+        );
+        return {
+          overflowX: cs.overflowX,
+          overflowY: cs.overflowY,
+          textOverflow: cs.textOverflow,
+          whiteSpace: cs.whiteSpace,
+          scrollWidth: label.scrollWidth,
+          clientWidth: label.clientWidth,
+          labelLeft: l.left,
+          labelRight: l.right,
+          pillLeft: p.left,
+          pillRight: p.right,
+          hitsBeyondPill,
+          // Measured on the LABEL, not the pill. The pill boxes are capped at
+          // their cells (see the docblock above) so they never move, and a
+          // pill-to-pill comparison therefore read 0 even with the clip removed
+          // and the ink hanging ~27px off each end - a witness that could not
+          // testify. The label's own box is the thing that grows.
+          overlapWithType: Math.max(0, Math.min(l.right, t.right) - Math.max(l.left, t.left)),
+        };
+      });
+
+      expect(measured).not.toBeNull();
+      const m = measured!;
+
+      // The clip that keeps the overflow inside the pill, and the ellipsis
+      // that marks it as truncated rather than cut off.
+      expect(m.overflowX).toBe('hidden');
+      expect(m.overflowY).toBe('hidden');
+      expect(m.textOverflow).toBe('ellipsis');
+      expect(m.whiteSpace).toBe('nowrap');
+
+      // The clip box itself sits inside the pill, so clipped ink cannot reach
+      // the neighbouring columns.
+      expect(m.labelLeft).toBeGreaterThanOrEqual(m.pillLeft - 0.5);
+      expect(m.labelRight).toBeLessThanOrEqual(m.pillRight + 0.5);
+
+      expect(m.hitsBeyondPill, "the label's own box is hit-testable beyond the pill's right edge - its ink is painting outside the pill").toBe(false);
+      expect(m.overlapWithType).toBe(0);
+
+      // Positive control, last because the assertions above name the defect
+      // more precisely when they are the ones that break: without a real
+      // overflow here every one of them is vacuous. Reads `${m.scrollWidth}px
+      // of text in a ${m.clientWidth}px label` - if those are equal the
+      // fixture stopped being the long label this test exists for, or the
+      // label grew to fit its text and is no longer being clipped at all.
+      expect(
+        m.scrollWidth,
+        `the label must overflow for this test to mean anything: ${m.scrollWidth}px of text in a ${m.clientWidth}px label`
+      ).toBeGreaterThan(m.clientWidth + 1);
     });
-
-    expect(measured).not.toBeNull();
-    const m = measured!;
-
-    // The clip that keeps the overflow inside the pill, and the ellipsis
-    // that marks it as truncated rather than cut off.
-    expect(m.overflowX).toBe('hidden');
-    expect(m.overflowY).toBe('hidden');
-    expect(m.textOverflow).toBe('ellipsis');
-    expect(m.whiteSpace).toBe('nowrap');
-
-    // The clip box itself sits inside the pill, so clipped ink cannot reach
-    // the neighbouring columns.
-    expect(m.labelLeft).toBeGreaterThanOrEqual(m.pillLeft - 0.5);
-    expect(m.labelRight).toBeLessThanOrEqual(m.pillRight + 0.5);
-
-    expect(m.hitsBeyondPill, "the label's own box is hit-testable beyond the pill's right edge - its ink is painting outside the pill").toBe(false);
-    expect(m.overlapWithType).toBe(0);
-
-    // Positive control, last because the assertions above name the defect
-    // more precisely when they are the ones that break: without a real
-    // overflow here every one of them is vacuous. Reads `${m.scrollWidth}px
-    // of text in a ${m.clientWidth}px label` - if those are equal the
-    // fixture stopped being the long label this test exists for, or the
-    // label grew to fit its text and is no longer being clipped at all.
-    expect(
-      m.scrollWidth,
-      `the label must overflow for this test to mean anything: ${m.scrollWidth}px of text in a ${m.clientWidth}px label`
-    ).toBeGreaterThan(m.clientWidth + 1);
-  });
+  }
 
   /**
    * #157: the published-but-broken label reads in full at every width the
-   * table renders at. The table is a fixed 918px from 1220px up, so 1220 is
-   * its narrowest and 1440 a common desktop; measured, "Broken" is 45px of
+   * table renders at. Since admin table Step 1 the table renders from 1024px
+   * up (Status a fixed 128px column), so the widths are the AC9 set: both
+   * edges of the 1024-1279 band, 1100, 1280 and 1440. When written (table
+   * from 1220), measured "Broken" was 45px of
    * text where the pill leaves its label 53px beside the warning glyph, and
    * "Published, not working" was 147px and read "PUBLIS...". The pill's text
    * also carries a visually hidden "Published, " for a screen reader.
    */
-  for (const width of [1220, 1440]) {
+  for (const width of [1024, 1100, 1219, 1280, 1440]) {
     test(`the "Broken" status label renders in full inside its pill at ${width}px`, async ({ page }) => {
       await serve(page, [NOT_WORKING]);
       await page.setViewportSize({ width, height: 900 });
@@ -313,7 +368,7 @@ test.describe('admin studies table pills share one box (#142)', () => {
         page.evaluate(() => {
           const pill = document.querySelector('td.col-status .admin-study-status');
           const label = document.querySelector('td.col-status .admin-study-status__label') as HTMLElement | null;
-          const typeLozenge = document.querySelector('td.col-type .lozenge');
+          const typeLozenge = document.querySelector('td:first-child .lozenge');
           if (!pill || !label || !typeLozenge) return null;
           const p = pill.getBoundingClientRect();
           const l = label.getBoundingClientRect();
@@ -348,43 +403,50 @@ test.describe('admin studies table pills share one box (#142)', () => {
   }
 
   /**
-   * The Status column's width is what decides whether "Auto-closed" fits its
-   * own pill on one line: at 10% the text escapes its background, at 12% it
-   * does not (measured 92px of pill for 81px of ink). Nothing but a source
-   * string pin saw that before this test - and a string pin cannot see a
-   * width the cascade overrides elsewhere.
+   * The Status column's width is what decides whether "Auto-closed" fits on
+   * one line: at 10% the text escaped its background, at 12% it did not
+   * (measured 92px of pill for 81px of ink). Nothing but a source string pin
+   * saw that before this test - and a string pin cannot see a width the
+   * cascade overrides elsewhere.
    *
-   * "Auto-closed" has no truncating inner span, so here the Range over its
-   * text node IS the painted ink.
+   * Since Step 1 the marker is plain text with no box of its own, so what is
+   * guarded is its ink: inside its own element, inside the Status cell's
+   * content box (not spilling into Progress), and on ONE line. It has no
+   * truncating inner span, so the Range over its text node IS the painted
+   * ink. Widths are the AC9 set.
    */
-  for (const width of [1240, 1440]) {
-    test(`the "Auto-closed" marker's text ink stays inside its pill at ${width}px`, async ({ page }) => {
+  for (const width of [1024, 1100, 1219, 1280, 1440]) {
+    test(`the "Auto-closed" marker's text ink stays inside its Status cell on one line at ${width}px`, async ({ page }) => {
       await serve(page, [CLOSED]);
       await page.setViewportSize({ width, height: 900 });
       await openAdmin(page);
 
-      await expect(page.locator('td.col-status .admin-pill--auto-closed')).toHaveCount(1);
+      await expect(page.locator('td.col-status').getByText(/^auto-closed$/i)).toHaveCount(1);
 
       const measured = await page.evaluate(() => {
-        const pill = document.querySelector('td.col-status .admin-pill--auto-closed') as HTMLElement | null;
-        if (!pill) return null;
-        const cell = pill.closest('td')!;
-        const textNode = [...pill.childNodes].find((n) => n.nodeType === Node.TEXT_NODE && n.textContent!.trim());
+        const marker = [...document.querySelectorAll('td.col-status *')].find((el) =>
+          [...el.childNodes].some((n) => n.nodeType === Node.TEXT_NODE && /^auto-closed$/i.test(n.textContent!.trim()))
+        ) as HTMLElement | undefined;
+        if (!marker) return null;
+        const cell = marker.closest('td')!;
+        const textNode = [...marker.childNodes].find((n) => n.nodeType === Node.TEXT_NODE && n.textContent!.trim());
         if (!textNode) return null;
         const range = document.createRange();
         range.selectNodeContents(textNode);
         const ink = range.getBoundingClientRect();
-        const p = pill.getBoundingClientRect();
+        const lineTops = new Set([...range.getClientRects()].map((r) => Math.round(r.top)));
+        const own = marker.getBoundingClientRect();
         const c = cell.getBoundingClientRect();
+        const cs = getComputedStyle(cell);
         return {
           inkLeft: ink.left,
           inkRight: ink.right,
           inkWidth: ink.width,
-          pillLeft: p.left,
-          pillRight: p.right,
-          pillHeight: p.height,
-          cellLeft: c.left,
-          cellRight: c.right,
+          ownLeft: own.left,
+          ownRight: own.right,
+          lines: lineTops.size,
+          cellContentLeft: c.left + parseFloat(cs.paddingLeft),
+          cellContentRight: c.right - parseFloat(cs.paddingRight),
         };
       });
 
@@ -393,43 +455,63 @@ test.describe('admin studies table pills share one box (#142)', () => {
 
       // Positive control: a zero-width ink range would sit inside anything.
       expect(m.inkWidth).toBeGreaterThan(40);
-      expect(m.inkLeft).toBeGreaterThanOrEqual(m.pillLeft - 0.5);
-      expect(m.inkRight).toBeLessThanOrEqual(m.pillRight + 0.5);
-      // One line, at the shared primitive's height.
-      expect(m.pillHeight).toBeGreaterThan(23);
-      expect(m.pillHeight).toBeLessThan(25);
-      // And the pill itself inside its column.
-      expect(m.pillLeft).toBeGreaterThanOrEqual(m.cellLeft - 0.5);
-      expect(m.pillRight).toBeLessThanOrEqual(m.cellRight + 0.5);
+      expect(m.inkLeft).toBeGreaterThanOrEqual(m.ownLeft - 0.5);
+      expect(m.inkRight).toBeLessThanOrEqual(m.ownRight + 0.5);
+      // One line.
+      expect(m.lines, '"Auto-closed" wraps').toBe(1);
+      // And the ink inside its column.
+      expect(m.inkLeft).toBeGreaterThanOrEqual(m.cellContentLeft - 0.5);
+      expect(m.inkRight).toBeLessThanOrEqual(m.cellContentRight + 0.5);
     });
   }
 
   /**
-   * Below 1220px the table reflows to cards (see the `max-width: 1219.98px`
-   * block in `_components.css`) and the status pill and the "Auto-closed"
-   * marker sit side by side on one line. `margin: 0` in the shared
-   * primitive's own ancestor-scoped rule removed the gutter main had between
-   * them: measured 0px, the two backgrounds touching.
+   * The status pill and the "Auto-closed" marker must never touch. On main
+   * they sat side by side in the card view with a 3.5px gutter (`margin: 0`
+   * in the shared primitive's own ancestor-scoped rule had once removed it:
+   * measured 0px, the two backgrounds touching). Step 1 puts the marker
+   * directly under the pill in the table; the card view (below 1024, see the
+   * `max-width: 1023.98px` block in `_components.css`) is "unchanged for
+   * today", so at 1023 either arrangement passes as long as there is a gap.
    */
-  test('the status pill and the auto-closed marker keep a gutter side by side at 1024px', async ({ page }) => {
+  const pillAndMarker = (page: import('@playwright/test').Page) =>
+    page.evaluate(() => {
+      const status = document.querySelector('td.col-status .admin-study-status');
+      const autoClosed = [...document.querySelectorAll('td.col-status *')].find((el) =>
+        /^auto-closed$/i.test((el.textContent ?? '').trim())
+      );
+      if (!status || !autoClosed) return null;
+      const s = status.getBoundingClientRect();
+      const a = autoClosed.getBoundingClientRect();
+      return {
+        sideGap: a.left - s.right,
+        belowGap: a.top - s.bottom,
+        sameLine: Math.abs(a.top - s.top) < 1,
+      };
+    });
+
+  test('the status pill and the auto-closed marker keep a gutter in the card view at 1023px', async ({ page }) => {
+    await serve(page, [CLOSED]);
+    await page.setViewportSize({ width: 1023, height: 900 });
+    await openAdmin(page);
+
+    const m = await pillAndMarker(page);
+    expect(m).not.toBeNull();
+    // Side by side with a gutter, or stacked with a gap; never touching.
+    if (m!.sameLine) expect(m!.sideGap).toBeGreaterThanOrEqual(3.5);
+    else expect(m!.belowGap).toBeGreaterThanOrEqual(1);
+  });
+
+  test('the auto-closed marker sits under the status pill, not beside it, at 1024px', async ({ page }) => {
     await serve(page, [CLOSED]);
     await page.setViewportSize({ width: 1024, height: 900 });
     await openAdmin(page);
 
-    const measured = await page.evaluate(() => {
-      const status = document.querySelector('td.col-status .admin-study-status');
-      const autoClosed = document.querySelector('td.col-status .admin-pill--auto-closed');
-      if (!status || !autoClosed) return null;
-      const s = status.getBoundingClientRect();
-      const a = autoClosed.getBoundingClientRect();
-      return { gap: a.left - s.right, sameLine: Math.abs(a.top - s.top) < 1, sTop: s.top, aTop: a.top };
-    });
-
-    expect(measured).not.toBeNull();
-    // Positive control: a gap measured between pills on two different lines
-    // says nothing about the gutter.
-    expect(measured!.sameLine).toBe(true);
-    expect(measured!.gap).toBeGreaterThanOrEqual(3.5);
+    const m = await pillAndMarker(page);
+    expect(m).not.toBeNull();
+    expect(m!.sameLine, 'the marker is beside the pill, not under it').toBe(false);
+    expect(m!.belowGap).toBeGreaterThanOrEqual(1);
+    expect(m!.belowGap).toBeLessThanOrEqual(6);
   });
 
   /**
@@ -440,7 +522,18 @@ test.describe('admin studies table pills share one box (#142)', () => {
    * never looked broken to a box comparison - it measured the button, not the
    * icon - so this measures the icon's painted width.
    */
-  for (const [width, font] of [[1240, 'web'], [1440, 'web'], [1240, 'fallback'], [1440, 'fallback']] as const) {
+  // Widths: 1024 and 1240 are the 1024-1279 band (Created hidden), 1280 the
+  // narrowest full table, 1440 a common desktop. Actions is a fixed 120px.
+  for (const [width, font] of [
+    [1024, 'web'],
+    [1240, 'web'],
+    [1280, 'web'],
+    [1440, 'web'],
+    [1024, 'fallback'],
+    [1240, 'fallback'],
+    [1280, 'fallback'],
+    [1440, 'fallback'],
+  ] as const) {
     test(`the row menu's icon paints and the actions fit their cell at ${width}px on the ${font} font`, async ({ page }) => {
       if (font === 'fallback') {
         // What a runner without egress to Google Fonts renders.
@@ -536,7 +629,7 @@ test.describe('admin studies table pills share one box (#142)', () => {
     };
 
     for (const theme of ['light', 'dark'] as const) {
-      for (const width of [1240, 1440]) {
+      for (const width of [1024, 1240, 1440]) {
         test(`the not-working pill shows its warning glyph and amber fill in ${theme} at ${width}px`, async ({ page }) => {
           await page.addInitScript((t) => localStorage.setItem('theme', t), theme);
           await serve(page, [NOT_WORKING, HEALTHY, DRAFT]);

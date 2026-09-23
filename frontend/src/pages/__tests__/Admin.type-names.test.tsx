@@ -103,10 +103,10 @@ const allTypes = Object.values(OPPORTUNITY_TYPES);
 describe('Admin dashboard type names', () => {
   it('uses the short admin type label in the dense table', async () => {
     renderAdmin();
-    // Anchor on "Type" - unique to the studies table since the Recent bookings
-    // table gained its own "Study" header in the redesign.
-    const typeHeader = await screen.findByRole('columnheader', { name: /^type/i });
-    const table = typeHeader.closest('table') as HTMLElement;
+    // Anchor on "Progress" - unique to the studies table (the Type column it
+    // used to anchor on moved into the Study cell's meta line in Step 1).
+    const progressHeader = await screen.findByRole('columnheader', { name: /^progress$/i });
+    const table = progressHeader.closest('table') as HTMLElement;
 
     // The two "... session" names are shortened for the admin table only
     // (getAdminTypeLabel), so the type pill does not crowd the status pill.
@@ -121,10 +121,10 @@ describe('Admin dashboard type names', () => {
 
   it('never badges a study with the admin-only taxonomy', async () => {
     renderAdmin();
-    // Anchor on "Type" - unique to the studies table since the Recent bookings
-    // table gained its own "Study" header in the redesign.
-    const typeHeader = await screen.findByRole('columnheader', { name: /^type/i });
-    const table = typeHeader.closest('table') as HTMLElement;
+    // Anchor on "Progress" - unique to the studies table (the Type column it
+    // used to anchor on moved into the Study cell's meta line in Step 1).
+    const progressHeader = await screen.findByRole('columnheader', { name: /^progress$/i });
+    const table = progressHeader.closest('table') as HTMLElement;
 
     expect(table.textContent).not.toMatch(/app testing/i);
     expect(table.textContent).not.toMatch(/unmoderated/i);
