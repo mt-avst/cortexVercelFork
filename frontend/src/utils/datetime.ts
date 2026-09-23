@@ -46,6 +46,33 @@ export const formatStudyDate = (
     .replace(',', '');
 };
 
+/**
+ * `Thu 24 Sept`, or `Thu 24 Sept 2027` when the date is not in `now`'s year -
+ * for dense tables, where the current year on every row is noise (Admin
+ * Research Studies, Mav 3.5). The year is compared in the same zone the date
+ * is shown in, so 31 Dec 23:30 in London is not "next year" on a UTC clock.
+ */
+export const formatStudyDateCompact = (
+  value: string | Date | null | undefined,
+  now: Date,
+  timeZone?: string
+): string | null => {
+  const date = toDate(value);
+  if (!date) return null;
+  const yearOf = (d: Date) =>
+    new Intl.DateTimeFormat('en-GB', { year: 'numeric', timeZone }).format(d);
+  const sameYear = yearOf(date) === yearOf(now);
+  return new Intl.DateTimeFormat('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    ...(sameYear ? {} : { year: 'numeric' as const }),
+    timeZone,
+  })
+    .format(date)
+    .replace(',', '');
+};
+
 /** `18 Aug` - for meta rows where the year is noise. */
 export const formatStudyDateShort = (
   value: string | Date | null | undefined,

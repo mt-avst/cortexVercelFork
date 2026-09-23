@@ -26,8 +26,17 @@ import Admin from '../Admin';
  * select's value and the matching header's aria-sort.
  *
  *   title       (alpha):  Alpha, Beta, Gamma
- *   status      (alpha):  Gamma (closed), Alpha (draft), Beta (published)
+ *   status      (rank):   Beta (broken), Alpha (draft), Gamma (closed)
  *   created_at  (asc):    Alpha (Jan), Gamma (Feb), Beta (Mar)
+ *
+ * Status sorts by triage rank since Admin table Step 2 (Petra 3.2: Broken 0,
+ * Draft 1, Published 2, Closed 3), not alphabetically as it did before
+ * (closed, draft, published). Beta is a published `interview` with no
+ * sessions, so it is Broken - which keeps status's order a permutation of its
+ * own: a published-and-working Beta would sort Alpha, Beta, Gamma, the same as
+ * title, and a control wired to title would pass the status case. The
+ * Published rank between Draft and Closed is pinned in
+ * Admin.triage.test.tsx and adminDashboard.triage.test.ts.
  */
 
 const auth = vi.hoisted(() => ({
@@ -148,7 +157,7 @@ const HEADER_NAME = {
 describe('Research Studies card-view sort control (#131)', () => {
   it.each([
     ['title', ['Alpha study', 'Beta study', 'Gamma study']],
-    ['status', ['Gamma study', 'Alpha study', 'Beta study']],
+    ['status', ['Beta study', 'Alpha study', 'Gamma study']],
     ['created_at', ['Alpha study', 'Gamma study', 'Beta study']],
   ] as const)('selecting %s in the card control sorts the rows to that field ascending', async (field, expected) => {
     renderAdmin();
@@ -187,8 +196,8 @@ describe('Research Studies card-view sort control (#131)', () => {
     fireEvent.change(select, { target: { value: 'status' } });
     fireEvent.click(screen.getByRole('button', { name: /Ascending/ }));
 
-    // status descending: published, draft, closed.
-    expect(renderedTitles(table)).toEqual(['Beta study', 'Alpha study', 'Gamma study']);
+    // status descending, by rank: closed, draft, broken.
+    expect(renderedTitles(table)).toEqual(['Gamma study', 'Alpha study', 'Beta study']);
     expect(select.value).toBe('status');
     expect(screen.getByRole('button', { name: /Descending/ })).toBeInTheDocument();
   });
@@ -259,9 +268,10 @@ describe('Research Studies card-view sort control (#131)', () => {
     });
 
     // Pinned as literals: a set derived from either side could not see the
-    // other drift. Type left with its column (Step 1).
-    expect([...selectFields].sort()).toEqual(['created_at', 'status', 'title']);
-    expect([...headerFields].sort()).toEqual(['created_at', 'status', 'title']);
+    // other drift. Type left with its column (Step 1); Next session / deadline
+    // became sortable in Step 2 (AC13), on BOTH sides (AC14).
+    expect([...selectFields].sort()).toEqual(['created_at', 'next', 'status', 'title']);
+    expect([...headerFields].sort()).toEqual(['created_at', 'next', 'status', 'title']);
   });
 
   it('is absent when there are no studies', async () => {
