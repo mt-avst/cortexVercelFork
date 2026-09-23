@@ -6,7 +6,7 @@ import { getOpportunities, deleteOpportunity, duplicateOpportunity, getDashboard
 import { Opportunity } from '../api/types';
 import { getTypeBadgeClass, getTimeRemainingUntil } from '../utils/opportunityUtils';
 import {
-  getRecruitment,
+  getStudyProgress,
   getSessionsThisWeek,
   getStudiesClosingSoon,
   getNextMilestone,
@@ -924,7 +924,7 @@ const Admin: React.FC = () => {
                         </thead>
                         <tbody>
                           {sortedOpportunities.map((opportunity) => {
-                            const recruitment = getRecruitment(opportunity);
+                            const recruitment = getStudyProgress(opportunity);
                             // Progress: booked / capacity when the study has sessions
                             // (below); otherwise its click count - but only when the
                             // server actually sent one. The list endpoint withholds
@@ -1061,7 +1061,7 @@ const Admin: React.FC = () => {
                                     {statusLabel}
                                   </span>
                                 </span>
-                                {opportunity.status === 'closed' && (
+                                {opportunity.status === 'closed' && opportunity.auto_closed === true && (
                                   <span className="admin-pill admin-pill--auto-closed">Auto-closed</span>
                                 )}
                               </td>

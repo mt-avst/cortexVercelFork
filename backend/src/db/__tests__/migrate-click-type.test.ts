@@ -45,6 +45,26 @@ const COLUMN_CHECK =
   /pg_attribute[\s\S]*to_regclass\('opportunity_clicks'\)[\s\S]*click_type[\s\S]*attisdropped/i;
 
 /**
+ * THE auto_closed POST-CHECK, answered "present". The auto_closed block runs
+ * earlier in the file than either opportunity_clicks ALTER and then asks the
+ * schema whether its column exists, failing the migration if not. In every
+ * fixture here that add SUCCEEDED (its DO block answers blandly), so the honest
+ * answer to that follow-up is "present" - an empty answer would fail the
+ * migration on auto_closed before it ever reached the ALTER under test.
+ * Matched on the pg_attribute lookup, which the DO block (an
+ * information_schema guard) does not contain, so the block is never mistaken
+ * for the check.
+ */
+const AUTO_CLOSED_CHECK =
+  /pg_attribute[\s\S]*to_regclass\('opportunities'\)[\s\S]*auto_closed[\s\S]*attisdropped/i;
+
+/** The bland answer every fixture gives a statement it is not about. */
+const blandAnswer = (sql: string) =>
+  AUTO_CLOSED_CHECK.test(sql)
+    ? { rows: [{ '?column?': 1 }], rowCount: 1 }
+    : { rows: [], rowCount: 0 };
+
+/**
  * A client that answers every statement blandly, except the click_type ALTER,
  * which fails, and the follow-up schema question, which answers as told.
  */
@@ -74,7 +94,7 @@ const clientWhereTheAlterFails = (
             ? { rows: [{ '?column?': 1 }], rowCount: 1 }
             : { rows: [], rowCount: 0 };
         }
-        return { rows: [], rowCount: 0 };
+        return blandAnswer(sql);
       }),
       release: jest.fn(),
     },
@@ -131,7 +151,7 @@ describe('runMigrations - adding opportunity_clicks.click_type', () => {
     const client = {
       query: jest.fn(async (text: unknown) => {
         seen.push(String(text));
-        return { rows: [], rowCount: 0 };
+        return blandAnswer(String(text));
       }),
       release: jest.fn(),
     };
@@ -183,7 +203,7 @@ const clientWhereVisitorNonceAlterFails = (
             ? { rows: [{ '?column?': 1 }], rowCount: 1 }
             : { rows: [], rowCount: 0 };
         }
-        return { rows: [], rowCount: 0 };
+        return blandAnswer(sql);
       }),
       release: jest.fn(),
     },
