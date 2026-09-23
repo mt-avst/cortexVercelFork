@@ -5822,7 +5822,9 @@ describe('Opportunities API', () => {
       { step_id: `${ORIGINAL_STUDY_ID}_step_2`, order: 2, type: 'open_text' as const, prompt: 'What would you change?' }
     ];
 
-    const queueDuplicateOfNativeOpportunity = () => {
+    const queueDuplicateOfNativeOpportunity = (
+      originalStudyStatus: 'draft' | 'launched' | 'archived' = 'launched'
+    ) => {
       mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] }); // ownership check
       mockQuery.mockResolvedValueOnce({
         rows: [{
@@ -5844,7 +5846,7 @@ describe('Opportunities API', () => {
           consent_text: 'Your answers are stored for research analysis.',
           kind: 'survey' as const,
           estimated_duration_minutes: undefined,
-          status: 'launched' as const,
+          status: originalStudyStatus,
           owner_user_id: 'test-user-id',
           copied_from_study_id: null,
           created_at: '2026-08-16T10:00:00.000Z',
@@ -5898,6 +5900,28 @@ describe('Opportunities API', () => {
             expect.objectContaining({ order: 2, type: 'open_text', prompt: 'What would you change?' })
           ]
         })
+      );
+    });
+
+    /**
+     * cto/AdaptaLabs#156 final review pass, MEDIUM. Copying the original
+     * study's own `status` through would let an ARCHIVED or DRAFT study's
+     * status survive onto the duplicate - and the native-survey session gate
+     * (`opportunities.ts`, `if (linked.study.status !== 'launched')`) refuses
+     * any study that isn't launched, so publishing that duplicate would 404
+     * "Survey" for every participant with nothing warning the author. Same
+     * fix, same reasoning, as the create path's own inline_study/inline_survey
+     * branches: the new study is always minted `launched`.
+     */
+    it('launches the duplicated study regardless of the original\'s own status', async () => {
+      queueDuplicateOfNativeOpportunity('archived');
+
+      await request(listening(app))
+        .post('/api/opportunities/native-opp-1/duplicate')
+        .expect(201);
+
+      expect(mockCreateStudy).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'launched' })
       );
     });
 

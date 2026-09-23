@@ -4675,6 +4675,17 @@ router.post('/:id/duplicate', requireAdmin, opportunityWriteLimiter, asyncHandle
   // back by a shared transaction that does not exist.
   let duplicatedStudyId: string | null = null;
 
+  // ponytail: neither call below is wrapped in error handling. `getStudyById`
+  //   can throw on a genuine runtime-pool outage (distinct from the `null`
+  //   return the stale-link branch already handles - that is a study
+  //   verifiably deleted, not a database that is unreachable), and
+  //   `createStudy` runs `validateSteps` before its own try/catch, so a stored
+  //   study whose steps cannot satisfy it today throws a bare Error straight
+  //   out of the route. Either throw currently 500s the WHOLE duplicate
+  //   request, including the opportunity-row copy that would have worked fine
+  //   without a linked study. Upgrade: map to a clear AppError (503 for the
+  //   outage, 422 for an unstorable copy) or fall back to the stale-link path
+  //   instead of refusing outright. -> cto/AdaptaLabs#160
   if (opp.firsthand_study_id && isStudiesPersistenceConfigured()) {
     const originalStudy = await getStudyById(opp.firsthand_study_id);
 
@@ -4708,7 +4719,16 @@ router.post('/:id/duplicate', requireAdmin, opportunityWriteLimiter, asyncHandle
         brand_name: originalStudy.study.brand_name,
         estimated_duration_minutes: originalStudy.study.estimated_duration_minutes,
         locale: originalStudy.study.locale,
-        status: originalStudy.study.status,
+        // Launched rather than the original's own status: only launched
+        // studies are selectable, and a study authored as part of duplicating
+        // an opportunity has no separate review step to wait for. Copying an
+        // archived or draft status through would produce a native duplicate
+        // that 404s "Survey" for every participant once published - the
+        // native-survey session gate earlier in this file refuses any study
+        // that isn't launched - with nothing warning the author. Same
+        // reasoning, same value, as the
+        // create path's own inline_study/inline_survey branches.
+        status: 'launched',
         kind: originalStudy.study.kind,
         // The duplicating caller becomes the new study's owner too, same as
         // the opportunity itself becomes theirs below.
