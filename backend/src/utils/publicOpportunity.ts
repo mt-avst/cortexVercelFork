@@ -73,6 +73,9 @@ interface PublicSerialisable {
   sessions?: unknown;
   screener?: unknown;
   external_consent_confirmed?: unknown;
+  total_booked?: unknown;
+  total_capacity?: unknown;
+  auto_closed?: unknown;
 }
 
 /**
@@ -116,7 +119,13 @@ type PublicSession<S> = S extends object ? Omit<S, 'location_or_meet_link_option
  */
 type PublicView<T> = Omit<
   T,
-  'owner_user_id' | 'owner_name' | 'owner_email' | 'external_consent_confirmed'
+  | 'owner_user_id'
+  | 'owner_name'
+  | 'owner_email'
+  | 'external_consent_confirmed'
+  | 'total_booked'
+  | 'total_capacity'
+  | 'auto_closed'
 > &
   (T extends { sessions: infer S extends readonly unknown[] }
     ? { sessions: { [K in keyof S]: PublicSession<S[K]> } }
@@ -145,6 +154,15 @@ export function toPublicOpportunity<T extends PublicSerialisable>(opportunity: T
     owner_name: _ownerName,
     owner_email: _ownerEmail,
     external_consent_confirmed: _externalConsentConfirmed,
+    // Admin dashboard fields. The list route only attaches the totals for an
+    // admin caller, but that one `if` is not a redaction layer - this is, so a
+    // refactor that hoists the batch cannot send lifetime booking counts to
+    // participants. `auto_closed` is how a study closed, an admin concern; on
+    // anything a participant can list it is always false, so it says nothing
+    // useful and nothing sensitive, and is dropped rather than pinned.
+    total_booked: _totalBooked,
+    total_capacity: _totalCapacity,
+    auto_closed: _autoClosed,
     ...publicView
   } = opportunity;
 

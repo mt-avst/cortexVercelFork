@@ -22,6 +22,11 @@ import {
 } from '../validation/schemas';
 import { AppError, ValidationError, NotFoundError, ForbiddenError, asyncHandler } from '../utils/errorHandler';
 import { toPublicOpportunity, toPublicSession } from '../utils/publicOpportunity';
+import {
+  loadOpportunityProgressTotals,
+  mockOpportunityProgressTotals,
+  type OpportunityProgressTotals
+} from '../utils/opportunityProgressTotals';
 import { createSession } from '../firsthand/session-create';
 import {
   findParticipantCompletionsForOpportunities,
@@ -231,6 +236,25 @@ export const UPDATABLE_OPPORTUNITY_COLUMNS: ReadonlySet<string> = new Set([
   'status',
   'start_date',
   'end_date',
+]);
+
+/**
+ * Columns the PATCH handler writes ITSELF, never from the request body.
+ *
+ * Disjoint from `UPDATABLE_OPPORTUNITY_COLUMNS` by construction: nothing here
+ * is in the update schema, so `validateRequest` strips it from any body, and
+ * the builder appends it as a LITERAL fragment after the allow-listed loop -
+ * no request value ever reaches it.
+ *
+ * `auto_closed`: any status this request writes was chosen by a person, so it
+ * is not an automatic close (see the append beside `updateFields` below).
+ *
+ * EXPORTED as a test seam, for the same reason the allow-list is: the SET
+ * clause assertion must be able to tell a server-derived column from an
+ * injected one without restating the policy.
+ */
+export const SERVER_DERIVED_OPPORTUNITY_COLUMNS: ReadonlySet<string> = new Set([
+  'auto_closed',
 ]);
 
 /**
@@ -1366,6 +1390,19 @@ const refusedRepeatedParameters = (
 
 // GET /api/opportunities - List opportunities
 //
+// Contract. Query: `type`, `q` (<= MAX_OPPORTUNITY_SEARCH_LENGTH), `status`
+// (admins only), `scope=mine|all` (admins only), each at most once.
+// Response: an array of opportunities, each `o.*` (including `auto_closed`, see
+// `migrate.ts`) plus `owner_name`, `owner_email`, `sessions` (windowed - see
+// ADMIN_RECENT_SESSIONS_ONLY / UPCOMING_SESSIONS_ONLY), `clicks_total` and, for
+// a signed-in caller on a native survey type, `completion`. ADMIN CALLERS ONLY
+// also receive `total_booked` and `total_capacity`: all-time, unwindowed
+// progress across every session (see utils/opportunityProgressTotals.ts),
+// ABSENT - not 0 - for a study with no sessions or when that read fails.
+// Non-admin responses pass through `toPublicOpportunity` and never carry the
+// totals. Errors: 400 repeated/over-long parameter, 413 over a ceiling, 503
+// database outage, 500 otherwise.
+//
 // `withLiveRoleIfPresent` (#45): `isAdmin` below decides drafts, unredacted
 // owner identity and `clicks_total`, and it read the role stamped into the
 // session at login. The chain re-reads it from `users` first - but only for a
@@ -1515,7 +1552,15 @@ router.get('/', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req: Re
       if (scopeToOwnStudies) {
         opportunities = opportunities.filter((opp) => isOpportunityOwner(opp, req.user));
       }
-      res.json(isAdmin ? opportunities : opportunities.map(toPublicOpportunity));
+      if (!isAdmin) {
+        res.json(opportunities.map(toPublicOpportunity));
+        return;
+      }
+      // Same admin-only, keyed-on-presence totals as the database path below.
+      res.json(opportunities.map((opp) => {
+        const mockTotals = mockOpportunityProgressTotals(opp.sessions);
+        return mockTotals ? { ...opp, ...mockTotals } : opp;
+      }));
       return;
     }
     
@@ -1667,6 +1712,20 @@ router.get('/', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req: Re
       }
     }
 
+    // All-time progress totals (admin only), over the SAME scoped id list the
+    // listing query produced - `scope=mine` has already narrowed
+    // `opportunityIds`, and the owner scope must never be re-derived here. A
+    // failed read degrades to absent totals, like the clicks batch above: the
+    // table falls back to the windowed sessions rather than the list 500ing.
+    let progressTotalsMap = new Map<string, OpportunityProgressTotals>();
+    if (isAdmin) {
+      try {
+        progressTotalsMap = await loadOpportunityProgressTotals(opportunityIds.map(String));
+      } catch (totalsError: unknown) {
+        logger.error('Error loading progress totals batch:', { error: String(totalsError) });
+      }
+    }
+
     // The signed-in participant's completion trace for the native survey/poll/
     // one-question rows on this page, in one batched read (audit row 10). Only
     // those types carry a trace; a bookable study leaves its trace in bookings.
@@ -1687,6 +1746,11 @@ router.get('/', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req: Re
         ? (completionById.get(String(opportunity.id)) ?? { completed: false, completedAt: null })
         : undefined;
 
+      // Only ever populated for admins (see the batch above), so a participant
+      // or anonymous row has nothing to spread. Absent when the study has no
+      // sessions.
+      const progressTotals = progressTotalsMap.get(String(opportunity.id));
+
       // Kept last before the return, immediately followed by it: a mutation-canary
       // entry pins `clicks_total ... : undefined;` directly against that `return {`
       // (clicks-total-is-withheld-not-zeroed). Insert nothing between the two.
@@ -1704,6 +1768,7 @@ router.get('/', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req: Re
         end_date: opportunity.end_date ? opportunity.end_date.toISOString() : null,
         sessions,
         clicks_total,
+        ...(progressTotals ?? {}),
         ...(completion ? { completion } : {}),
       };
     });
@@ -2340,6 +2405,21 @@ router.post('/draft-from-brief', requireAdmin, draftLimiter, validateRequest(Dra
 }));
 
 // PATCH /api/opportunities/:id - Update opportunity
+//
+// Contract. Body: any subset of UPDATABLE_OPPORTUNITY_COLUMNS plus the three
+// NON_COLUMN_OPPORTUNITY_BODY_KEYS. A key the update schema does not declare -
+// `auto_closed` included - is STRIPPED by `validateRequest` before the handler
+// runs (so `{ auto_closed: true }` alone answers 400 "No fields to update", and
+// alongside a real field it is silently dropped); the allow-list below refuses
+// with 400 anything that survives the schema. Response: the updated row (`RETURNING *`,
+// including `auto_closed`) with ISO dates, `sessions: []` and, when this
+// request wrote a study, `linked_study_updated_at`.
+//
+// `auto_closed` is DERIVED HERE, never taken from the body: any request that
+// writes `status` - a manual close, a reopen, a move to draft - sets it false
+// in the same UPDATE, because a status a person chose is by definition not an
+// automatic close. Only the lifecycle sweeps in utils/opportunityLifecycle.ts
+// set it true. Errors: 400 validation / publish guard, 403 not owner, 404, 500.
 router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(UpdateOpportunitySchema), asyncHandler(async (req: Request, res: Response) => {
   // THE ALLOW-LIST IS THE INJECTION FIX. See UPDATABLE_OPPORTUNITY_COLUMNS for
   // why the builder further down is unsafe on its own.
@@ -2423,6 +2503,9 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
       ...data,
       ...(mockConsent ?? {}),
       ...consentStrippedByTypeChange,
+      // Same derivation as the database branch: a status a person CHANGED is
+      // not an automatic close.
+      ...(data.status !== undefined && data.status !== existingOpportunity.status ? { auto_closed: false } : {}),
       updated_at: new Date()
     });
     
@@ -3287,6 +3370,24 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
         }
       }
     });
+
+    // HOW THE STUDY CLOSED, derived server-side and never read from the body
+    // (`auto_closed` is not in the update schema, so `validateRequest` strips it
+    // before this handler runs, and it is not in the allow-list). Any status
+    // this request writes was chosen by a person, so it is not an automatic
+    // close: a manual close records false, and so does a reopen, which clears a
+    // stale true left by an earlier sweep. A literal, not a parameter - nothing
+    // from the request reaches this fragment. Appended AFTER the loop so the
+    // loop's allow-list check never sees it as a body key.
+    //
+    // Only on a real CHANGE of status. A write of the status the row already has
+    // is a no-op, not a decision: an admin pressing Close on a stale "published"
+    // row minutes after the sweep closed it must not relabel that sweep close
+    // as a manual one. The row is held FOR UPDATE by the read above, so the
+    // comparison cannot race.
+    if (data.status !== undefined && data.status !== existingOpp.rows[0].status) {
+      updateFields.push('auto_closed = false');
+    }
 
     // An in-place study update changes no column on `opportunities`, so a request
     // whose entire content was the authored task list or question set leaves this
