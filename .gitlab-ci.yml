@@ -129,36 +129,46 @@ check-release-will-deploy:
 # `trigger-deployment-prod` bridge below, the parent pipeline - reported
 # green. The only signal was the served revision failing to move.
 #
-# WHY THIS CAN GATE ON trigger-deployment-prod AT ALL. It is a `strategy:
+# WHY THIS CAN GATE ON trigger-deployment-prod ALONE. It is a `strategy:
 # depend` bridge job: it does not itself finish until the downstream dynamic
 # deploy pipeline finishes, and a job that `needs:` it waits for that same
 # resolution. So `verify-deploy` genuinely starts only once the real
 # kubera-playground-backend/-frontend deploy jobs have run - "green" or not.
 #
-# WHY IT DOES NOT FAIL ON A NON-RELEASING MERGE (ci:/docs:/refactor:/etc).
-# `trigger-deployment-prod` runs unconditionally on every push to main - it
-# does not check whether a release was cut. Its downstream dynamic pipeline
-# (`generate-environment-jobs`) sets `APP_VERSION` from
-# `$SEMREL_INFO_NEXT_VERSION` when a release IS due, and falls back to
-# `$SEMREL_INFO_LAST_VERSION` - the PREVIOUS release - when it is not. A
-# non-releasing merge therefore still runs a "successful" deploy, but it
-# redeploys the old image unchanged, and $CI_COMMIT_SHA of THIS pipeline never
-# appears anywhere. scripts/verify-deploy.mjs reads the same
-# SEMREL_INFO_NEXT_VERSION dotenv check-release-will-deploy above reads (from
-# semantic-release-info, needed here the same way) and skips the poll
-# entirely when it is empty - see releaseWillDeploy() and its test file for
-# both arms.
+# NO RELEASE GATE. An earlier version of this job also needed
+# semantic-release-info and skipped verification whenever no release was cut,
+# on the theory that a non-releasing merge redeploys the previous release
+# unchanged. That was wrong: `trigger-deployment-prod` has no release
+# condition of its own (only `$CI_COMMIT_REF_NAME =~ $PROD_REF`, same as
+# here), DOCKER_BUILD_ARGS bakes `APP_COMMIT_SHA=$CI_COMMIT_SHA` into both
+# images, and both apps set DOCKER_BUILD_CACHE_DISABLED - so every commit on
+# main gets a fresh image build and the deploy rolls THAT digest, whether or
+# not semantic-release releases it. Confirmed against a real trace: pipeline
+# 383708 (a `chore:` merge, no SEMREL_INFO_NEXT_VERSION) still had deploy job
+# 383713 log "deploying image digest resolved by this pipeline" for both
+# apps. The only merges that deploy nothing are the ones check-release-will-
+# deploy already fails BEFORE the build/deploy stages - those never reach
+# trigger-deployment-prod, so they never reach this job either. See
+# scripts/verify-deploy.mjs's own docblock for the full trace.
 #
-# Image: node:20-alpine, same as lint/test-base - only `node`'s global fetch
-# is needed, no curl, no git.
+# Image: node:20-alpine, same as lint/test-base - `node`'s global fetch
+# covers the HTTP polling; git is installed below for scripts/verify-deploy.mjs's
+# isAncestor() check (a served revision NEWER than $CI_COMMIT_SHA, because a
+# later pipeline's deploy landed first, must not read as a failure - and the
+# fix-suggestion in the failure message must never point at retrying an OLDER
+# deploy job when the site has already moved forward). GIT_DEPTH: 0 so that
+# ancestry check has the history to answer with, same reasoning as
+# check-release-will-deploy above.
 verify-deploy:
   stage: production
   image: registry.hub.docker.com/library/node:20.20.2-alpine3.22
   needs:
     - job: trigger-deployment-prod
-    - job: semantic-release-info
-      artifacts: true
+  variables:
+    GIT_DEPTH: 0
   interruptible: false
+  before_script:
+    - apk add --no-cache git
   script:
     - node scripts/verify-deploy.mjs
   rules:
