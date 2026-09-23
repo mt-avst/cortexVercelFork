@@ -57,8 +57,10 @@ const FeedbackFooter: React.FC = () => {
     }
   };
 
+  // A dropdown boundary: the footer stacks above the page content, so a menu
+  // that would hang into it opens upward instead (ui/Dropdown.tsx).
   return (
-    <footer className="feedback-footer" role="contentinfo">
+    <footer className="feedback-footer" role="contentinfo" data-dropdown-boundary="">
       <div className="feedback-footer__container">
         <form onSubmit={handleSubmit} className="feedback-footer__form">
           <p className="feedback-footer__prompt" id="feedback-footer-label">

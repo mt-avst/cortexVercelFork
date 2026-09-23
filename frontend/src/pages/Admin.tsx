@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import useDocumentTitle from '../hooks/useDocumentTitle';
-import { Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { getOpportunities, deleteOpportunity, duplicateOpportunity, getDashboardStats, DashboardStats, exportBookingsCsv, getPendingApprovals, getFeedback } from '../api/client';
 import { Opportunity } from '../api/types';
@@ -9,15 +9,33 @@ import {
   getStudyProgress,
   getSessionsThisWeek,
   getStudiesClosingSoon,
+  getBrokenStudies,
   getNextMilestone,
   getDisplayStatus,
   getAdminTypeLabel,
+  getQuickFilterCounts,
+  getPrimaryStudyAction,
+  canManageStudy,
+  CLOSING_SOON_DAYS,
+  isAutoClosed,
+  isNextNoteWarned,
+  isStudyBroken,
   matchesQuickFilter,
+  matchesStatusFilter,
+  matchesTypeFilter,
   relativeDayLabel,
+  sortStudies,
+  studyAnalyticsPath,
+  studyEditPath,
+  studyPreviewPath,
+  studyRowPath,
+  QUICK_FILTERS,
   QuickFilter,
+  SortDirection,
+  StatusFilter,
+  StudySortField,
 } from '../utils/adminDashboard';
 import {
-  isPublishedButNotWorking,
   PUBLISHED_NOT_WORKING_LABEL,
   PUBLISHED_NOT_WORKING_PREFIX,
   PUBLISHED_NOT_WORKING_DESCRIPTION
@@ -30,16 +48,18 @@ import ConfirmationModal from '../components/ConfirmationModal';
 import { Dropdown, DropdownItem, DropdownDivider, Icon, SortCaret } from '../components/ui';
 import { Settings, ClipboardList, Users, Clock, List, History, MessageSquare, Calendar, Download, Clapperboard, Flag, ArrowRight, MoreVertical, CheckCircle, AlertTriangle } from 'lucide-react';
 import { getStudyTypeGlyph } from '../utils/studyTypeIcons';
+import { useCloseStudyUndo, failureMessage, isInViewport, CLOSE_UNDO_MS } from '../hooks/useCloseStudyUndo';
+import { ClosedStudyNoticeRow, CopyNoticeRow, StudyActionErrorRow } from '../components/StudyRowNotices';
 
-import { formatStudyDate, formatClockTime, formatTimeZoneLabel } from '../utils/datetime';
+import { formatStudyDate, formatStudyDateCompact, formatClockTime, formatTimeZoneLabel } from '../utils/datetime';
 
-/** The Research Studies table's three sortable columns - extracted once so the
- * Sort-by control (#131) and the header buttons/handleSort/ariaSortFor all
- * reference one union, rather than three copies of the same literal that only
- * agreed by convention. `type` left with the Type column: the type is filterable
- * (Study Type select) and rides in the Study cell's meta line, but no header
- * sorts on it, and the Sort-by control offers exactly what the headers do. */
-type SortField = 'title' | 'created_at' | 'status';
+/** The Research Studies table's sortable columns - one union (`StudySortField`,
+ * adminDashboard.ts) shared by the Sort-by control (#131), the header buttons,
+ * handleSort, ariaSortFor and the comparator, so they cannot drift apart. `type`
+ * is not one: the type is filterable (Study Type select) and rides in the Study
+ * cell's meta line, but no header sorts on it, and the Sort-by control offers
+ * exactly what the headers do. */
+type SortField = StudySortField;
 
 
 const Admin: React.FC = () => {
@@ -63,7 +83,7 @@ const Admin: React.FC = () => {
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [loadingOpportunities, setLoadingOpportunities] = useState(true);
   const [error, setError] = useState<string>('');
-  const [statusFilter, setStatusFilter] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('');
   const [typeFilter, setTypeFilter] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>('');
@@ -78,8 +98,10 @@ const Admin: React.FC = () => {
   }, [searchQuery]);
   const [activeTab, setActiveTab] = useState<'opportunities' | 'approvals' | 'feedback' | 'bookings'>('opportunities');
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const [sortField, setSortField] = useState<SortField>('created_at');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  // Status ascending by default (Petra 3.2): broken studies first, then
+  // drafts, then live studies by their next milestone, then closed ones.
+  const [sortField, setSortField] = useState<SortField>('status');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [_loadingStats, setLoadingStats] = useState(false);
   // Decision 2: "Show all researchers" toggle. Off by default, so an admin lands
@@ -99,60 +121,23 @@ const Admin: React.FC = () => {
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState<number | null>(null);
   const [feedbackCount, setFeedbackCount] = useState<{ count: number; hasMore: boolean } | null>(null);
   const [quickFilter, setQuickFilter] = useState<QuickFilter | null>(null);
+  const tableRef = useRef<HTMLTableElement>(null);
+  const quickFiltersRef = useRef<HTMLDivElement>(null);
+  const resultCountRef = useRef<HTMLSpanElement>(null);
+  // Set by a Needs attention card that applies its chip: once the filtered
+  // list has rendered, bring the chip row and the first rows into view.
+  const [revealTable, setRevealTable] = useState(false);
+  // Copy's outcome, shown in place under the study that was copied.
+  const [copyNotice, setCopyNotice] = useState<
+    { id: string; title: string; tone: 'status' | 'error'; message: string } | null
+  >(null);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const copyRetryRef = useRef<HTMLButtonElement>(null);
   // One clock reading per mount, shared by every "now"-relative derivation on
   // the page so the snapshot and the table agree with each other.
   const now = useMemo(() => new Date(), []);
 
 
-  // Filter opportunities based on debounced search query (memoized for performance)
-  const filteredOpportunities = useMemo(() => {
-    if (!debouncedSearchQuery) return opportunities;
-    const query = debouncedSearchQuery.toLowerCase();
-    return opportunities.filter(opp => 
-      opp.title.toLowerCase().includes(query) ||
-      opp.purpose_one_liner.toLowerCase().includes(query) ||
-      (opp.description_optional && opp.description_optional.toLowerCase().includes(query))
-    );
-  }, [opportunities, debouncedSearchQuery]);
-
-  // Quick-filter chips narrow the search results further, client-side over the
-  // already-loaded list. Each predicate reads only real fields (status, session
-  // capacity, closing time) - see adminDashboard.ts.
-  const quickFilteredOpportunities = useMemo(() => {
-    if (!quickFilter) return filteredOpportunities;
-    return filteredOpportunities.filter((opp) => matchesQuickFilter(opp, quickFilter, now));
-  }, [filteredOpportunities, quickFilter, now]);
-
-  // Sort filtered opportunities (memoized for performance)
-  const sortedOpportunities = useMemo(() => {
-    return [...quickFilteredOpportunities].sort((a, b) => {
-      let aValue: string | number = a[sortField];
-      let bValue: string | number = b[sortField];
-      
-      if (sortField === 'created_at') {
-        aValue = new Date(a.created_at).getTime();
-        bValue = new Date(b.created_at).getTime();
-      }
-      
-      if (typeof aValue === 'string' && typeof bValue === 'string') {
-        aValue = aValue.toLowerCase();
-        bValue = bValue.toLowerCase();
-      }
-      
-      if (sortDirection === 'asc') {
-        return aValue > bValue ? 1 : -1;
-      } else {
-        return aValue < bValue ? 1 : -1;
-      }
-    });
-  }, [quickFilteredOpportunities, sortField, sortDirection]);
-
-  // "Needs attention" and "Sessions this week" derive from the loaded studies.
-  const studiesClosingSoon = useMemo(() => getStudiesClosingSoon(opportunities, now), [opportunities, now]);
-  const sessionsThisWeek = useMemo(() => getSessionsThisWeek(opportunities, now), [opportunities, now]);
-  // The panel is permanent: it shows action cards when there is something to do,
-  // and a slim all-clear line otherwise.
-  const attentionClear = (pendingApprovalsCount ?? 0) === 0 && studiesClosingSoon.length === 0;
 
   const handleSort = (field: SortField) => {
     if (field === sortField) {
@@ -173,6 +158,32 @@ const Admin: React.FC = () => {
     setQuickFilter((current) => (current === filter ? null : filter));
   };
 
+  /**
+   * A Needs attention card's "View studies": show exactly that chip's studies
+   * - so the other filters are cleared, or the card's own count could be
+   * narrowed to nothing - and bring the result into view, since the panel
+   * sits well above the table.
+   */
+  const applyChipFromAttention = (filter: QuickFilter) => {
+    setSearchQuery('');
+    setDebouncedSearchQuery('');
+    setStatusFilter('');
+    setTypeFilter('');
+    setQuickFilter(filter);
+    setActiveTab('opportunities');
+    setRevealTable(true);
+  };
+
+  // After the chip has filtered the list: scroll the chip row (and so the
+  // first rows under it) into view, and put focus on the result count, which
+  // says what the table now shows.
+  useEffect(() => {
+    if (!revealTable) return;
+    setRevealTable(false);
+    quickFiltersRef.current?.scrollIntoView?.({ block: 'start' });
+    resultCountRef.current?.focus({ preventScroll: true });
+  }, [revealTable]);
+
   // Whether any Research Studies filter is active - drives the "Clear filters"
   // affordance and the empty-state copy.
   const hasActiveFilters = Boolean(searchQuery || statusFilter || typeFilter || quickFilter);
@@ -191,16 +202,18 @@ const Admin: React.FC = () => {
     try {
       setLoadingOpportunities(true);
       setError('');
-      const params: { status?: string; type?: string; scope?: 'mine' | 'all' } = {};
-      // If forceClearFilter is true, don't apply filters to ensure new items are visible
-      if (!forceClearFilter) {
-        if (statusFilter) params.status = statusFilter;
-        if (typeFilter) params.type = typeFilter;
+      // Status and Study Type filter client-side (see statusFilteredOpportunities),
+      // so the whole in-scope list is always loaded. A forced refresh - returning
+      // from creating or editing a study - clears those two selects, so the new
+      // or changed study is visible, as the old server-side forced clear made it.
+      if (forceClearFilter) {
+        setStatusFilter('');
+        setTypeFilter('');
       }
-      // Decision 2: the owner scope always rides along, even on a forced clear -
+      // Decision 2: the owner scope is the one thing that goes to the server -
       // it is not a filter chip, it is which researchers' studies the table is
       // showing, and it must match the snapshot's scope below.
-      params.scope = showAllResearchers ? 'all' : 'mine';
+      const params: { scope: 'mine' | 'all' } = { scope: showAllResearchers ? 'all' : 'mine' };
       // Performance: debug logging disabled in production
       const data = await getOpportunities(params);
       // Performance: debug logging disabled in production
@@ -219,7 +232,28 @@ const Admin: React.FC = () => {
     } finally {
       setLoadingOpportunities(false);
     }
-  }, [statusFilter, typeFilter, showAllResearchers]);
+  }, [showAllResearchers]);
+
+  /**
+   * Re-read the list WITHOUT the load states: no spinner, no error banner, and
+   * the list on screen stays if the request fails. For a refresh after a row
+   * action (Copy), where blanking the table - or replacing it with the
+   * load-failure state - would lose the reader's place and hide what they just
+   * did. Resolves whether it worked; the caller says so in place.
+   */
+  const refreshOpportunities = useCallback(async (): Promise<boolean> => {
+    try {
+      const data = await getOpportunities({ scope: showAllResearchers ? 'all' : 'mine' });
+      setOpportunities(data || []);
+      return true;
+    } catch (error: unknown) {
+      logger.warn('Failed to refresh research studies', {
+        component: 'Admin',
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+      return false;
+    }
+  }, [showAllResearchers]);
 
   const loadDashboardStats = useCallback(async () => {
     try {
@@ -240,6 +274,166 @@ const Admin: React.FC = () => {
       setLoadingStats(false);
     }
   }, [showAllResearchers]);
+
+  // --- Close study, with Undo (Petra 3.4; hooks/useCloseStudyUndo.ts) -------
+
+  /** Update one row in place from a status change the server accepted. */
+  const applyStatus = useCallback((id: string, status: 'published' | 'closed') => {
+    // `auto_closed: false` because this table only ever makes MANUAL status
+    // changes - the server records the same (MR A), so the row need not wait
+    // for a reload to lose its "Auto-closed" caption.
+    setOpportunities((current) =>
+      current.map((opp) => (opp.id === id ? { ...opp, status, auto_closed: false } : opp))
+    );
+    // The snapshot's published/draft counts and open slots moved with it.
+    void loadDashboardStats();
+  }, [loadDashboardStats]);
+
+  /**
+   * Focus a study's title link: where focus goes when its notice ends or its
+   * error is dismissed. If that link is no longer on screen - the row
+   * re-sorted away, or left the filtered table - focus goes to what now sits
+   * at the notice's old slot instead (`near`: the next row's link, then the
+   * previous row's), else the result count, else the study's own link. Never
+   * scrolls, and never lands off screen, so the next Tab does not jump the
+   * page either.
+   */
+  const focusStudy = useCallback((id: string, near: string[] = []) => {
+    const table = tableRef.current;
+    const link = (studyId: string) =>
+      table?.querySelector<HTMLAnchorElement>(`a.row-title[data-study-id="${studyId}"]`) ?? null;
+    const own = link(id);
+    let target: HTMLElement | null = own && isInViewport(own) ? own : null;
+    if (!target) {
+      target =
+        near.map(link).find((el): el is HTMLAnchorElement => el !== null) ??
+        resultCountRef.current ??
+        own;
+      // No "first study" fallback: the result count renders whenever a filter
+      // is on, and with no filter the study's own row is always in the table,
+      // so `own` is the last resort that can actually be reached.
+    }
+    target?.focus({ preventScroll: true });
+  }, []);
+
+  /** The studies around study `id`'s notice or error slot, before a re-sort:
+   * the next row's, then the previous row's (its own row excepted). */
+  const captureNeighbours = useCallback((id: string): string[] => {
+    const slot = tableRef.current?.querySelector(`tr[data-notice-for="${id}"]`);
+    if (!slot) return [];
+    const studyOf = (tr: Element | null) =>
+      tr?.querySelector<HTMLAnchorElement>('a.row-title')?.dataset.studyId;
+    let next = slot.nextElementSibling;
+    while (next && !studyOf(next)) next = next.nextElementSibling;
+    let prev = slot.previousElementSibling;
+    while (prev && (!studyOf(prev) || studyOf(prev) === id)) prev = prev.previousElementSibling;
+    return [studyOf(next), studyOf(prev)].filter((studyId): studyId is string => Boolean(studyId));
+  }, []);
+
+  const closeUndo = useCloseStudyUndo({ onStatusChanged: applyStatus, focusStudy, captureNeighbours });
+
+  // Filter opportunities based on debounced search query (memoized for performance)
+  const filteredOpportunities = useMemo(() => {
+    if (!debouncedSearchQuery) return opportunities;
+    const query = debouncedSearchQuery.toLowerCase();
+    return opportunities.filter(opp =>
+      opp.title.toLowerCase().includes(query) ||
+      opp.purpose_one_liner.toLowerCase().includes(query) ||
+      (opp.description_optional && opp.description_optional.toLowerCase().includes(query))
+    );
+  }, [opportunities, debouncedSearchQuery]);
+
+  // The Status and Study Type selects, applied here rather than on the server:
+  // `opportunities` is then the whole in-scope set, so "N of M" is true under
+  // every filter and Needs attention never narrows with a table filter.
+  const statusFilteredOpportunities = useMemo(
+    () =>
+      filteredOpportunities.filter(
+        (opp) => matchesStatusFilter(opp, statusFilter) && matchesTypeFilter(opp, typeFilter)
+      ),
+    [filteredOpportunities, statusFilter, typeFilter]
+  );
+
+  // What each chip would show, over everything but the chips themselves - the
+  // count on the chip is the number of rows pressing it gives.
+  const quickFilterCounts = useMemo(
+    () => getQuickFilterCounts(statusFilteredOpportunities, now),
+    [statusFilteredOpportunities, now]
+  );
+
+  // Quick-filter chips narrow the search results further, client-side over the
+  // already-loaded list. Each predicate reads only real fields (status, session
+  // capacity, closing time) - see adminDashboard.ts.
+  const quickFilteredOpportunities = useMemo(() => {
+    if (!quickFilter) return statusFilteredOpportunities;
+    return statusFilteredOpportunities.filter((opp) => matchesQuickFilter(opp, quickFilter, now));
+  }, [statusFilteredOpportunities, quickFilter, now]);
+
+  // One stable comparator for header and Sort-by alike (adminDashboard.ts).
+  // Every filter, the "N of M" count, the chip counts and Needs attention read
+  // LIVE status; this list is what the count and the empty state measure.
+  const sortedOpportunities = useMemo(
+    () => sortStudies(quickFilteredOpportunities, sortField, sortDirection, now),
+    [quickFilteredOpportunities, sortField, sortDirection, now]
+  );
+
+  // What the table draws. The same rows, with two in-place exceptions, both
+  // sorted on the study as it was BEFORE its close so they hold the place
+  // the reader was looking at:
+  //  - while a study's Close notice is up, its row sorts on that snapshot and
+  //    stays under the pointer with Undo beneath it. If the live filters no
+  //    longer match it (a closed study under the Broken chip), its notice
+  //    stays alone in that place ('noticeOnly'), so Undo is still there.
+  //  - after a refused Undo, the error takes the notice's slot on its own
+  //    ('errorSlot'), while the row itself moves to its live place.
+  // Neither extra entry is counted: counts and filters read live status.
+  type TableRow = { study: Opportunity; kind: 'row' | 'noticeOnly' | 'errorSlot' };
+  const tableRows = useMemo((): TableRow[] => {
+    const frozen = closeUndo.frozenSnapshot;
+    const errorAnchor = closeUndo.actionError?.anchor ?? null;
+    if (!frozen && !errorAnchor) return sortedOpportunities.map((study) => ({ study, kind: 'row' }));
+    const query = debouncedSearchQuery.toLowerCase();
+    // Whether a pre-close snapshot would be on screen under the current filters.
+    const wasShown = (snapshot: Opportunity) =>
+      (!query ||
+        snapshot.title.toLowerCase().includes(query) ||
+        snapshot.purpose_one_liner.toLowerCase().includes(query) ||
+        Boolean(snapshot.description_optional?.toLowerCase().includes(query))) &&
+      matchesStatusFilter(snapshot, statusFilter) &&
+      matchesTypeFilter(snapshot, typeFilter) &&
+      (!quickFilter || matchesQuickFilter(snapshot, quickFilter, now));
+    const frozenLive = frozen !== null && quickFilteredOpportunities.some((opp) => opp.id === frozen.id);
+    let input: Opportunity[] = frozenLive
+      ? quickFilteredOpportunities.map((opp) => (opp.id === frozen.id ? frozen : opp))
+      : quickFilteredOpportunities;
+    if (frozen && !frozenLive && wasShown(frozen)) input = [...input, frozen];
+    if (errorAnchor && wasShown(errorAnchor)) input = [...input, errorAnchor];
+    const liveById = new Map(opportunities.map((opp) => [opp.id, opp]));
+    // sortStudies returns the same objects it was given, so the snapshots are
+    // told apart from live rows by identity.
+    return sortStudies(input, sortField, sortDirection, now).map((viewed): TableRow => {
+      if (viewed === errorAnchor) return { study: viewed, kind: 'errorSlot' };
+      if (viewed === frozen) return { study: liveById.get(viewed.id) ?? viewed, kind: frozenLive ? 'row' : 'noticeOnly' };
+      return { study: viewed, kind: 'row' };
+    });
+  }, [
+    closeUndo.frozenSnapshot, closeUndo.actionError, sortedOpportunities, quickFilteredOpportunities, opportunities,
+    debouncedSearchQuery, statusFilter, typeFilter, quickFilter, sortField, sortDirection, now,
+  ]);
+
+  // "Needs attention" and "Sessions this week" derive from every loaded study
+  // in scope, unfiltered: the panel is triage for the whole list, not a view
+  // of the table.
+  const brokenStudies = useMemo(() => getBrokenStudies(opportunities), [opportunities]);
+  const studiesClosingSoon = useMemo(() => getStudiesClosingSoon(opportunities, now), [opportunities, now]);
+  const sessionsThisWeek = useMemo(() => getSessionsThisWeek(opportunities, now), [opportunities, now]);
+  // The panel is permanent: it shows action cards when there is something to do,
+  // and a slim all-clear line otherwise.
+  const attentionClear =
+    (pendingApprovalsCount ?? 0) === 0 && studiesClosingSoon.length === 0 && brokenStudies.length === 0;
+
+  // The Sort-by control is only offered when there are rows to sort.
+  const showSortControl = !loadingOpportunities && !error && tableRows.length > 0;
 
   // Counts for the tab badges and the approvals attention card. A failure here
   // must not blank the page - it just leaves the badge absent, so warn and move
@@ -271,8 +465,8 @@ const Admin: React.FC = () => {
       loadDashboardStats();
       loadCounts();
     }
-    // statusFilter and typeFilter are not listed directly: loadOpportunities is
-    // memoised on them, so its identity already changes when they do.
+    // The filters are client-side, so only the scope (through
+    // loadOpportunities' identity) reloads the list.
   }, [user, loadOpportunities, loadDashboardStats, loadCounts]);
 
   // Refresh opportunities when returning from editing or creating
@@ -304,6 +498,7 @@ const Admin: React.FC = () => {
   useEffect(() => () => {
     if (successTimerRef.current) clearTimeout(successTimerRef.current);
     if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
   }, []);
 
   const handleDelete = (id: string, title: string) => {
@@ -333,32 +528,87 @@ const Admin: React.FC = () => {
     setDeleteConfirm({ show: false, opportunity: null });
   };
 
-  const handleDuplicate = async (id: string) => {
-    try {
-      const duplicated = await duplicateOpportunity(id);
-      await loadOpportunities();
-      // cto/AdaptaLabs#161: the backend falls back to a plain, questionless
-      // copy when the linked FirstHand study is gone or fails to clone,
-      // rather than refusing the whole request - previously with no signal
-      // here at all, so the researcher only found out by opening the copy.
-      if (duplicated.study_copy_failed) {
-        setSuccessMessageVariant('warning');
-        setSuccessMessage('Study duplicated, but its questions could not be copied - the copy is empty and needs its own content before it can run.');
-        if (successTimerRef.current) clearTimeout(successTimerRef.current);
-        successTimerRef.current = setTimeout(() => setSuccessMessage(''), 5000);
-      }
-    } catch (error: unknown) {
-      // Note this also catches a failure of the RELOAD, where the duplicate did
-      // in fact get created - so the message can be wrong, and the cause is the
-      // only way to tell.
-      logger.error('Failed to duplicate research study', {
-        component: 'Admin',
-        opportunityId: id,
-        errorMessage: error instanceof Error ? error.message : String(error),
-      });
-      setError('Failed to duplicate research study');
+  const clearCopyTimer = () => {
+    if (copyTimerRef.current) {
+      clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = null;
     }
   };
+
+  const dismissCopyNotice = (id: string) => {
+    clearCopyTimer();
+    setCopyNotice((current) => (current?.id === id ? null : current));
+    focusStudy(id);
+  };
+
+  /** The in-place "Copied" status, which lapses on the undo notice's clock. */
+  const showCopiedNotice = (study: Opportunity) => {
+    clearCopyTimer();
+    setCopyNotice({ id: study.id, title: study.title, tone: 'status', message: `Copied “${study.title}”` });
+    copyTimerRef.current = setTimeout(() => {
+      copyTimerRef.current = null;
+      setCopyNotice((current) => (current?.id === study.id && current.tone === 'status' ? null : current));
+    }, CLOSE_UNDO_MS);
+  };
+
+  /**
+   * Refresh after a copy; on failure the notice says so, with a Retry. A Retry
+   * that succeeds re-arms the lapse and hands focus back to the study, because
+   * the Retry button it was on has just gone.
+   */
+  const refreshAfterCopy = async (study: Opportunity, isRetry = false) => {
+    const refreshed = await refreshOpportunities();
+    if (refreshed) {
+      if (isRetry) {
+        showCopiedNotice(study);
+        focusStudy(study.id);
+      }
+      return;
+    }
+    clearCopyTimer();
+    setCopyNotice({
+      id: study.id,
+      title: study.title,
+      tone: 'error',
+      message: `Copied “${study.title}”, but the list could not be refreshed to show the copy.`,
+    });
+    window.setTimeout(() => copyRetryRef.current?.focus({ preventScroll: true }), 0);
+  };
+
+  const handleDuplicate = async (study: Opportunity) => {
+    let duplicated: Awaited<ReturnType<typeof duplicateOpportunity>>;
+    try {
+      duplicated = await duplicateOpportunity(study.id);
+    } catch (error: unknown) {
+      // A refused Copy (a 403 for someone else's study, a 500) shows under
+      // the study's row, like a refused Close - never through `setError`,
+      // which replaces the whole table with the load-failure state.
+      logger.error('Failed to duplicate research study', {
+        component: 'Admin',
+        opportunityId: study.id,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+      closeUndo.showRowError(study, failureMessage('copy', study.title, error));
+      return;
+    }
+    // The copy exists from here on: say so first, in place, then refresh the
+    // list quietly. Focus goes back to the study the menu belonged to (the
+    // menu item it was on has gone), without scrolling.
+    showCopiedNotice(study);
+    focusStudy(study.id);
+    await refreshAfterCopy(study);
+    // cto/AdaptaLabs#161: the backend falls back to a plain, questionless
+    // copy when the linked FirstHand study is gone or fails to clone,
+    // rather than refusing the whole request - previously with no signal
+    // here at all, so the researcher only found out by opening the copy.
+    if (duplicated.study_copy_failed) {
+      setSuccessMessageVariant('warning');
+      setSuccessMessage('Study duplicated, but its questions could not be copied - the copy is empty and needs its own content before it can run.');
+      if (successTimerRef.current) clearTimeout(successTimerRef.current);
+      successTimerRef.current = setTimeout(() => setSuccessMessage(''), 5000);
+    }
+  };
+
 
 
   // Wait for initial auth check to complete before making redirect decisions
@@ -429,8 +679,9 @@ const Admin: React.FC = () => {
             )}
 
             {/* Needs attention - a PERMANENT triage panel. It shows action cards
-                when there are approvals waiting or studies closing soon, and a
-                slim all-clear line otherwise, so it always has a presence. The
+                when studies are broken, approvals are waiting or studies close
+                soon, and a slim all-clear line otherwise, so it always has a
+                presence. Those three cards are the ceiling (Petra 3.3). The
                 "needs recruitment" card the wireframe showed is deliberately
                 omitted: it needs a per-study participant target the backend
                 does not expose. */}
@@ -450,6 +701,40 @@ const Admin: React.FC = () => {
               </div>
               {!attentionClear && (
                 <div className="admin-attention__grid">
+                  {/* Broken first: the most urgent state there is - live, and
+                      failing its own publish readiness. The link applies the
+                      Broken chip, as the closing-soon card applies its own; a
+                      single broken study opens straight onto its edit page. */}
+                  {brokenStudies.length > 0 && (
+                    <button
+                      type="button"
+                      className="admin-attention__card admin-attention__card--broken"
+                      onClick={() => {
+                        if (brokenStudies.length === 1) {
+                          navigate(studyEditPath(brokenStudies[0].id));
+                        } else {
+                          applyChipFromAttention('broken');
+                        }
+                      }}
+                    >
+                      <span className="admin-attention__icon admin-attention__icon--broken"><AlertTriangle size={20} aria-hidden /></span>
+                      <span className="admin-attention__body">
+                        <span className="admin-attention__lead">
+                          {brokenStudies.length === 1
+                            ? '1 study broken'
+                            : `${brokenStudies.length} studies broken`}
+                        </span>
+                        <span className="admin-attention__sub">
+                          {brokenStudies.length === 1
+                            ? brokenStudies[0].title
+                            : 'Published, but participants cannot take part'}
+                        </span>
+                        <span className="admin-attention__link">
+                          {brokenStudies.length === 1 ? 'View study' : 'View studies'} <ArrowRight size={14} aria-hidden />
+                        </span>
+                      </span>
+                    </button>
+                  )}
                   {(pendingApprovalsCount ?? 0) > 0 && (
                     <button
                       type="button"
@@ -472,10 +757,9 @@ const Admin: React.FC = () => {
                       className="admin-attention__card"
                       onClick={() => {
                         if (studiesClosingSoon.length === 1) {
-                          navigate(`/admin/opportunities/${studiesClosingSoon[0].id}/edit`);
+                          navigate(studyEditPath(studiesClosingSoon[0].id));
                         } else {
-                          setQuickFilter('closing-soon');
-                          setActiveTab('opportunities');
+                          applyChipFromAttention('closing-soon');
                         }
                       }}
                     >
@@ -489,7 +773,7 @@ const Admin: React.FC = () => {
                         <span className="admin-attention__sub">
                           {studiesClosingSoon.length === 1
                             ? studiesClosingSoon[0].title
-                            : 'Recruitment windows ending in the next few days'}
+                            : `Recruitment windows ending in the next ${CLOSING_SOON_DAYS} days`}
                         </span>
                         <span className="admin-attention__link">
                           {studiesClosingSoon.length === 1 ? 'View study' : 'View studies'} <ArrowRight size={14} aria-hidden />
@@ -721,9 +1005,12 @@ const Admin: React.FC = () => {
                         id="statusFilter"
                         className="form-select"
                         value={statusFilter}
-                        onChange={(e) => setStatusFilter(e.target.value)}
+                        onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
                       >
+                        {/* Broken is published-and-failing-readiness, not a
+                            stored status (matchesStatusFilter). */}
                         <option value="">All Statuses</option>
+                        <option value="broken">Broken</option>
                         <option value="draft">Draft</option>
                         <option value="published">Published</option>
                         <option value="closed">Closed</option>
@@ -754,30 +1041,44 @@ const Admin: React.FC = () => {
 
                   {/* Quick filters - client-side chips over the loaded list. Each
                       reads only real fields; "Needs recruitment" is open-slot
-                      capacity, NOT a participant target (which does not exist). */}
-                  <div className="admin-quick-filters">
+                      capacity, NOT a participant target (which does not exist).
+                      Every chip carries its count; a chip with nothing to show
+                      is disabled rather than hidden, so the row never reflows
+                      (an active one stays pressable, so it can be released). */}
+                  <div className="admin-quick-filters" ref={quickFiltersRef}>
                     <span className="admin-quick-filters__label">Quick filters</span>
-                    {([
-                      { key: 'needs-recruitment', label: 'Needs recruitment' },
-                      { key: 'draft', label: 'Draft' },
-                      { key: 'closing-soon', label: 'Closing soon' },
-                      { key: 'fully-booked', label: 'Fully booked' },
-                    ] as { key: QuickFilter; label: string }[]).map((chip) => (
-                      <button
-                        key={chip.key}
-                        type="button"
-                        className={`admin-chip ${quickFilter === chip.key ? 'admin-chip--active' : ''}`}
-                        aria-pressed={quickFilter === chip.key}
-                        onClick={() => toggleQuickFilter(chip.key)}
-                      >
-                        {chip.label}
-                      </button>
-                    ))}
-                    {/* Clear filters and Sort by are one right-aligned group, so
-                        when the row runs out of room they wrap together to the
-                        right edge - not Sort by alone, packed left, on a line of
-                        its own. */}
+                    {QUICK_FILTERS.map((chip) => {
+                      const active = quickFilter === chip.key;
+                      const count = quickFilterCounts[chip.key];
+                      return (
+                        <button
+                          key={chip.key}
+                          type="button"
+                          className={`admin-chip ${active ? 'admin-chip--active' : ''}`}
+                          aria-pressed={active}
+                          disabled={count === 0 && !active}
+                          onClick={() => toggleQuickFilter(chip.key)}
+                        >
+                          {/* The space gives the accessible name "Broken 3";
+                              the flex gap draws the visual one. */}
+                          {chip.label}{' '}
+                          <span className="admin-chip__count">{count}</span>
+                        </button>
+                      );
+                    })}
+                    {/* The result count, Clear filters and Sort by are one
+                        right-aligned group, so when the row runs out of room
+                        they wrap together to the right edge - not Sort by
+                        alone, packed left, on a line of its own. The group is
+                        only rendered when it holds something. */}
+                    {(hasActiveFilters || showSortControl) && (
                     <div className="admin-quick-filters__end">
+                      {hasActiveFilters && !loadingOpportunities && !error && (
+                        <span className="admin-result-count" role="status" ref={resultCountRef} tabIndex={-1}>
+                          {sortedOpportunities.length} of {opportunities.length}{' '}
+                          {opportunities.length === 1 ? 'study' : 'studies'}
+                        </span>
+                      )}
                       {hasActiveFilters && (
                         <button
                           type="button"
@@ -801,17 +1102,24 @@ const Admin: React.FC = () => {
                           a row of its own above the table, where at 1024-1279px it
                           stranded ~48px of height with nothing beside it. Rendered
                           only when there are rows to sort. */}
-                      {!loadingOpportunities && !error && sortedOpportunities.length > 0 && (
+                      {showSortControl && (
                         <div className="admin-card-sort" role="group" aria-label="Sort studies">
                           <label htmlFor="cardSortField" className="form-label mb-0">Sort by</label>
                           <select
                             id="cardSortField"
                             className="form-select"
                             value={sortField}
-                            onChange={(e) => handleSort(e.target.value as SortField)}
+                            // Choosing a field is never a direction toggle: that
+                            // is the button beside it. Only a different field
+                            // goes through handleSort (which starts it ascending).
+                            onChange={(e) => {
+                              const field = e.target.value as SortField;
+                              if (field !== sortField) handleSort(field);
+                            }}
                           >
                             <option value="title">Study</option>
                             <option value="status">Status</option>
+                            <option value="next">Next / deadline</option>
                             <option value="created_at">Created</option>
                           </select>
                           <button type="button" className="admin-card-sort-dir" onClick={() => handleSort(sortField)}>
@@ -822,7 +1130,9 @@ const Admin: React.FC = () => {
                         </div>
                       )}
                     </div>
+                    )}
                   </div>
+
 
                   {/* Error State */}
                   {error && (
@@ -846,7 +1156,7 @@ const Admin: React.FC = () => {
                   )}
 
                   {/* Empty State */}
-                  {!loadingOpportunities && !error && sortedOpportunities.length === 0 && (
+                  {!loadingOpportunities && !error && tableRows.length === 0 && (
                     <div className="text-center py-5">
                       <h4 className="admin-empty-title">No research studies found</h4>
                                   <p className="admin-empty-text">
@@ -870,15 +1180,18 @@ const Admin: React.FC = () => {
                   {/* Research Studies Table. No min-height: a 400px floor once
                       kept room under a short filtered list for the last row's
                       kebab menu, and left ~200px of empty card under two rows.
-                      The menu may now hang past the card - the page content
-                      stacks above the feedback footer (_themes.css, search
-                      "admin-dashboard-page .admin-page-bg > *"). */}
-                  {!loadingOpportunities && !error && sortedOpportunities.length > 0 && (
+                      A menu that would hang into the feedback footer or past
+                      the viewport opens upward instead (ui/Dropdown.tsx,
+                      "Collision flip-up"). */}
+                  {!loadingOpportunities && !error && tableRows.length > 0 && (
                     <div className="table-responsive" style={{
                       overflow: 'visible', 
                       width: '100%'
                     }}>
-                      <table className="table table-hover admin-data-table">
+                      <table
+                        ref={tableRef}
+                        className={`table table-hover admin-data-table${closeUndo.holdScroll ? ' admin-data-table--hold-scroll' : ''}`}
+                      >
                         {/* Fixed pixel widths on every column but Study, which
                             takes the remainder: under `table-layout: fixed` the
                             <col> widths are the whole story. The numbers live in
@@ -912,7 +1225,12 @@ const Admin: React.FC = () => {
                                 type that has none. There is deliberately no Capacity column
                                 beside it: that duplicated the ratio's denominator. */}
                             <th className="admin-th col-progress" scope="col">Progress</th>
-                            <th className="admin-th col-next" scope="col">Next session / deadline</th>
+                            <th className="admin-th col-next" scope="col" aria-sort={ariaSortFor('next')}>
+                              <button type="button" className="admin-th-sort" onClick={() => handleSort('next')}>
+                                Next / deadline
+                                <SortCaret active={sortField === 'next'} direction={sortDirection} />
+                              </button>
+                            </th>
                             <th className="admin-th col-date" scope="col" aria-sort={ariaSortFor('created_at')}>
                               <button type="button" className="admin-th-sort" onClick={() => handleSort('created_at')}>
                                 Created
@@ -923,7 +1241,40 @@ const Admin: React.FC = () => {
                           </tr>
                         </thead>
                         <tbody>
-                          {sortedOpportunities.map((opportunity) => {
+                          {tableRows.map(({ study: opportunity, kind }) => {
+                            const notice = closeUndo.notice?.id === opportunity.id ? closeUndo.notice : null;
+                            const rowError =
+                              closeUndo.actionError?.id === opportunity.id ? closeUndo.actionError : null;
+                            // A refused Undo's error has its own slot (kind
+                            // 'errorSlot'); every other error sits under its row.
+                            const actionError = rowError && !rowError.anchor ? rowError : null;
+                            if (kind === 'errorSlot') {
+                              return rowError ? (
+                                <StudyActionErrorRow
+                                  key={`${opportunity.id}-error-slot`}
+                                  studyId={opportunity.id}
+                                  message={rowError.message}
+                                  onDismiss={closeUndo.dismissError}
+                                  errorRef={closeUndo.errorRef}
+                                />
+                              ) : null;
+                            }
+                            // Undo is disabled on every notice while any Undo is in
+                            // flight, so two reopen requests never race.
+                            const noticeRow = notice && (
+                              <ClosedStudyNoticeRow
+                                studyId={notice.id}
+                                title={notice.title}
+                                undoing={closeUndo.undoingId !== null}
+                                onUndo={() => void closeUndo.undo()}
+                                undoButtonRef={closeUndo.undoButtonRef}
+                              />
+                            );
+                            // The closed study no longer matches the filters: its
+                            // notice alone holds its place (see tableRows).
+                            if (kind === 'noticeOnly') {
+                              return <React.Fragment key={opportunity.id}>{noticeRow}</React.Fragment>;
+                            }
                             const recruitment = getStudyProgress(opportunity);
                             // Progress: booked / capacity when the study has sessions
                             // (below); otherwise its click count - but only when the
@@ -940,64 +1291,65 @@ const Admin: React.FC = () => {
                             // One call per row: the status cell renders this and
                             // also carries it as the label's `title`, and the
                             // readiness check reads six fields.
-                            const notWorking = isPublishedButNotWorking(opportunity.status, {
-                              type: opportunity.type,
-                              deliveryMode: opportunity.delivery_mode,
-                              hasLinkedStudy: Boolean(opportunity.firsthand_study_id),
-                              externalLink: opportunity.external_link_optional,
-                              sessionCount: (opportunity.sessions ?? []).length,
-                              meetingLocation: opportunity.meeting_location_optional
-                            });
+                            const notWorking = isStudyBroken(opportunity);
                             const statusLabel = notWorking
                               ? PUBLISHED_NOT_WORKING_LABEL
                               : getDisplayStatus(opportunity.status);
+                            const editPath = studyEditPath(opportunity.id);
+                            // One URL for the row: the title link and a row click
+                            // both go here - the edit page for someone who can
+                            // edit, the participant page for anyone else.
+                            const rowPath = studyRowPath(opportunity, user);
+                            const canManage = canManageStudy(opportunity, user);
+                            const primaryAction = getPrimaryStudyAction(opportunity, user);
+                            const owner = opportunity.owner_name || opportunity.owner_email;
                             return (
+                            <React.Fragment key={opportunity.id}>
                             <tr
-                              key={opportunity.id}
                               className="admin-row-clickable"
+                              /* The mouse's shortcut to the title link's own URL.
+                                 The keyboard has the link itself (Tab, Enter), so
+                                 the row is not a Tab stop and carries no key
+                                 handling of its own. */
                               onClick={(e) => {
-                                // Ignore keyboard events (detail is 0)
-                                if (e.detail === 0) return;
-                                
+                                // A plain single click only: not a keyboard-synthesised
+                                // one (detail 0), not the second click of a double-click
+                                // (which lands here after a menu item's first click
+                                // closed the menu over this row), and not a modifier
+                                // click - the title link is the way to open a new tab.
+                                if (e.detail !== 1) return;
+                                if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                                // Nor while a Close is in flight: the menu it came from
+                                // has gone, and the pointer is over some other row.
+                                if (closeUndo.isCloseInFlight()) return;
+
                                 // Ignore text selection (if user selected text)
                                 const selection = window.getSelection();
                                 if (selection && selection.toString().length > 0) return;
-                                
+
                                 // Only navigate if the click target is not an interactive element
                                 const target = e.target as HTMLElement;
                                 const isInteractive = target.closest('button, a, input, select, textarea, [role="button"], .dropdown, .dropdown-menu, .dropdown-item');
                                 if (!isInteractive) {
-                                  navigate(`/admin/opportunities/${opportunity.id}/edit`);
+                                  navigate(rowPath);
                                 }
-                              }}
-                              onMouseDown={() => {
-                                // Ensure we don't trigger anything on mousedown
-                              }}
-                              onKeyDown={(e) => {
-                                // Prevent keyboard navigation on row
-                                if (e.key === 'Enter' || e.key === ' ') {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                }
-                              }}
-                              tabIndex={-1}
-                              /* No role="presentation" here: the row is focusable and
-                                 carries an aria-label, and axe reports the combination as
-                                 presentation-role-conflict. It is a real row, so it keeps
-                                 the implicit row role. */
-                              aria-label={`Study: ${opportunity.title}`}
-                              onFocus={(e) => {
-                                // Prevent focus on table rows
-                                e.currentTarget.blur();
                               }}
                             >
                               {/* The Study cell names the row: the title (two lines at
-                                  most) and one meta line - the type pill, then the
-                                  purpose one-liner, truncated. Both carry their full
-                                  text in `title`, so nothing clamped is lost. The type
-                                  pill moved here from its own column, unchanged. */}
+                                  most, and the link to the study) and one meta line -
+                                  the type pill, the owner when every researcher's
+                                  studies are showing, then the purpose one-liner,
+                                  truncated. Clamped strings carry their full text in
+                                  `title`, so nothing is lost. */}
                               <td className="col-title" data-label="Study">
-                                <strong className="row-title" title={opportunity.title}>{opportunity.title}</strong>
+                                <Link
+                                  to={rowPath}
+                                  className="row-title"
+                                  title={opportunity.title}
+                                  data-study-id={opportunity.id}
+                                >
+                                  {opportunity.title}
+                                </Link>
                                 <div className="admin-study-meta">
                                   <span className={`admin-pill ${getTypeBadgeClass(opportunity.type)} badge--${opportunity.type}`}>
                                     {TypeGlyph && (
@@ -1005,6 +1357,12 @@ const Admin: React.FC = () => {
                                     )}
                                     {getAdminTypeLabel(opportunity.type)}
                                   </span>
+                                  {showAllResearchers && owner && (
+                                    <span className="admin-study-owner" title={`Owner: ${owner}`}>
+                                      <span className="visually-hidden">Owner: </span>
+                                      {owner}
+                                    </span>
+                                  )}
                                   <small className="row-desc" title={opportunity.purpose_one_liner}>
                                     {opportunity.purpose_one_liner}
                                   </small>
@@ -1061,7 +1419,7 @@ const Admin: React.FC = () => {
                                     {statusLabel}
                                   </span>
                                 </span>
-                                {opportunity.status === 'closed' && opportunity.auto_closed === true && (
+                                {isAutoClosed(opportunity) && (
                                   <span className="admin-pill admin-pill--auto-closed">Auto-closed</span>
                                 )}
                               </td>
@@ -1093,17 +1451,22 @@ const Admin: React.FC = () => {
                               {/* Next session / deadline: the soonest upcoming slot, else a future
                                   closing time, else "Completed" once every slot has passed. All
                                   from real fields - no invented session ordinal. */}
-                              {/* The date on its own line; a session's clock time leads the
-                                  second line, before its relative day. "Thu 24 Sept 2026 ·
-                                  16:00" on one line measures ~174px against this column's
-                                  152px content box, and a nowrap there spills into Created. */}
+                              {/* The date on its own line ("Thu 24 Sept", the year only
+                                  when it is not this one); a session's clock time leads
+                                  the second line, before its relative day. The note
+                                  turns warning colour inside CLOSING_SOON_DAYS - the
+                                  same horizon as the Closing soon chip and card. */}
                               <td className="col-next" data-label="Next / deadline">
                                 {milestone ? (
                                   <div className="admin-next">
                                     <span className="admin-next__date">
-                                      {formatStudyDate(milestone.date.toISOString())}
+                                      {formatStudyDateCompact(milestone.date, now)}
                                     </span>
-                                    <span className={`admin-next__note admin-next__note--${milestone.kind}`}>
+                                    <span
+                                      className={`admin-next__note admin-next__note--${milestone.kind}${
+                                        isNextNoteWarned(opportunity, now) ? ' admin-next__note--soon' : ''
+                                      }`}
+                                    >
                                       {milestone.kind === 'session' ? (
                                         <>
                                           <span className="admin-next__time">{formatClockTime(milestone.date.toISOString())}</span>
@@ -1111,6 +1474,10 @@ const Admin: React.FC = () => {
                                         </>
                                       ) : milestone.kind === 'completed' ? (
                                         'Completed'
+                                      ) : milestone.kind === 'closed' ? (
+                                        // Closed by hand before this date: nothing is
+                                        // ahead of it, so no countdown and no colour.
+                                        'Closed early'
                                       ) : (
                                         `Closes · ${getTimeRemainingUntil(milestone.date).text ?? 'soon'}`
                                       )}
@@ -1122,26 +1489,36 @@ const Admin: React.FC = () => {
                               </td>
                               <td className="col-date" data-label="Created">
                                 <small className="admin-cell-metadata">
-                                  {formatStudyDate(opportunity.created_at)}
+                                  {formatStudyDateCompact(opportunity.created_at, now)}
                                 </small>
                               </td>
                               <td className="col-actions" data-label="Actions">
                                 <div className="admin-action-group">
-                                  <button
-                                    type="button"
-                                    className="btn btn-outline-secondary btn-sm admin-action-primary"
+                                  {/* The next thing to do to the study (Petra 3.4), for
+                                      someone who can act on it: Fix a broken one, Edit a
+                                      draft, Analytics for a live or closed one. Anyone
+                                      else gets Preview as a participant. A link, because
+                                      every one of these is a page: a modifier-click
+                                      opens a new tab. Named with the study, so a list
+                                      of links reads "Fix: <title>", not "Fix, Fix". */}
+                                  <Link
+                                    to={primaryAction.to}
+                                    className={`btn btn-outline-secondary btn-sm admin-action-primary${
+                                      primaryAction.label === 'Fix' ? ' admin-action-primary--fix' : ''
+                                    }`}
+                                    aria-label={`${primaryAction.label}: ${opportunity.title}`}
                                     onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (opportunity.status === 'draft') {
-                                        navigate(`/admin/opportunities/${opportunity.id}/edit`);
-                                      } else {
-                                        navigate(`/opportunities/${opportunity.id}`);
-                                      }
+                                      // Not the second click of a double-click, nor
+                                      // while a Close is in flight (see the row's
+                                      // own guard). Modifier clicks pass through.
+                                      if (e.detail > 1 || closeUndo.isCloseInFlight()) e.preventDefault();
                                     }}
-                                    onMouseDown={(e) => e.stopPropagation()}
                                   >
-                                    {opportunity.status === 'draft' ? 'Edit' : 'View'}
-                                  </button>
+                                    {primaryAction.label === 'Fix' && (
+                                      <Icon icon={AlertTriangle} size={14} aria-hidden="true" />
+                                    )}
+                                    {primaryAction.label}
+                                  </Link>
                                 <Dropdown
                                   menu
                                   align="end"
@@ -1161,16 +1538,23 @@ const Admin: React.FC = () => {
                                     </button>
                                   }
                                 >
-                                  <DropdownItem onClick={() => navigate(`/opportunities/${opportunity.id}`)}>
-                                    View
+                                  {/* Everything, in one order (Petra 3.4): Edit, Preview
+                                      as participant, Analytics, Copy | Close study |
+                                      Delete. Items that go to a page are links (`to`).
+                                      The participant page renders a draft for an admin
+                                      (with a Draft badge), so Preview is live for drafts
+                                      too. Edit is the owner's (or a superadmin's): the
+                                      server refuses anyone else's save. */}
+                                  {canManage ? (
+                                    <DropdownItem to={editPath}>Edit</DropdownItem>
+                                  ) : (
+                                    <DropdownItem disabled title="Only the owner can edit this study">
+                                      Edit
+                                    </DropdownItem>
+                                  )}
+                                  <DropdownItem to={studyPreviewPath(opportunity.id)}>
+                                    Preview as participant
                                   </DropdownItem>
-                                  <DropdownItem onClick={() => navigate(`/admin/opportunities/${opportunity.id}/edit`)}>
-                                    Edit
-                                  </DropdownItem>
-                                  <DropdownItem onClick={() => handleDuplicate(opportunity.id)}>
-                                    Copy
-                                  </DropdownItem>
-                                  <DropdownDivider />
                                   {/* Analytics for EVERY study type. The page always renders
                                       an Overview (views/clicks), and the moderated types (test,
                                       interview) reach their booked-participant roster only
@@ -1184,8 +1568,8 @@ const Admin: React.FC = () => {
                                       one naming who owns it (row 8). Under the beta all-admin
                                       switch that disables it on most rows for most viewers, by
                                       design. */}
-                                  {(user?.role === 'superadmin' || opportunity.owner_user_id === user?.id) ? (
-                                    <DropdownItem onClick={() => navigate(`/admin/opportunities/${opportunity.id}/analytics`)}>
+                                  {canManage ? (
+                                    <DropdownItem to={studyAnalyticsPath(opportunity.id)}>
                                       Analytics
                                     </DropdownItem>
                                   ) : (
@@ -1196,14 +1580,69 @@ const Admin: React.FC = () => {
                                       Analytics
                                     </DropdownItem>
                                   )}
+                                  {/* Copy is the owner's too: the server refuses
+                                      anyone else's with a 403. */}
+                                  {canManage ? (
+                                    <DropdownItem onClick={() => void handleDuplicate(opportunity)}>
+                                      Copy
+                                    </DropdownItem>
+                                  ) : (
+                                    <DropdownItem disabled title="Only the owner can copy this study">
+                                      Copy
+                                    </DropdownItem>
+                                  )}
+                                  {/* Close study: published studies only, and only for the
+                                      owner or a superadmin - the server's own gate on a
+                                      status change, the same one Analytics reads. Reversible,
+                                      so an Undo notice rather than a confirm. */}
+                                  {opportunity.status === 'published' && canManage && <DropdownDivider />}
+                                  {opportunity.status === 'published' && canManage && (
+                                    <DropdownItem onClick={() => void closeUndo.closeStudy(opportunity)}>
+                                      Close study
+                                    </DropdownItem>
+                                  )}
                                   <DropdownDivider />
-                                  <DropdownItem className="text-danger" onClick={() => handleDelete(opportunity.id, opportunity.title)}>
-                                    Delete
-                                  </DropdownItem>
+                                  {/* Delete: the server refuses anyone but the owner or a
+                                      superadmin ("Only the owner can delete this study"), so
+                                      offering it to anyone else only ends in an error after
+                                      the confirm. Disabled with the reason, like Edit. */}
+                                  {canManage ? (
+                                    <DropdownItem className="text-danger" onClick={() => handleDelete(opportunity.id, opportunity.title)}>
+                                      Delete
+                                    </DropdownItem>
+                                  ) : (
+                                    <DropdownItem className="text-danger" disabled title="Only the owner can delete this study">
+                                      Delete
+                                    </DropdownItem>
+                                  )}
                                 </Dropdown>
                                 </div>
                               </td>
                             </tr>
+                            {/* Close study's notices, in place under the row they
+                                are about (components/StudyRowNotices.tsx). */}
+                            {noticeRow}
+                            {copyNotice?.id === opportunity.id && (
+                              <CopyNoticeRow
+                                message={copyNotice.message}
+                                tone={copyNotice.tone}
+                                onRetry={() => {
+                                  setCopyNotice({ ...copyNotice, tone: 'status', message: `Copied “${copyNotice.title}”` });
+                                  void refreshAfterCopy(opportunity, true);
+                                }}
+                                onDismiss={() => dismissCopyNotice(opportunity.id)}
+                                actionRef={copyRetryRef}
+                              />
+                            )}
+                            {actionError && (
+                              <StudyActionErrorRow
+                                studyId={opportunity.id}
+                                message={actionError.message}
+                                onDismiss={closeUndo.dismissError}
+                                errorRef={closeUndo.errorRef}
+                              />
+                            )}
+                            </React.Fragment>
                             );
                           })}
                         </tbody>

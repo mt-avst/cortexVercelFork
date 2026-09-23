@@ -58,6 +58,21 @@ describe('FeedbackFooter', () => {
     expect(screen.getByLabelText('How we can improve Cortex')).toBeInTheDocument();
   });
 
+  // Admin table Step 2 (item 9): the footer is painted above the page
+  // content, so a row menu hanging into it lost its lower items (Delete)
+  // under the footer. The footer now marks itself a dropdown boundary and
+  // ui/Dropdown opens upward rather than into it. The attribute name is
+  // pinned as a literal: Dropdown looks it up by that exact string.
+  it('marks itself a dropdown boundary, so a menu above it opens upward', () => {
+    render(
+      <MemoryRouter initialEntries={['/admin']}>
+        <FeedbackFooter />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole('contentinfo')).toHaveAttribute('data-dropdown-boundary');
+  });
+
   // The footer is now shown on the study-setup wizard too - reversing the D10
   // hide - so setup work has an in-context feedback loop. The only route that
   // still suppresses it is /feedback itself (covered above).

@@ -27,7 +27,7 @@
 import type { Opportunity, Session, SessionUser } from '../../shared/types';
 
 type Wire<T> = { [K in keyof T]: T[K] | null };
-type WireOpportunity = Omit<Wire<Opportunity>, 'sessions'> & { sessions: Array<Wire<Session>> };
+export type WireOpportunity = Omit<Wire<Opportunity>, 'sessions'> & { sessions: Array<Wire<Session>> };
 
 export const FIXTURE_NOW = '2026-09-23T09:00:00.000Z';
 export const FIXTURE_TIMEZONE = 'Europe/London';
@@ -547,3 +547,283 @@ export const FEEDBACK = {
   ],
   has_more: false,
 };
+
+/*
+ * ---------------------------------------------------------------------------
+ * Admin table Step 2 (MR B: triage behaviour). NOT part of the 13-study seed
+ * capture above: the Step 1 specs pin that count, so these ride in their own
+ * lists and only `admin-studies-table-triage.test.ts` serves them.
+ *
+ * Every date is placed against FIXTURE_NOW (Wed 23 Sept 2026 09:00Z) to make a
+ * policy literal observable:
+ *   - the warning horizon is 3 days: one deadline at now + 2d 23h (inside) and
+ *     one at now + 3d 1h (outside), so moving the horizon to 2 or 4 days flips
+ *     one of them;
+ *   - two published polls share a deadline and differ only by title case
+ *     ("accessibility ..." / "Billing ..."), so a case-sensitive title
+ *     tie-break (B < a) orders them the other way;
+ *   - a published question with no deadline and no sessions has no milestone;
+ *   - a next-year session and a last-year creation date carry the year, and
+ *     this year's dates do not.
+ * ---------------------------------------------------------------------------
+ */
+
+/** A second researcher, for the Show all researchers (scope=all) case. */
+export const OTHER_OWNER = {
+  id: 'aa000001-0000-4000-8000-000000000009',
+  name: 'Priya Raman',
+  email: 'priya.raman@adaptavist.com',
+} as const;
+
+/** A third researcher with no display name: the meta line falls back to the email. */
+export const UNNAMED_OWNER = {
+  id: 'aa000001-0000-4000-8000-00000000000a',
+  email: 'sam.lee@adaptavist.com',
+} as const;
+
+const mine = {
+  owner_user_id: ADMIN_ME.id,
+  owner_name: ADMIN_ME.name,
+  owner_email: ADMIN_ME.email,
+  description_optional: null,
+  firsthand_study_id: null,
+  start_date: null,
+  meeting_location_optional: null,
+} as const;
+
+/** Studies admin@test.com owns beyond the seed: served under scope=mine and scope=all. */
+export const STEP2_MINE_EXTRA = [
+  {
+    ...mine,
+    id: '0aa00002-0000-4000-8000-00000000000a',
+    type: 'poll',
+    title: 'Search relevance: which result did you want?',
+    purpose_one_liner: 'Pick the result you were actually looking for.',
+    // Closed by hand (MR A: a PATCH close sets auto_closed false) before its
+    // end date, so it carries no Auto-closed caption. The end date is inside
+    // the 3-day horizon (now + 2d 7h) on purpose: a closed study has no
+    // upcoming milestone, so it must neither sort as one nor turn warning.
+    status: 'closed',
+    auto_closed: false,
+    external_link_optional: 'https://forms.gle/example-search-relevance',
+    end_date: '2026-09-25T16:00:00.000Z',
+    created_at: '2026-09-02T09:00:00.000Z',
+    updated_at: '2026-09-21T09:00:00.000Z',
+    delivery_mode: 'external',
+    default_duration_minutes: 5,
+    clicks_total: 4,
+    sessions: [],
+  },
+  {
+    ...mine,
+    id: '0aa00002-0000-4000-8000-00000000000b',
+    type: 'survey',
+    title: 'Release notes: what do you read?',
+    purpose_one_liner: 'Tell us which parts of the release notes you actually read.',
+    status: 'published',
+    external_link_optional: 'https://forms.gle/example-release-notes',
+    // now + 2 days 23 hours: INSIDE the 3-day horizon.
+    end_date: '2026-09-26T08:00:00.000Z',
+    created_at: '2026-09-18T09:00:00.000Z',
+    updated_at: '2026-09-18T09:00:00.000Z',
+    delivery_mode: 'external',
+    default_duration_minutes: 5,
+    clicks_total: 6,
+    sessions: [],
+  },
+  {
+    ...mine,
+    id: '0aa00002-0000-4000-8000-00000000000c',
+    type: 'poll',
+    title: 'Release cadence: monthly or quarterly?',
+    purpose_one_liner: 'One click on how often you want releases.',
+    status: 'published',
+    external_link_optional: 'https://forms.gle/example-release-cadence',
+    // now + 3 days 1 hour: OUTSIDE the 3-day horizon.
+    end_date: '2026-09-26T10:00:00.000Z',
+    created_at: '2026-09-18T10:00:00.000Z',
+    updated_at: '2026-09-18T10:00:00.000Z',
+    delivery_mode: 'external',
+    default_duration_minutes: 5,
+    clicks_total: 2,
+    sessions: [],
+  },
+  {
+    ...mine,
+    id: '0aa00002-0000-4000-8000-00000000000d',
+    type: 'interview',
+    title: '2027 roadmap interviews',
+    purpose_one_liner: 'Thirty minutes on what you need from us next year.',
+    status: 'published',
+    external_link_optional: null,
+    meeting_location_optional: 'Google Meet',
+    end_date: '2027-01-29T17:00:00.000Z',
+    // Last year: "Tue 4 Nov 2025" keeps its year.
+    created_at: '2025-11-04T10:00:00.000Z',
+    updated_at: '2026-09-10T10:00:00.000Z',
+    delivery_mode: 'external',
+    default_duration_minutes: 30,
+    sessions: [
+      {
+        id: '05e00002-0000-4000-8000-00000000000d',
+        opportunity_id: '0aa00002-0000-4000-8000-00000000000d',
+        // Next year: "Thu 14 Jan 2027", 10:00 (GMT in January).
+        start_time: '2027-01-14T10:00:00.000Z',
+        end_time: '2027-01-14T10:30:00.000Z',
+        capacity: 4,
+        booked_count: 0,
+        location_or_meet_link_optional: 'https://meet.google.com/road-map-2027',
+        created_at: '2026-09-10T10:00:00.000Z',
+        updated_at: '2026-09-10T10:00:00.000Z',
+        remaining: 4,
+      },
+    ],
+  },
+  {
+    ...mine,
+    id: '0aa00002-0000-4000-8000-00000000000e',
+    type: 'poll',
+    title: 'accessibility audit follow-up',
+    purpose_one_liner: 'Did the audit fixes land where you work?',
+    status: 'published',
+    external_link_optional: 'https://forms.gle/example-a11y-follow-up',
+    end_date: '2026-10-14T12:00:00.000Z',
+    created_at: '2026-09-12T09:00:00.000Z',
+    updated_at: '2026-09-12T09:00:00.000Z',
+    delivery_mode: 'external',
+    default_duration_minutes: 5,
+    clicks_total: 1,
+    sessions: [],
+  },
+  {
+    ...mine,
+    id: '0aa00002-0000-4000-8000-00000000000f',
+    type: 'poll',
+    title: 'Billing page first impressions',
+    purpose_one_liner: 'One click on the redesigned billing page.',
+    status: 'published',
+    external_link_optional: 'https://forms.gle/example-billing-page',
+    // The same deadline as "accessibility audit follow-up": a title tie-break.
+    end_date: '2026-10-14T12:00:00.000Z',
+    created_at: '2026-09-12T10:00:00.000Z',
+    updated_at: '2026-09-12T10:00:00.000Z',
+    delivery_mode: 'external',
+    default_duration_minutes: 5,
+    clicks_total: 3,
+    sessions: [],
+  },
+  {
+    ...mine,
+    id: '0aa00002-0000-4000-8000-000000000010',
+    type: 'question',
+    title: 'Open question: what slows your code reviews?',
+    purpose_one_liner: 'A sentence or a page, whichever you have time for.',
+    status: 'published',
+    external_link_optional: 'https://forms.gle/example-code-reviews',
+    // No end date and no sessions: no milestone at all.
+    end_date: null,
+    created_at: '2026-09-11T09:00:00.000Z',
+    updated_at: '2026-09-11T09:00:00.000Z',
+    delivery_mode: 'external',
+    default_duration_minutes: 5,
+    sessions: [],
+  },
+] satisfies WireOpportunity[];
+
+/** Other researchers' studies: served under scope=all only. */
+export const STEP2_OTHERS = [
+  {
+    id: '0aa00003-0000-4000-8000-000000000001',
+    type: 'interview',
+    title: 'Pricing page: how teams choose a tier',
+    purpose_one_liner: 'Walk us through the last time your team picked a plan.',
+    description_optional: null,
+    status: 'published',
+    owner_user_id: OTHER_OWNER.id,
+    owner_name: OTHER_OWNER.name,
+    owner_email: OTHER_OWNER.email,
+    external_link_optional: null,
+    meeting_location_optional: 'Zoom',
+    start_date: null,
+    end_date: '2026-10-09T17:00:00.000Z',
+    created_at: '2026-09-08T09:00:00.000Z',
+    updated_at: '2026-09-08T09:00:00.000Z',
+    firsthand_study_id: null,
+    delivery_mode: 'external',
+    default_duration_minutes: 45,
+    sessions: [
+      {
+        id: '05e00003-0000-4000-8000-000000000001',
+        opportunity_id: '0aa00003-0000-4000-8000-000000000001',
+        start_time: '2026-10-01T13:00:00.000Z',
+        end_time: '2026-10-01T13:45:00.000Z',
+        capacity: 2,
+        booked_count: 1,
+        location_or_meet_link_optional: 'https://zoom.us/j/000000000',
+        created_at: '2026-09-08T09:00:00.000Z',
+        updated_at: '2026-09-08T09:00:00.000Z',
+        remaining: 1,
+      },
+    ],
+  },
+  {
+    id: '0aa00003-0000-4000-8000-000000000002',
+    type: 'question',
+    title: 'One word for our new dashboard',
+    purpose_one_liner: 'The first word that comes to mind, nothing more.',
+    description_optional: null,
+    status: 'published',
+    owner_user_id: UNNAMED_OWNER.id,
+    owner_name: null,
+    owner_email: UNNAMED_OWNER.email,
+    external_link_optional: 'https://forms.gle/example-one-word',
+    meeting_location_optional: null,
+    start_date: null,
+    end_date: '2026-10-30T17:00:00.000Z',
+    created_at: '2026-09-09T09:00:00.000Z',
+    updated_at: '2026-09-09T09:00:00.000Z',
+    firsthand_study_id: null,
+    delivery_mode: 'external',
+    default_duration_minutes: 5,
+    sessions: [],
+  },
+  {
+    // Another researcher's BROKEN study (an interview with no venue and no
+    // slot): a non-manager is offered Preview, never Fix (the server refuses
+    // their save); a superadmin is offered Fix.
+    id: '0aa00003-0000-4000-8000-000000000003',
+    type: 'interview',
+    title: 'Onboarding checklist interviews',
+    purpose_one_liner: 'Twenty minutes on the first week with a new team.',
+    description_optional: null,
+    status: 'published',
+    owner_user_id: OTHER_OWNER.id,
+    owner_name: OTHER_OWNER.name,
+    owner_email: OTHER_OWNER.email,
+    external_link_optional: null,
+    meeting_location_optional: null,
+    start_date: null,
+    end_date: '2026-10-21T17:00:00.000Z',
+    created_at: '2026-09-10T09:00:00.000Z',
+    updated_at: '2026-09-10T09:00:00.000Z',
+    firsthand_study_id: null,
+    delivery_mode: 'external',
+    default_duration_minutes: 20,
+    sessions: [],
+  },
+] satisfies WireOpportunity[];
+
+/** A superadmin, for the manager-gate case: may act on every researcher's study. */
+export const SUPERADMIN_ME = {
+  id: 'aa000001-0000-4000-8000-0000000000ff',
+  name: 'Super Admin',
+  email: 'superadmin@test.com',
+  business_unit: 'Research',
+  role_title: 'Platform Owner',
+  role: 'superadmin',
+} satisfies SessionUser;
+
+/** scope=mine for the Step 2 spec: the seed's 13 plus 7 = 20 studies. */
+export const STEP2_MINE: readonly WireOpportunity[] = [...OPPORTUNITIES, ...STEP2_MINE_EXTRA];
+/** scope=all for the Step 2 spec: 20 plus 3 other researchers' = 23 studies. */
+export const STEP2_ALL: readonly WireOpportunity[] = [...STEP2_MINE, ...STEP2_OTHERS];

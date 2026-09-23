@@ -35,9 +35,25 @@ import { measureGroundContrast } from './helpers/ground-contrast';
  */
 
 /** The new column set, in order. No Type, no Clicks. */
-const COLUMNS = ['Study', 'Status', 'Progress', 'Next session / deadline', 'Created', 'Actions'];
-/** The sort fields reachable at every width, header buttons plus the Sort by control. */
-const SORT_FIELDS = ['Created', 'Status', 'Study'];
+/**
+ * The Next column's label changed ON PURPOSE in admin table Step 2's fix round:
+ * "Next session / deadline" wrapped to two lines and made the header row 57px
+ * (REVIEW-STEP2B-visual M1), so it is "Next / deadline" - Petra's spec name,
+ * and the card view's own data-label.
+ */
+const COLUMNS = ['Study', 'Status', 'Progress', 'Next / deadline', 'Created', 'Actions'];
+/**
+ * The sort fields reachable at every width, header buttons plus the Sort by
+ * control. Step 2 (MR B) made Next / deadline sortable (AC13), so it
+ * joined the set - a deliberate change to what this pinned.
+ */
+const SORT_FIELDS = ['Created', 'Next / deadline', 'Status', 'Study'];
+/**
+ * A Sort by option that names a field differently from its header. Empty since
+ * the fix round made both "Next / deadline"; kept so a future short option
+ * label is an explicit, reviewed entry rather than a silent parity failure.
+ */
+const SORT_OPTION_ALIASES: Record<string, string> = {};
 
 const TABLE_WIDTHS_BELOW_1280 = [1024, 1100, 1152, 1219];
 const TABLE_WIDTHS_FROM_1280 = [1280, 1440, 1920];
@@ -333,7 +349,7 @@ for (const theme of THEMES) {
       const failures: string[] = [];
       for (const width of [390, 1023, 1024, 1100, 1279, 1280, 1440]) {
         await resizeTo(page, width);
-        const reachable = await page.evaluate(() => {
+        const reachable = await page.evaluate((aliases) => {
           const p = window.__adminProbe;
           const fromHeaders = p
             .headerCells()
@@ -342,9 +358,11 @@ for (const theme of THEMES) {
           const control = document.querySelector('.admin-card-sort');
           const select = control?.querySelector('select');
           const fromControl =
-            select && p.shown(control) && p.shown(select) ? [...select.options].map((o) => p.norm(o.textContent)) : [];
+            select && p.shown(control) && p.shown(select)
+              ? [...select.options].map((o) => aliases[p.norm(o.textContent)] ?? p.norm(o.textContent))
+              : [];
           return [...new Set([...fromHeaders, ...fromControl])].sort();
-        });
+        }, SORT_OPTION_ALIASES);
         if (JSON.stringify(reachable) !== JSON.stringify(SORT_FIELDS)) {
           failures.push(`${width}px: reachable [${reachable.join(', ')}]`);
         }
@@ -406,7 +424,7 @@ for (const theme of THEMES) {
       expect(failures).toEqual([]);
     });
 
-    test(`the column set is Study, Status, Progress, Next session / deadline, Created, Actions (${theme})`, async ({
+    test(`the column set is Study, Status, Progress, Next / deadline, Created, Actions (${theme})`, async ({
       page,
       baseURL,
     }) => {
