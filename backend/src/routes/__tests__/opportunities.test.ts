@@ -45,6 +45,26 @@ jest.mock('../../firsthand/runtime-repository-postgres', () => ({
   hasAnswerCarryingTerminalSession: jest.fn(async () => false),
 }));
 
+// cto/AdaptaLabs#159: the survey-session route now runs its whole mint
+// decision inside `runSerializedForMintPair`, which checks out a REAL client
+// from the firsthand runtime pool to hold the advisory lock across it. This
+// suite mocks every repository call the callback makes
+// (`findParticipantSessionForOpportunity`, `hasAnswerCarryingTerminalSession`,
+// `createSession` above) and none of them touch the client argument they're
+// given, so the callback is invoked with `undefined` in its place rather than
+// a real pool checkout - a real one would try to reach Postgres and hang/error
+// in this unit-test process, which has no DATABASE_URL. The advisory lock
+// itself, and the fact that this callback genuinely runs inside one Postgres
+// transaction in production, is proven against a real database in
+// mint-serializes-concurrent-bursts-postgres.test.ts - that is the test that
+// would catch a regression here, not this file.
+jest.mock('../../firsthand/runtime-database', () => ({
+  runSerializedForMintPair: jest.fn(
+    async (_opportunityId: string, _participantId: string, operation: (client: undefined) => Promise<unknown>) =>
+      operation(undefined)
+  ),
+}));
+
 // Defaults to "nobody answered". Every results test that cares queues its own
 // rows; the point of the default is that a test which never reaches the read
 // still gets a call count of zero to assert on.
@@ -6856,8 +6876,13 @@ describe('Opportunities API', () => {
         .expect(200);
 
       expect(response.body.session_url).toBe('https://cortex.example.com/survey/fh_tok');
+      // A second argument now, the runSerializedForMintPair client
+      // (undefined here - see this file's mock of runtime-database above) -
+      // cto/AdaptaLabs#159. toHaveBeenCalledWith checks every argument the
+      // mock actually received, not just the ones named here.
       expect(mockCreateSession).toHaveBeenCalledWith(
-        expect.objectContaining({ studyId: 'study_questions', opportunityId: '1' })
+        expect.objectContaining({ studyId: 'study_questions', opportunityId: '1' }),
+        undefined
       );
     });
 

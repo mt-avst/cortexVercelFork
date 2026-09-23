@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from 'crypto';
+import type { PoolClient } from 'pg';
 
 import {
   sessionPayloadSchema,
@@ -65,7 +66,16 @@ export type CreateSessionResult =
   | { ok: false; error: CreateSessionError };
 
 export async function createSession(
-  input: CreateSessionInput
+  input: CreateSessionInput,
+  /**
+   * When supplied (cto/AdaptaLabs#159), `seedRuntimeSession` runs on THIS
+   * client instead of checking out and committing its own - see that
+   * function's docblock. `getStudyById` just below stays on its own pooled
+   * read either way: it queries `studies`, not `runtime_sessions`, so it
+   * carries no race for this fix to close and does not need to sit inside
+   * the caller's locked transaction.
+   */
+  existingClient?: PoolClient
 ): Promise<CreateSessionResult> {
   if (!isStudiesPersistenceConfigured()) {
     return { ok: false, error: 'persistence_not_configured' };
@@ -151,7 +161,7 @@ export async function createSession(
     return { ok: false, error: 'payload_assembly_failed' };
   }
 
-  await seedRuntimeSession(validated.data);
+  await seedRuntimeSession(validated.data, existingClient);
 
   return {
     ok: true,

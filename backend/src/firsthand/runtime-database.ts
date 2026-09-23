@@ -176,6 +176,30 @@ export async function withRuntimeDatabaseClient<T>(
   operation: (client: PoolClient) => Promise<T>,
   options?: RuntimeCheckoutOptions
 ) {
+  const { client, release } = await checkoutRuntimeClient(options);
+
+  try {
+    // Everything the operation awaits runs marked as already holding a slot,
+    // so a nested checkout passes through instead of deadlocking on a cap of
+    // ADMIN_CONCURRENCY_LIMIT. Siblings started outside this scope are
+    // unaffected and still take a permit each.
+    return await runHoldingRuntimeSlot(() => operation(client));
+  } finally {
+    await release();
+  }
+}
+
+/**
+ * The checkout half of `withRuntimeDatabaseClient`, split out so
+ * `runSerializedForMintPair` (cto/AdaptaLabs#159) can hold the SAME client
+ * across an advisory lock and everything decided under it, rather than
+ * opening a second, unrelated checkout. Admission, connect and
+ * `prepareRuntimeSession` are unchanged from before this split - only lifted
+ * out of the try/finally that used to wrap them alone.
+ */
+async function checkoutRuntimeClient(
+  options?: RuntimeCheckoutOptions
+): Promise<{ client: PoolClient; release: () => Promise<void> }> {
   await ensureRuntimeDatabase();
 
   // Admission BEFORE the pool checkout, which is the whole point: queueing on
@@ -195,32 +219,96 @@ export async function withRuntimeDatabaseClient<T>(
     throw error;
   }
 
-  try {
-    await prepareRuntimeSession(client, options?.statementTimeoutMs);
-    // Everything the operation awaits runs marked as already holding a slot,
-    // so a nested checkout passes through instead of deadlocking on a cap of
-    // ADMIN_CONCURRENCY_LIMIT. Siblings started outside this scope are
-    // unaffected and still take a permit each.
-    return await runHoldingRuntimeSlot(() => operation(client));
-  } finally {
-    // NESTED, not sequential, and that is the whole of it. pg throws on a
-    // double release (pg-pool's `throwOnDoubleRelease`), and a bare
-    // `client.release(); admission.release();` would let that exception escape
-    // the finally with the admission permit still held - permanently, on a cap
-    // of two. Two of those and every admin runtime checkout in the process
-    // waits ten seconds and then 503s, forever, on a pool that has long since
-    // recovered.
-    //
-    // The ORDER of the two is genuinely unobservable: both run in one
-    // synchronous block and a waiter resumes on a microtask, so a mutation
-    // swapping them survives the whole suite. It was the COUPLING that
-    // mattered, and an earlier version of this comment argued only about the
-    // order - which is how a real hazard got written up as a non-issue.
-    try {
-      client.release();
-    } finally {
-      admission.release();
+  await prepareRuntimeSession(client, options?.statementTimeoutMs);
+
+  return {
+    client,
+    release: async () => {
+      // NESTED, not sequential, and that is the whole of it. pg throws on a
+      // double release (pg-pool's `throwOnDoubleRelease`), and a bare
+      // `client.release(); admission.release();` would let that exception escape
+      // the finally with the admission permit still held - permanently, on a cap
+      // of two. Two of those and every admin runtime checkout in the process
+      // waits ten seconds and then 503s, forever, on a pool that has long since
+      // recovered.
+      //
+      // The ORDER of the two is genuinely unobservable: both run in one
+      // synchronous block and a waiter resumes on a microtask, so a mutation
+      // swapping them survives the whole suite. It was the COUPLING that
+      // mattered, and an earlier version of this comment argued only about the
+      // order - which is how a real hazard got written up as a non-issue.
+      try {
+        client.release();
+      } finally {
+        admission.release();
+      }
     }
+  };
+}
+
+/**
+ * Serialises every mint decision for one (opportunity, participant) pair
+ * through a single Postgres transaction, so a concurrent burst for the same
+ * pair cannot all read "clear to mint" before any of them commits
+ * (cto/AdaptaLabs#159).
+ *
+ * Takes `pg_advisory_xact_lock` in its TWO-INT form -
+ * `pg_advisory_xact_lock(hashtext(opportunityId), hashtext(participantId))` -
+ * not the single-bigint form `sessions.ts` already uses for its own
+ * opportunity-only lock (`pg_advisory_xact_lock(hashtextextended($1::text,
+ * 0))`, cto/AdaptaLabs#128). Both pools resolve the SAME database
+ * (config/index.ts), and advisory locks are database-scoped rather than
+ * table- or schema-scoped, so the two locks share one keyspace. Postgres
+ * tags the single-bigint form and the two-int form as structurally distinct
+ * lock instances (different `objsubid`), so they are GUARANTEED never to
+ * collide regardless of hash input - confirmed directly against Postgres
+ * (both granted simultaneously in one transaction, see the paired
+ * non-collision test) rather than assumed from the hash arithmetic alone.
+ * Picking a form that cannot collide is simpler than trying to prove two
+ * differently-keyed uses of the SAME form never will.
+ *
+ * No deadlock risk against #34/#128's `sessions`/`bookings` row-lock
+ * ordering discipline: `operation` here only ever touches `firsthand` schema
+ * tables (`runtime_sessions` and friends) through the functions this fix
+ * threads a client into, never `sessions` or `bookings`, so no transaction
+ * can hold one lock family while waiting on the other.
+ *
+ * `operation` receives the checked-out client and must use it (not a fresh
+ * checkout) for every read and write that needs to be inside this lock -
+ * see the client-accepting call sites in `runtime-repository-postgres.ts`
+ * and `session-create.ts`. The transaction commits (releasing the lock) when
+ * `operation` resolves and rolls back (also releasing the lock) if it
+ * throws or returns a rejected refusal path that still needs to `return`
+ * from inside the callback.
+ */
+export async function runSerializedForMintPair<T>(
+  opportunityId: string,
+  participantId: string,
+  operation: (client: PoolClient) => Promise<T>
+): Promise<T> {
+  const { client, release } = await checkoutRuntimeClient();
+
+  try {
+    return await runHoldingRuntimeSlot(async () => {
+      await client.query('BEGIN');
+
+      try {
+        await client.query(
+          'SELECT pg_advisory_xact_lock(hashtext($1::text), hashtext($2::text))',
+          [opportunityId, participantId]
+        );
+
+        const result = await operation(client);
+
+        await client.query('COMMIT');
+        return result;
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw error;
+      }
+    });
+  } finally {
+    await release();
   }
 }
 
