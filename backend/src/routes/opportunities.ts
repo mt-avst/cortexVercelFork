@@ -4785,78 +4785,86 @@ router.post('/:id/duplicate', requireAdmin, opportunityWriteLimiter, asyncHandle
   // back by a shared transaction that does not exist.
   let duplicatedStudyId: string | null = null;
 
-  // ponytail: neither call below is wrapped in error handling. `getStudyById`
-  //   can throw on a genuine runtime-pool outage (distinct from the `null`
-  //   return the stale-link branch already handles - that is a study
-  //   verifiably deleted, not a database that is unreachable), and
-  //   `createStudy` runs `validateSteps` before its own try/catch, so a stored
-  //   study whose steps cannot satisfy it today throws a bare Error straight
-  //   out of the route. Either throw currently 500s the WHOLE duplicate
-  //   request, including the opportunity-row copy that would have worked fine
-  //   without a linked study. Upgrade: map to a clear AppError (503 for the
-  //   outage, 422 for an unstorable copy) or fall back to the stale-link path
-  //   instead of refusing outright. -> cto/AdaptaLabs#160
   if (opp.firsthand_study_id && isStudiesPersistenceConfigured()) {
-    const originalStudy = await getStudyById(opp.firsthand_study_id);
+    // cto/AdaptaLabs#160: `getStudyById` can throw on a genuine runtime-pool
+    // outage (distinct from the `null` return the stale-link branch below
+    // handles - that is a study verifiably deleted, not a database that is
+    // unreachable), and `createStudy` runs `validateSteps` before its own
+    // try/catch, so a stored study whose steps cannot satisfy it today throws
+    // a bare Error. Either throw used to 500 the WHOLE duplicate request,
+    // including the opportunity-row copy that would have worked fine without
+    // a linked study - so both fall back the same way the stale-link branch
+    // already does, rather than refusing outright. Logged at `error`, not
+    // `warn` like the stale-link case, because this IS a failure (an outage
+    // or an unstorable copy), not a verified-gone link.
+    try {
+      const originalStudy = await getStudyById(opp.firsthand_study_id);
 
-    if (originalStudy) {
-      const newStudyId = `study_${crypto.randomUUID()}`;
+      if (originalStudy) {
+        const newStudyId = `study_${crypto.randomUUID()}`;
 
-      // Re-prefix every step id onto the NEW study's namespace, keeping the
-      // ORIGINAL's key - the id is always `${studyId}_${key}` (see
-      // shared/firsthand/step-identity.ts), so copying `originalStudy.steps`
-      // unchanged would leave the new study's rows still carrying the OLD
-      // study's id as their prefix. `stepKeyOf` then fails to recover a key
-      // for any of them under the new study id, `studyRoundTripsCleanly`
-      // refuses the study as unrepresentable, and the duplicate opens
-      // read-only - defeating the point of duplicating it to edit for a
-      // repeat run. The key itself is safe to keep verbatim: two studies
-      // sharing a key is fine, only a shared STORED id (study + key) is not.
-      // A step whose id does not belong to the original study's own
-      // namespace (no prefix match - a legacy/positional id) is left
-      // unchanged, same as the frontend's own round-trip check would treat
-      // it: nothing here can safely re-mint an identity it cannot parse.
-      const steps = originalStudy.steps.map((step) => {
-        const key = stepKeyOf(step.step_id, originalStudy.study.id);
-        return key ? { ...step, step_id: stepIdFor(newStudyId, key) } : step;
-      });
+        // Re-prefix every step id onto the NEW study's namespace, keeping the
+        // ORIGINAL's key - the id is always `${studyId}_${key}` (see
+        // shared/firsthand/step-identity.ts), so copying `originalStudy.steps`
+        // unchanged would leave the new study's rows still carrying the OLD
+        // study's id as their prefix. `stepKeyOf` then fails to recover a key
+        // for any of them under the new study id, `studyRoundTripsCleanly`
+        // refuses the study as unrepresentable, and the duplicate opens
+        // read-only - defeating the point of duplicating it to edit for a
+        // repeat run. The key itself is safe to keep verbatim: two studies
+        // sharing a key is fine, only a shared STORED id (study + key) is not.
+        // A step whose id does not belong to the original study's own
+        // namespace (no prefix match - a legacy/positional id) is left
+        // unchanged, same as the frontend's own round-trip check would treat
+        // it: nothing here can safely re-mint an identity it cannot parse.
+        const steps = originalStudy.steps.map((step) => {
+          const key = stepKeyOf(step.step_id, originalStudy.study.id);
+          return key ? { ...step, step_id: stepIdFor(newStudyId, key) } : step;
+        });
 
-      const stored = await createStudy({
-        id: newStudyId,
-        title: originalStudy.study.title,
-        intro_text: originalStudy.study.intro_text,
-        consent_text: originalStudy.study.consent_text,
-        brand_name: originalStudy.study.brand_name,
-        estimated_duration_minutes: originalStudy.study.estimated_duration_minutes,
-        locale: originalStudy.study.locale,
-        // Launched rather than the original's own status: only launched
-        // studies are selectable, and a study authored as part of duplicating
-        // an opportunity has no separate review step to wait for. Copying an
-        // archived or draft status through would produce a native duplicate
-        // that 404s "Survey" for every participant once published - the
-        // native-survey session gate earlier in this file refuses any study
-        // that isn't launched - with nothing warning the author. Same
-        // reasoning, same value, as the
-        // create path's own inline_study/inline_survey branches.
-        status: 'launched',
-        kind: originalStudy.study.kind,
-        // The duplicating caller becomes the new study's owner too, same as
-        // the opportunity itself becomes theirs below.
-        owner_user_id: req.user!.id,
-        // Provenance, exactly like the create path's copy-on-select branches:
-        // this new study was copied from the original, not authored blank.
-        copied_from_study_id: originalStudy.study.id,
-        consent_template_id: originalStudy.study.consent_template_id,
-        consent_template_version: originalStudy.study.consent_template_version,
-        steps
-      });
-      duplicatedStudyId = stored.study.id;
-    } else {
-      // The link is stale - the study behind it is gone. Duplicate the
-      // opportunity anyway rather than refusing the whole request; same
-      // fallback as no link at all, logged so an orphaned link is
-      // discoverable rather than silently swallowed.
-      logger.warn('Duplicate: linked FirstHand study not found, duplicating opportunity without it', {
+        const stored = await createStudy({
+          id: newStudyId,
+          title: originalStudy.study.title,
+          intro_text: originalStudy.study.intro_text,
+          consent_text: originalStudy.study.consent_text,
+          brand_name: originalStudy.study.brand_name,
+          estimated_duration_minutes: originalStudy.study.estimated_duration_minutes,
+          locale: originalStudy.study.locale,
+          // Launched rather than the original's own status: only launched
+          // studies are selectable, and a study authored as part of duplicating
+          // an opportunity has no separate review step to wait for. Copying an
+          // archived or draft status through would produce a native duplicate
+          // that 404s "Survey" for every participant once published - the
+          // native-survey session gate earlier in this file refuses any study
+          // that isn't launched - with nothing warning the author. Same
+          // reasoning, same value, as the
+          // create path's own inline_study/inline_survey branches.
+          status: 'launched',
+          kind: originalStudy.study.kind,
+          // The duplicating caller becomes the new study's owner too, same as
+          // the opportunity itself becomes theirs below.
+          owner_user_id: req.user!.id,
+          // Provenance, exactly like the create path's copy-on-select branches:
+          // this new study was copied from the original, not authored blank.
+          copied_from_study_id: originalStudy.study.id,
+          consent_template_id: originalStudy.study.consent_template_id,
+          consent_template_version: originalStudy.study.consent_template_version,
+          steps
+        });
+        duplicatedStudyId = stored.study.id;
+      } else {
+        // The link is stale - the study behind it is gone. Duplicate the
+        // opportunity anyway rather than refusing the whole request; same
+        // fallback as no link at all, logged so an orphaned link is
+        // discoverable rather than silently swallowed.
+        logger.warn('Duplicate: linked FirstHand study not found, duplicating opportunity without it', {
+          opportunityId: id,
+          firsthandStudyId: opp.firsthand_study_id
+        });
+      }
+    } catch (error) {
+      logger.error('Duplicate: failed to clone linked FirstHand study, duplicating opportunity without it', {
+        error,
         opportunityId: id,
         firsthandStudyId: opp.firsthand_study_id
       });
