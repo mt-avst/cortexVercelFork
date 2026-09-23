@@ -18,8 +18,20 @@ export const autoCloseOpportunityIfNeeded = async (opportunityId: string): Promi
   if (result.rows.length > 0) {
     const { total_sessions, past_sessions, status } = result.rows[0];
     if (total_sessions > 0 && past_sessions == total_sessions && status === 'published') {
+      // `auto_closed = true` in the SAME statement as the status flip, so a
+      // study can never be observed closed-by-the-sweep but not marked so. The
+      // admin table's "Auto-closed" caption reads this; a manual close through
+      // PATCH /api/opportunities/:id writes false instead.
+      //
+      // `AND status = 'published'` because the SELECT above is a separate
+      // statement: a manual close or a move to draft landing between the two
+      // would otherwise be overwritten as a sweep close.
+      //
+      // POST /:id/close-if-past also lands here, started by the owner. That is
+      // still an automatic close for this flag: the rule (every session over)
+      // decided it, not the person, and the endpoint closes nothing otherwise.
       await pool.query(
-        'UPDATE opportunities SET status = $1 WHERE id = $2',
+        "UPDATE opportunities SET status = $1, auto_closed = true WHERE id = $2 AND status = 'published'",
         ['closed', opportunityId]
       );
     }
@@ -56,12 +68,16 @@ export const autoCloseOpportunityIfNeeded = async (opportunityId: string): Promi
  * closed. `NOW()` is the database clock, so the boundary is a real timestamptz
  * comparison, not an app-server time the test would have to stub.
  *
+ * Sets `auto_closed = true` in the same UPDATE as the status, like
+ * `autoCloseOpportunityIfNeeded`: both are the automatic closes the admin
+ * table captions "Auto-closed", as opposed to a manual close through PATCH.
+ *
  * Returns the number of studies it closed, for the cron log.
  */
 export const autoClosePublishedStudiesPastEndDate = async (): Promise<number> => {
   const result = await pool.query(
     `UPDATE opportunities
-     SET status = 'closed'
+     SET status = 'closed', auto_closed = true
      WHERE status = 'published'
        AND end_date IS NOT NULL
        AND end_date < NOW()

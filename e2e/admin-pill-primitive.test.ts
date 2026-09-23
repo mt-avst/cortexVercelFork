@@ -44,8 +44,12 @@ const study = (id: string, status: string, extra: Fixture = {}): Fixture => ({
   ...extra,
 });
 
-/** A closed study renders the status pill AND the "Auto-closed" marker. */
-const CLOSED = study('Closed study', 'closed');
+/**
+ * A closed study renders the status pill AND the "Auto-closed" marker.
+ * `auto_closed: true` since admin table Step 2: the caption is the server's
+ * record of an automatic close (MR A), not every closed study.
+ */
+const CLOSED = study('Closed study', 'closed', { auto_closed: true });
 
 /**
  * `isPublishedButNotWorking` resolves true for an external-delivery study
