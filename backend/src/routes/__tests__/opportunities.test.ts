@@ -34,6 +34,15 @@ jest.mock('../../firsthand/runtime-repository-postgres', () => ({
   findParticipantSessionForOpportunity: jest.fn(async () => null),
   // Defaults to "no completion trace for anyone". Row-10 tests queue their own.
   findParticipantCompletionsForOpportunities: jest.fn(async () => []),
+  // Defaults to "no terminal, answer-carrying session anywhere in this
+  // participant's history for this opportunity" (cto/AdaptaLabs#155, review
+  // pass 1 HIGH-2) - the common case, and the one every test in this file that
+  // does not care about that refusal needs so the survey-session route does
+  // not throw on an unmocked import. The refusal itself is covered end to end
+  // against a real Postgres in mint-refuses-answer-carrying-abandoned-session-postgres.test.ts,
+  // which is where a test that cares about this predicate belongs, since the
+  // whole reason it exists is to scan real rows this mock cannot represent.
+  hasAnswerCarryingTerminalSession: jest.fn(async () => false),
 }));
 
 // Defaults to "nobody answered". Every results test that cares queues its own
