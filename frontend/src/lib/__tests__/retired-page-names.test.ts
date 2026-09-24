@@ -34,8 +34,6 @@ const RETIRED: RegExp[] = [
 
 /** Literal text that matches a pattern but is not a page name, each with its reason. */
 const ALLOWED: ReadonlyArray<{ file: string; text: string; why: string }> = [
-  { file: 'frontend/src/api/client.ts', text: '/admin/dashboard', why: 'API path' },
-  { file: 'backend/src/routes/admin.ts', text: '/dashboard', why: 'API path' },
   { file: 'frontend/src/pages/Admin.tsx', text: 'Failed to load dashboard stats', why: 'log message, not shown' },
   {
     file: 'frontend/src/components/OpportunityForm/BasicInfoTab.tsx',
@@ -43,7 +41,6 @@ const ALLOWED: ReadonlyArray<{ file: string; text: string; why: string }> = [
     why: 'example study content',
   },
   { file: 'frontend/src/components/OpportunityForm/BasicInfoTab.tsx', text: 'e.g., Mobile App, Dashboard, API, etc.', why: 'example study content' },
-  { file: 'frontend/src/pages/MyBookings.tsx', text: 'Browse studies', why: 'an action, kept on purpose' },
 ];
 
 const shippedFiles = (dir: string): string[] =>
@@ -96,13 +93,14 @@ describe('retired page names (#169)', () => {
         .filter((text) => !ALLOWED.some((a) => a.file === rel && a.text === text))
         .map((text) => `${rel}: ${text}`);
     });
-    expect(hits).toEqual([]);
+    expect(hits, 'rename it to the new page name, or add an ALLOWED entry with its reason').toEqual([]);
   });
 
-  it('every allow-list entry still exists, so none outlives its reason', () => {
+  it('every allow-list entry is still needed, so none outlives its reason', () => {
     for (const a of ALLOWED) {
       const source = readFileSync(join(REPO, a.file), 'utf8');
-      expect(literalTexts(source, a.file.endsWith('.tsx')), `${a.file}: ${a.text}`).toContain(a.text);
+      expect(literalTexts(source, a.file.endsWith('.tsx')), `${a.file}: ${a.text} still exists`).toContain(a.text);
+      expect(RETIRED.some((re) => re.test(a.text)), `${a.text} still matches a retired pattern`).toBe(true);
     }
   });
 
