@@ -20,11 +20,24 @@ import { join } from 'path';
 const CSS = readFileSync(join(__dirname, '..', '_components.css'), 'utf8');
 
 /** One `selector { declarations }` block, matched on the FIRST occurrence of
- * `${selector} {` at any indentation. Assumes flat declarations (no nested
- * braces) - true of every plain rule in this file. */
+ * `selector` as a whole item in a rule's own selector list - anchored to the
+ * start of its line (whitespace only before it), followed by a comma (more
+ * selectors follow) or the rule's own opening brace. C-L6: a plain
+ * `indexOf('${selector} {')` also matches a COMPOUND selector that merely
+ * ends in the same text (e.g. `.admin-phone-filters .admin-chip {`), which
+ * is a different, more specific rule - that false match is exactly what let
+ * `.admin-phone-chip` exist only to dodge this lookup rather than share
+ * `.admin-chip`. Assumes flat declarations (no nested braces) - true of
+ * every plain rule in this file. */
 const blockFor = (css: string, selector: string): string => {
-  const start = css.indexOf(`${selector} {`);
-  if (start === -1) throw new Error(`selector not found: ${selector}`);
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Anchored at the start of its own line (only whitespace before it) and
+  // followed directly by its rule's opening brace - so `selector` must be
+  // the WHOLE (possibly multi-line, comma-joined) selector list this call
+  // was given, not a suffix inside a longer compound/descendant selector.
+  const found = new RegExp(`^[ \\t]*${escaped}[ \\t]*\\{`, 'm').exec(css);
+  if (!found) throw new Error(`selector not found: ${selector}`);
+  const start = found.index;
   const from = css.indexOf('{', start);
   // Declarations end at the rule's own closing brace, which - for every rule
   // in this file - sits alone on its own line, indented to match its
@@ -160,6 +173,8 @@ describe('.admin-card-sort shared control height (#131)', () => {
   it('grows both controls to 2.5rem on a phone, matching every other admin select there', () => {
     // Control: the phone rule it matches still sets 2.5rem.
     expect(CSS).toMatch(/\.admin-dashboard \.form-select \{[^}]*min-height:\s*2\.5rem/);
-    expect(CSS).toMatch(/@media \(max-width: 575px\) \{\s*\.admin-card-sort \{\s*--admin-card-sort-height:\s*2\.5rem\s*;/);
+    // C-L2: the phone breakpoint was unified on 575.98px (not 575px) across
+    // the branch's cascade bumps.
+    expect(CSS).toMatch(/@media \(max-width: 575\.98px\) \{\s*\.admin-card-sort \{\s*--admin-card-sort-height:\s*2\.5rem\s*;/);
   });
 });

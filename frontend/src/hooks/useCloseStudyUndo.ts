@@ -90,11 +90,34 @@ const focusInPlace = (el: HTMLElement | null) => {
  * never clears or steals focus from another's notice.
  */
 /** Whether an element is on screen. An element with no box at all (not laid
- * out, e.g. in a test DOM) counts as on screen: nothing says otherwise. */
+ * out, e.g. in a test DOM) counts as on screen: nothing says otherwise. Any
+ * overlap counts - use this for "is the reader currently looking at this"
+ * (e.g. whether to hold scroll anchoring). For choosing an AUTOMATIC focus
+ * target, `isFullyInViewport` below is the right one: a target only partly
+ * inside the viewport is exactly the thing focus must not land on (#160
+ * follow-up - a lapsed Undo notice could hand focus to a title
+ * link straddling the bottom edge). */
 export const isInViewport = (el: Element): boolean => {
   const rect = el.getBoundingClientRect();
   if (rect.width === 0 && rect.height === 0) return true;
   return rect.bottom > 0 && rect.top < window.innerHeight;
+};
+
+/** Whether an element is ENTIRELY on screen (both edges), not merely
+ * overlapping it. The same no-box-in-tests pass-through as `isInViewport`.
+ * `topBoundary` is the top edge to test against, defaulting to the
+ * viewport's own (0) - but the table's `thead` is `position: sticky; top: 0`
+ * from 1024px up (_components.css, "Row dividers and the table-mode row
+ * box"), and once stuck it paints OVER whatever sits at y=0, so a title
+ * measured "fully in the viewport" there was not actually reachable:
+ * `elementFromPoint` at its centre returned the sort button in the header,
+ * not the link (WCAG 2.4.11). The caller passes the thead's own bottom edge
+ * when it is currently stuck; every other caller's default 0 is
+ * unaffected. */
+export const isFullyInViewport = (el: Element, topBoundary = 0): boolean => {
+  const rect = el.getBoundingClientRect();
+  if (rect.width === 0 && rect.height === 0) return true;
+  return rect.top >= topBoundary && rect.bottom <= window.innerHeight;
 };
 
 /** Runs `fn` two frames from now (after the re-sort has been laid out). */
@@ -109,6 +132,24 @@ const afterLayout = (fn: () => void) => {
 export function useCloseStudyUndo({ onStatusChanged, focusStudy, captureNeighbours }: Options) {
   const [notice, setNotice] = useState<ClosedStudyNotice | null>(null);
   const [undoingId, setUndoingId] = useState<string | null>(null);
+  // A closed study's kebab, any time after its Undo window has passed
+  // ("No Reopen once the Undo window has passed"). Distinct from
+  // `undoingId`: that one only ever fires from the notice's own Undo button,
+  // which needs a live `notice` (see `undo` below) - this fires from the row
+  // menu on ANY closed study, with no notice involved.
+  const [reopeningId, setReopeningId] = useState<string | null>(null);
+  // A successful Reopen's announcement: "Reopened
+  // <title>", in place under the row - the way Copy's own notice works
+  // (CopyNoticeRow), not a second copy of the Close/Undo notice's row-freeze
+  // machinery. Lapses on the same clock Copy's does. `snapshot` (the
+  // reopened-under-the-Closed-filter gap): the
+  // study AS CLOSED, before this PATCH - Admin.tsx sorts on it the same way
+  // Close's own frozen snapshot works, so a reopen the live filters now
+  // exclude (Closed, or Broken if it was also broken) still has a slot to
+  // show its "Reopened" notice in, instead of the notice having nowhere to
+  // render at all.
+  const [reopenNotice, setReopenNotice] = useState<{ id: string; title: string; snapshot: Opportunity } | null>(null);
+  const reopenNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [actionError, setActionError] = useState<StudyActionError | null>(null);
   const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
   // True from a focus hand-off that coincides with a re-sort (a lapse with
@@ -124,6 +165,7 @@ export function useCloseStudyUndo({ onStatusChanged, focusStudy, captureNeighbou
   const mountedRef = useRef(true);
   // Mirrors, read by timers and settled requests scheduled on earlier renders.
   const noticeRef = useRef<ClosedStudyNotice | null>(null);
+  const reopenNoticeRef = useRef<{ id: string; title: string; snapshot: Opportunity } | null>(null);
   const errorStateRef = useRef<StudyActionError | null>(null);
   const undoingRef = useRef<string | null>(null);
   const seqRef = useRef(0);
@@ -131,6 +173,9 @@ export function useCloseStudyUndo({ onStatusChanged, focusStudy, captureNeighbou
   useEffect(() => {
     noticeRef.current = notice;
   }, [notice]);
+  useEffect(() => {
+    reopenNoticeRef.current = reopenNotice;
+  }, [reopenNotice]);
   useEffect(() => {
     errorStateRef.current = actionError;
   }, [actionError]);
@@ -170,6 +215,29 @@ export function useCloseStudyUndo({ onStatusChanged, focusStudy, captureNeighbou
     setNotice((current) => (current?.id === id ? null : current));
   }, [captureNeighbours, focusStudy, requestFocus]);
 
+  const clearReopenNoticeTimer = useCallback(() => {
+    if (reopenNoticeTimerRef.current) {
+      clearTimeout(reopenNoticeTimerRef.current);
+      reopenNoticeTimerRef.current = null;
+    }
+  }, []);
+
+  /** Dismiss the "Reopened" notice, focus going to the study itself - the
+   * same hand-off Copy's own dismiss uses (Admin.tsx `dismissCopyNotice`),
+   * mirroring Close's own lapse: capture the notice's neighbours
+   * BEFORE the notice goes and the row re-sorts, defer focus through
+   * `requestFocus` so it lands after that re-sort is laid out, and hold
+   * scroll anchoring through it - dismissing used to call `focusStudy`
+   * straight away, landing focus on the row's pre-dismiss slot and letting
+   * the page jump under it once the sort unfroze. */
+  const dismissReopenNotice = useCallback((id: string) => {
+    clearReopenNoticeTimer();
+    const near = captureNeighbours?.(id) ?? [];
+    setReopenNotice((current) => (current?.id === id ? null : current));
+    requestFocus('study', id, near);
+    setHandoff(true);
+  }, [captureNeighbours, clearReopenNoticeTimer, requestFocus]);
+
   const closeStudy = useCallback(async (study: Opportunity) => {
     const { id, title } = study;
     if (closingRef.current.has(id)) return;
@@ -193,11 +261,17 @@ export function useCloseStudyUndo({ onStatusChanged, focusStudy, captureNeighbou
     }
     if (!mountedRef.current) return;
     onStatusChanged(id, 'closed');
+    // A leftover "Reopened" notice for this same study (from an
+    // earlier Reopen its Undo window never used) would otherwise show
+    // alongside the fresh "Closed ... Undo" notice below - closing the
+    // study makes that older announcement stale.
+    clearReopenNoticeTimer();
+    setReopenNotice((current) => (current?.id === id ? null : current));
     clearTimer();
     setNotice({ id, title, snapshot: study });
     timerRef.current = setTimeout(() => lapse(id), CLOSE_UNDO_MS);
     requestFocus('undo', id);
-  }, [clearTimer, lapse, onStatusChanged, requestFocus]);
+  }, [clearReopenNoticeTimer, clearTimer, lapse, onStatusChanged, requestFocus]);
 
   const undo = useCallback(async () => {
     const current = noticeRef.current;
@@ -247,6 +321,84 @@ export function useCloseStudyUndo({ onStatusChanged, focusStudy, captureNeighbou
     }
   }, [clearTimer, onStatusChanged, requestFocus]);
 
+  const reopeningRef = useRef(new Set<string>());
+
+  /**
+   * Reopen a closed study from its row menu - the same PATCH `undo()` sends,
+   * but reachable at any time, not only while that study's own Undo notice is
+   * still up. Runs the publish guard server-side exactly as Undo does, and
+   * shows a refusal the same way: under the row, with the server's own
+   * reason. Unlike Undo there is no notice slot to anchor a refusal to - the
+   * row for a closed study is already live and in place - so a refusal here
+   * is a plain row error (no `anchor`), rendered by the existing
+   * `actionError && !rowError.anchor` branch in Admin.tsx.
+   */
+  const reopenStudy = useCallback(async (study: Opportunity) => {
+    const { id, title } = study;
+    if (reopeningRef.current.has(id)) return;
+    reopeningRef.current.add(id);
+    setReopeningId(id);
+    setActionError((current) => (current?.id === id ? null : current));
+    try {
+      await updateOpportunity(id, { status: 'published' });
+      if (!mountedRef.current) return;
+      onStatusChanged(id, 'published');
+      // mirror `undo()`'s success path exactly - a
+      // Reopen re-sorts the row (closed studies and published ones sort
+      // differently) just as an Undo does, and before this fix `reopenStudy`
+      // called `focusStudy` straight after the PATCH, ahead of that re-sort,
+      // landing focus off screen on the row's OLD position (measured -107px
+      // at 1440, or on BODY under the Closed filter, where the row leaves
+      // the list outright). `requestFocus` defers through the same
+      // `focusRequest` effect Close/Undo/Dismiss already use, which runs
+      // after the re-render has the row in its new place, and `setHandoff`
+      // holds scroll anchoring through that resort the same way.
+      const near = captureNeighbours?.(id) ?? [];
+      requestFocus('study', id, near);
+      setHandoff(true);
+      clearReopenNoticeTimer();
+      setReopenNotice({ id, title, snapshot: study });
+      // Lapse mirrors `dismissReopenNotice`: capture neighbours
+      // before the notice goes, defer focus past the re-sort it triggers,
+      // and hold scroll anchoring through it, so an unattended lapse cannot
+      // scroll the page (measured 1549px at 390 before this fix).
+      reopenNoticeTimerRef.current = setTimeout(() => {
+        reopenNoticeTimerRef.current = null;
+        const stillCurrent = reopenNoticeRef.current?.id === id;
+        // Only hand focus off if the reader is still AT the notice: on the
+        // page body (nothing focused), on the study's own row/link, or
+        // inside the notice itself. Anyone else has moved on (e.g. typed
+        // into search), and an unconditional hand-off - the bug this guard
+        // fixes - pulled focus out from under them and could drop the rest
+        // of a word they were mid-typing. Close's own lapse (`lapse` above)
+        // only moves focus when Undo itself still holds it; this mirrors
+        // that for Reopen, whose notice has no single focusable control.
+        const active = document.activeElement as HTMLElement | null;
+        const focusAtStudy = !active || active === document.body
+          || active.dataset.studyId === id
+          || Boolean(active.closest(`[data-notice-for="${id}"]`));
+        setReopenNotice((current) => (current?.id === id ? null : current));
+        if (stillCurrent && focusAtStudy) {
+          const near = captureNeighbours?.(id) ?? [];
+          requestFocus('study', id, near);
+          setHandoff(true);
+        }
+      }, CLOSE_UNDO_MS);
+    } catch (error: unknown) {
+      logger.warn('Failed to reopen research study', {
+        component: 'Admin',
+        opportunityId: id,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+      if (!mountedRef.current) return;
+      setActionError({ id, title, message: failureMessage('reopen', title, error) });
+      requestFocus('error', id);
+    } finally {
+      reopeningRef.current.delete(id);
+      if (mountedRef.current) setReopeningId((current) => (current === id ? null : current));
+    }
+  }, [captureNeighbours, clearReopenNoticeTimer, onStatusChanged, requestFocus]);
+
   /** Show a refused row action (e.g. Copy) under its study's row. */
   const showRowError = useCallback((study: Opportunity, message: string) => {
     if (!mountedRef.current) return;
@@ -286,6 +438,7 @@ export function useCloseStudyUndo({ onStatusChanged, focusStudy, captureNeighbou
     return () => {
       mountedRef.current = false;
       if (timerRef.current) clearTimeout(timerRef.current);
+      if (reopenNoticeTimerRef.current) clearTimeout(reopenNoticeTimerRef.current);
     };
   }, []);
 
@@ -305,10 +458,14 @@ export function useCloseStudyUndo({ onStatusChanged, focusStudy, captureNeighbou
   return {
     notice,
     undoingId,
+    reopeningId,
+    reopenNotice,
     actionError,
     frozenSnapshot,
     closeStudy,
     undo,
+    reopenStudy,
+    dismissReopenNotice,
     showRowError,
     dismissError,
     isCloseInFlight,

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useContext, useId } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
 export interface DropdownProps {
@@ -12,11 +12,24 @@ export interface DropdownProps {
    * Opt in to the strict WAI-ARIA menu-button keyboard model: aria-haspopup="menu",
    * focus moves to the first item on open, a roving tabindex with Up/Down/Home/End,
    * and Tab closes. Use ONLY when every popup child is a menuitem (e.g. the admin
-   * row-action kebab). The default (off) leaves items as ordinary Tab stops, which
-   * is what a popup mixing menuitems with links (e.g. the header nav) needs - the
-   * roving model navigates only [role="menuitem"] and would strand those links.
+   * row-action kebab) - the roving model navigates only [role="menuitem"] and
+   * would strand anything else.
    */
   menu?: boolean;
+  /**
+   * Opt in to the WAI-ARIA Disclosure pattern instead: no role="menu" on the
+   * panel and no aria-haspopup on the trigger (both assert a strict
+   * single-purpose widget a popup that mixes navigation links, an info block
+   * and a couple of actions is not). Items stay ordinary Tab stops in DOM
+   * order - correct for the header nav's profile/phone menus, whose content
+   * is fundamentally page navigation, not a set of actions (#117 follow-up:
+   * this popup previously carried role="menu" unconditionally with no
+   * keyboard model to back it, announcing a menu widget that arrow keys did
+   * nothing inside). Escape-closes-and-returns-focus still applies here,
+   * because that is a property of any dismissible floating popup, not of the
+   * menu role specifically.
+   */
+  disclosure?: boolean;
 }
 
 /**
@@ -28,6 +41,19 @@ export interface DropdownProps {
 export const DROPDOWN_BOUNDARY_ATTRIBUTE = 'data-dropdown-boundary';
 
 export type DropdownPlacement = 'bottom' | 'top';
+
+/**
+ * The popup's WAI-ARIA mode, threaded from `Dropdown` to every `DropdownItem`
+ * inside it. `DropdownItem` used to hardcode
+ * `role="menuitem"` in all three of its render branches regardless of mode -
+ * correct for `menu` (the roving-tabindex model below reads exactly that
+ * role), but in `disclosure` mode it left the popup's own children with no
+ * `role="menu"` ancestor at all once the panel itself stopped asserting one,
+ * which is `aria-required-parent`: critical under axe. `legacy` (neither
+ * prop set) keeps the old unconditional behaviour for the one shared
+ * component's own default, so nothing already exercising it moves. */
+export type DropdownMode = 'menu' | 'disclosure' | 'legacy';
+const DropdownModeContext = React.createContext<DropdownMode>('legacy');
 
 /**
  * Where a menu opens: below its trigger unless that would run past
@@ -107,7 +133,8 @@ export const Dropdown: React.FC<DropdownProps> = ({
   align = 'end',
   className = '',
   menuClassName = '',
-  menu = false
+  menu = false,
+  disclosure = false
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [placement, setPlacement] = useState<DropdownPlacement>('bottom');
@@ -284,8 +311,42 @@ export const Dropdown: React.FC<DropdownProps> = ({
     }
   }, [menuItems, focusItemAt]);
 
+  // menu -> strict ARIA menu-button widget. disclosure -> no widget role at
+  // all (plain Tab-order popup). Neither -> the pre-existing generic popup
+  // (role="menu", aria-haspopup="true", no keyboard model), kept only for the
+  // shared component's own default so nothing already exercising it moves;
+  // every real consumer now picks one of the two named modes explicitly.
+  const mode: DropdownMode = menu ? 'menu' : disclosure ? 'disclosure' : 'legacy';
+  const ariaHaspopup = menu ? 'menu' : disclosure ? undefined : 'true';
+  const popupRole = disclosure ? undefined : 'menu';
+  const menuId = useId();
+
+  // close the popup once focus leaves it - it stayed open
+  // on main and on this branch alike once Tab moved past the last item, so
+  // the next control down the page (e.g. the header's "Task lists" link at
+  // 390) sat hidden under a popup nothing pointed at any more (WCAG 2.4.11).
+  // A `focusout` on the container (React's onBlur bubbles from any
+  // descendant) fires for the mouse-outside-click case too - redundant with
+  // the effect below, but idempotent, so left as the one shared close path
+  // for "focus/interaction moved away" rather than teaching this one only
+  // keyboard users.
+  const handleContainerBlur = useCallback((event: React.FocusEvent) => {
+    const next = event.relatedTarget as Node | null;
+    // a click that lands on a disabled item or the popup's own padding
+    // focuses nothing, so `relatedTarget` is null - indistinguishable, from
+    // this event alone, from focus genuinely leaving the popup. Reading it as
+    // "still inside" is right far more often: outside clicks are already
+    // handled by the mousedown listener above, so this blur-close exists for
+    // keyboard/assistive focus actually moving elsewhere, which always leaves
+    // a `relatedTarget` (or, in the no-support case, the browsers that never
+    // populate it also never fire this listener in a way this branch reaches).
+    if (!next) return;
+    if (dropdownRef.current?.contains(next)) return;
+    setIsOpen(false);
+  }, []);
+
   return (
-    <div ref={dropdownRef} className={`dropdown ${className}`}>
+    <div ref={dropdownRef} className={`dropdown ${className}`} onBlur={handleContainerBlur}>
       {React.isValidElement(trigger) ? (
         React.cloneElement(trigger as React.ReactElement<Record<string, unknown>>, {
           // Compose, don't clobber: a trigger may carry its own onClick (e.g. the
@@ -301,7 +362,8 @@ export const Dropdown: React.FC<DropdownProps> = ({
             handleKeyDown(event);
           },
           'aria-expanded': isOpen,
-          'aria-haspopup': menu ? 'menu' : 'true',
+          'aria-haspopup': ariaHaspopup,
+          'aria-controls': isOpen ? menuId : undefined,
           className: `${(trigger as React.ReactElement<{ className?: string }>).props.className || ''} dropdown-toggle`.trim(),
         })
       ) : (
@@ -312,7 +374,8 @@ export const Dropdown: React.FC<DropdownProps> = ({
           onClick={handleToggle}
           onKeyDown={handleKeyDown}
           aria-expanded={isOpen}
-          aria-haspopup={menu ? 'menu' : 'true'}
+          aria-haspopup={ariaHaspopup}
+          aria-controls={isOpen ? menuId : undefined}
         >
           {trigger}
         </button>
@@ -320,15 +383,17 @@ export const Dropdown: React.FC<DropdownProps> = ({
 
       {isOpen && (
         <div
+          id={menuId}
           ref={menuRef}
           className={`dropdown-menu show ${align === 'end' ? 'dropdown-menu-end' : ''} ${
             placement === 'top' ? 'dropdown-menu--up' : ''
           } ${menuClassName}`.replace(/\s+/g, ' ').trim()}
           data-placement={placement}
           style={maxHeight === null ? undefined : { maxHeight, overflowY: 'auto' }}
-          role="menu"
+          role={popupRole}
           onKeyDown={menu ? handleMenuKeyDown : undefined}
         >
+          <DropdownModeContext.Provider value={mode}>
           {React.Children.map(children, child => {
             if (React.isValidElement(child)) {
               // Pass close handler to items
@@ -348,6 +413,7 @@ export const Dropdown: React.FC<DropdownProps> = ({
             }
             return child;
           })}
+          </DropdownModeContext.Provider>
         </div>
       )}
     </div>
@@ -357,13 +423,21 @@ export const Dropdown: React.FC<DropdownProps> = ({
 export const DropdownItem = React.forwardRef<HTMLButtonElement, DropdownItemProps>(
   ({ children, as = 'button', href, to, icon, className = '', onClick, ...props }, ref) => {
     const classes = `dropdown-item ${className}`.trim();
+    // no `role="menuitem"` in disclosure mode - a
+    // disclosure's children are ordinary Tab stops (nav links, a theme
+    // toggle button, a couple of actions), not menu items with a
+    // `role="menu"` parent to satisfy `aria-required-parent`. `menu` mode
+    // keeps the role (the roving-tabindex model in `Dropdown` reads exactly
+    // this selector); `legacy` keeps the old unconditional behaviour.
+    const mode = useContext(DropdownModeContext);
+    const itemRole = mode === 'disclosure' ? undefined : 'menuitem';
 
     if (to && !props.disabled) {
       return (
         <Link
           to={to}
           className={classes}
-          role="menuitem"
+          role={itemRole}
           title={props.title}
           aria-label={props['aria-label']}
           onClick={onClick as unknown as React.MouseEventHandler<HTMLAnchorElement>}
@@ -376,10 +450,10 @@ export const DropdownItem = React.forwardRef<HTMLButtonElement, DropdownItemProp
 
     if (as === 'link' && href) {
       return (
-        <a 
-          href={href} 
-          className={classes} 
-          role="menuitem"
+        <a
+          href={href}
+          className={classes}
+          role={itemRole}
           onClick={onClick as unknown as React.MouseEventHandler<HTMLAnchorElement>}
         >
           {icon && <span className="me-2">{icon}</span>}
@@ -393,7 +467,7 @@ export const DropdownItem = React.forwardRef<HTMLButtonElement, DropdownItemProp
         ref={ref}
         type="button"
         className={classes}
-        role="menuitem"
+        role={itemRole}
         onClick={onClick}
         {...props}
       >

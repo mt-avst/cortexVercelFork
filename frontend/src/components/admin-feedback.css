@@ -98,8 +98,13 @@
   outline-offset: 2px;
   border-radius: 2px;
 }
+/* Matches Approvals' and Bookings' own heading rows (0.95rem/600) -
+   this was a bare Bootstrap h3 (1.75rem) with no size of its own, the
+   tallest of the four tab panels' headings by a wide margin. */
 .admin-feedback .feedback-heading {
   color: var(--text-primary);
+  font-size: 0.95rem;
+  font-weight: 600;
 }
 .admin-feedback .empty-state-icon {
   color: var(--text-muted);
@@ -190,6 +195,63 @@
   .admin-feedback .feedback-table thead th:last-child,
   .admin-feedback .feedback-table tbody td:last-child {
     padding-right: 0 !important;
+  }
+}
+
+/* The three widths below used to be inline
+   `style={{ width }}` on the `<th>`s (AdminFeedback.tsx), needing
+   `!important` here to even be contested - and losing the contest anyway,
+   because `table-layout` was never `fixed`: a column's `width` under `auto`
+   layout (the browser default) is only a HINT the layout algorithm weighs
+   against actual cell content, not an enforced value. The comment this one
+   replaces said "gives Feedback 272px at 800px"; measured, it rendered
+   159px - the gap between what the CSS asked for and what auto layout
+   actually does with a hint. `table-layout: fixed` makes every one of these
+   widths exact (the browser stops looking at content at all), so the
+   comment and the render can no longer drift apart, and Feedback - the one
+   column with no width class - gets whatever is left over, guaranteed. */
+@media (min-width: 768px) {
+  .admin-feedback .feedback-table {
+    table-layout: fixed;
+  }
+
+  .admin-feedback .feedback-col-date {
+    width: 150px;
+  }
+
+  .admin-feedback .feedback-col-category {
+    width: 168px;
+  }
+
+  .admin-feedback .feedback-col-user {
+    width: 232px;
+  }
+
+  .admin-feedback .feedback-col-actions {
+    width: 80px;
+    text-align: center;
+  }
+}
+
+/* 768-991.98px: the three widths above are tuned for >=1024px and left only
+   112px for Feedback - the one column that is the actual content - at 800px,
+   truncating on its first line ("The session times on the...", measured).
+   Narrower here instead - EXCEPT Category, which cannot shrink below its
+   own content: "Feature Request" (measured 129px) plus this table's 16px
+   cell padding each side needs >=161px, so an earlier 108px/130px here
+   clipped it mid-word ("FEATURE RE..."). Date and User give up the width
+   Category cannot. */
+@media (min-width: 768px) and (max-width: 991.98px) {
+  .admin-feedback .feedback-col-date {
+    width: 96px;
+  }
+
+  .admin-feedback .feedback-col-category {
+    width: 168px;
+  }
+
+  .admin-feedback .feedback-col-user {
+    width: 120px;
   }
 }
 

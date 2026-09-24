@@ -1,6 +1,8 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
 import {
   THEMES,
+  contrastRatio,
   expectNoUnmockedCalls,
   openAdminDashboard,
   resizeTo,
@@ -127,18 +129,33 @@ const CHIPS: Array<[string, number]> = [
   ['Fully booked', 0],
 ];
 
-/** Next-note warning horizon: inside and outside, per milestone kind. */
+/**
+ * Next-note warning horizon: inside and outside, per milestone kind.
+ *
+ * D1 (Step 2) ties the warning strictly to `isClosingSoon`, the CLOSE date
+ * alone, on `Math.floor(daysLeft) <= 3` - the same predicate the label, the
+ * chip and the Needs attention card all read. Two consequences pinned below:
+ * a "3 days 1 hour" close (floor 3) now warns, where an earlier, looser rule
+ * read that as outside 3 days - `boundary` pins the true new edge. And a
+ * `session`-kind note (no close date is near; a session is) never warns,
+ * however soon that session sits - `getNextMilestone` only ever shows a
+ * `session` note when `isClosingSoon` is already false, so warning and
+ * session-kind note are mutually exclusive by construction.
+ */
 const WARNED = {
-  session: 'Server to Cloud migration: what actually hurt', // now + 1d 6h
   deadline: 'Release notes: what do you read?', // now + 2d 23h
   deadline2: 'Developer experience pulse, Q3', // now + 1d 14h
+  boundary: 'Release cadence: monthly or quarterly?', // now + 3d 1h, floor 3: still inside
 };
 /** Closed by hand, end date at now + 2d 7h: closed, so never warned. */
 const CLOSED_INSIDE_HORIZON = 'Search relevance: which result did you want?';
 const NOT_WARNED = {
-  session: '2027 roadmap interviews', // next year
-  deadline: 'Release cadence: monthly or quarterly?', // now + 3d 1h
-  deadline2: 'Interview: admin automation workflows', // now + 5d 14h
+  // A session-kind note: its own session sits now + 1d 6h away, but the
+  // study's close date (Oct 16) is far outside the horizon, so the note -
+  // and the warning colour with it - never switches to it.
+  session: 'Server to Cloud migration: what actually hurt',
+  deadline: 'Interview: admin automation workflows', // now + 5d 14h
+  farFuture: '2027 roadmap interviews', // next year
 };
 
 const PUBLISHED_MINE = 'Which editor do you write Groovy in?';
@@ -322,7 +339,11 @@ const titleLink = (page: Page, title: string) => row(page, title).getByRole('lin
 const header = (page: Page, label: string) =>
   page.locator('table.admin-data-table thead th').filter({ hasText: new RegExp(`^\\s*${label.replace(/[/]/g, '\\/')}\\s*$`) });
 const kebab = (page: Page, title: string) => row(page, title).locator('.admin-action-btn-kebab');
-const chipRow = (page: Page) => page.locator('.admin-quick-filters');
+// The chip row is `.admin-quick-filters` at >=576px and `.admin-phone-filters`
+// below it (PhoneStudyFilters.tsx: a genuinely different toolbar, not the
+// same element resized) - only one renders at a time, so the comma selector
+// picks up whichever is actually there.
+const chipRow = (page: Page) => page.locator('.admin-quick-filters, .admin-phone-filters');
 const chips = (page: Page) => chipRow(page).locator('button.admin-chip');
 const chip = (page: Page, label: string) => chips(page).filter({ hasText: new RegExp(`^\\s*${label}\\s*\\d*\\s*$`) });
 
@@ -339,12 +360,20 @@ const titles = (page: Page): Promise<string[]> =>
  */
 const slotNeighbours = (page: Page, title: string): Promise<{ next: string | null; prev: string | null }> =>
   page.evaluate((t) => {
-    const notices = [...document.querySelectorAll('table.admin-data-table tbody tr.admin-inline-notice-row')];
-    const slot = notices.find((tr) => tr.textContent?.includes(`“${t}”`));
+    // R3-H1: `data-notice-for` sits on a full `<tr>` at >=1024 (the sibling-row
+    // layout) but on a `td.col-notice` INSIDE the study's own `<tr>` below 1024
+    // (the compact in-card layout). `[data-notice-for="<id>"]` followed by
+    // `.closest('tr')` resolves both shapes to the row whose neighbours we
+    // want; the old `tr.admin-inline-notice-row` text-scan only ever matched
+    // the >=1024 shape, so this always read no neighbours below 1024.
+    const table = document.querySelector('table.admin-data-table');
+    const link = [...(table?.querySelectorAll<HTMLAnchorElement>('a.row-title') ?? [])].find(
+      (a) => a.getAttribute('title') === t
+    );
+    const id = link?.dataset.studyId;
+    const slot = id ? table?.querySelector(`[data-notice-for="${id}"]`)?.closest('tr') : null;
     const titleOf = (tr: Element | null) =>
-      tr && !tr.classList.contains('admin-inline-notice-row')
-        ? (tr.querySelector('td [title]')?.getAttribute('title') ?? null)
-        : null;
+      tr?.querySelector<HTMLAnchorElement>('a.row-title')?.getAttribute('title') ?? null;
     if (!slot) return { next: null, prev: null };
     let next = slot.nextElementSibling;
     while (next && !titleOf(next)) next = next.nextElementSibling;
@@ -522,7 +551,7 @@ test.describe('Admin studies table triage: sort (AC11-AC14)', () => {
 
 test.describe('Admin studies table triage: Next note warning horizon', () => {
   for (const theme of THEMES) {
-    test(`the Next note turns warning colour inside 3 days, not at 3 days 1 hour and never on a closed study, at >= 4.5:1 (${theme})`, async ({
+    test(`the Next note turns warning colour through 3 days 1 hour (floor 3), never on a session-kind note or a closed study, at >= 4.5:1 (${theme})`, async ({
       page,
       baseURL,
     }) => {
@@ -553,12 +582,18 @@ test.describe('Admin studies table triage: Next note warning horizon', () => {
       const n = colours.notWarned;
       if (Object.values({ ...w, ...n }).includes('no note')) failures.push(`a Next note is missing: ${JSON.stringify(colours)}`);
       if (new Set(Object.values(w)).size !== 1) failures.push(`warned notes disagree: ${JSON.stringify(w)}`);
-      // Same kind, either side of the horizon: the colour must differ.
-      if (w.deadline === n.deadline) failures.push(`deadline at +2d23h and +3d1h share ${w.deadline}`);
-      if (w.deadline2 === n.deadline2) failures.push(`deadline at +1d14h and +5d14h share ${w.deadline2}`);
-      if (w.session === n.session) failures.push(`session at +1d6h and next year share ${w.session}`);
+      const warnedColour = w.deadline;
+      // Same kind (deadline), either side of the horizon: the colour must differ.
+      if (w.deadline === n.deadline) failures.push(`deadline at +2d23h and +5d14h share ${w.deadline}`);
+      // D1's true edge: floor(3d 1h) is 3, still inside - this must warn, not
+      // read as outside "3 days" the way a naive (non-floor) rule would.
+      if (w.boundary !== warnedColour) failures.push(`boundary at +3d1h (floor 3) is not warning-coloured: ${w.boundary}`);
+      // A session-kind note never warns, however soon its own session sits:
+      // the warning tracks the close date alone (D1), and a session-kind note
+      // only ever renders when the close date is NOT inside the horizon.
+      if (n.session === warnedColour) failures.push(`session-kind note at +1d6h is warning-coloured (${n.session})`);
       // A closed study inside the horizon: no note at all, or not the warning ink.
-      if (colours.closed === w.deadline) failures.push(`the closed study closing at +2d7h is warning-coloured (${colours.closed})`);
+      if (colours.closed === warnedColour) failures.push(`the closed study closing at +2d7h is warning-coloured (${colours.closed})`);
       expect(failures).toEqual([]);
 
       // Contrast of the warning colour, against the lightest ground it can sit on.
@@ -1431,7 +1466,12 @@ test.describe('Admin studies table triage: fix round (REVIEW-STEP2B-visual)', ()
     await expect(rows(page)).toHaveCount(1, { timeout: 5000 });
     await expect(count, 'Status: Draft').toHaveText('1 of 13 studies', { timeout: 3000 });
     await expect(attention.getByText('3 studies broken'), 'the Broken card under Status: Draft').toBeVisible();
-    await expect(attention.getByText('2 studies close soon'), 'the closing-soon card under Status: Draft').toBeVisible();
+    // D1 (Step 2) ties "closing soon" to isClosingSoon's close-date-only,
+    // floor(days) <= 3 rule: of the 13-seed OPPORTUNITIES only "Developer
+    // experience pulse, Q3" (close +1d 14h) now qualifies - "Server to Cloud
+    // migration" no longer does, since D1 stopped counting an imminent
+    // session as closing soon (see the Next-note-warning-horizon spec above).
+    await expect(attention.getByText('1 study closes soon'), 'the closing-soon card under Status: Draft').toBeVisible();
     await select.selectOption({ label: 'Published' }, { timeout: 3000 });
     await expect(rows(page)).toHaveCount(10, { timeout: 5000 });
     await expect(count, 'Status: Published').toHaveText('10 of 13 studies', { timeout: 3000 });
@@ -1516,8 +1556,10 @@ test.describe('Admin studies table triage: fix round (REVIEW-STEP2B-visual)', ()
       `/opportunities/${idOf(OTHER_BROKEN)}`
     );
     await openMenu(page, OTHER_BROKEN);
+    // P-L2: the kebab's lead item reads "Fix" (disabled here - a
+    // researcher_admin cannot fix another researcher's study), not "Edit".
     expect(await menuSequence(page)).toEqual([
-      'Edit (disabled)',
+      'Fix (disabled)',
       'Preview as participant',
       'Analytics (disabled)',
       'Copy (disabled)',
@@ -1537,8 +1579,10 @@ test.describe('Admin studies table triage: fix round (REVIEW-STEP2B-visual)', ()
       `/admin/opportunities/${idOf(OTHER_BROKEN)}/edit`
     );
     await openMenu(page, OTHER_BROKEN);
+    // P-L2: the lead item reads "Fix" for a broken study, matching this
+    // test's own title and the inline action above - not "Edit".
     expect(await menuSequence(page)).toEqual([
-      'Edit',
+      'Fix',
       'Preview as participant',
       'Analytics',
       'Copy',
@@ -1751,8 +1795,10 @@ test.describe('Admin studies table triage: round 3', () => {
       );
     expect({
       inside: await note(WARNED.deadline),
-      outside: await note(NOT_WARNED.deadline),
-    }).toEqual({ inside: 'Closes · 2 days left', outside: 'Closes · 3 days left' });
+      // +3d 1h floors to 3, same label text as +2d 23h's "2" -> "3" step -
+      // the D1 boundary case (`WARNED.boundary`, still inside the horizon).
+      atBoundary: await note(WARNED.boundary),
+    }).toEqual({ inside: 'Closes · 2 days left', atBoundary: 'Closes · 3 days left' });
   });
 
   test('chip counts and Needs attention follow the live status at once, and a refused Undo freezes nothing', async ({
@@ -1767,12 +1813,18 @@ test.describe('Admin studies table triage: round 3', () => {
     await expect(closingSoonCard).toHaveText('3 studies close soon');
     const at = STATUS_ASC_ORDER.indexOf(REOPEN_REFUSED_STUDY);
 
+    // D1: REOPEN_REFUSED_STUDY (Server to Cloud migration) is a session-kind
+    // note - its close date is Oct 16, well outside the horizon - so it was
+    // never part of the "Closing soon" 3, and closing it must leave that
+    // count exactly where it was. A control, not a positive assertion: it
+    // proves the live-count wiring does not fire on studies it should not.
     await closeFromMenu(page, REOPEN_REFUSED_STUDY);
     await expect(notice(page, REOPEN_REFUSED_STUDY)).toBeVisible({ timeout: 3000 });
-    await expect(chip(page, 'Closing soon'), 'chip, live, while the notice shows').toHaveText(/^\s*Closing soon\s*2\s*$/, {
-      timeout: 3000,
-    });
-    await expect(closingSoonCard, 'card, live, while the notice shows').toHaveText('2 studies close soon');
+    await expect(
+      chip(page, 'Closing soon'),
+      'chip, live, while the notice shows: unchanged - this close is not a closing-soon study'
+    ).toHaveText(/^\s*Closing soon\s*3\s*$/, { timeout: 3000 });
+    await expect(closingSoonCard, 'card, live, while the notice shows: unchanged').toHaveText('3 studies close soon');
     expect((await titles(page)).indexOf(REOPEN_REFUSED_STUDY), 'sort position held while the notice shows').toBe(at);
 
     await notice(page, REOPEN_REFUSED_STUDY).getByRole('button', { name: 'Undo' }).click({ timeout: 3000 });
@@ -1936,7 +1988,7 @@ test.describe('Admin studies table triage: round 4', () => {
     await chip(page, 'Closing soon').click({ timeout: 3000 });
     await expect(rows(page)).toHaveCount(MINE_COUNT + 1, { timeout: 3000 });
     expect(closingSoon, 'the Closing soon set').toEqual(
-      [WARNED.session, WARNED.deadline, WARNED.deadline2, closesBeforeLastSlot.title!].sort()
+      [WARNED.boundary, WARNED.deadline, WARNED.deadline2, closesBeforeLastSlot.title!].sort()
     );
     const warned = await page.evaluate(
       ({ nextHeader, reference }) => {
@@ -1959,6 +2011,97 @@ test.describe('Admin studies table triage: round 4', () => {
   });
 });
 
+test.describe('Admin studies table triage: round 8 - Reopen neighbour hand-off (M-1b)', () => {
+  const reopenFromMenu = async (page: Page, title: string) => {
+    await openMenu(page, title);
+    await page.getByRole('menuitem', { name: 'Reopen study' }).click({ timeout: 3000 });
+  };
+  const reopenNotice = (page: Page, title: string) => page.getByRole('status').filter({ hasText: `Reopened “${title}”` });
+  const scrollY = (page: Page) => page.evaluate(() => window.scrollY);
+  const idFor = (page: Page, title: string) => titleLink(page, title).evaluate((a) => (a as HTMLAnchorElement).dataset.studyId!);
+  /**
+   * `slotNeighbours` resolves its id through a live `a.row-title[title]` -
+   * exactly the element that is GONE once a study leaves the Closed filter
+   * (`reopenNoticeOnly`: the row disappears, only the standalone notice
+   * `<tr data-notice-for>` is left). So the id has to be captured up front,
+   * while the row still has its title link, and the slot found by id alone.
+   */
+  const neighboursForId = (page: Page, id: string): Promise<{ next: string | null; prev: string | null }> =>
+    page.evaluate((studyId) => {
+      const table = document.querySelector('table.admin-data-table');
+      const slot = table?.querySelector(`[data-notice-for="${studyId}"]`)?.closest('tr');
+      const titleOf = (tr: Element | null) =>
+        tr?.querySelector<HTMLAnchorElement>('a.row-title')?.getAttribute('title') ?? null;
+      if (!slot) return { next: null, prev: null };
+      let next = slot.nextElementSibling;
+      while (next && !titleOf(next)) next = next.nextElementSibling;
+      let prev = slot.previousElementSibling;
+      while (prev && !titleOf(prev)) prev = prev.previousElementSibling;
+      return { next: titleOf(next), prev: titleOf(prev) };
+    }, id);
+  // Both are in the Closed group of STATUS_ASC_ORDER (mine, so `canManage`
+  // is true); reopening either takes it OUT of the Closed-filtered view, the
+  // same "notice with nowhere left to render" case Close already has under
+  // a filter that no longer matches.
+  const LAPSE_STUDY = 'Bitbucket pipeline templates';
+  const DISMISS_STUDY = 'Recorded: first-run onboarding';
+
+  test('Dismiss on a Reopen under the Closed filter hands focus to the neighbour at the notice slot, with 0px page scroll', async ({
+    page,
+    baseURL,
+  }) => {
+    const api = makeApi();
+    await open(page, baseURL, { api, height: 1400 });
+    await mockPatch(page, api);
+    await page.locator('#statusFilter').selectOption({ label: 'Closed' }, { timeout: 3000 });
+    await expect(row(page, DISMISS_STUDY), 'setup: the dismiss study is in the Closed filter').toHaveCount(1, {
+      timeout: 3000,
+    });
+
+    const dismissId = await idFor(page, DISMISS_STUDY);
+    await reopenFromMenu(page, DISMISS_STUDY);
+    await expect(reopenNotice(page, DISMISS_STUDY)).toBeVisible({ timeout: 3000 });
+    const dismissNeighbours = await neighboursForId(page, dismissId);
+    expect(dismissNeighbours.next ?? dismissNeighbours.prev, 'setup: a neighbour exists at the notice slot').not.toBeNull();
+    const beforeDismiss = await scrollY(page);
+    await reopenNotice(page, DISMISS_STUDY).getByRole('button', { name: 'Dismiss' }).click({ timeout: 3000 });
+    const afterDismiss = await scrollY(page);
+    const dismiss = await expectHandOff(page, DISMISS_STUDY, dismissNeighbours, 'Reopen Dismiss');
+    // The study just left the Closed filter (it is published now): the
+    // neighbour case, never its own link.
+    expect(dismiss.ownInView, 'Dismiss leaves the Closed filter behind').toBe(false);
+    expect(afterDismiss - beforeDismiss, 'page scroll, px').toBe(0);
+  });
+
+  test('a lapse on a Reopen under the Closed filter hands focus to the neighbour at the notice slot, with 0px page scroll', async ({
+    page,
+    baseURL,
+  }) => {
+    // The Reopen captures its neighbours straight after the PATCH, before
+    // its notice exists, so the study's own row has to stand in as the slot;
+    // without that, focus fell back to the result count and the lapse never
+    // corrected it.
+    test.setTimeout(45000);
+    const api = makeApi();
+    await open(page, baseURL, { api, height: 1400 });
+    await mockPatch(page, api);
+    await page.locator('#statusFilter').selectOption({ label: 'Closed' }, { timeout: 3000 });
+    await expect(row(page, LAPSE_STUDY), 'setup: the lapse study is in the Closed filter').toHaveCount(1, { timeout: 3000 });
+
+    const lapseId = await idFor(page, LAPSE_STUDY);
+    await reopenFromMenu(page, LAPSE_STUDY);
+    await expect(reopenNotice(page, LAPSE_STUDY)).toBeVisible({ timeout: 3000 });
+    const lapseNeighbours = await neighboursForId(page, lapseId);
+    expect(lapseNeighbours.next ?? lapseNeighbours.prev, 'setup: a neighbour exists at the notice slot').not.toBeNull();
+    const beforeLapse = await scrollY(page);
+    await expect(reopenNotice(page, LAPSE_STUDY), 'the Reopened notice lapses').toHaveCount(0, { timeout: 12000 });
+    const afterLapse = await scrollY(page);
+    const lapse = await expectHandOff(page, LAPSE_STUDY, lapseNeighbours, 'Reopen lapse');
+    expect(lapse.ownInView, 'a reopened study leaves the Closed filter behind').toBe(false);
+    expect(afterLapse - beforeLapse, 'page scroll, px').toBe(0);
+  });
+});
+
 test.describe('Admin studies table triage: the 390px card view', () => {
   /**
    * MR C replaces the phone cards; MR B must not break them meanwhile. At
@@ -1977,11 +2120,20 @@ test.describe('Admin studies table triage: the 390px card view', () => {
       const overflow = await page.evaluate(() => ({
         scroll: document.scrollingElement!.scrollWidth,
         inner: window.innerWidth,
-        offRight: [...document.querySelectorAll('.admin-quick-filters *')]
+        // Below 1024, the chip row is `.admin-phone-filters`, not
+        // `.admin-quick-filters` (that only renders at >=576px). See the
+        // `chipRow` helper's own comment. `.admin-phone-chips` is the chip
+        // strip's own scrolling container (PhoneStudyFilters: "one scrolling
+        // line" with an edge cue) - its OWN box must fit the viewport, but a
+        // chip inside it is allowed to sit past the right edge, scrolled to,
+        // by design, so descendants of it are excluded from the offender scan
+        // and its container is checked directly instead.
+        offRight: [...document.querySelectorAll('.admin-phone-filters *')]
+          .filter((el) => !el.closest('.admin-phone-chips') || el.matches('.admin-phone-chips'))
           .filter((el) => el.getBoundingClientRect().right > window.innerWidth + 0.5)
           .map((el) => `${el.tagName.toLowerCase()}.${[...el.classList].join('.')}`),
       }));
-      expect(overflow.offRight, 'quick-filter row content past the right edge').toEqual([]);
+      expect(overflow.offRight, 'phone filter row content past the right edge').toEqual([]);
       expect(overflow.scroll, 'document scrolls sideways').toBeLessThanOrEqual(overflow.inner);
 
       await openMenu(page, BROKEN[0]);
@@ -2022,4 +2174,378 @@ test.describe('Admin studies table triage: Sort by control', () => {
       expect(failures).toEqual([]);
     });
   }
+});
+
+// --- MR C Step 2 (test lane, Part B) ----------------------------------------
+
+test.describe('MR C: fold, chip row and AC8 no page scroll', () => {
+  test('AC-fold: the first row is at most 900px from the top, at 1440x900, both themes', async ({ page, baseURL }) => {
+    for (const theme of THEMES) {
+      await open(page, baseURL, { width: 1440, height: 900, theme });
+      const top = await page.evaluate(() => window.__adminProbe.rows()[0]!.getBoundingClientRect().top);
+      expect(top, `${theme}: first row top`).toBeLessThanOrEqual(900);
+    }
+  });
+
+  for (const width of [1024, 1151]) {
+    test(`the chip row is one line at ${width}px`, async ({ page, baseURL }) => {
+      await open(page, baseURL, { width });
+      // `.admin-quick-filters` also carries the label and the result-count/
+      // Clear/Sort-by group (`__end`), which are allowed their own line - only
+      // the chips themselves must share one row (same top).
+      const tops = await page.evaluate(() =>
+        [...document.querySelectorAll('.admin-quick-filters button.admin-chip')].map((el) =>
+          Math.round(el.getBoundingClientRect().top)
+        )
+      );
+      expect(new Set(tops).size, `chip tops: ${[...new Set(tops)].join(', ')}`).toBe(1);
+    });
+  }
+
+  test('AC8: document width equals viewport width at 390, 768, 1023 and 1024, including with a row menu open', async ({
+    page,
+    baseURL,
+  }) => {
+    await open(page, baseURL, { width: 1440 });
+    const failures: string[] = [];
+    for (const width of [390, 768, 1023, 1024]) {
+      await resizeTo(page, width);
+      const before = await page.evaluate(() => document.documentElement.scrollWidth);
+      if (before > width) failures.push(`${width}px: document ${before}px before any menu`);
+      const title = width < 1024 ? BROKEN[0] : PUBLISHED_MINE;
+      await openMenu(page, title);
+      const during = await page.evaluate(() => document.documentElement.scrollWidth);
+      if (during > width) failures.push(`${width}px: document ${during}px with the menu open`);
+      await page.keyboard.press('Escape');
+    }
+    expect(failures).toEqual([]);
+  });
+});
+
+test.describe('MR C: AC7 at 390x844', () => {
+  test('every item is <= 132px, at least 5 fully visible once scrolled, titles >= 250px, kebab shares one x', async ({
+    page,
+    baseURL,
+  }) => {
+    await open(page, baseURL, { width: 390, height: 844 });
+    const m = await page.evaluate(() => {
+      const p = window.__adminProbe;
+      const items = p.rows();
+      const heights = items.map((r) => r.getBoundingClientRect().height);
+      // The title's own CONTAINING box (col-title), not the anchor's rendered
+      // text width - a short title naturally renders narrower than its box.
+      const titleWidths = items.map((r) => r.querySelector('td.col-title')!.getBoundingClientRect().width);
+      const kebabXs = items.map((r) => Math.round(r.querySelector('.admin-action-btn-kebab')!.getBoundingClientRect().left));
+      return { heights, titleWidths, kebabXs };
+    });
+    expect(m.heights.filter((h) => h > 132), 'items over 132px').toEqual([]);
+    expect(m.titleWidths.filter((w) => w < 250), 'titles under 250px').toEqual([]);
+    expect(new Set(m.kebabXs).size, `kebab x positions: ${[...new Set(m.kebabXs)].join(', ')}`).toBe(1);
+
+    // Scroll the first item to the top; at least 5 fully visible after.
+    await page.evaluate(() => window.__adminProbe.rows()[0]!.scrollIntoView({ block: 'start' }));
+    const visibleCount = await page.evaluate(() => {
+      const p = window.__adminProbe;
+      return p.rows().filter((r) => {
+        const b = r.getBoundingClientRect();
+        return b.top >= 0 && b.bottom <= window.innerHeight;
+      }).length;
+    });
+    expect(visibleCount, 'fully-visible items after scrolling the first to the top').toBeGreaterThanOrEqual(5);
+  });
+
+  test('a not-owned study leads with Preview; a broken study leads with Fix', async ({ page, baseURL }) => {
+    await open(page, baseURL, { width: 390, height: 844 });
+    await toggleShowAll(page, ALL_COUNT);
+    await openMenu(page, OTHER_PUBLISHED);
+    expect((await menuSequence(page))[0]).toBe('Preview as participant');
+    await page.keyboard.press('Escape');
+    await openMenu(page, BROKEN[0]);
+    expect((await menuSequence(page))[0]).toBe('Fix');
+  });
+});
+
+test.describe('MR C: the 800-1023 grid', () => {
+  test('DOM order equals visual order (row-major), a Close moves no other item column, notice renders inside the card', async ({
+    page,
+    baseURL,
+  }) => {
+    const api = makeApi();
+    await open(page, baseURL, { width: 900, api });
+    await mockPatch(page, api);
+    const before = await page.evaluate(() => {
+      const p = window.__adminProbe;
+      return p.rows().map((r) => {
+        const b = r.getBoundingClientRect();
+        return { left: Math.round(b.left), top: Math.round(b.top) };
+      });
+    });
+    // Row-major: reading top-then-left must already be sorted (a column-major
+    // grid interleaves row 1 with row 9, etc - see _components.css:3955).
+    const sorted = [...before].sort((a, b) => a.top - b.top || a.left - b.left);
+    expect(before, 'DOM order vs visual (top, then left) order').toEqual(sorted);
+    const others = before
+      .map((r, i) => ({ i, r }))
+      .filter(({ i }) => STATUS_ASC_ORDER[i] !== PUBLISHED_MINE)
+      .map(({ i, r }) => ({ title: STATUS_ASC_ORDER[i], col: r.left }));
+
+    await openMenu(page, PUBLISHED_MINE);
+    await page.getByRole('menuitem', { name: 'Close study' }).click({ timeout: 3000 });
+    await expect(page.getByRole('status').filter({ hasText: `Closed “${PUBLISHED_MINE}”` })).toBeVisible({ timeout: 3000 });
+
+    // The notice renders inside the acted-on item's own card, not a sibling row.
+    const notice = await page.evaluate(() => document.querySelector('tr.admin-inline-notice-row'));
+    expect(notice, 'a sibling notice row exists (should be inside the item instead)').toBeNull();
+
+    const after = await page.evaluate(() => {
+      const p = window.__adminProbe;
+      const byTitle = new Map<string, number>();
+      for (const r of p.rows()) {
+        const title = r.querySelector<HTMLAnchorElement>('a.row-title')?.getAttribute('title');
+        if (title) byTitle.set(title, Math.round(r.getBoundingClientRect().left));
+      }
+      return Object.fromEntries(byTitle);
+    });
+    const moved = others.filter(({ title, col }) => after[title] !== undefined && after[title] !== col);
+    expect(moved, 'other items that changed column').toEqual([]);
+  });
+});
+
+test.describe('MR C: tabs', () => {
+  for (const width of [390, 800]) {
+    test(`the tab strip is one line at ${width}px`, async ({ page, baseURL }) => {
+      await open(page, baseURL, { width });
+      const h = await page.evaluate(() => document.querySelector('ul.nav.nav-tabs')!.getBoundingClientRect().height);
+      const btnH = await page.evaluate(() => document.getElementById('research-studies-tab-button')!.getBoundingClientRect().height);
+      expect(h, `tab strip ${h}px vs one tab ${btnH}px`).toBeLessThanOrEqual(btnH + 8);
+    });
+  }
+
+  test('a Tab keypress onto Bookings scrolls it into view', async ({ page, baseURL }) => {
+    await open(page, baseURL, { width: 390 });
+    await page.locator('#feedback-tab-button').focus();
+    await page.keyboard.press('Tab');
+    await expect(page.locator('#bookings-tab-button')).toBeFocused({ timeout: 3000 });
+    const inView = await page.evaluate(() => {
+      const b = document.getElementById('bookings-tab-button')!.getBoundingClientRect();
+      const c = document.querySelector('.admin-tabs-container')!.getBoundingClientRect();
+      return b.left >= c.left - 1 && b.right <= c.right + 1;
+    });
+    expect(inView, 'Bookings tab scrolled fully into its container').toBe(true);
+  });
+});
+
+test.describe('MR C: Needs attention at 390', () => {
+  test('the studies card scrolls to the phone filters and focuses them', async ({ page, baseURL }) => {
+    await open(page, baseURL, { width: 390, height: 844 });
+    await page.locator('.admin-attention__card--broken').click({ timeout: 3000 });
+    await expect(page.locator('.admin-phone-filters')).toBeInViewport({ timeout: 3000 });
+    const focused = await page.evaluate(() => document.activeElement?.className ?? '');
+    expect(focused).toContain('admin-result-count');
+  });
+
+  test('the approvals card switches tab, scrolls, and focuses', async ({ page, baseURL }) => {
+    await open(page, baseURL, { width: 390, height: 844 });
+    await page.locator('.admin-attention__card:not(.admin-attention__card--broken)').first().click({ timeout: 3000 });
+    await expect(page.locator('#completion-approvals-tab-button')).toBeFocused({ timeout: 3000 });
+    await expect(page.locator('#completion-approvals-tab-button')).toBeInViewport({ timeout: 3000 });
+  });
+});
+
+test.describe('MR C: #160 copy warning', () => {
+  test('a duplicate carrying study_copy_failed shows a row alert at >= 4.5:1 in both themes', async ({ page, baseURL }) => {
+    for (const theme of THEMES) {
+      const api = makeApi();
+      await open(page, baseURL, { api, theme });
+      await mockCsrf(page);
+      await page.route(
+        (url) => /^\/api\/opportunities\/[^/]+\/duplicate$/.test(url.pathname),
+        (route) =>
+          route.fulfill({
+            status: 201,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              ...structuredClone(api.store.find((s) => s.title === PUBLISHED_MINE)),
+              id: 'e2e-copy-warning',
+              title: `${PUBLISHED_MINE} (copy)`,
+              status: 'draft',
+              study_copy_failed: true,
+            }),
+          })
+      );
+      await openMenu(page, PUBLISHED_MINE);
+      await page.getByRole('menuitem', { name: 'Copy' }).click({ timeout: 3000 });
+      const alert = page.getByRole('alert').filter({ hasText: 'questions could not be copied' });
+      await expect(alert, `${theme}: the copy-failed alert`).toBeVisible({ timeout: 3000 });
+      const contrast = await measureGroundContrast(page, ['.admin-copy-notice[role="alert"]']);
+      expect(contrast.failures, `${theme}: copy-warning contrast`).toEqual([]);
+    }
+  });
+});
+
+test.describe('MR C: status pill contrast at 390 in light theme', () => {
+  test('every status pill label is >= 4.5:1', async ({ page, baseURL }) => {
+    await open(page, baseURL, { width: 390, height: 844, theme: 'light' });
+    const results = await page.evaluate(() => {
+      const p = window.__adminProbe;
+      return [...document.querySelectorAll<HTMLElement>('.admin-study-status')].map((pill) => {
+        const label = pill.querySelector('.admin-study-status__label') ?? pill;
+        const text = p.effectiveText(label);
+        const bg = p.effectiveBackground(label);
+        return { text: label.textContent, textRGB: text, bgRGB: bg };
+      });
+    });
+    const failures = results
+      .map((r) => ({ ...r, ratio: contrastRatio(r.textRGB, r.bgRGB) }))
+      .filter((r) => r.ratio < 4.5)
+      .map((r) => `"${r.text}": ${r.ratio.toFixed(2)}:1`);
+    expect(failures).toEqual([]);
+  });
+});
+
+test.describe('MR C: header disclosure axe', () => {
+  for (const [width, triggerLabel] of [[1440, 'User profile menu'], [390, 'Menu']] as const) {
+    test(`the opened header menu at ${width}px finds 0 critical axe issues`, async ({ page, baseURL }) => {
+      await open(page, baseURL, { width });
+      await page.getByRole('button', { name: triggerLabel }).click({ timeout: 3000 });
+      await expect(page.locator('.dropdown-menu.show, [role="menu"]').first()).toBeVisible({ timeout: 3000 });
+      const scan = await new AxeBuilder({ page }).include('.dropdown-menu.show, [role="menu"]').analyze();
+      const critical = scan.violations.filter((v) => v.impact === 'critical');
+      expect(critical, JSON.stringify(critical, null, 2)).toEqual([]);
+    });
+  }
+});
+
+test.describe('MR C: result count at 390', () => {
+  test('always visible idle ("N studies"); applying a filter moves the first item by 0px', async ({ page, baseURL }) => {
+    await open(page, baseURL, { width: 390, height: 844 });
+    await expect(page.locator('.admin-result-count')).toHaveText(/^\s*\d+ studies\s*$/, { timeout: 3000 });
+    // Document-relative (rect top + scrollY), not viewport-relative: applying
+    // the filter is allowed to scroll the page, but must not insert or remove
+    // space above the list itself.
+    const docTop = () =>
+      page.evaluate(() => window.__adminProbe.rows()[0]!.getBoundingClientRect().top + window.scrollY);
+    const before = await docTop();
+    await chip(page, 'Draft').click({ timeout: 3000 });
+    await expect(rows(page)).toHaveCount(1, { timeout: 3000 });
+    const after = await docTop();
+    expect(after - before, 'first item document-relative shift after applying a filter').toBe(0);
+  });
+});
+
+test.describe('MR C: owner at 390 under Show all researchers', () => {
+  test('owner shares a line with the Next note, and the item is at most 132px tall', async ({ page, baseURL }) => {
+    await open(page, baseURL, { width: 390, height: 844, api: makeApi(STEP2_ALL, null), expectedRows: ALL_COUNT });
+    await toggleShowAll(page, ALL_COUNT);
+    const m = await page.evaluate((title) => {
+      const p = window.__adminProbe;
+      const r = p.rows().find((tr) => tr.querySelector(`[title="${CSS.escape(title)}"]`));
+      const owner = r?.querySelector('td.col-owner .admin-study-owner');
+      const next = r?.querySelector('.admin-next__note');
+      if (!r || !owner || !next) return null;
+      const o = owner.getBoundingClientRect();
+      const n = next.getBoundingClientRect();
+      return { sameLine: o.top < n.bottom && n.top < o.bottom, height: r.getBoundingClientRect().height };
+    }, OTHER_PUBLISHED);
+    expect(m, 'owner and Next note both rendered').not.toBeNull();
+    expect(m!.sameLine, 'owner and Next note share a line').toBe(true);
+    expect(m!.height, 'item height').toBeLessThanOrEqual(132);
+  });
+});
+
+test.describe('MR C: type icon in list items', () => {
+  test('the icon carries the study-type colour, the text stays muted, and icon contrast is >= 3:1 in both themes', async ({
+    page,
+    baseURL,
+  }) => {
+    for (const theme of THEMES) {
+      await open(page, baseURL, { width: 390, height: 844, theme });
+      const results = await page.evaluate(() => {
+        const p = window.__adminProbe;
+        // --text-muted resolved on the element itself (custom properties
+        // inherit down the cascade the same as any other property).
+        const mutedVar = getComputedStyle(document.body).getPropertyValue('--text-muted').trim();
+        return [...document.querySelectorAll<HTMLElement>('.admin-study-type-compact')].map((el) => {
+          const svg = el.querySelector('svg') as SVGElement;
+          const title = el.closest('tr')?.querySelector<HTMLElement>('a.row-title');
+          return {
+            label: el.textContent ?? '',
+            iconColour: p.rgba(getComputedStyle(svg).color),
+            rawTextColour: p.rgba(getComputedStyle(el).color),
+            textColour: p.effectiveText(el),
+            titleColour: title ? p.effectiveText(title) : null,
+            bg: p.effectiveBackground(el),
+            mutedColour: p.rgba(mutedVar),
+          };
+        });
+      });
+      const same = (a: number[], b: number[] | null) => !!b && a.slice(0, 3).every((v, i) => Math.abs(v - b[i]) < 2);
+      const failures = results
+        .filter((r) => contrastRatio(r.iconColour, r.bg) < 3)
+        .map((r) => `"${r.label}": icon ${contrastRatio(r.iconColour, r.bg).toFixed(2)}:1`);
+      expect(failures, `${theme}: icon contrast`).toEqual([]);
+      expect(
+        results.filter((r) => same(r.iconColour, r.textColour)).map((r) => r.label),
+        `${theme}: the icon carries its own colour, not the text colour`
+      ).toEqual([]);
+      expect(
+        results.filter((r) => same(r.textColour, r.titleColour)).map((r) => r.label),
+        `${theme}: the type text is muted, not title-coloured`
+      ).toEqual([]);
+      // LOW-1: not merely "differs from the title" - equals the RESOLVED
+      // --text-muted token, so a future rule that greys the text some OTHER
+      // way (not the title's own colour) would still be caught.
+      expect(
+        results.filter((r) => !same(r.rawTextColour, r.mutedColour)).map((r) => `"${r.label}": ${r.rawTextColour.join(',')} vs --text-muted ${r.mutedColour.join(',')}`),
+        `${theme}: the type text colour equals the resolved --text-muted`
+      ).toEqual([]);
+      const typeColours = new Set(results.map((r) => r.iconColour.slice(0, 3).join(',')));
+      expect(typeColours.size, `${theme}: different study types show different icon colours`).toBeGreaterThan(1);
+      expect(results.length, `${theme}: type-compact items found`).toBeGreaterThan(0);
+    }
+  });
+
+  test('N5: the PAINTED colour of the glyph (stroke/fill on its path/circle children) carries the type colour and clears 3:1, not merely the svg color attribute', async ({
+    page,
+    baseURL,
+  }) => {
+    for (const theme of THEMES) {
+      await open(page, baseURL, { width: 390, height: 844, theme });
+      const results = await page.evaluate(() => {
+        const p = window.__adminProbe;
+        return [...document.querySelectorAll<HTMLElement>('.admin-study-type-compact')].map((el) => {
+          const svg = el.querySelector('svg') as SVGElement;
+          const svgColour = p.rgba(getComputedStyle(svg).color);
+          // The colour actually painted: the resolved `stroke`/`fill` of the
+          // svg's own path/circle/line children (lucide icons stroke, not
+          // fill) - a `td *` catch-all can set an explicit colour directly on
+          // THESE elements without ever touching `svg.color`, which is why
+          // reading `svg.color` alone cannot see the bug this guards.
+          const painted = [...svg.querySelectorAll<SVGGraphicsElement>('path, circle, line, polyline, rect')].map((node) => {
+            const cs = getComputedStyle(node);
+            const stroke = cs.stroke !== 'none' ? p.rgba(cs.stroke) : null;
+            const fill = cs.fill !== 'none' ? p.rgba(cs.fill) : null;
+            return stroke ?? fill;
+          }).filter((c): c is number[] => c !== null);
+          return {
+            label: el.textContent ?? '',
+            svgColour,
+            painted,
+            bg: p.effectiveBackground(el),
+          };
+        });
+      });
+      const same = (a: number[], b: number[]) => a.slice(0, 3).every((v, i) => Math.abs(v - b[i]) < 2);
+      expect(results.filter((r) => r.painted.length === 0).map((r) => r.label), `${theme}: every glyph has a painted stroke/fill part`).toEqual([]);
+      const mismatches = results
+        .filter((r) => !r.painted.every((c) => same(c, r.svgColour)))
+        .map((r) => `"${r.label}": svg.color ${r.svgColour.join(',')} vs painted ${r.painted.map((c) => c.join(',')).join(' / ')}`);
+      expect(mismatches, `${theme}: the painted stroke/fill matches the svg's own colour (not greyed by a td * catch-all)`).toEqual([]);
+      const failures = results
+        .flatMap((r) => r.painted.map((c) => ({ label: r.label, ratio: contrastRatio(c, r.bg) })))
+        .filter((r) => r.ratio < 3)
+        .map((r) => `"${r.label}": painted colour ${r.ratio.toFixed(2)}:1`);
+      expect(failures, `${theme}: painted glyph contrast >= 3:1`).toEqual([]);
+    }
+  });
 });

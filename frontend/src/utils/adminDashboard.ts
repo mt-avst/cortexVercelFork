@@ -122,36 +122,34 @@ export const getSessionsThisWeek = (
 };
 
 /**
- * Published studies that need attention within `withinDays`, by EITHER measure:
- *  - a closing time (end_date, or last session end via getClosingTime) still in
- *    the future and inside the window, OR
- *  - an upcoming session inside the window.
- *
- * The session arm matters because getClosingTime prefers `end_date`: a study
- * whose recruitment window has passed but which still has an imminent session
- * would otherwise show that session in the table yet never appear here. The two
- * views are now consistent - if the table calls it imminent, so does this.
+ * "Closing soon", the one predicate: a published study
+ * whose closing time (end_date, or last session end via getClosingTime) is
+ * still ahead and reads `withinDays` or fewer on the same round-down rule the
+ * label itself uses (`Math.floor`, matching getTimeRemainingUntil's "N days
+ * left"). This is deliberately about the CLOSE date alone, not a session -
+ * the note colour, the Closing soon chip and the Needs attention card all
+ * call this one function, so a label reading "3 days left" and its colour can
+ * never disagree, and the note's colour and the milestone it names describe
+ * the same date (getNextMilestone below).
  */
+export const isClosingSoon = (
+  opportunity: Opportunity,
+  now: Date,
+  withinDays = CLOSING_SOON_DAYS,
+): boolean => {
+  if (opportunity.status !== 'published') return false;
+  const closesAt = getClosingTime(opportunity);
+  if (!closesAt || closesAt.getTime() <= now.getTime()) return false;
+  const daysLeft = Math.floor((closesAt.getTime() - now.getTime()) / MS_PER_DAY);
+  return daysLeft <= withinDays;
+};
+
+/** Published studies closing within `withinDays` (see `isClosingSoon`). */
 export const getStudiesClosingSoon = (
   opportunities: Opportunity[],
   now: Date,
   withinDays = CLOSING_SOON_DAYS,
-): Opportunity[] => {
-  const horizon = now.getTime() + withinDays * MS_PER_DAY;
-  return opportunities.filter((opp) => {
-    if (opp.status !== 'published') return false;
-
-    const closesAt = getClosingTime(opp);
-    const closingWindow =
-      closesAt !== null && closesAt.getTime() > now.getTime() && closesAt.getTime() <= horizon;
-
-    // getNextSession already guarantees start >= now, so only the upper bound is left.
-    const next = getNextSession(opp, now);
-    const sessionWindow = next !== null && new Date(next.start_time).getTime() <= horizon;
-
-    return closingWindow || sessionWindow;
-  });
-};
+): Opportunity[] => opportunities.filter((opp) => isClosingSoon(opp, now, withinDays));
 
 /** Every session slot is at or over capacity, and there is at least one. */
 export const isFullyBooked = (opportunity: Opportunity): boolean => {
@@ -209,7 +207,7 @@ export const matchesQuickFilter = (
     case 'draft':
       return opportunity.status === 'draft';
     case 'closing-soon':
-      return getStudiesClosingSoon([opportunity], now).length === 1;
+      return isClosingSoon(opportunity, now);
     case 'fully-booked':
       return isFullyBooked(opportunity);
     default:
@@ -289,6 +287,14 @@ export const getNextMilestone = (opportunity: Opportunity, now: Date): NextMiles
     return next ? { kind: 'closed', date: new Date(next.start_time) } : null;
   }
 
+  // a closing-soon study's note names its CLOSE milestone,
+  // even when a session sits later - the colour and the chip both come from
+  // the close date (isClosingSoon), so the text has to describe that same
+  // date or the two disagree (closesAt is guaranteed non-null and ahead by
+  // isClosingSoon's own check). Every other study keeps the old session-first
+  // priority.
+  if (isClosingSoon(opportunity, now)) return { kind: 'deadline', date: closesAt as Date };
+
   const next = getNextSession(opportunity, now);
   if (next) return { kind: 'session', date: new Date(next.start_time) };
 
@@ -329,20 +335,14 @@ export const isMilestoneSoon = (
 };
 
 /**
- * Whether a row's Next note takes the warning colour: exactly when the study
- * is one the Closing soon chip and card count (`matchesQuickFilter(...,
- * 'closing-soon')`, the same `getStudiesClosingSoon` test) - a published
- * study whose closing time OR next session falls inside the horizon. That
- * includes a note showing a later session while the recruitment window
- * closes inside 72h: the chip counts that study, so its note is coloured too.
- *
- * LATER (Petra, accepted): the note's day label rounds DOWN, like every other
- * surface, so between 3.0 and 4.0 days a note can read "3 days left" without
- * the colour. Closing that window means changing the horizon itself (a
- * calendar-day horizon, or < 4 days), which is a policy call, not a label one.
+ * Whether a row's Next note takes the warning colour: exactly `isClosingSoon`
+ * - the same one predicate the Closing soon chip and the
+ * Needs attention card use, so a label reading "N days left" and its colour
+ * can never disagree, and `getNextMilestone` already switches the milestone
+ * itself to the close date whenever this is true.
  */
 export const isNextNoteWarned = (opportunity: Opportunity, now: Date): boolean =>
-  matchesQuickFilter(opportunity, 'closing-soon', now);
+  isClosingSoon(opportunity, now);
 
 /**
  * Triage rank for the Status column (Petra 3.2): what needs a researcher
@@ -366,6 +366,13 @@ export const getStatusRank = (opportunity: Opportunity): number => {
 /** Every field the Research Studies table sorts by, header and Sort-by alike. */
 export type StudySortField = 'title' | 'status' | 'next' | 'created_at';
 export type SortDirection = 'asc' | 'desc';
+
+/** The table's own starting sort (Admin.tsx state init) - named here too so
+ * the phone filter toolbar's "non-default filters and sort settings" badge
+ * count can ask "is sort still at its default?"
+ * without duplicating the literal values `Admin.tsx` initialises from. */
+export const DEFAULT_SORT_FIELD: StudySortField = 'status';
+export const DEFAULT_SORT_DIRECTION: SortDirection = 'asc';
 
 interface StudySortKeys {
   title: string;
