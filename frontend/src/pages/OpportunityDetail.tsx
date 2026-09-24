@@ -23,6 +23,7 @@ import { isPublishableExternalLink } from '@shared/firsthand/url-safety';
 import { ExternalHandoff, ExternalDestinationNote } from '../components/ExternalHandoff';
 import { RefreshCw, CheckCircle, Calendar, Info, LayoutGrid, Table2, ArrowLeft } from 'lucide-react';
 import { Icon } from '../components/ui';
+import { PARTICIPATE } from '@shared/pageNames';
 
 /**
  * The server's own sentence when a mint is refused because the study has closed
@@ -1080,7 +1081,7 @@ const OpportunityDetail: React.FC = () => {
               onClick={() => navigate('/')}
             >
               <Icon icon={ArrowLeft} size={16} className="me-1" aria-hidden="true" />
-              Back to Cortex
+              Back to {PARTICIPATE}
             </button>
           </div>
         </div>
@@ -1133,10 +1134,9 @@ const OpportunityDetail: React.FC = () => {
           <button
             className="btn btn-outline-secondary mb-4 mission-back-btn"
             onClick={() => navigate('/')}
-            aria-label="Navigate back to Cortex home"
           >
             <Icon icon={ArrowLeft} size={16} className="me-1" aria-hidden="true" />
-            Back to Cortex
+            Back to {PARTICIPATE}
           </button>
 
 

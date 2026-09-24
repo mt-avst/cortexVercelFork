@@ -98,6 +98,8 @@ describe('SurveySession', () => {
     renderSession();
 
     expect(await screen.findByText(/link has expired/i)).toBeInTheDocument();
+    // #169: the way out names the participant page by its name.
+    expect(screen.getByRole('link', { name: /^Back to Participate$/ })).toHaveAttribute('href', '/');
   });
 
   it('distinguishes someone else\'s link from one that does not exist', async () => {
@@ -165,7 +167,7 @@ describe('SurveySession', () => {
 
     await screen.findByRole('button', { name: /finish the survey/i });
 
-    expect(screen.getByRole('link', { name: /back to cortex/i })).toHaveAttribute('href', '/');
+    expect(screen.getByRole('link', { name: /^Back to Participate$/ })).toHaveAttribute('href', '/');
   });
 
   it('renders inside a main landmark, since there is no chrome to supply one', async () => {
@@ -188,5 +190,7 @@ describe('SurveySession', () => {
 
     await screen.findByText(/answers have been sent/i);
     expect(screen.queryByRole('link', { name: /back to the study/i })).toBeNull();
+    // It falls back to the participant page instead (#169 names it).
+    expect(screen.getByRole('link', { name: /^Back to Participate$/ })).toHaveAttribute('href', '/');
   });
 });

@@ -150,7 +150,7 @@ Verify that all critical user journeys work end-to-end without blocking issues.
 3. [ ] Click "Open Poll" or "Open Survey" button
 4. [ ] Verify redirect to external link
 5. [ ] Sign in as admin
-6. [ ] Go to Admin Dashboard
+6. [ ] Go to Create & Manage
 7. [ ] Find the poll/survey opportunity
 8. [ ] Check "Clicks" column - should show 1
 9. [ ] Click "Analytics" button
@@ -174,7 +174,7 @@ Verify that all critical user journeys work end-to-end without blocking issues.
 
 **Steps**:
 1. [ ] Sign in as admin
-2. [ ] Go to Admin Dashboard
+2. [ ] Go to Create & Manage
 3. [ ] Click "Create New Opportunity"
 4. [ ] Fill in basic information:
    - [ ] Select type (Test, Poll, Survey, etc.)
@@ -209,7 +209,7 @@ Verify that all critical user journeys work end-to-end without blocking issues.
 
 **Steps**:
 1. [ ] Sign in as admin
-2. [ ] Go to Admin Dashboard
+2. [ ] Go to Create & Manage
 3. [ ] Find existing opportunity
 4. [ ] Click "Edit"
 5. [ ] Modify title or description
@@ -234,7 +234,7 @@ Verify that all critical user journeys work end-to-end without blocking issues.
 
 **Steps**:
 1. [ ] Sign in as admin
-2. [ ] Go to Admin Dashboard
+2. [ ] Go to Create & Manage
 3. [ ] Find opportunity to duplicate
 4. [ ] Click "Duplicate" button
 5. [ ] Verify new opportunity created
@@ -254,11 +254,11 @@ Verify that all critical user journeys work end-to-end without blocking issues.
 
 ---
 
-### 9. Dashboard and Analytics
+### 9. Create & Manage and Analytics
 
 **Steps**:
 1. [ ] Sign in as admin
-2. [ ] Go to Admin Dashboard
+2. [ ] Go to Create & Manage
 3. [ ] Verify statistics cards show:
    - [ ] Total opportunities
    - [ ] Total bookings
@@ -277,7 +277,7 @@ Verify that all critical user journeys work end-to-end without blocking issues.
 8. [ ] Check click data displays
 
 **Expected Results**:
-- ✅ Dashboard loads correctly
+- ✅ Create & Manage loads correctly
 - ✅ Statistics are accurate
 - ✅ Filtering works
 - ✅ Analytics display correctly
@@ -440,7 +440,7 @@ Verify that all critical user journeys work end-to-end without blocking issues.
 1. [ ] Open on mobile device or resize browser
 2. [ ] Test navigation
 3. [ ] Test booking flow
-4. [ ] Test admin dashboard
+4. [ ] Test Create & Manage
 5. [ ] Check form inputs
 6. [ ] Verify buttons are clickable
 7. [ ] Check text readability
@@ -469,7 +469,7 @@ Verify that all critical user journeys work end-to-end without blocking issues.
 | 6 | Create Opportunity | ⬜ | |
 | 7 | Edit Opportunity | ⬜ | |
 | 8 | Duplicate Opportunity | ⬜ | |
-| 9 | Dashboard/Analytics | ⬜ | |
+| 9 | Create & Manage/Analytics | ⬜ | |
 | 10 | Settings | ⬜ | |
 | 11 | Full Session | ⬜ | |
 | 12 | Past Session | ⬜ | |

@@ -341,3 +341,21 @@ describe('OpportunityDetail - what an error takes away', () => {
     expect(screen.queryByRole('button', { name: 'stub book' })).not.toBeInTheDocument();
   });
 });
+
+// #169: the participant page is called Participate, and both ways back from a
+// study say so. The loaded page's button used to carry an aria-label ("Navigate
+// back to Cortex home") that did not contain its visible text; the accessible
+// name is now the visible label, exactly.
+describe('OpportunityDetail - the way back (#169)', () => {
+  it('names Participate on the loaded page', async () => {
+    renderDetail();
+    expect(await screen.findByRole('button', { name: 'Back to Participate' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /cortex home/i })).not.toBeInTheDocument();
+  });
+
+  it('names Participate when the study cannot be loaded', async () => {
+    vi.mocked(getOpportunity).mockRejectedValue({ response: { status: 500 } });
+    renderDetail();
+    expect(await screen.findByRole('button', { name: 'Back to Participate' })).toBeInTheDocument();
+  });
+});

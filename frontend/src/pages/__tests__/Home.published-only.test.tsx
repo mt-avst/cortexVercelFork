@@ -1,4 +1,4 @@
-import { render, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -63,5 +63,18 @@ describe('the participant Home', () => {
     // The fetch is gated on pathname === '/', so a mount elsewhere is quiet.
     await new Promise((resolve) => setTimeout(resolve, 120));
     expect(vi.mocked(getOpportunities)).not.toHaveBeenCalled();
+  });
+});
+
+// #169: the participant side is named for what people do there. The route
+// stays /; only the visible name changed. Literals on purpose - a test that
+// read the name from the same constant as the page could not see it change.
+describe('the participant Home name (#169)', () => {
+  it('names the page Participate in its heading and the tab title', async () => {
+    renderHome();
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Participate' })).toBeInTheDocument();
+    expect(document.title).toBe('Participate · Cortex');
+    expect(screen.queryByRole('heading', { level: 1, name: /Browse studies/i })).not.toBeInTheDocument();
   });
 });

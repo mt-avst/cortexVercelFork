@@ -713,7 +713,7 @@ describe('the two backward controls are named apart', () => {
   it('calls the way out of the form Exit, not Back', () => {
     renderForm();
 
-    expect(screen.getByRole('button', { name: /Exit to dashboard/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Exit to Create & Manage$/i })).toBeInTheDocument();
     // The old label said "Back" three inches above a control that also said
     // "Back" and only moved one step. Pinned so it cannot come back.
     expect(screen.queryByRole('button', { name: /Back to Admin Dashboard/i })).not.toBeInTheDocument();
@@ -724,7 +724,7 @@ describe('exiting the form', () => {
   it('leaves straight away when nothing has been typed', () => {
     renderForm();
 
-    fireEvent.click(screen.getByRole('button', { name: /Exit to dashboard/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Exit to Create & Manage$/i }));
 
     expect(screen.getByText('Admin dashboard')).toBeInTheDocument();
   });
@@ -736,7 +736,7 @@ describe('exiting the form', () => {
     fireEvent.click(steps()[1]);
     typeInto(/Title/i, 'Half a study');
 
-    fireEvent.click(screen.getByRole('button', { name: /Exit to dashboard/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Exit to Create & Manage$/i }));
 
     expect(screen.getByText(/have not been saved/i)).toBeInTheDocument();
     expect(screen.queryByText('Admin dashboard')).not.toBeInTheDocument();
@@ -755,7 +755,7 @@ describe('exiting the form', () => {
     fireEvent.click(steps()[1]);
     typeInto(/Title/i, 'Half a study');
 
-    fireEvent.click(screen.getByRole('button', { name: /Exit to dashboard/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Exit to Create & Manage$/i }));
     fireEvent.click(screen.getByRole('button', { name: /Discard and leave/i }));
 
     expect(screen.getByText('Admin dashboard')).toBeInTheDocument();
@@ -788,7 +788,7 @@ describe('exiting the form', () => {
     // more, so the strip is the load anchor.
     await screen.findByRole('navigation', { name: 'Form steps' });
 
-    fireEvent.click(screen.getByRole('button', { name: /Exit to dashboard/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Exit to Create & Manage$/i }));
 
     expect(screen.getByText('Admin dashboard')).toBeInTheDocument();
   });
@@ -815,7 +815,7 @@ describe('exiting the form', () => {
     selectType('poll');
     fireEvent.click(steps()[1]);
     typeInto(/^Title/i, 'Typed over a form that never loaded');
-    fireEvent.click(screen.getByRole('button', { name: /Exit to dashboard/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Exit to Create & Manage$/i }));
 
     expect(screen.getByText(/have not been saved/i)).toBeInTheDocument();
     expect(screen.queryByText('Admin dashboard')).not.toBeInTheDocument();
@@ -865,7 +865,7 @@ describe('exiting the form', () => {
     // itself the thing under test rather than "nothing was ever touched".
     await screen.findByText(/saved as DRAFT|saved successfully/i);
 
-    fireEvent.click(screen.getByRole('button', { name: /Exit to dashboard/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Exit to Create & Manage$/i }));
 
     expect(screen.queryByText(/have not been saved/i)).not.toBeInTheDocument();
     // And it actually left - a confirmation that silently no-ops is just as
@@ -928,7 +928,7 @@ describe('exiting the form', () => {
   it('lets a saved interview be left without a word', async () => {
     await editAndSaveAnInterview();
 
-    fireEvent.click(screen.getByRole('button', { name: /Exit to dashboard/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Exit to Create & Manage$/i }));
 
     // The half that stops the confirmation crying wolf. Without the save
     // rebaselining what it sent, this form reads dirty forever - and a dialog
@@ -949,7 +949,7 @@ describe('exiting the form', () => {
 
     fireEvent.click(steps()[3]); // Session Management
     fireEvent.click(screen.getByRole('button', { name: /lay out a time slot/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Exit to dashboard/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Exit to Create & Manage$/i }));
 
     expect(screen.getByText(/have not been saved/i)).toBeInTheDocument();
     expect(screen.queryByText('Admin dashboard')).not.toBeInTheDocument();
@@ -972,7 +972,7 @@ describe('exiting the form', () => {
     fireEvent.click(steps()[3]); // Task List
     fireEvent.click(screen.getByRole('button', { name: /Add task/i }));
 
-    fireEvent.click(screen.getByRole('button', { name: /Exit to dashboard/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Exit to Create & Manage$/i }));
 
     // The dirty check compares the whole form object rather than a hand-written
     // list of fields. A list is what hid the Save button from an author who had

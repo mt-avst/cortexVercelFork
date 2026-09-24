@@ -2192,7 +2192,7 @@ describe('the Save button appearing for a change that only touches authored cont
 
     // The other half of the disagreement. The exit warning has always fired on
     // this edit; the point is that the Save button now fires on the same one.
-    fireEvent.click(screen.getByRole('button', { name: /Exit to dashboard/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Exit to Create & Manage$/i }));
     expect(await screen.findByText(/Leave without saving\?/i)).toBeInTheDocument();
   });
 

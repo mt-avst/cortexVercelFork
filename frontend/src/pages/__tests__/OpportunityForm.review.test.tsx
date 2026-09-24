@@ -1155,7 +1155,7 @@ describe('a save that half-worked is not announced as a success', () => {
     // atomic, so nothing was created and the slots are still on the step named.
     expect(banner).toMatch(/change the times on the Session Management step/i);
     // NOT the advice that sends them to re-add the same slots and hit the same 409.
-    expect(banner).not.toMatch(/from the dashboard/i);
+    expect(banner).not.toMatch(/from Create & Manage/i);
     expect(currentStepName()).toMatch(/Review/);
 
     /*
@@ -1172,7 +1172,7 @@ describe('a save that half-worked is not announced as a success', () => {
     await commitWithFailingSessions({ response: { status: 409, data: {} } });
 
     expect(await bannerText(/time slots were not/i)).toBe(
-      'The study was saved but its time slots were not. Add them from the dashboard.'
+      'The study was saved but its time slots were not. Add them from Create & Manage.'
     );
     expect(currentStepName()).toMatch(/Review/);
   });
@@ -1197,7 +1197,7 @@ describe('a save that half-worked is not announced as a success', () => {
 
     const banner = await bannerText(/time slots were not/i);
     expect(banner).toBe(
-      'The study was saved but its time slots were not. Add them from the dashboard.'
+      'The study was saved but its time slots were not. Add them from Create & Manage.'
     );
     expect(banner).not.toMatch(/foreign key constraint/i);
     expect(screen.queryByText(/foreign key constraint/i)).not.toBeInTheDocument();
@@ -1208,7 +1208,7 @@ describe('a save that half-worked is not announced as a success', () => {
     await commitWithFailingSessions(undefined);
 
     expect(await bannerText(/time slots were not/i)).toBe(
-      'The study was saved but its time slots were not. Add them from the dashboard.'
+      'The study was saved but its time slots were not. Add them from Create & Manage.'
     );
     expect(currentStepName()).toMatch(/Review/);
   });

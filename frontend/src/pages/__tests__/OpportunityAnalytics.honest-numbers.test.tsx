@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, cleanup } from '@testing-library/react';
+import { render, cleanup, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -111,6 +111,14 @@ beforeEach(() => {
     status: 'published',
     firsthand_study_id: 'study_x',
   } as never);
+});
+
+describe('the way back (#169)', () => {
+  it('names the researcher workspace Create & Manage on the loaded page', async () => {
+    const { container } = renderPage();
+    await settled(container);
+    expect(within(container).getByRole('button', { name: /^Back to Create & Manage$/ })).toBeInTheDocument();
+  });
 });
 
 describe('week-over-week with no previous week', () => {
