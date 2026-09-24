@@ -26,7 +26,7 @@ const ROOTS = ['frontend/src', 'backend/src', 'shared'];
 
 const RETIRED: RegExp[] = [
   /(?<![-\w/])dashboard(?![-\w])/i, // "admin-dashboard-page" and "adminDashboard" are code, not copy
-  /\b(back|return|exit|go) to (the )?(admin|studies|browse studies)\b/i,
+  /\b(back|return|exit|go) to (the )?(admin|studies|browse studies|cortex)\b/i, // "Back to Cortex" meant /
   /\bBrowse Studies\b/, // the retired header label; the lower-case action is kept
   /\bAdmin · Cortex\b/,
   /\bBrowse studies · Cortex\b/i,
@@ -41,6 +41,11 @@ const ALLOWED: ReadonlyArray<{ file: string; text: string; why: string }> = [
     why: 'example study content',
   },
   { file: 'frontend/src/components/OpportunityForm/BasicInfoTab.tsx', text: 'e.g., Mobile App, Dashboard, API, etc.', why: 'example study content' },
+  {
+    file: 'frontend/src/components/recording/StudyRunner.tsx',
+    text: 'Go back to the Cortex tab to see what happened. Nothing you do here is being recorded.',
+    why: 'the browser tab Cortex runs in, not a page',
+  },
 ];
 
 const shippedFiles = (dir: string): string[] =>
@@ -117,6 +122,8 @@ describe('retired page names (#169)', () => {
       "const a = 'Back to admin';",
       "const a = 'Back to studies';",
       "const a = 'Back to Browse studies';",
+      'const a = <Link to="/">Back to Cortex</Link>;',
+      'const a = <button aria-label="Navigate back to Cortex home" />;',
       "useDocumentTitle('Admin · Cortex');",
       "useDocumentTitle('Browse studies · Cortex');",
       'const a = <span>Browse Studies</span>;',
