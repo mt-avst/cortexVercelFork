@@ -15045,10 +15045,11 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
    value cannot work when the thing that overflows is the string, not the
    viewport. Letting the caption wrap instead (`flex-wrap` + `__sub`'s own
    rule, below) keeps it beside the value when it fits and moves it to its
-   own line only when it does not, so every caption shows in full at every
-   width in this band, however long it is. The
-   vertical divider stops making sense once items sit in a grid rather than
-   a row, so it becomes a top border on every item after the first pair. */
+   own line only when it does not, so wherever captions show (770-1023px;
+   they are hidden below 770) each one shows in full, however long it is.
+   The vertical divider stops making sense once items sit in a grid rather
+   than a row, so it becomes a top border on every item after the first
+   pair. */
 @media (max-width: 1023.98px) {
   .admin-snapshot-strip {
     display: grid;
