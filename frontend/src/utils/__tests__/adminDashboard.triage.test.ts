@@ -291,18 +291,48 @@ describe('the closing-soon horizon (3 days)', () => {
     expect(isMilestoneSoon({ kind: 'deadline', date: new Date(NOW.getTime() - 1) }, NOW)).toBe(false);
   });
 
-  // Passes on main too, by design: the default was already 3 there. It
-  // guards the refactor onto CLOSING_SOON_DAYS, not new behaviour.
-  it('is the same default horizon the Closing soon card and chip use', () => {
-    // 3 days in, 3 days + 1 hour out - through the default argument.
+  it('is the same default horizon the Closing soon card and chip use - floor(daysLeft) <= 3, so a few hours past 3 days still counts (D1)', () => {
+    // isClosingSoon floors the days-left count (D1: "the close label reads 3
+    // days or fewer"), so 3 days + 1 hour still floors to 3 and counts too -
+    // only a full 4th day away falls outside. Through the default argument.
     const inside = published({ id: 'in', sessions: [], type: 'unmoderated', end_date: inDays(3) });
-    const outside = published({
-      id: 'out',
+    const alsoInside = published({
+      id: 'also-in',
       sessions: [],
       type: 'unmoderated',
       end_date: new Date(NOW.getTime() + 3 * DAY + 60 * 60 * 1000).toISOString(),
     });
-    expect(ids(getStudiesClosingSoon([inside, outside], NOW))).toEqual(['in']);
+    const outside = published({ id: 'out', sessions: [], type: 'unmoderated', end_date: inDays(4) });
+    expect(ids(getStudiesClosingSoon([inside, alsoInside, outside], NOW))).toEqual(['in', 'also-in']);
+  });
+
+  // TESTLANE-C section 2: the D1 isClosingSoon boundary, probed at the four
+  // named days.
+  it('is true at 2.9, 3.2 and 3.99 days, and false at a full 4.0 days (D1 boundary probes: isClosingSoon floors, unlike isMilestoneSoon\'s exact 72h)', () => {
+    const at = (days: number, id: string) =>
+      published({ id, sessions: [], type: 'unmoderated', end_date: new Date(NOW.getTime() + days * DAY).toISOString() });
+    const cases = [
+      [2.9, true],
+      [3.2, true],
+      [3.99, true],
+      [4.0, false],
+    ] as const;
+    for (const [days, expected] of cases) {
+      const study = at(days, `d-${days}`);
+      // isNextNoteWarned IS isClosingSoon (floor(daysLeft) <= 3) - not
+      // isMilestoneSoon, which keeps its own exact 72h cutoff (see "does not
+      // colour one a millisecond past 3 days" above): the two genuinely
+      // disagree between 3 and 4 days, by design.
+      expect(isNextNoteWarned(study, NOW)).toBe(expected);
+      expect(ids(getStudiesClosingSoon([study], NOW))).toEqual(expected ? [study.id] : []);
+    }
+  });
+
+  it('a draft or closed study is never closing soon, however close its date is (control)', () => {
+    const soon = new Date(NOW.getTime() + DAY).toISOString();
+    const draftSoon = { ...published({ id: 'd', sessions: [], type: 'unmoderated', end_date: soon }), status: 'draft' as const };
+    const closedSoon = { ...published({ id: 'c', sessions: [], type: 'unmoderated', end_date: soon }), status: 'closed' as const };
+    expect(getStudiesClosingSoon([draftSoon, closedSoon], NOW)).toEqual([]);
   });
 });
 
@@ -510,10 +540,14 @@ describe('a closed study has no next milestone and is never coloured (round 3)',
 });
 
 describe('the Next note colour is the Closing soon chip\'s own test (round 4)', () => {
-  it('colours a study whose window ends inside 72h even though its next session is later', () => {
+  it('colours a study whose window ends inside 72h even though its next session is later - and the milestone ITSELF now names the close date (D1: getNextMilestone)', () => {
     const windowSoon = published({ id: 'w', sessions: [session(5)], end_date: new Date(NOW.getTime() + 2 * DAY).toISOString() });
     expect(matchesQuickFilter(windowSoon, 'closing-soon', NOW)).toBe(true);
-    expect(isMilestoneSoon(getNextMilestone(windowSoon, NOW), NOW)).toBe(false);
+    // D1: "a closing-soon study's note shows its close milestone" - unconditionally,
+    // even though a session sits later - so getNextMilestone itself already
+    // switches to the deadline kind/date, and that milestone is soon too.
+    expect(getNextMilestone(windowSoon, NOW)).toEqual({ kind: 'deadline', date: new Date(NOW.getTime() + 2 * DAY) });
+    expect(isMilestoneSoon(getNextMilestone(windowSoon, NOW), NOW)).toBe(true);
     expect(isNextNoteWarned(windowSoon, NOW)).toBe(true);
   });
 

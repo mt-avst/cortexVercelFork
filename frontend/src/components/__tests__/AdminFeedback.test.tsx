@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import AdminFeedback from '../AdminFeedback';
@@ -77,7 +77,13 @@ describe('AdminFeedback under the bounded list contract', () => {
     expect(notice.textContent).toContain('Export');
   });
 
-  it('marks the count badge as a floor, not a total, when the list is truncated', async () => {
+  // M-L1: the heading's own count badge was removed - the Feedback tab
+  // button already carries the same count (Admin.tsx), and this was the one
+  // panel heading left with a second, redundant one. These two pins used to
+  // assert the badge's TEXT (floor "3+" vs exact "2"); now they assert its
+  // absence, on both the truncated and the exact-count shapes, so a badge
+  // reappearing here (in either shape) is still caught.
+  it('shows no count badge on the heading when the list is truncated - that count now lives on the Feedback tab button (M-L1)', async () => {
     mockGetFeedback.mockResolvedValue({ items: [item(1), item(2), item(3)], has_more: true });
 
     render(<AdminFeedback />);
@@ -86,11 +92,11 @@ describe('AdminFeedback under the bounded list contract', () => {
       expect(screen.getByText('feedback body 1')).toBeInTheDocument();
     });
 
-    // "3+" - a bare "3" would present the visible slice as the whole table.
-    expect(screen.getByText('3+')).toBeInTheDocument();
+    const heading = screen.getByText('Feedback inbox').closest('div') as HTMLElement;
+    expect(within(heading).queryByText(/^\d+\+?$/)).not.toBeInTheDocument();
   });
 
-  it('keeps the count badge exact when nothing was cut off', async () => {
+  it('shows no count badge on the heading when nothing was cut off (M-L1)', async () => {
     mockGetFeedback.mockResolvedValue({ items: [item(1), item(2)], has_more: false });
 
     render(<AdminFeedback />);
@@ -99,8 +105,8 @@ describe('AdminFeedback under the bounded list contract', () => {
       expect(screen.getByText('feedback body 1')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('2')).toBeInTheDocument();
-    expect(screen.queryByText('2+')).not.toBeInTheDocument();
+    const heading = screen.getByText('Feedback inbox').closest('div') as HTMLElement;
+    expect(within(heading).queryByText(/^\d+\+?$/)).not.toBeInTheDocument();
   });
 });
 

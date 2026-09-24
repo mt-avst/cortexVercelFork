@@ -124,6 +124,15 @@ const Header: React.FC = memo(() => {
   const themeIcon = isDarkMode
     ? <Sun size={18} aria-hidden="true" />
     : <Moon size={18} aria-hidden="true" />;
+  // the phone menu's theme item was the one icon in the
+  // list at size 18 (with the label in its own `ms-2`-margined span) beside
+  // five others at size 16 (each with a plain `me-2` on the icon itself, no
+  // wrapping span) - two different icon boxes meant two different text
+  // start-x's down the column. A dedicated size-16 pair, built the same way
+  // every other item's icon is, closes both gaps at once.
+  const themeIconSm = isDarkMode
+    ? <Sun size={16} aria-hidden="true" className="me-2" />
+    : <Moon size={16} aria-hidden="true" className="me-2" />;
 
   /**
    * The primary destination(s) available to the signed-in user. `bar` renders
@@ -164,7 +173,11 @@ const Header: React.FC = memo(() => {
 
     return [
       <GuardedLink key="browse" to="/" className={primary}>
-        <List size={18} className="me-1" aria-hidden="true" />
+        {/* 16px + `me-2`, matching every other menu icon -
+            this one's own 18px + `me-1` was the second cause of the phone
+            menu's text-x drift (the squashed ShieldPlus icon, fixed above
+            with `flex-shrink: 0`, was the first). */}
+        <List size={16} className="me-2" aria-hidden="true" />
         Browse Studies
       </GuardedLink>,
     ];
@@ -386,6 +399,7 @@ const Header: React.FC = memo(() => {
                     <Dropdown
                       trigger={renderProfileTrigger()}
                       align="end"
+                      disclosure
                     >
                       {profileMenuItems()}
                     </Dropdown>
@@ -402,14 +416,15 @@ const Header: React.FC = memo(() => {
                 <Dropdown
                   trigger={renderMenuTrigger()}
                   align="end"
+                  disclosure
                 >
                   <DropdownItem
                     key="theme"
                     onClick={toggleTheme}
                     aria-label={themeToggleAria}
                   >
-                    {themeIcon}
-                    <span className="ms-2">{themeToggleLabel}</span>
+                    {themeIconSm}
+                    {themeToggleLabel}
                   </DropdownItem>
                   <DropdownDivider key="div-after-theme" />
                   {primaryActionItems('menu')}

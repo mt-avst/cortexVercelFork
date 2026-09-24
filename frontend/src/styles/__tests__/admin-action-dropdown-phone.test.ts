@@ -65,30 +65,42 @@ describe('admin action dropdown reverses its anchor below the card-reflow breakp
     expect(css).toMatch(/\.admin-action-dropdown-menu,[\s\S]*?right:\s*0\s*!important;/);
   });
 
-  it('a reflow-width !important override sits AFTER the !important block and flips it to open rightward, at the SAME breakpoint as the card reflow', () => {
+  // C-H2 (fix round 4): the M1 rebuild's kebab sits at the card's own
+  // top-right corner at every width under 1024px (`.admin-data-table
+  // td.col-actions { position: absolute; right: 12px }`), not at its LEFT
+  // edge as an earlier round's card layout did - so the menu anchor no
+  // longer flips to `left: 0` below the reflow breakpoint. It stays
+  // right-anchored, matching the desktop rule; the <1024px block re-asserting
+  // `right: 0 !important` is kept only so a future kebab-position change has
+  // one place to update rather than two rules to reconcile (see the block's
+  // own comment).
+  it('the <1024 block re-asserts the SAME right anchor as the desktop rule, at the card-reflow breakpoint - no left-hand flip any more (fix round 4)', () => {
     const importantBlockAt = css.search(/\.admin-action-dropdown-menu,[\s\S]*?right:\s*0\s*!important;/);
     expect(importantBlockAt, 'the unconditional !important block must exist').toBeGreaterThanOrEqual(0);
 
-    // Find the anchor override that comes right after that block, not just
-    // anywhere in the file - a coincidental match inside an unrelated
-    // media block elsewhere must not satisfy this.
-    const searchFrom = importantBlockAt;
-    const leftImportantAt = css.indexOf('left: 0 !important;\n    right: auto !important;', searchFrom);
-    expect(
-      leftImportantAt,
-      'expected "left: 0 !important; right: auto !important;" to appear after the unconditional !important block'
-    ).toBeGreaterThan(searchFrom);
+    // No left-hand anchor override survives anywhere in the file. Bounded on
+    // the left so `margin-left:`/`padding-left:` (genuinely unrelated
+    // properties) do not false-match.
+    expect(css).not.toMatch(/(^|[^-\w])left:\s*0\s*!important/);
 
-    // It must be reachable from a @media block at the SAME breakpoint as the
-    // card reflow, with no intervening closing `}` at column 0 (i.e. no
-    // unrelated top-level rule sits between the media query opening and the
-    // declaration).
-    const mediaQueryAt = css.lastIndexOf(`@media (max-width: ${REFLOW_BREAKPOINT}px) {`, leftImportantAt);
+    // A second !important block, after the first, re-declares the same
+    // right anchor - not just anywhere in the file, but wrapped in a @media
+    // block at the SAME breakpoint as the card reflow.
+    const secondBlockAt = css.indexOf(
+      'right: 0 !important;\n    left: auto !important;',
+      importantBlockAt + 1
+    );
+    expect(
+      secondBlockAt,
+      'expected a second "right: 0 !important; left: auto !important;" declaration after the unconditional block'
+    ).toBeGreaterThan(importantBlockAt);
+
+    const mediaQueryAt = css.lastIndexOf(`@media (max-width: ${REFLOW_BREAKPOINT}px) {`, secondBlockAt);
     expect(
       mediaQueryAt,
       `expected a @media (max-width: ${REFLOW_BREAKPOINT}px) block (the same breakpoint as the .admin-data-table card reflow) wrapping the override`
     ).toBeGreaterThan(importantBlockAt);
-    const selectorBetween = css.slice(mediaQueryAt, leftImportantAt);
+    const selectorBetween = css.slice(mediaQueryAt, secondBlockAt);
     expect(selectorBetween, 'the media query must target .admin-action-dropdown-menu').toMatch(/\.admin-action-dropdown-menu/);
   });
 });

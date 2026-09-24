@@ -173,16 +173,20 @@ describe('getStudiesClosingSoon', () => {
     expect(getStudiesClosingSoon([bookable], NOW, 3).map((o) => o.id)).toEqual(['b']);
   });
 
-  it('counts an imminent upcoming session even when end_date has already passed', () => {
-    // Recruitment window closed yesterday, but a session runs today - the table
-    // shows it as imminent, so this must too.
+  it('excludes a study whose end_date has passed, even with an imminent upcoming session - end_date always wins over sessions (D1: getClosingTime)', () => {
+    // Recruitment window closed yesterday; a session still runs today. Before
+    // D1 this counted as imminent (a session-aware fallback); getClosingTime
+    // now prefers end_date unconditionally whenever it is present, so a
+    // passed end_date excludes the study however soon its next session is -
+    // the same rule the control below already pinned for a session with no
+    // end_date at all.
     const stillRunning = opp({
       id: 'r',
       status: 'published',
       end_date: '2026-08-18T17:00:00', // before NOW
       sessions: [session({ start_time: '2026-08-19T16:00:00', end_time: '2026-08-19T16:30:00' })], // today, future
     });
-    expect(getStudiesClosingSoon([stillRunning], NOW, 3).map((o) => o.id)).toEqual(['r']);
+    expect(getStudiesClosingSoon([stillRunning], NOW, 3)).toEqual([]);
   });
 
   it('excludes a study whose only session is beyond the window (control)', () => {

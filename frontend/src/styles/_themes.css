@@ -197,6 +197,15 @@ body.theme-light {
   --surface-panel-current: var(--surface-panel-light);
   --surface-card-current: var(--surface-card-light);
   --surface-glass-current: var(--surface-glass-light);
+  /* A fully opaque (alpha 1), deliberately light anchor for the status
+   * pills' own `color-mix` fills (_components.css, "Study lifecycle") -
+   * literal, not `--surface-card-current`: that token carries its own alpha
+   * (0.9), so mixing against it still left an ~8% sliver of whatever sits
+   * behind the pill showing through, and the resulting fill measured
+   * 4.49:1 on the Published label, under the 4.5:1 floor. This anchor
+   * matches the literal `#FFFFFF` the table header block above already
+   * hardcodes for the same "FORCE WHITE BACKGROUND" reason. */
+  --status-pill-fill-anchor-current: #FFFFFF;
 
   --border-subtle-current: var(--border-subtle-light);
   --border-strong-current: var(--border-strong-light);
@@ -275,6 +284,12 @@ body.theme-light {
      brighter, distinct pair. */
   --status-success-text: var(--status-success);
   --status-danger-text: var(--status-danger);
+  /* #160: same split as success/danger-text above, but warning's fill
+     (--status-warning, #c27a2d) is NOT safe as text here either - already
+     documented on --accent-amber-text above (3.08-3.43 across light
+     surfaces). Reuses that already-AA-checked darker twin (5.17 on cream,
+     5.67 on a white card) rather than inventing a third amber. */
+  --status-warning-text: var(--accent-amber-text);
   --status-info: #1e5a8a;
 
   /* Tag Colors */
@@ -748,6 +763,21 @@ body.theme-light .admin-dashboard .form-select {
   background-color: rgba(255, 255, 255, 0.8) !important;
 }
 
+/* Admin dashboard search field - light mode: the Status/Type selects above
+   already move off the base rule's cool slate (`#F8FAFC`) to a warmer,
+   near-white fill - the search `<input>` (a `.form-control`, not a
+   `.form-select`) kept the cool one, so it read as a visibly different
+   surface beside the two controls next to it in the same row. Same value,
+   so the whole filters row shares one fill. `!important`: the earlier,
+   unconditional `body.theme-light .form-control` rule above (search
+   "Light slate fill for visibility against white card") sets its own
+   `#F8FAFC !important` - any `!important` declaration beats any
+   non-`!important` one regardless of specificity, so without one here this
+   rule's higher specificity would not be enough to win. */
+body.theme-light .admin-dashboard .form-control {
+  background-color: rgba(255, 255, 255, 0.8) !important;
+}
+
 /* Filter Section */
 body.theme-light .filter-section {
   background: rgba(255, 255, 255, 0.65);
@@ -773,6 +803,19 @@ body.theme-light .alert-success {
 body.theme-light .alert-danger {
   border-color: #EF4444;
   background: rgba(239, 68, 68, 0.05);
+}
+
+/* success and danger both got their own light-theme
+   override above; warning never did, so `body.theme-light .alert` (two
+   classes, 0-2-1) always beat `.alert-warning`'s own colour (one class,
+   0-1-0) regardless of source order, and #160's banner rendered navy on a
+   white 70% box in light - indistinguishable from an info message, not a
+   warning at all. `--status-warning-text` (the light theme's own accessible
+   amber twin, 5.17:1 on cream / 5.67:1 on a white card) now actually paints. */
+body.theme-light .alert-warning {
+  border-color: var(--status-warning);
+  background: color-mix(in srgb, var(--status-warning) 8%, transparent);
+  color: var(--status-warning-text);
 }
 
 /* Tables */
@@ -1148,6 +1191,19 @@ body.theme-dark .admin-dashboard .admin-dashboard-title {
   color: var(--color-text-main);
 }
 
+/* one heading ink token across the four tab panels -
+   "Recent bookings" is an <h2>, so it (uniquely among the four) matched the
+   legacy rule above and read a different ink to "Pending completion
+   approvals" and "Feedback inbox" (both <h3>, and both already routed
+   through --text-primary by their own unlayered component stylesheets,
+   which is why editing the rule above - still relied on by other headings
+   in this admin shell - is not the fix). Higher specificity than the h1-h4
+   rule (3 classes against 2 classes + 1 element) wins this one heading back
+   to the same token, in both themes. */
+body.theme-dark .admin-dashboard .admin-bookings-title {
+  color: var(--text-primary);
+}
+
 body.theme-dark .admin-dashboard p,
 body.theme-dark .admin-dashboard .lead,
 body.theme-dark .admin-dashboard .card-text {
@@ -1223,21 +1279,6 @@ body.theme-dark .admin-tabs .nav-link.active {
   background: rgba(255, 78, 80, 0.1);
 }
 
-/* Admin stat cards - dark mode (enhanced depth system) */
-body.theme-dark .admin-stat-card {
-  background: rgba(255, 255, 255, var(--glass-opacity-card));
-  border: 1px solid var(--border-strength-medium);
-  box-shadow: var(--depth-1), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  transition: transform var(--transition-lift), box-shadow var(--transition-card), border-color var(--transition-card);
-}
-
-body.theme-dark .admin-stat-card:hover {
-  border-color: var(--border-strength-strong);
-  box-shadow: var(--depth-2), inset 0 1px 0 rgba(255, 255, 255, 0.1);
-}
-
 /* Admin data table - uses panel surface system with enhanced depth */
 body.theme-dark .admin-data-table-container {
   background: rgba(255, 255, 255, var(--glass-opacity-panel));
@@ -1268,30 +1309,6 @@ body.theme-dark .admin-settings-btn {
 body.theme-dark .admin-settings-btn:hover {
   background: rgba(255, 255, 255, 0.05);
   border-color: rgba(255, 255, 255, 0.3);
-}
-
-body.theme-dark .admin-stat-card .stat-value {
-  color: var(--color-text-main);
-}
-
-body.theme-dark .admin-stat-card .stat-label {
-  color: rgba(255, 255, 255, 0.7);
-}
-
-body.theme-dark .admin-stat-card .stat-subtitle {
-  color: rgba(255, 255, 255, 0.6);
-}
-
-/* STRICT MONOCHROME - No colored icons in Dark Mode. This theme-scoped
-   override forced the SAME dark slate value regardless of theme (so the
-   "Light Mode" copy below rendered dark-theme grey on a white card) and,
-   like the base .stat-icon rule in _components.css, dimmed it to ~1.92:1
-   with opacity + !important. Removed rather than fixed in place: with no
-   override here the theme-aware base rule (--text-secondary) already
-   applies. */
-body.theme-dark .admin-stat-card .stat-icon-wrapper {
-  background: var(--surface-glass-current);
-  border: 1px solid var(--border-subtle-current);
 }
 
 /* Page title - Dark Mode: near-white, Lane A1's deliberate value. */
@@ -1328,6 +1345,15 @@ body.theme-dark .admin-dashboard table.admin-data-table tbody td .admin-undo-not
 
 body.theme-dark .admin-dashboard table.admin-data-table tbody td .admin-action-error .admin-row-notice__text {
   color: var(--status-danger-text);
+}
+
+/* same restatement as the two above, for the Copy
+   warning's row notice (`.admin-row-notice--warning`) - without it the
+   blanket dark `td span` colour below painted its text the same flat grey
+   as everything else, measured rgb(212,212,212) instead of the amber
+   `--status-warning-text` the notice's own border/background already used. */
+body.theme-dark .admin-dashboard table.admin-data-table tbody td .admin-row-notice--warning .admin-row-notice__text {
+  color: var(--status-warning-text);
 }
 
 /* Next session / deadline cell - dark mode. The blanket `td *` colour
@@ -1473,6 +1499,37 @@ body.theme-dark .admin-dashboard table .admin-action-primary--fix:hover {
   color: color-mix(in srgb, var(--status-warning) 80%, var(--text-primary));
   border-color: var(--status-warning);
   background: color-mix(in srgb, var(--status-warning) 18%, transparent);
+}
+
+/* Below 1024px the kebab is two nested boxes - the
+   44x44 hit target (`.admin-action-btn-kebab`, `.btn-outline-secondary`) and
+   the visible 32x32 box inside it (`.admin-action-btn-kebab__box`,
+   _components.css). The outer button's own hover/focus/expanded fill above
+   still painted on top of the inner box's own tint - two treatments where
+   the compact list wants one. In light this was worse than doubled: the
+   outer fill is the brand orange with white text, so hover or an open menu
+   showed an orange square with the inner cream box on top and WHITE dots -
+   1.23:1 against that box (non-text needs 3:1), measured. Below 1024px only,
+   revert the outer button to its resting fill (none) and resting colour (the
+   same rules above give it unconditionally), so only the inner box tints.
+   >=1024px is untouched - there is no inner box there, and the outer fill IS
+   the correct, already-passing (5.18:1) treatment. */
+@media (max-width: 1023.98px) {
+  body.theme-dark .admin-dashboard table.admin-data-table .admin-action-btn-kebab:hover,
+  body.theme-dark .admin-dashboard table.admin-data-table .admin-action-btn-kebab:focus-visible,
+  body.theme-dark .admin-dashboard table.admin-data-table .admin-action-btn-kebab[aria-expanded="true"] {
+    background: transparent;
+    border-color: transparent;
+    color: rgba(224, 224, 224, 0.8);
+  }
+
+  body.theme-light .admin-dashboard table.admin-data-table .admin-action-btn-kebab:hover,
+  body.theme-light .admin-dashboard table.admin-data-table .admin-action-btn-kebab:focus-visible,
+  body.theme-light .admin-dashboard table.admin-data-table .admin-action-btn-kebab[aria-expanded="true"] {
+    background: transparent;
+    border-color: transparent;
+    color: var(--text-primary);
+  }
 }
 
 /* Admin table date text - dark mode */
@@ -1766,6 +1823,26 @@ body.theme-dark .admin-dashboard .admin-feedback .feedback-table tbody td .badge
   color: revert-layer;
 }
 
+/* The compact list's line 2 (type icon+label) and the owner line under Show
+   all researchers also lost to the blanket rule above - same fix, same
+   reason: the rule paints every span #D4D4D4, flattening the hierarchy
+   `.admin-study-type-compact`/`.admin-study-owner` (_components.css) intend
+   with `var(--text-muted)`. Measured before this rule: both #D4D4D4
+   (212,212,212), close to the title's rgb(240,240,240) - no visible
+   hierarchy. `--text-muted` here is `#94A3B8`, ~6:1 on the dark page.
+   `td.col-status`, not bare `td`: the type element is a `<span>`, so the
+   blanket rule's own `td span:not(.badge):not(.lozenge)` selector is
+   (0,4,5) - one type-selector ahead of a bare `td .class` exemption
+   (0,4,4) - and still wins on the tie-break below class count. Scoping to
+   `col-status` is also the correct scope for the type element (it only ever
+   renders there) and adds the class this needs to clear (0,4,5) outright.
+   The owner element moved into its own `td.col-owner`; its exemption
+   below is scoped there to match, or it selects nothing. */
+body.theme-dark .admin-dashboard table.admin-data-table tbody td.col-status .admin-study-type-compact,
+body.theme-dark .admin-dashboard table.admin-data-table tbody td.col-owner .admin-study-owner {
+  color: revert-layer;
+}
+
 /* ...except the Question badge: dark's `bg-info` is a light teal, and the
    `text-dark` it is paired with resolves no colour in this build, so it
    reverts to white at 3.04:1. Dark ink on the teal instead. */
@@ -1858,6 +1935,13 @@ body.theme-light .admin-dashboard h3,
 body.theme-light .admin-dashboard h4,
 body.theme-light .admin-dashboard .admin-dashboard-title {
   color: var(--text-on-light);
+}
+
+/* see the dark-theme rule of the same name earlier in
+   this file for why this is scoped to one heading rather than the h1-h4
+   rule above. */
+body.theme-light .admin-dashboard .admin-bookings-title {
+  color: var(--text-primary);
 }
 
 body.theme-light .admin-dashboard p,
@@ -1975,15 +2059,6 @@ body.theme-light .custom-tab-button span:not(.admin-tab-count--alert) {
   color: inherit;
 }
 
-/* Admin stat cards - light mode (uses unified surface system) */
-body.theme-light .admin-stat-card {
-  background: var(--surface-card-current);
-  border: 1px solid var(--border-subtle-current);
-  box-shadow: var(--shadow-card-current);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-
 /* Admin container - light mode: transparent for Glass Cockpit aesthetic */
 body.theme-light .admin-container-wide {
   background: transparent;
@@ -1996,27 +2071,6 @@ body.theme-light .admin-container-wide {
    `.admin-dashboard table tbody tr:hover` above, which it has to outrank. */
 body.theme-light .admin-dashboard table.admin-data-table tbody tr:hover {
   background: var(--bg-hover);
-}
-
-body.theme-light .admin-stat-card .stat-value {
-  color: var(--text-on-light);
-}
-
-body.theme-light .admin-stat-card .stat-label {
-  color: #4B5563;
-}
-
-body.theme-light .admin-stat-card .stat-subtitle {
-  color: #6B7280;
-}
-
-/* STRICT MONOCHROME - No colored icons in Light Mode. Same defect as the
-   dark-mode block above: an identical dark-slate value forced onto both
-   themes at ~1.92:1, which on a white card also had no theme-awareness at
-   all. Removed for the same reason. */
-body.theme-light .admin-stat-card .stat-icon-wrapper {
-  background: var(--surface-glass-current);
-  border: 1px solid var(--border-subtle-current);
 }
 
 /* Page title - Light Mode: near-black, Lane A1's deliberate value. */
@@ -2094,6 +2148,20 @@ body.theme-light .admin-dashboard table.admin-data-table tbody td .admin-study-o
   color: var(--text-secondary);
 }
 
+/* The compact list's own owner rule (`.admin-data-table td.col-owner
+   .admin-study-owner`, _components.css) deliberately asks for
+   `--text-muted`, a step below the desktop meta line's `--text-secondary`
+   above (there is no separate purpose line for it to sit a step above, in
+   the 3-line compact card) - but the blanket rule above outranks it
+   (0,4,4) against (0,3,1) and always won, so the compact owner measured
+   `--text-secondary`'s rgb(61,74,92) in every light shot regardless.
+   `td.col-owner` clears it the same way the dark owner exemption above
+   does - the owner element moved into its own `td.col-owner`, so a
+   `col-status` scope here selects nothing. */
+body.theme-light .admin-dashboard table.admin-data-table tbody td.col-owner .admin-study-owner {
+  color: revert-layer;
+}
+
 /* Admin table headers - light mode - FORCE WHITE BACKGROUND */
 body.theme-light .admin-data-table,
 body.theme-light .admin-data-table thead,
@@ -2110,6 +2178,35 @@ body.theme-light .admin-dashboard .table thead tr,
 body.theme-light .admin-dashboard .table th {
   background: #FFFFFF !important;
   background-color: #FFFFFF !important;
+}
+
+/* below 576px the tabs card's own chrome (border, shadow,
+   background) is dropped entirely (`_components.css`, "PHONE GUTTER") so
+   every block on the page shares one plain 16px gutter - the white block
+   above, unscoped, otherwise still paints a hard-edged white rectangle from
+   the first list item to the end of the list, framed by nothing, against
+   the page's cream canvas. Drop the table's own background here instead of
+   giving it a flat substitute colour: the list then sits on the real page
+   gradient, and the status pills (`.admin-study-status--*`,
+   _components.css) mix their own fill against a light, stable card token
+   rather than `transparent`, so their label contrast stays close to fixed
+   regardless of the (non-flat) gradient now visible behind them - mixing
+   against the page's own cream tone read only 4.27:1 on Published, still
+   under AA, because cream itself is no lighter than the gradient it stood
+   in for. An earlier fix instead painted this wrapper
+   `var(--surface-page-current)`, which only swapped one flat backdrop for
+   another - still visibly a rectangle against the true, non-flat gradient -
+   and is unnecessary now the pills carry their own near-opaque fill. */
+@media (max-width: 575.98px) {
+  /* The element-qualified pair (`table.admin-data-table`) matches the rule
+     above's own `body.theme-light .admin-dashboard table` selector at equal
+     specificity (0,2,1) - the bare-class pair alone (0,2,0) lost to it. */
+  body.theme-light .admin-data-table,
+  body.theme-light .admin-dashboard table.admin-data-table,
+  body.theme-light .admin-dashboard .table-responsive {
+    background: transparent !important;
+    background-color: transparent !important;
+  }
 }
 
 /* The Research Studies header: muted, 12px top and bottom like its cells,
@@ -3020,7 +3117,10 @@ body.theme-dark {
   --surface-panel-current: var(--surface-panel);
   --surface-card-current: var(--surface-card);
   --surface-glass-current: var(--surface-glass);
-  
+  /* Dark already clears AA by a wide margin against the card surface itself
+   * (measured 10-11:1) - no opacity workaround needed here. */
+  --status-pill-fill-anchor-current: var(--surface-card-current);
+
   --border-subtle-current: var(--border-subtle-dark);
   --border-strong-current: var(--border-strong-dark);
 

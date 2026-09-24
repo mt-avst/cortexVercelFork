@@ -238,16 +238,21 @@ const AdminFeedback: React.FC = () => {
 
   return (
     <div className="admin-feedback">
+      {/* this used to be `mb-3`, on the Bootstrap
+          assumption that mb-3 is 1rem - in this design system's own spacing
+          scale `--spacing-3` is 0.75rem (12px) and `--spacing-4` is 1rem
+          (16px), so the two scales' numbering does not line up and the
+          Feedback table started 4px above Bookings' and Approvals', which
+          both use a real 16px margin. `mb-4` is the one that actually
+          matches. */}
       <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-        <h3 className="feedback-heading mb-0">
-          Feedback Inbox
-          {feedback.length > 0 && (
-            <span className="badge bg-secondary ms-2" style={{ fontSize: '0.65rem', verticalAlign: 'middle' }}>
-              {/* A truncated list's count is a floor, not a total. */}
-              {listTruncated ? `${feedback.length}+` : feedback.length}
-            </span>
-          )}
-        </h3>
+        {/* no count badge here any more - the Feedback
+            tab button already carries the same count (Admin.tsx), and this
+            was the one panel heading left with a second, redundant one. */}
+        {/* sentence case, matching "Recent bookings" -
+            this and "Pending Completion Approvals" were the two Title Case
+            outliers among the panel headings. */}
+        <h3 className="feedback-heading mb-0">Feedback inbox</h3>
         {/* Same button family as the Bookings tab's Export CSV. `btn-outline-light`
             drew no visible border on either theme's card, so the pair read as
             loose text ending 16px short of the table edge. */}
@@ -299,19 +304,19 @@ const AdminFeedback: React.FC = () => {
           <table className="table feedback-table">
             <thead>
               <tr>
-                <th className="sortable" scope="col" aria-sort={ariaSortFor('created_at')} style={{ width: '150px' }}>
+                <th className="sortable feedback-col-date" scope="col" aria-sort={ariaSortFor('created_at')}>
                   <button type="button" className="feedback-th-sort" onClick={() => handleSort('created_at')}>
                     Date
                     <SortCaret active={sortField === 'created_at'} direction={sortDirection} />
                   </button>
                 </th>
-                <th className="sortable" scope="col" aria-sort={ariaSortFor('category')} style={{ width: '168px' }}>
+                <th className="sortable feedback-col-category" scope="col" aria-sort={ariaSortFor('category')}>
                   <button type="button" className="feedback-th-sort" onClick={() => handleSort('category')}>
                     Category
                     <SortCaret active={sortField === 'category'} direction={sortDirection} />
                   </button>
                 </th>
-                <th className="sortable" scope="col" aria-sort={ariaSortFor('user_name')} style={{ width: '232px' }}>
+                <th className="sortable feedback-col-user" scope="col" aria-sort={ariaSortFor('user_name')}>
                   <button type="button" className="feedback-th-sort" onClick={() => handleSort('user_name')}>
                     User
                     <SortCaret active={sortField === 'user_name'} direction={sortDirection} />
@@ -319,7 +324,7 @@ const AdminFeedback: React.FC = () => {
                 </th>
                 <th scope="col">Feedback</th>
                 {isSuperadmin && (
-                  <th scope="col" style={{ width: '80px', textAlign: 'center' }}>Actions</th>
+                  <th scope="col" className="feedback-col-actions">Actions</th>
                 )}
               </tr>
             </thead>
@@ -359,7 +364,7 @@ const AdminFeedback: React.FC = () => {
                       </div>
                     </td>
                     {isSuperadmin && (
-                      <td data-label="Actions" style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                      <td data-label="Actions" className="feedback-col-actions" onClick={(e) => e.stopPropagation()}>
                         <button
                           className="btn btn-outline-danger btn-sm"
                           onClick={(e) => {

@@ -411,9 +411,11 @@ describe('Admin page', () => {
     fireEvent.click(screen.getByRole('button', { name: /Actions for Checkout usability test/i }));
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Copy' }));
 
+    // The copy warning is now a row notice (StudyRowNotices), not a
+    // Bootstrap `alert-warning` banner.
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(/could not be copied/i);
-    expect(alert).toHaveClass('alert-warning');
+    expect(alert).toHaveClass('admin-row-notice', 'admin-copy-notice', 'admin-row-notice--warning');
   });
 
   /**
