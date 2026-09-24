@@ -36,10 +36,13 @@ This guide will help you create and manage research opportunities on AdaptaLabs.
 2. Click **"Admin"** in the header (or go to `/admin`)
 3. You'll see the admin dashboard
 
+Below 992px wide, the header folds into one menu button: Admin, Browse Studies, My bookings and the profile items are all inside it.
+**My bookings** is in every signed-in header, so you can get back to sessions you have booked in other people's studies.
+
 ### Admin Dashboard Overview
 
 The dashboard shows, top to bottom:
-- **Needs attention**: completion reports waiting for approval and studies closing soon, each with a link that takes you to them
+- **Needs attention**: broken studies, completion reports waiting for approval and studies closing soon, each with a link that takes you to them
 - **Operational snapshot**: active studies, participants, sessions this week and open slots. It counts your own studies; **Show all researchers** widens it to everyone's
 - **Four tabs**: Research Studies, Completion Approvals, Feedback and Bookings. See [Research Studies table](#research-studies-table) below
 
@@ -504,17 +507,35 @@ The operational snapshot shows four figures for your studies (or every researche
 
 ### Research Studies table
 
+The list opens sorted by status, broken studies first, then drafts, published and closed.
+
 One row per study, in these columns:
-- **Study**: the title, then the study type and its one-line purpose underneath. Hover the title or purpose to read it in full
-- **Status**: Draft, Published, Closed or Broken. Broken means the study is published but something stops participants taking part - open it to see what. A study closed automatically at its end date says *Auto-closed* under its status
-- **Progress**: for studies with sessions, places booked out of the total (for example *3 / 4*) with a bar. For polls, surveys and recorded studies, the number of clicks through to the study. A dash means there is nothing to count yet
-- **Next session / deadline**: the next session, or the date recruitment closes, with how long is left
+- **Study**: the title, which is a link, with the study type and its one-line purpose underneath. With **Show all researchers** on, the owner's name shows under the title too
+- **Status**: Draft, Published, Closed or Broken. Broken means the study is published but something stops participants taking part - open it to see what. A study closed automatically at its end date says *Auto-closed* beside its status
+- **Progress**: for studies with sessions, places booked out of the total across the study's whole life (for example *3 / 4*) with a bar. For polls, surveys and recorded studies, the number of clicks through to the study. A dash means there is nothing to count yet
+- **Next / deadline**: the next session, or the date recruitment closes, with how long is left. A study closing in 3 days or fewer shows its close date, in the warning colour
 - **Created**: when the study was created
-- **Actions**: **View** (or **Edit** for a draft), and a menu with View, Edit, Copy, Analytics and Delete
+- **Actions**: one button for the next thing to do, and a menu for the rest
+
+The action button depends on the study's state:
+- **Fix** for a broken study
+- **Edit** for a draft
+- **Analytics** for a published or closed study
+- **Preview** for a study you do not own, whatever its state
+
+The menu holds Edit (Fix for a broken study), Preview as participant, Analytics, Copy, Close study and Delete, led by the same action as the button.
+On a study you do not own, the owner-only items are shown greyed out.
+A closed study's menu offers **Reopen study** instead of Close study.
+
+**Close study** takes effect at once and shows an **Undo** for 8 seconds.
+Reopening, by Undo or from the menu, runs the same checks as publishing, so a study that could not be published (for example, a session study with no future slot) is refused, and the reason shows under its row.
 
 Sort by clicking a column heading.
-On a narrower screen (below 1280px wide) the Created column is hidden and a **Sort by** control appears above the table instead.
-Below 1024px each study shows as a card.
+Between 1024px and 1279px wide the Created column is hidden, and a **Sort by** control appears beside the quick filters instead.
+
+Below 1024px the table becomes a compact list.
+Each study shows its title, its status and type, and its progress and next date, with the menu at the top right.
+From 800px up the list is two columns.
 
 ### Analytics (Polls & Surveys)
 
@@ -530,7 +551,8 @@ For Poll and Survey opportunities:
 
 - Use **Search** to find a study by its title or purpose
 - Use the **Status** and **Study type** filters to narrow the list
-- Use the **Quick filters** - Needs recruitment, Draft, Closing soon and Fully booked - for the common questions. **Clear filters** resets them all
+- Use the **Quick filters** - Broken, Needs recruitment, Draft, Closing soon and Fully booked - for the common questions. Each shows how many studies it matches. **Clear filters** resets them all
+- On a phone, Status, Study type and Sort by sit behind the **Filters** button, which shows how many are set, and the quick filters scroll sideways on one line
 
 ---
 
