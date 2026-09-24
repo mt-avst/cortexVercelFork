@@ -446,7 +446,13 @@ async function openMenu(page: Page, title: string): Promise<void> {
 }
 
 async function toggleShowAll(page: Page, expectedRows: number): Promise<void> {
-  await page.getByRole('button', { name: 'Show all researchers' }).click({ timeout: 3000 });
+  const toggle = page.getByRole('button', { name: 'Show all researchers' });
+  const next = (await toggle.getAttribute('aria-pressed')) === 'true' ? 'false' : 'true';
+  await toggle.click({ timeout: 3000 });
+  // Wait on the toggle itself, not only the row count: when both scopes serve
+  // the same number of rows the count matches before the refetch has even
+  // started, and a caller that measured straight away read the list mid-load.
+  await expect(toggle, 'Show all researchers pressed state').toHaveAttribute('aria-pressed', next, { timeout: 3000 });
   await expect(rows(page), 'rows after Show all researchers').toHaveCount(expectedRows, { timeout: 5000 });
 }
 
@@ -2437,7 +2443,11 @@ test.describe('MR C: owner at 390 under Show all researchers', () => {
   test('owner shares a line with the Next note, and the item is at most 132px tall', async ({ page, baseURL }) => {
     await open(page, baseURL, { width: 390, height: 844, api: makeApi(STEP2_ALL, null), expectedRows: ALL_COUNT });
     await toggleShowAll(page, ALL_COUNT);
-    const m = await page.evaluate((title) => {
+    // Both scopes serve ALL_COUNT rows here, so no row count can tell that the
+    // scope=all refetch has landed (a one-shot read measured the list mid-load,
+    // ~1 run in 4). Poll the measurement itself until the owner line exists;
+    // if it never renders, this fails by name after 5s.
+    const measure = () => page.evaluate((title) => {
       const p = window.__adminProbe;
       const r = p.rows().find((tr) => tr.querySelector(`[title="${CSS.escape(title)}"]`));
       const owner = r?.querySelector('td.col-owner .admin-study-owner');
@@ -2447,7 +2457,8 @@ test.describe('MR C: owner at 390 under Show all researchers', () => {
       const n = next.getBoundingClientRect();
       return { sameLine: o.top < n.bottom && n.top < o.bottom, height: r.getBoundingClientRect().height };
     }, OTHER_PUBLISHED);
-    expect(m, 'owner and Next note both rendered').not.toBeNull();
+    await expect.poll(measure, { message: 'owner and Next note both rendered', timeout: 5000 }).not.toBeNull();
+    const m = await measure();
     expect(m!.sameLine, 'owner and Next note share a line').toBe(true);
     expect(m!.height, 'item height').toBeLessThanOrEqual(132);
   });

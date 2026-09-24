@@ -7,7 +7,7 @@
 //   through to lift out.
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import useDocumentTitle from '../hooks/useDocumentTitle';
-import { CREATE_AND_MANAGE } from '../lib/pageNames';
+import { CREATE_AND_MANAGE } from '@shared/pageNames';
 import { Link, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { getOpportunities, deleteOpportunity, duplicateOpportunity, getDashboardStats, DashboardStats, exportBookingsCsv, getPendingApprovals, getFeedback } from '../api/client';

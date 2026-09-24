@@ -19,7 +19,7 @@ import SessionsTab from '../components/opportunity-analytics/SessionsTab';
 import ParticipantsTab from '../components/opportunity-analytics/ParticipantsTab';
 import { useBookingArtifacts } from '../components/opportunity-analytics/useBookingArtifacts';
 import { ArrowLeft, Info } from 'lucide-react';
-import { CREATE_AND_MANAGE } from '../lib/pageNames';
+import { CREATE_AND_MANAGE } from '@shared/pageNames';
 
 // Width reserved for the y-axis value labels, left of the plot area.
 const BAR_CHART_Y_AXIS_WIDTH = 30;
@@ -619,7 +619,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
         }}
       >
         <ArrowLeft size={14} style={{ marginRight: '6px' }} />
-        Back to Dashboard
+        Back to {CREATE_AND_MANAGE}
       </button>
 
       {/* Header - Cortex Page Header Structure */}

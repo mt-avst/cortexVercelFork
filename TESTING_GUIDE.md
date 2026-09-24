@@ -273,7 +273,7 @@ Follow the **`docs/END_TO_END_TESTING_CHECKLIST.md`** step-by-step.
 - [ ] Open on mobile device
 - [ ] Test navigation
 - [ ] Test booking flow
-- [ ] Test admin dashboard
+- [ ] Test Create & Manage
 - [ ] Verify buttons are clickable
 - [ ] Check text readability
 

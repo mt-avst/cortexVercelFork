@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import useDocumentTitle from '../hooks/useDocumentTitle';
-import { PARTICIPATE } from '../lib/pageNames';
+import { PARTICIPATE } from '@shared/pageNames';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { getOpportunities } from '../api/client';
 import { Opportunity } from '../api/types';

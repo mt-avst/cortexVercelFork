@@ -6,7 +6,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import LoadingSpinner from './LoadingSpinner';
 import ConfirmationModal from './ConfirmationModal';
 import { requestAdminAccess } from '../api/client';
-import { CREATE_AND_MANAGE, PARTICIPATE } from '../lib/pageNames';
+import { CREATE_AND_MANAGE, PARTICIPATE } from '@shared/pageNames';
 import { Dropdown, DropdownItem, DropdownDivider, DropdownHeader } from './ui';
 import CortexMark from './CortexMark';
 import {

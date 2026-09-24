@@ -80,5 +80,7 @@ describe('OpportunityAnalytics permission state (row 8)', () => {
 
     expect(await screen.findByRole('button', { name: /Retry/i })).toBeInTheDocument();
     expect(screen.queryByText(/Dana Owner/)).not.toBeInTheDocument();
+    // #169: this state has its own Back button, separate from the refused one.
+    expect(screen.getByRole('button', { name: /^Back to Create & Manage$/ })).toBeInTheDocument();
   });
 });

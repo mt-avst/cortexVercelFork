@@ -1157,6 +1157,28 @@ test.describe('Accessibility Tests', () => {
     expectNoViolations(results, 'My Bookings (empty)');
   });
 
+  test('My Bookings keeps its title and Refresh on one row at 390px, with the subtitle under the title', async ({ page }) => {
+    // At 390px "My bookings" and a labelled Refresh button did not fit on one
+    // row, so Refresh wrapped BETWEEN the title and its subtitle. Below 576px
+    // the button shows only its icon; its accessible name is still "Refresh".
+    await page.setViewportSize({ width: 390, height: 844 });
+    await stubParticipant(page, { upcoming: [], past: [] }, []);
+    await page.goto('/');
+    await page.evaluate(() => sessionStorage.setItem('loginRedirect', 'true'));
+    await page.goto('/my-bookings');
+    const title = page.getByRole('heading', { level: 1, name: 'My bookings' });
+    const refresh = page.getByRole('button', { name: 'Refresh' });
+    await expectRendered(page, title, refresh);
+
+    const t = (await title.boundingBox())!;
+    const r = (await refresh.boundingBox())!;
+    const sub = (await page.locator('.my-bookings-subtitle').boundingBox())!;
+    expect(r.y, 'Refresh starts inside the title row').toBeLessThan(t.y + t.height);
+    expect(r.x, 'Refresh sits to the right of the title').toBeGreaterThanOrEqual(t.x + t.width);
+    expect(r.x + r.width, 'Refresh stays on screen').toBeLessThanOrEqual(390);
+    expect(sub.y, 'the subtitle follows the whole row').toBeGreaterThanOrEqual(Math.max(t.y + t.height, r.y + r.height));
+  });
+
   test('My Bookings page (populated) should be accessible', async ({ page }) => {
     await stubParticipant(page, populatedBookings, populatedSessionEvents);
     await page.goto('/');

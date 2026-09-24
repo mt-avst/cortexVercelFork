@@ -21,7 +21,7 @@ This guide will help you create and manage research opportunities on AdaptaLabs.
 6. [Polls and Surveys Answered in Cortex](#polls-and-surveys-answered-in-cortex)
 7. [Consent](#consent)
 8. [Publishing Opportunities](#publishing-opportunities)
-9. [Dashboard and Analytics](#dashboard-and-analytics)
+9. [Create & Manage and Analytics](#create--manage-and-analytics)
 10. [Settings](#settings)
 11. [Managing Bookings](#managing-bookings)
 12. [Tips and Best Practices](#tips-and-best-practices)
@@ -74,7 +74,7 @@ An opportunity you are **editing** opens with its steps already marked, because 
 
 Two controls used to look almost identical and do very different things. They are now named apart:
 
-- **Exit to dashboard**, at the top of the page, leaves the form. If you have unsaved changes it asks first, and you can choose to stay
+- **Exit to Create & Manage**, at the top of the page, leaves the form. If you have unsaved changes it asks first, and you can choose to stay
 - **Previous: {step name}**, at the bottom of every step after the first, goes back one step and names where it is going - *Previous: Task List*, *Previous: Basic Info*
 
 ### Step 1: Start Creating
@@ -495,9 +495,9 @@ The panel does not appear on a draft or a closed opportunity, because neither ca
 
 ---
 
-## Dashboard and Analytics
+## Create & Manage and Analytics
 
-### Dashboard Statistics
+### Create & Manage Statistics
 
 The operational snapshot shows four figures for your studies (or every researcher's, with **Show all researchers**):
 - **Active studies**: published and draft studies
@@ -674,7 +674,7 @@ Closed sessions:
 2. **Capacity Planning**: Set realistic capacity limits
 3. **Location Details**: Always include meeting links or locations
 4. **Buffer Time**: Leave time between sessions if needed
-5. **Monitor Bookings**: Check dashboard regularly
+5. **Monitor Bookings**: Check Create & Manage regularly
 
 ### Communication
 

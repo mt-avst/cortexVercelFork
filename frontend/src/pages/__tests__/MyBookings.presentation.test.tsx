@@ -179,3 +179,19 @@ describe('MyBookings presentation', () => {
     // so it could never match either way. The assertion above does the work.)
   });
 });
+
+describe('MyBookings names the participant page Participate (#169)', () => {
+  it('goes back to Participate', async () => {
+    renderPage();
+    const back = await screen.findByRole('button', { name: /^Back to Participate$/ });
+    expect(back).toHaveAttribute('title', 'Back to Participate');
+  });
+
+  it('points an empty list at Participate, not at a dashboard', async () => {
+    vi.mocked(getMyBookings).mockResolvedValue({ upcoming: [], past: [] } as never);
+    renderPage();
+    expect(await screen.findByText('No upcoming sessions')).toBeInTheDocument();
+    expect(screen.getByText('Find a study to take part in on Participate.')).toBeInTheDocument();
+    expect(screen.queryByText(/dashboard/i)).not.toBeInTheDocument();
+  });
+});

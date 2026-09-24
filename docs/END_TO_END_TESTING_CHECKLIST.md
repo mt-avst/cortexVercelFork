@@ -254,7 +254,7 @@ Verify that all critical user journeys work end-to-end without blocking issues.
 
 ---
 
-### 9. Dashboard and Analytics
+### 9. Create & Manage and Analytics
 
 **Steps**:
 1. [ ] Sign in as admin
@@ -277,7 +277,7 @@ Verify that all critical user journeys work end-to-end without blocking issues.
 8. [ ] Check click data displays
 
 **Expected Results**:
-- ✅ Dashboard loads correctly
+- ✅ Create & Manage loads correctly
 - ✅ Statistics are accurate
 - ✅ Filtering works
 - ✅ Analytics display correctly
@@ -440,7 +440,7 @@ Verify that all critical user journeys work end-to-end without blocking issues.
 1. [ ] Open on mobile device or resize browser
 2. [ ] Test navigation
 3. [ ] Test booking flow
-4. [ ] Test admin dashboard
+4. [ ] Test Create & Manage
 5. [ ] Check form inputs
 6. [ ] Verify buttons are clickable
 7. [ ] Check text readability
@@ -469,7 +469,7 @@ Verify that all critical user journeys work end-to-end without blocking issues.
 | 6 | Create Opportunity | ⬜ | |
 | 7 | Edit Opportunity | ⬜ | |
 | 8 | Duplicate Opportunity | ⬜ | |
-| 9 | Dashboard/Analytics | ⬜ | |
+| 9 | Create & Manage/Analytics | ⬜ | |
 | 10 | Settings | ⬜ | |
 | 11 | Full Session | ⬜ | |
 | 12 | Past Session | ⬜ | |
