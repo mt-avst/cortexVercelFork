@@ -776,5 +776,29 @@ describe('useCloseStudyUndo', () => {
       });
       expect(vi.mocked(updateOpportunity)).toHaveBeenCalledTimes(1);
     });
+
+    it('an unattended lapse leaves focus alone, and does not call focusStudy, while it sits somewhere other than the body/study/notice (round 4 guard, M-1a)', async () => {
+      const { result, focusStudy } = setup();
+      vi.useFakeTimers();
+      await act(async () => {
+        await result.current.reopenStudy(study('x', 'Study X'));
+      });
+      expect(result.current.reopenNotice?.id).toBe('x');
+      // The reader moves on and types into an unrelated input - not the
+      // body, not the study's own row, not inside the notice - AFTER the
+      // success path's own (expected) focus hand-off above.
+      const input = document.createElement('input');
+      document.body.append(input);
+      input.focus();
+      expect(document.activeElement, 'setup: the input holds focus').toBe(input);
+      focusStudy.mockClear();
+      act(() => {
+        vi.advanceTimersByTime(8000);
+      });
+      expect(result.current.reopenNotice, 'the notice still clears on schedule').toBeNull();
+      expect(focusStudy, 'the reader was mid-typing elsewhere - the lapse must not steal focus').not.toHaveBeenCalled();
+      expect(document.activeElement, 'focus stays in the input').toBe(input);
+      input.remove();
+    });
   });
 });

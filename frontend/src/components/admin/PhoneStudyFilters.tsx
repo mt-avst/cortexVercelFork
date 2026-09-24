@@ -97,7 +97,7 @@ export const PhoneStudyFilters: React.FC<PhoneStudyFiltersProps> = ({
 
   // Focus goes into the panel on open (the Status select, its first
   // control); Escape closes it and returns focus to the toggle - the
-  // disclosure pattern the brief asks for (item 6).
+  // standard disclosure pattern.
   useEffect(() => {
     if (open) firstFieldRef.current?.focus();
   }, [open]);
@@ -271,7 +271,7 @@ export const PhoneStudyFilters: React.FC<PhoneStudyFiltersProps> = ({
           className="admin-result-count"
           role="status"
           ref={resultCountRef}
-          tabIndex={hasActiveFilters ? -1 : undefined}
+          tabIndex={-1}
         >
           {hasActiveFilters
             ? `${resultShown} of ${resultTotal} ${resultTotal === 1 ? 'study' : 'studies'}`

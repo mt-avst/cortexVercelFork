@@ -153,6 +153,9 @@ describe('PhoneStudyFilters', () => {
     const { rerender } = render(<PhoneStudyFilters {...baseProps} hasActiveFilters={false} />);
     const status = document.querySelector('.admin-result-count') as HTMLElement;
     expect(status).toBeInTheDocument();
+    // LOW-2: the slot is a live region by role, not merely by class name -
+    // an announcement depends on this attribute, not on `.admin-result-count`.
+    expect(status).toHaveAttribute('role', 'status');
     expect(status).toHaveTextContent(/^6 studies$/);
     expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument();
 
@@ -160,6 +163,18 @@ describe('PhoneStudyFilters', () => {
     expect(status).toHaveTextContent('4 of 6 studies');
     expect(document.querySelector('.admin-result-count')).toBe(status);
     expect(screen.getByRole('button', { name: 'Clear filters' })).toBeInTheDocument();
+  });
+
+  it('LOW-3: the idle count carries tabIndex=-1, as the desktop count does, and receives focus programmatically - the fallback focusStudy relies on', () => {
+    renderFilters({ hasActiveFilters: false });
+    const status = document.querySelector('.admin-result-count') as HTMLElement;
+    // A plain <span> is not focusable at all without an explicit tabindex -
+    // `focusStudy`'s fallback calls `.focus()` on this exact element when no
+    // row is on screen, so a missing/negative-gated tabIndex here means that
+    // fallback silently lands nowhere on a real browser.
+    expect(status).toHaveAttribute('tabindex', '-1');
+    status.focus();
+    expect(document.activeElement, 'the fallback can actually move focus here').toBe(status);
   });
 
   it('calls onToggleQuickFilter with the chip key, and disables a zero-count chip unless it is active', () => {

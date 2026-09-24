@@ -78,7 +78,7 @@ type SortField = StudySortField;
 const Admin: React.FC = () => {
   const { user, loading, initialAuthCheck } = useAuth();
   // Below 1024px the Research Studies row loses its visible state button
-  // (AC7: compact list items, no room for a second control beside the
+  // (compact list items leave no room for a second control beside the
   // kebab), so the kebab itself has to lead with that action instead.
   // Below 576px the phone filter toolbar (PhoneStudyFilters) replaces the
   // always-visible Status/Type/Sort-by fields. Both breakpoints
@@ -457,7 +457,14 @@ const Admin: React.FC = () => {
     // `tr[data-notice-for]` selector this used to be never matched below
     // 1024, so this always returned no neighbours there, and focus landed
     // on the wrong study after a lapse.
-    const slot = tableRef.current?.querySelector(`[data-notice-for="${id}"]`)?.closest('tr');
+    // With no notice rendered yet (a Reopen captures straight after its PATCH,
+    // before its notice commits), the study's own row is the slot: it is
+    // still in place at that moment, and its neighbours are the ones the
+    // notice-only placeholder will sit between once the row leaves.
+    const slot = (
+      tableRef.current?.querySelector(`[data-notice-for="${id}"]`) ??
+      tableRef.current?.querySelector(`a.row-title[data-study-id="${id}"]`)
+    )?.closest('tr');
     if (!slot) return [];
     const studyOf = (tr: Element | null) =>
       tr?.querySelector<HTMLAnchorElement>('a.row-title')?.dataset.studyId;
@@ -1113,7 +1120,7 @@ const Admin: React.FC = () => {
                       and no study readable). Fixed here by treating the filter
                       row as this panel's own head row instead - see
                       .filters-row in _components.css. */}
-                  {/* Phone spec item 6: below 576px this whole
+                  {/* Below 576px this whole
                       block - search, Status/Type/Sort-by, the quick-filter
                       chips, the result count - is a genuinely different UI
                       (a "Filters" disclosure button, not three always-on
@@ -1260,8 +1267,22 @@ const Admin: React.FC = () => {
                         through a background reload with a filter on: a plain
                         `!loadingOpportunities` unmounts this `role=status`
                         for the reload's duration, taking the count's own
-                        announcement with it. */}
-                    {(hasActiveFilters || !loadingOpportunities) && !error && (
+                        announcement with it.
+                        `opportunities.length > 0 ||` does the same with no
+                        filter on - `loadOpportunities` does not clear
+                        `opportunities` before it re-fetches, so a background
+                        reload still has the PREVIOUS count sitting in state
+                        while `loadingOpportunities` is true, and the region
+                        can stay mounted showing that stale-but-real count
+                        instead of unmounting and remounting on "58 studies"
+                        with nothing said in between - the same reasoning
+                        that keeps the phone's count permanently mounted
+                        (PhoneStudyFilters.tsx). Only the very first load
+                        (nothing fetched yet, `opportunities` still its `[]`
+                        initial value) still waits for `loadingOpportunities`
+                        to clear, so this never announces "0 studies" before
+                        the real count has loaded once. */}
+                    {(hasActiveFilters || !loadingOpportunities || opportunities.length > 0) && !error && (
                     <div className="admin-quick-filters__end">
                       <span className="admin-result-count" role="status" ref={resultCountRef} tabIndex={-1}>
                         {hasActiveFilters
@@ -1707,7 +1728,7 @@ const Admin: React.FC = () => {
                                 {isAutoClosed(opportunity) && (
                                   <span className="admin-pill admin-pill--auto-closed">Auto-closed</span>
                                 )}
-                                {/* AC7 compact list item, line 2: "the status pill, then the
+                                {/* Compact list item, line 2: "the status pill, then the
                                     type glyph and label" - a second copy of the type pill,
                                     gated on `isCompactActions` rather than a CSS breakpoint. The
                                     meta line's own type pill (`.admin-study-meta`, hidden below

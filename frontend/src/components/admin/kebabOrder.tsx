@@ -2,7 +2,7 @@ import React from 'react';
 import { DropdownItem } from '../ui';
 
 export interface StudyKebabOrderInput {
-  /** Below 1024px (AC7) the row's own state button (Fix/Edit/Analytics/
+  /** Below 1024px the row's own state button (Fix/Edit/Analytics/
    * Preview) is gone - no room beside a compact list item's kebab - so one
    * of the three items below leads the menu instead of the fixed
    * Edit/Preview/Analytics order. */

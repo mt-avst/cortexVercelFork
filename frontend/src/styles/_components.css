@@ -3095,8 +3095,8 @@ body.admin-dashboard-page .main > .container {
   font-weight: 500;
   font-size: var(--font-size-body);
   transition: color 0.2s ease-in-out, border-color 0.2s ease-in-out;
-  /* Phone spec item 5: one scrolling line, not a wrapped
-     2-line label. `.admin-tabs-container .nav-tabs { flex-wrap: nowrap }`
+  /* One scrolling line, not a wrapped 2-line label.
+     `.admin-tabs-container .nav-tabs { flex-wrap: nowrap }`
      already stops the ROW wrapping and turns the strip
      scrollable once the buttons hit their shrink floor - but a button can
      still shrink (default flex-shrink:1) below its label's own one-line
@@ -3106,7 +3106,7 @@ body.admin-dashboard-page .main > .container {
      one-line width, so shrinking stops there and the strip scrolls instead
      of wrapping the words. Was already applied at >=576px only
      (`.admin-tabs-card .nav-fill .custom-tab-button`, below); unconditional
-     now, since <576px needs it too (main at 1440 and 390 alike, per item 5). */
+     now, since <576px needs it too (main at 1440 and 390 alike). */
   white-space: nowrap;
 }
 
@@ -3396,20 +3396,25 @@ body.admin-dashboard-page .main > .container {
 
 /* The owner, only under Show all researchers (Admin.tsx): between the type
    pill and the purpose, a step brighter than the purpose so the two muted
-   strings read as two things. Capped so a long name cannot take the line.
-   `flex-shrink: 0` (was `0 1 auto`, shrinkable) - with a long purpose
-   on the same line, the row's flex-shrink math gave owner only a small
-   share of the overflow it did not cause, crushing even a short name like
-   "Owner: Test Admin" to 31-45px (scrollWidth 68) at 1024px, reading as
-   "Tes…" on every row under Show all. Owner now always gets its own
-   content width up to the 40% cap; `.row-desc` next to it (`flex: 1 1
+   strings read as two things. Capped so an extreme name still cannot take
+   the whole line. `flex-shrink: 0` (was `0 1 auto`, shrinkable) - with a
+   long purpose on the same line, the row's flex-shrink math gave owner only
+   a small share of the overflow it did not cause, crushing even a short
+   name like "Owner: Test Admin" to 31-45px (scrollWidth 68) at 1024px,
+   reading as "Tes…" on every row under Show all. Owner now always gets its
+   own content width up to the cap; `.row-desc` next to it (`flex: 1 1
    auto`, its own ellipsis already in place) absorbs the whole deficit
    instead - the purpose line is the one both themes already treat as
    droppable first (hidden outright below 1024px), and under Show all the
-   owner is the column that tells rows apart, which the purpose is not. */
+   owner is the column that tells rows apart, which the purpose is not.
+   The cap was 40%, which truncated a real 24-character name ("Owner: Race
+   Condition Test User", 154px content) to 121px at 1024px - the exact width
+   the row's own meta line has there (302px, 40% = 121px). 60% covers that
+   name with headroom (181px) while still leaving `.row-desc` a third of the
+   line rather than none of it for a name long enough to hit even this cap. */
 .admin-data-table .admin-study-meta .admin-study-owner {
   flex: 0 0 auto;
-  max-width: 40%;
+  max-width: 60%;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3570,7 +3575,7 @@ body.admin-dashboard-page .main > .container {
    MUST stay in lockstep with the row-actions dropdown anchor block (search
    "card-reflow breakpoint (row 14") - it drifted once.
    ============================================================ */
-/* AC7: compact list items replace the label/value cards. Three lines,
+/* Compact list items replace the label/value cards. Three lines,
    no field labels - title+kebab, status+type, progress+next - each item
    <=132px so >=5 fit at 390x844. The <td>s stay real table cells in the DOM
    (so nothing here needs a second render path in Admin.tsx); how each one is
@@ -3595,7 +3600,7 @@ body.admin-dashboard-page .main > .container {
     display: none;
   }
 
-  /* No field labels (AC7): the column names that used to move into each
+  /* No field labels: the column names that used to move into each
      cell as data-label (`td::before`) are gone. Every value below now says
      what it is through its own shape (a status pill, a progress bar, "Next
      / deadline"'s own icon-free relative phrasing) rather than a caption
@@ -3657,8 +3662,8 @@ body.admin-dashboard-page .main > .container {
      so nothing on line 3 has to share a column with it. Title's own
      available width is now the row's FULL content width, minus only the
      kebab's own reserved corner (`col-title`'s padding-right, below) - at
-     390 with the phone gutter fix (item 1) that measures >=250px on every
-     row, the spec's own floor. */
+     390 with the phone gutter fix that measures >=250px on every
+     row. */
   .admin-data-table tr.admin-row-clickable {
     display: flex;
     flex-wrap: wrap;
@@ -3902,6 +3907,9 @@ body.admin-dashboard-page .main > .container {
      closing time, a broken study with a progress count) still shows. */
   .admin-data-table tr[data-line3-empty] td.col-progress,
   .admin-data-table tr[data-line3-empty] td.col-next {
+    /* `!important`: `.admin-data-table td { display: block !important }`
+       above forces every cell visible; only `!important` beats `!important`
+       regardless of this selector's own higher specificity. */
     display: none !important;
   }
 
@@ -3989,7 +3997,14 @@ body.admin-dashboard-page .main > .container {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
-    align-items: start;
+    /* `stretch`, not `start`: with `start` the shorter card in a pair
+       (fewer wrapped lines, or no line-3 content) kept its own intrinsic
+       height while its taller neighbour set the row's height, so the two
+       cards in a row read as uneven (measured 5 of 8 pairs at 800px, 3 of 8
+       at 1023px, one pair 70px against 127px) - ragged next to the
+       otherwise tidy grid. `stretch` (the grid default this overrides) lets
+       every card in a row match the row's own height instead. */
+    align-items: stretch;
   }
 
   /* Below 800 `tr.admin-row-clickable`'s own `margin-bottom: var(--spacing-3)`
@@ -3999,6 +4014,17 @@ body.admin-dashboard-page .main > .container {
      than one rhythm. The grid gap alone is enough here. */
   .admin-data-table tr.admin-row-clickable {
     margin-bottom: 0;
+    /* The card's own base rule is `display: flex; flex-wrap: wrap`
+       (title/status/meta lines) with no `align-content` of its own, which
+       defaults to `normal` - stretched to the grid's new taller row height
+       (above), `normal` behaves as `stretch` on the wrapped flex LINES
+       themselves, spacing lines 1-3 apart to fill the extra height instead
+       of leaving it below them, changing the notice's own line spacing
+       along with everything else. `flex-start` packs the existing lines at
+       their normal spacing and puts all the extra height in one place,
+       below the last line, so nothing already on the card - the notice
+       included - moves. */
+    align-content: flex-start;
   }
 }
 
@@ -15011,10 +15037,18 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
 }
 
 /* Below 1024px a single row of four (each already at its content floor) has
-   nowhere left to shrink into - two per row keeps every value and caption on
-   one line instead of wrapping mid-sentence. The vertical divider stops
-   making sense once items sit in a grid rather than a row, so it becomes a
-   top border on every item after the first pair. */
+   nowhere left to shrink into - two per row keeps every value on one line.
+   The caption used to be forced onto that same line too and ellipsised once
+   it ran out of room, which truncated at a width that moved with the data
+   (measured cutting off at 770-771px with one caption, clean at the same
+   width with another) - chasing that boundary with a media-query pixel
+   value cannot work when the thing that overflows is the string, not the
+   viewport. Letting the caption wrap instead (`flex-wrap` + `__sub`'s own
+   rule, below) keeps it beside the value when it fits and moves it to its
+   own line only when it does not, so every caption shows in full at every
+   width in this band, however long it is. The
+   vertical divider stops making sense once items sit in a grid rather than
+   a row, so it becomes a top border on every item after the first pair. */
 @media (max-width: 1023.98px) {
   .admin-snapshot-strip {
     display: grid;
@@ -15034,6 +15068,17 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
   .admin-snapshot-item {
     border-left: none;
     padding: 0.5rem 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  /* The caption wraps onto its own line only when it does not fit beside
+     the value, rather than being clipped mid-word. Forcing the value onto
+     its own line as well cost up to ~100px of strip height for nothing. */
+  .admin-snapshot-item__sub {
+    min-width: 0;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
   }
 
   /* the base rule's `:first-child` padding-left (written for
@@ -15070,7 +15115,7 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
   }
 }
 
-/* Phone spec item 4: each tile becomes an uppercase LABEL
+/* Below 576px, each tile becomes an uppercase LABEL
    (with its icon inline) on one line, the VALUE on the line below - the
    sub-caption dropped outright, since at this width it only truncates
    (measured: "10 published..." clipped mid-word). DOM order is icon, label,
@@ -15339,8 +15384,8 @@ body.theme-light .admin-attention__icon--broken {
 /* each card to ONE line - icon + lead only. The whole
    card is already the link (a <button>, Admin.tsx), so the sub-line and the
    "View study" text were never load-bearing information, only explanation -
-   dropped here the same way field labels were dropped from the compact list
-   (AC7), with a static chevron standing in for the affordance. Measured
+   dropped here the same way field labels were dropped from the compact list,
+   with a static chevron standing in for the affordance. Measured
    111px/card before; a single icon+text row is well under half that.
    extended from <576 to <1024 - three 111px cards at
    576-1023 (441px of panel) get the same treatment, aiming for ~250px. */

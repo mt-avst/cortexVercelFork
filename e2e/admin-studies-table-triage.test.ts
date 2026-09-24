@@ -2011,6 +2011,97 @@ test.describe('Admin studies table triage: round 4', () => {
   });
 });
 
+test.describe('Admin studies table triage: round 8 - Reopen neighbour hand-off (M-1b)', () => {
+  const reopenFromMenu = async (page: Page, title: string) => {
+    await openMenu(page, title);
+    await page.getByRole('menuitem', { name: 'Reopen study' }).click({ timeout: 3000 });
+  };
+  const reopenNotice = (page: Page, title: string) => page.getByRole('status').filter({ hasText: `Reopened “${title}”` });
+  const scrollY = (page: Page) => page.evaluate(() => window.scrollY);
+  const idFor = (page: Page, title: string) => titleLink(page, title).evaluate((a) => (a as HTMLAnchorElement).dataset.studyId!);
+  /**
+   * `slotNeighbours` resolves its id through a live `a.row-title[title]` -
+   * exactly the element that is GONE once a study leaves the Closed filter
+   * (`reopenNoticeOnly`: the row disappears, only the standalone notice
+   * `<tr data-notice-for>` is left). So the id has to be captured up front,
+   * while the row still has its title link, and the slot found by id alone.
+   */
+  const neighboursForId = (page: Page, id: string): Promise<{ next: string | null; prev: string | null }> =>
+    page.evaluate((studyId) => {
+      const table = document.querySelector('table.admin-data-table');
+      const slot = table?.querySelector(`[data-notice-for="${studyId}"]`)?.closest('tr');
+      const titleOf = (tr: Element | null) =>
+        tr?.querySelector<HTMLAnchorElement>('a.row-title')?.getAttribute('title') ?? null;
+      if (!slot) return { next: null, prev: null };
+      let next = slot.nextElementSibling;
+      while (next && !titleOf(next)) next = next.nextElementSibling;
+      let prev = slot.previousElementSibling;
+      while (prev && !titleOf(prev)) prev = prev.previousElementSibling;
+      return { next: titleOf(next), prev: titleOf(prev) };
+    }, id);
+  // Both are in the Closed group of STATUS_ASC_ORDER (mine, so `canManage`
+  // is true); reopening either takes it OUT of the Closed-filtered view, the
+  // same "notice with nowhere left to render" case Close already has under
+  // a filter that no longer matches.
+  const LAPSE_STUDY = 'Bitbucket pipeline templates';
+  const DISMISS_STUDY = 'Recorded: first-run onboarding';
+
+  test('Dismiss on a Reopen under the Closed filter hands focus to the neighbour at the notice slot, with 0px page scroll', async ({
+    page,
+    baseURL,
+  }) => {
+    const api = makeApi();
+    await open(page, baseURL, { api, height: 1400 });
+    await mockPatch(page, api);
+    await page.locator('#statusFilter').selectOption({ label: 'Closed' }, { timeout: 3000 });
+    await expect(row(page, DISMISS_STUDY), 'setup: the dismiss study is in the Closed filter').toHaveCount(1, {
+      timeout: 3000,
+    });
+
+    const dismissId = await idFor(page, DISMISS_STUDY);
+    await reopenFromMenu(page, DISMISS_STUDY);
+    await expect(reopenNotice(page, DISMISS_STUDY)).toBeVisible({ timeout: 3000 });
+    const dismissNeighbours = await neighboursForId(page, dismissId);
+    expect(dismissNeighbours.next ?? dismissNeighbours.prev, 'setup: a neighbour exists at the notice slot').not.toBeNull();
+    const beforeDismiss = await scrollY(page);
+    await reopenNotice(page, DISMISS_STUDY).getByRole('button', { name: 'Dismiss' }).click({ timeout: 3000 });
+    const afterDismiss = await scrollY(page);
+    const dismiss = await expectHandOff(page, DISMISS_STUDY, dismissNeighbours, 'Reopen Dismiss');
+    // The study just left the Closed filter (it is published now): the
+    // neighbour case, never its own link.
+    expect(dismiss.ownInView, 'Dismiss leaves the Closed filter behind').toBe(false);
+    expect(afterDismiss - beforeDismiss, 'page scroll, px').toBe(0);
+  });
+
+  test('a lapse on a Reopen under the Closed filter hands focus to the neighbour at the notice slot, with 0px page scroll', async ({
+    page,
+    baseURL,
+  }) => {
+    // The Reopen captures its neighbours straight after the PATCH, before
+    // its notice exists, so the study's own row has to stand in as the slot;
+    // without that, focus fell back to the result count and the lapse never
+    // corrected it.
+    test.setTimeout(45000);
+    const api = makeApi();
+    await open(page, baseURL, { api, height: 1400 });
+    await mockPatch(page, api);
+    await page.locator('#statusFilter').selectOption({ label: 'Closed' }, { timeout: 3000 });
+    await expect(row(page, LAPSE_STUDY), 'setup: the lapse study is in the Closed filter').toHaveCount(1, { timeout: 3000 });
+
+    const lapseId = await idFor(page, LAPSE_STUDY);
+    await reopenFromMenu(page, LAPSE_STUDY);
+    await expect(reopenNotice(page, LAPSE_STUDY)).toBeVisible({ timeout: 3000 });
+    const lapseNeighbours = await neighboursForId(page, lapseId);
+    expect(lapseNeighbours.next ?? lapseNeighbours.prev, 'setup: a neighbour exists at the notice slot').not.toBeNull();
+    const beforeLapse = await scrollY(page);
+    await expect(reopenNotice(page, LAPSE_STUDY), 'the Reopened notice lapses').toHaveCount(0, { timeout: 12000 });
+    const afterLapse = await scrollY(page);
+    const lapse = await expectHandOff(page, LAPSE_STUDY, lapseNeighbours, 'Reopen lapse');
+    expect(lapse.ownInView, 'a reopened study leaves the Closed filter behind').toBe(false);
+    expect(afterLapse - beforeLapse, 'page scroll, px').toBe(0);
+  });
+});
+
 test.describe('Admin studies table triage: the 390px card view', () => {
   /**
    * MR C replaces the phone cards; MR B must not break them meanwhile. At
@@ -2371,15 +2462,20 @@ test.describe('MR C: type icon in list items', () => {
       await open(page, baseURL, { width: 390, height: 844, theme });
       const results = await page.evaluate(() => {
         const p = window.__adminProbe;
+        // --text-muted resolved on the element itself (custom properties
+        // inherit down the cascade the same as any other property).
+        const mutedVar = getComputedStyle(document.body).getPropertyValue('--text-muted').trim();
         return [...document.querySelectorAll<HTMLElement>('.admin-study-type-compact')].map((el) => {
           const svg = el.querySelector('svg') as SVGElement;
           const title = el.closest('tr')?.querySelector<HTMLElement>('a.row-title');
           return {
             label: el.textContent ?? '',
             iconColour: p.rgba(getComputedStyle(svg).color),
+            rawTextColour: p.rgba(getComputedStyle(el).color),
             textColour: p.effectiveText(el),
             titleColour: title ? p.effectiveText(title) : null,
             bg: p.effectiveBackground(el),
+            mutedColour: p.rgba(mutedVar),
           };
         });
       });
@@ -2396,9 +2492,60 @@ test.describe('MR C: type icon in list items', () => {
         results.filter((r) => same(r.textColour, r.titleColour)).map((r) => r.label),
         `${theme}: the type text is muted, not title-coloured`
       ).toEqual([]);
+      // LOW-1: not merely "differs from the title" - equals the RESOLVED
+      // --text-muted token, so a future rule that greys the text some OTHER
+      // way (not the title's own colour) would still be caught.
+      expect(
+        results.filter((r) => !same(r.rawTextColour, r.mutedColour)).map((r) => `"${r.label}": ${r.rawTextColour.join(',')} vs --text-muted ${r.mutedColour.join(',')}`),
+        `${theme}: the type text colour equals the resolved --text-muted`
+      ).toEqual([]);
       const typeColours = new Set(results.map((r) => r.iconColour.slice(0, 3).join(',')));
       expect(typeColours.size, `${theme}: different study types show different icon colours`).toBeGreaterThan(1);
       expect(results.length, `${theme}: type-compact items found`).toBeGreaterThan(0);
+    }
+  });
+
+  test('N5: the PAINTED colour of the glyph (stroke/fill on its path/circle children) carries the type colour and clears 3:1, not merely the svg color attribute', async ({
+    page,
+    baseURL,
+  }) => {
+    for (const theme of THEMES) {
+      await open(page, baseURL, { width: 390, height: 844, theme });
+      const results = await page.evaluate(() => {
+        const p = window.__adminProbe;
+        return [...document.querySelectorAll<HTMLElement>('.admin-study-type-compact')].map((el) => {
+          const svg = el.querySelector('svg') as SVGElement;
+          const svgColour = p.rgba(getComputedStyle(svg).color);
+          // The colour actually painted: the resolved `stroke`/`fill` of the
+          // svg's own path/circle/line children (lucide icons stroke, not
+          // fill) - a `td *` catch-all can set an explicit colour directly on
+          // THESE elements without ever touching `svg.color`, which is why
+          // reading `svg.color` alone cannot see the bug this guards.
+          const painted = [...svg.querySelectorAll<SVGGraphicsElement>('path, circle, line, polyline, rect')].map((node) => {
+            const cs = getComputedStyle(node);
+            const stroke = cs.stroke !== 'none' ? p.rgba(cs.stroke) : null;
+            const fill = cs.fill !== 'none' ? p.rgba(cs.fill) : null;
+            return stroke ?? fill;
+          }).filter((c): c is number[] => c !== null);
+          return {
+            label: el.textContent ?? '',
+            svgColour,
+            painted,
+            bg: p.effectiveBackground(el),
+          };
+        });
+      });
+      const same = (a: number[], b: number[]) => a.slice(0, 3).every((v, i) => Math.abs(v - b[i]) < 2);
+      expect(results.filter((r) => r.painted.length === 0).map((r) => r.label), `${theme}: every glyph has a painted stroke/fill part`).toEqual([]);
+      const mismatches = results
+        .filter((r) => !r.painted.every((c) => same(c, r.svgColour)))
+        .map((r) => `"${r.label}": svg.color ${r.svgColour.join(',')} vs painted ${r.painted.map((c) => c.join(',')).join(' / ')}`);
+      expect(mismatches, `${theme}: the painted stroke/fill matches the svg's own colour (not greyed by a td * catch-all)`).toEqual([]);
+      const failures = results
+        .flatMap((r) => r.painted.map((c) => ({ label: r.label, ratio: contrastRatio(c, r.bg) })))
+        .filter((r) => r.ratio < 3)
+        .map((r) => `"${r.label}": painted colour ${r.ratio.toFixed(2)}:1`);
+      expect(failures, `${theme}: painted glyph contrast >= 3:1`).toEqual([]);
     }
   });
 });

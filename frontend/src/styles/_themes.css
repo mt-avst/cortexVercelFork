@@ -1837,8 +1837,22 @@ body.theme-dark .admin-dashboard .admin-feedback .feedback-table tbody td .badge
    `col-status` is also the correct scope for the type element (it only ever
    renders there) and adds the class this needs to clear (0,4,5) outright.
    The owner element moved into its own `td.col-owner`; its exemption
-   below is scoped there to match, or it selects nothing. */
+   below is scoped there to match, or it selects nothing.
+
+   The type glyph's own `<svg>` gets the per-type colour inline
+   (`style="color: ..."`), which the blanket rule above cannot touch (an
+   inline style always wins). Its paint comes from the inner `<path>`/
+   `<circle>`, though, and those ARE separate elements matched by the
+   blanket's own `td *` - so each one gets its OWN `color: #D4D4D4` set
+   directly on it, which is not "inherited grey" being overridden, it is
+   an explicit value on the painting element itself. `currentColor` in
+   `stroke`/`fill` resolves to that element's own colour, not an ancestor's,
+   so every glyph painted flat grey in dark regardless of its type. The
+   `svg *` selector below reverts that explicit value so the path/circle
+   fall back to inheriting the svg's own (correct) colour instead. */
 body.theme-dark .admin-dashboard table.admin-data-table tbody td.col-status .admin-study-type-compact,
+body.theme-dark .admin-dashboard table.admin-data-table tbody td.col-status .admin-study-type-compact svg,
+body.theme-dark .admin-dashboard table.admin-data-table tbody td.col-status .admin-study-type-compact svg *,
 body.theme-dark .admin-dashboard table.admin-data-table tbody td.col-owner .admin-study-owner {
   color: revert-layer;
 }
@@ -2204,6 +2218,9 @@ body.theme-light .admin-dashboard .table th {
   body.theme-light .admin-data-table,
   body.theme-light .admin-dashboard table.admin-data-table,
   body.theme-light .admin-dashboard .table-responsive {
+    /* `!important`: the block above already paints this element's
+       background `#FFFFFF !important` at equal specificity; only
+       `!important` beats it regardless of selector order. */
     background: transparent !important;
     background-color: transparent !important;
   }

@@ -14,7 +14,7 @@ import { useEffect, useState } from 'react';
  */
 
 /** Below this width the Research Studies row loses its visible state button
- * (AC7: compact list items, no room for a second control beside the kebab),
+ * (compact list items leave no room for a second control beside the kebab),
  * so the kebab itself has to lead with that action instead
  * (`_components.css`, "ROW 14 - Research Studies table reflows to cards"). */
 export const COMPACT_ACTIONS_BREAKPOINT = 1023.98;
