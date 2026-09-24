@@ -97,10 +97,12 @@ describe('retired page names (#169)', () => {
   });
 
   it('every allow-list entry is still needed, so none outlives its reason', () => {
+    const scanned = files.map((f) => relative(REPO, f));
     for (const a of ALLOWED) {
+      expect(scanned, `${a.file} is not a file the scan reads - fix or delete the ALLOWED entry`).toContain(a.file);
       const source = readFileSync(join(REPO, a.file), 'utf8');
-      expect(literalTexts(source, a.file.endsWith('.tsx')), `${a.file}: ${a.text} still exists`).toContain(a.text);
-      expect(RETIRED.some((re) => re.test(a.text)), `${a.text} still matches a retired pattern`).toBe(true);
+      expect(literalTexts(source, a.file.endsWith('.tsx')), `${a.file}: "${a.text}" is gone - delete the ALLOWED entry`).toContain(a.text);
+      expect(RETIRED.some((re) => re.test(a.text)), `${a.file}: "${a.text}" matches no RETIRED pattern - delete the ALLOWED entry`).toBe(true);
     }
   });
 
