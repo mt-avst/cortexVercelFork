@@ -2267,7 +2267,7 @@ body.theme-dark.landing-page .header .logo-word {
   outline-offset: var(--focus-outline-offset);
 }
 
-/* Row 14: the header collapses to one menu below 768px. Above it, the desktop
+/* Row 14: the header collapses to one menu below 992px. Above it, the desktop
    toolbar lays the controls out in a single row; below it, that toolbar is
    hidden and every control lives inside one dropdown, reached from the menu
    button. The two layouts are mutually exclusive so the a11y tree never
@@ -2289,7 +2289,10 @@ body.theme-dark.landing-page .header .logo-word {
   padding: var(--spacing-2);
 }
 
-@media (max-width: 767.98px) {
+/* 992px, not 768px: every signed-in bar carries four labelled controls
+   (theme, a second destination, the Admin/Browse switch, the profile menu),
+   and between 768 and 991px they ran into the logo. */
+@media (max-width: 991.98px) {
   .header-actions--desktop {
     display: none;
   }
@@ -2302,6 +2305,13 @@ body.theme-dark.landing-page .header .logo-word {
      At 390px the profile dropdown used to open 345px wide and cover the page. */
   .header .dropdown-menu {
     max-width: calc(100vw - 2 * var(--spacing-4));
+  }
+
+  /* Wide enough for the longest items ("Request Superadmin Access",
+     "Submit Research Request") on one line; at 220px they wrapped to two.
+     Still capped by the max-width above. */
+  .header-actions--mobile .dropdown-menu {
+    min-width: 17rem;
   }
 }
 

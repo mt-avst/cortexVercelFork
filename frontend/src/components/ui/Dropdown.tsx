@@ -493,7 +493,10 @@ export const DropdownHeader: React.FC<DropdownHeaderProps> = ({
   ...props 
 }) => {
   return (
-    <div className={`dropdown-header px-3 py-2 ${className}`} {...props}>
+    // No padding utility here: `.dropdown-header` sets the same inline padding
+    // as `.dropdown-item`, so header text lines up with the items under it.
+    // A baked-in `px-3` overrode that with 12px against the items' 16px.
+    <div className={`dropdown-header ${className}`} {...props}>
       {children}
     </div>
   );
