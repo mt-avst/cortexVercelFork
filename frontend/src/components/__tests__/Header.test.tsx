@@ -477,6 +477,73 @@ describe('Collapsing phone menu', () => {
 });
 
 /**
+ * #165: My bookings rendered for non-admins only. CORTEX_BETA_ALL_ADMIN lifts
+ * every adaptavist.com account to researcher_admin, so during the beta internal
+ * staff - who book sessions in each other's studies - had no route back to
+ * what they had booked. Every signed-in role gets it, in the bar and the menu.
+ */
+describe('My bookings link (#165)', () => {
+  const renderFor = (role: string | null, path = '/') => {
+    auth.user = role ? { name: 'A Person', role } : null;
+    window.history.pushState({}, '', path);
+    return render(
+      <BrowserRouter>
+        <Header />
+      </BrowserRouter>
+    );
+  };
+
+  const cases: Array<[string, string]> = [
+    ['employee', '/'],
+    ['researcher_admin', '/'],
+    ['researcher_admin', '/admin'],
+    ['superadmin', '/'],
+    ['superadmin', '/admin'],
+  ];
+
+  it.each(cases)('a signed-in %s on %s has My bookings in the toolbar, linking to /my-bookings', (role, path) => {
+    const { container } = renderFor(role, path);
+    const bar = container.querySelector('.header-actions--desktop') as HTMLElement;
+    const link = within(bar).getByRole('link', { name: /^My bookings$/ });
+    expect(link).toHaveAttribute('href', '/my-bookings');
+  });
+
+  it.each(cases)('a signed-in %s on %s has My bookings in the collapsed menu', (role, path) => {
+    const { container } = renderFor(role, path);
+    fireEvent.click(within(container).getByRole('button', { name: 'Menu' }));
+    const menu = container.querySelector('.header-actions--mobile .dropdown-menu') as HTMLElement;
+    expect(within(menu).getByRole('link', { name: /^My bookings$/ })).toHaveAttribute('href', '/my-bookings');
+  });
+
+  it.each(cases)('every toolbar control for a signed-in %s on %s carries one 16px icon', (role, path) => {
+    const { container } = renderFor(role, path);
+    const bar = container.querySelector('.header-actions--desktop') as HTMLElement;
+    const controls = [...bar.querySelectorAll<HTMLElement>('a.btn, button.btn')];
+    expect(controls.length, 'toolbar controls found').toBeGreaterThanOrEqual(4);
+    const bad = controls
+      .map((el) => ({ label: el.textContent?.trim() || el.getAttribute('aria-label'), icons: [...el.querySelectorAll('svg')] }))
+      .filter(({ icons }) => icons.length !== 1 || icons[0].getAttribute('width') !== '16')
+      .map(({ label, icons }) => `${label}: ${icons.map((i) => i.getAttribute('width')).join(',') || 'no icon'}`);
+    expect(bad).toEqual([]);
+  });
+
+  it.each(cases)('the collapsed menu gives My bookings and the destination switch an icon, for a signed-in %s on %s', (role, path) => {
+    const { container } = renderFor(role, path);
+    fireEvent.click(within(container).getByRole('button', { name: 'Menu' }));
+    const menu = container.querySelector('.header-actions--mobile .dropdown-menu') as HTMLElement;
+    const names = role === 'employee' ? [/^My bookings$/, /Submit Research Request/] : [/^My bookings$/, path === '/admin' ? /^Browse Studies$/ : /^Admin$/];
+    for (const name of names) {
+      expect(within(menu).getByRole('link', { name }).querySelector('svg'), `${name} icon`).not.toBeNull();
+    }
+  });
+
+  it('gives a signed-out visitor no My bookings link (control)', () => {
+    renderFor(null);
+    expect(screen.queryByRole('link', { name: /My bookings/i })).not.toBeInTheDocument();
+  });
+});
+
+/**
  * #146: both request-admin branches (success and error) armed a bare
  * setTimeout(() => setAdminRequestMessage(null), 5000) with no clearTimeout
  * anywhere. Under React 18 a setState after unmount is a silent no-op, but the

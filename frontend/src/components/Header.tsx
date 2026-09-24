@@ -21,6 +21,9 @@ import {
   MessageSquare,
   LogOut,
   List,
+  LayoutDashboard,
+  Calendar,
+  Send,
   Menu
 } from 'lucide-react';
 
@@ -29,9 +32,9 @@ import {
  * Main navigation header with auth controls and theme toggle.
  *
  * Two mutually-exclusive layouts share one <nav>, switched purely by a CSS
- * breakpoint (`header-actions--desktop` / `header-actions--mobile`, 768px), so
+ * breakpoint (`header-actions--desktop` / `header-actions--mobile`, 992px), so
  * there is no matchMedia dependency and the correct layout is right on first
- * paint. Below 768px every control - theme toggle, the primary destination and
+ * paint. Below 992px every control - theme toggle, the primary destination and
  * the profile items - collapses into one menu, because at phone width the
  * inline toolbar wrapped onto a second row that clipped the logo (audit row 14).
  * The item builders below feed both layouts so they cannot drift.
@@ -145,6 +148,18 @@ const Header: React.FC = memo(() => {
     const secondary = variant === 'bar' ? 'btn btn-outline-secondary' : 'dropdown-item';
     const primary = variant === 'bar' ? 'btn btn-secondary' : 'dropdown-item';
 
+    // Every signed-in user can book a session, admins included - they take
+    // part in each other's studies - so every one of them needs a way back
+    // to what they have booked. This used to render for non-admins only, and
+    // CORTEX_BETA_ALL_ADMIN lifts every adaptavist.com account to admin, so
+    // during the beta internal staff had no route back at all.
+    const myBookings = (
+      <GuardedLink key="my-bookings" to="/my-bookings" className={secondary}>
+        <Calendar size={16} className="me-2" aria-hidden="true" />
+        My bookings
+      </GuardedLink>
+    );
+
     if (!isAdmin) {
       return [
         <a
@@ -155,23 +170,25 @@ const Header: React.FC = memo(() => {
           className={secondary}
           aria-label="Submit Research Request (opens in new tab)"
         >
+          <Send size={16} className="me-2" aria-hidden="true" />
           Submit Research Request
         </a>,
-        <GuardedLink key="my-bookings" to="/my-bookings" className={secondary}>
-          My bookings
-        </GuardedLink>,
+        myBookings,
       ];
     }
 
     if (!isOnAdminPage) {
       return [
+        myBookings,
         <GuardedLink key="admin" to="/admin" className={primary}>
+          <LayoutDashboard size={16} className="me-2" aria-hidden="true" />
           Admin
         </GuardedLink>,
       ];
     }
 
     return [
+      myBookings,
       <GuardedLink key="browse" to="/" className={primary}>
         {/* 16px + `me-2`, matching every other menu icon -
             this one's own 18px + `me-1` was the second cause of the phone
@@ -316,7 +333,7 @@ const Header: React.FC = memo(() => {
       type="button"
       aria-label="User profile menu"
     >
-      <UserCircle size={18} className="me-1" aria-hidden="true" />
+      <UserCircle size={16} className="me-2" aria-hidden="true" />
       Your Profile
     </button>
   );
@@ -348,7 +365,7 @@ const Header: React.FC = memo(() => {
           </GuardedLink>
 
           <nav className="nav" aria-label="Main navigation">
-            {/* Desktop toolbar - hidden below 768px */}
+            {/* Desktop toolbar - hidden below 992px */}
             <div className="header-actions header-actions--desktop">
               {!user && initialAuthCheck ? (
                 /* CB-26: on the signed-out header this is the ONLY control (every
@@ -384,8 +401,9 @@ const Header: React.FC = memo(() => {
                   aria-label={themeToggleAria}
                   title={themeToggleAria}
                 >
-                  {themeIcon}
-                  <span className="d-none d-md-inline ms-1">{themeToggleLabel}</span>
+                  {/* 16px + me-2, the same icon box as every other bar button. */}
+                  {themeIconSm}
+                  <span className="d-none d-md-inline">{themeToggleLabel}</span>
                 </button>
               )}
 
@@ -408,7 +426,7 @@ const Header: React.FC = memo(() => {
               ) : null}
             </div>
 
-            {/* Collapsed phone menu - hidden at/above 768px */}
+            {/* Collapsed menu - hidden at/above 992px */}
             <div className="header-actions--mobile">
               {loading && initialAuthCheck ? (
                 <LoadingSpinner size="small" text="Loading..." />
