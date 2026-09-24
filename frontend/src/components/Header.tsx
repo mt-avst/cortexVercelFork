@@ -210,8 +210,11 @@ const Header: React.FC = memo(() => {
 
     items.push(
       <DropdownHeader key="user-info">
-        <div className="flex items-start gap-2">
-          <User size={16} className="mt-1" aria-hidden="true" />
+        {/* gap-3 + me-2 is the same icon-to-text gap `.dropdown-item` uses
+            (its own 12px gap plus each icon's me-2), so this line's text starts
+            where every menu item's does. */}
+        <div className="flex items-start gap-3">
+          <User size={16} className="mt-1 me-2" aria-hidden="true" />
           <div>
             <div className="font-semibold">Hello, {user.name || 'Unknown User'}</div>
             <div className="text-muted text-sm">

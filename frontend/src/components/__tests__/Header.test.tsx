@@ -515,15 +515,15 @@ describe('My bookings link (#165)', () => {
     expect(within(menu).getByRole('link', { name: /^My bookings$/ })).toHaveAttribute('href', '/my-bookings');
   });
 
-  it.each(cases)('every toolbar control for a signed-in %s on %s carries one 16px icon', (role, path) => {
+  it.each(cases)('every toolbar control for a signed-in %s on %s carries one 16px icon with the same me-2 gap', (role, path) => {
     const { container } = renderFor(role, path);
     const bar = container.querySelector('.header-actions--desktop') as HTMLElement;
     const controls = [...bar.querySelectorAll<HTMLElement>('a.btn, button.btn')];
     expect(controls.length, 'toolbar controls found').toBeGreaterThanOrEqual(4);
     const bad = controls
       .map((el) => ({ label: el.textContent?.trim() || el.getAttribute('aria-label'), icons: [...el.querySelectorAll('svg')] }))
-      .filter(({ icons }) => icons.length !== 1 || icons[0].getAttribute('width') !== '16')
-      .map(({ label, icons }) => `${label}: ${icons.map((i) => i.getAttribute('width')).join(',') || 'no icon'}`);
+      .filter(({ icons }) => icons.length !== 1 || icons[0].getAttribute('width') !== '16' || !icons[0].classList.contains('me-2'))
+      .map(({ label, icons }) => `${label}: ${icons.map((i) => `${i.getAttribute('width')} ${i.getAttribute('class') ?? ''}`).join(',') || 'no icon'}`);
     expect(bad).toEqual([]);
   });
 
