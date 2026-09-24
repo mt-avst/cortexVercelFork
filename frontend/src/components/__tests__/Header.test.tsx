@@ -537,6 +537,20 @@ describe('My bookings link (#165)', () => {
     }
   });
 
+  // jsdom cannot measure layout, so this pins the classes that line the
+  // greeting up with the items (measured in the browser: the same icon and
+  // text x as every item): no px-3 override on the header, and the items' own
+  // 12px gap plus the icon's me-2.
+  it('lines the profile greeting up with the menu items', () => {
+    const { container } = renderFor('researcher_admin', '/');
+    fireEvent.click(within(container).getByRole('button', { name: 'Menu' }));
+    const header = container.querySelector('.header-actions--mobile .dropdown-header') as HTMLElement;
+    expect(header).not.toHaveClass('px-3');
+    const row = header.firstElementChild as HTMLElement;
+    expect(row).toHaveClass('gap-3');
+    expect(row.querySelector('svg')).toHaveClass('me-2');
+  });
+
   it('gives a signed-out visitor no My bookings link (control)', () => {
     renderFor(null);
     expect(screen.queryByRole('link', { name: /My bookings/i })).not.toBeInTheDocument();
