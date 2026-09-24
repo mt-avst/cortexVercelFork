@@ -80,12 +80,22 @@ test.describe('Admin Research Studies table - chrome layout across the card and 
       await openAdminDashboard(page, baseURL, { width });
       await resizeTo(page, width);
 
-      const measured = await page.evaluate(() => {
+      // Below 1024 (D3/L-f), the Study cell's `.lozenge` pill is hidden and
+      // replaced by `.admin-study-type-compact` - a coloured icon plus muted
+      // text, no pill background - measured: it renders inside `td.col-status`
+      // (beside the status pill and the Auto-closed marker), not the Study
+      // cell. The `.lozenge` markup stays in the DOM (desktop CSS just hides
+      // it there), which is why it alone would read as 0x0 "clipped" below
+      // 1024 rather than genuinely absent.
+      const selector = width >= 1024 ? '.lozenge' : '.admin-study-type-compact';
+      const cellHeader = width >= 1024 ? 'Study' : 'Status';
+      const measured = await page.evaluate(
+        ({ sel, header }) => {
         const p = window.__adminProbe;
         const lozenges = p
           .rows()
-          .map((r) => p.cell(r, 'Study')?.querySelector('.lozenge'))
-          .filter((el): el is Element => Boolean(el));
+          .map((r) => p.cell(r, header)?.querySelector(sel) ?? null)
+          .filter((el): el is Element => Boolean(el) && p.shown(el));
         const offenders = lozenges
           .filter((el) => {
             const cell = el.closest('td')!;
@@ -98,10 +108,12 @@ test.describe('Admin Research Studies table - chrome layout across the card and 
             return clipped || overflowsCell || glyphGone;
           })
           .map((el) => ({ text: el.textContent, scrollWidth: el.scrollWidth, clientWidth: el.clientWidth }));
-        return { count: lozenges.length, offenders };
-      });
-      // One per study, and all of them in the Study cell.
-      expect(measured.count, 'type lozenges found in the Study cell').toBe(SEEDED_STUDY_COUNT);
+          return { count: lozenges.length, offenders };
+        },
+        { sel: selector, header: cellHeader }
+      );
+      // One per study.
+      expect(measured.count, `${selector} found in the ${cellHeader} cell`).toBe(SEEDED_STUDY_COUNT);
       expect(measured.offenders).toEqual([]);
     });
   }

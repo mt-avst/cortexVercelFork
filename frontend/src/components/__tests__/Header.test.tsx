@@ -433,8 +433,11 @@ describe('Collapsing phone menu', () => {
 
     expect(menu.getByText('Dark Mode')).toBeInTheDocument();
     expect(menu.getByRole('link', { name: /Send Feedback/i })).toBeInTheDocument();
-    // Logout is a Dropdown menuitem, not a bare button.
-    expect(menu.getByRole('menuitem', { name: /Logout/i })).toBeInTheDocument();
+    // #117 follow-up: the collapsed phone menu is a disclosure now, not a
+    // strict ARIA menu (Dropdown's `disclosure` prop) - its items carry no
+    // `role="menuitem"` any more, so Logout (a plain DropdownItem button, no
+    // `to`) reads by its implicit button role.
+    expect(menu.getByRole('button', { name: /Logout/i })).toBeInTheDocument();
   });
 
   it("carries a non-admin's primary destinations inside the menu", () => {
@@ -513,7 +516,10 @@ describe('the admin-request banner timer', () => {
   // advanceTimersByTimeAsync can flush both the request promise and the timer.
   const armTheBanner = async (container: HTMLElement) => {
     const desktop = openProfileMenu(container);
-    fireEvent.click(within(desktop).getByRole('menuitem', { name: /Request Admin Access/i }));
+    // The desktop profile dropdown is a disclosure too (#117 follow-up): no
+    // `role="menuitem"` on its items any more, so the request-admin
+    // DropdownItem (a plain button, no `to`) reads by its implicit button role.
+    fireEvent.click(within(desktop).getByRole('button', { name: /Request Admin Access/i }));
 
     vi.useFakeTimers();
     fireEvent.click(screen.getByRole('button', { name: 'Request Admin Access' }));

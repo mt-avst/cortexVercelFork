@@ -160,7 +160,10 @@ const PendingApprovals: React.FC = () => {
   return (
     <div className="pending-approvals">
       <div className="pending-approvals__head">
-        <h3 className="pending-approvals__heading">Pending Completion Approvals</h3>
+        {/* sentence case, matching "Recent bookings" -
+            this and "Feedback Inbox" were the two Title Case outliers among
+            the panel headings. */}
+        <h3 className="pending-approvals__heading">Pending completion approvals</h3>
         <button
           className="btn btn-outline-secondary btn-sm"
           onClick={loadPendingApprovals}

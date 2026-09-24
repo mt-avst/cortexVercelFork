@@ -311,61 +311,75 @@ describe('day labels round DOWN; the warning colour is a 72-hour horizon (round 
     vi.useRealTimers();
   });
 
-  it('a deadline 2.9 days away reads "2 days left", coloured; 3.2 days reads "3 days left", uncoloured', async () => {
+  // GUARD: passes on main too - a deadline-only study (no sessions) already
+  // used this floor-day arithmetic there. It is kept (not deleted) because it
+  // still pins the boundary the branch's session-override tests below build
+  // on, and a regression in the underlying floor(daysLeft) math would fail it
+  // on both.
+  it('a deadline 2.9 days away reads "2 days left", coloured; a full 4 days away reads "4 days left", uncoloured (D1: floor(daysLeft) <= 3)', async () => {
+    // D1 replaced the 72-hour horizon with the close label's own rule: "the
+    // close label reads 3 days or fewer" - floor(daysLeft) <= 3, so 3.2 and
+    // even 3.99 days still count as soon (see adminDashboard.triage.test.ts,
+    // "the closing-soon horizon"). Only a full 4th day away is uncoloured.
     vi.mocked(getOpportunities).mockResolvedValue([
       deadline('opp-d29', 'Closes in 2.9 days', 2.9),
-      deadline('opp-d32', 'Closes in 3.2 days', 3.2),
+      deadline('opp-d40', 'Closes in 4.0 days', 4.0),
     ] as never);
     renderAdmin();
     const table = await findStudiesTable();
 
     expect(note(table, 'Closes in 2.9 days')).toHaveTextContent('Closes · 2 days left');
     expect(note(table, 'Closes in 2.9 days')).toHaveClass('admin-next__note--soon');
-    expect(note(table, 'Closes in 3.2 days')).toHaveTextContent('Closes · 3 days left');
-    expect(note(table, 'Closes in 3.2 days')).not.toHaveClass('admin-next__note--soon');
+    expect(note(table, 'Closes in 4.0 days')).toHaveTextContent('Closes · 4 days left');
+    expect(note(table, 'Closes in 4.0 days')).not.toHaveClass('admin-next__note--soon');
   });
 
-  it('a session 2.9 days away reads "in 3 days", coloured; 3.2 days also "in 3 days", uncoloured', async () => {
-    // Session labels count calendar days: from 09:00, +2.9 days is 06:36 and
-    // +3.2 days 13:48, both three calendar days on. Only the 72h horizon
-    // separates them.
+  it('a session that is also the closing time (no end_date) shows "Closes · N days left" once inside the horizon - a session 5 days out reads "in 5 days", uncoloured', async () => {
+    // With no end_date, getClosingTime falls back to the session's own end,
+    // so a session inside the closing-soon horizon IS the closing time: D1's
+    // "the note shows its close milestone" branch fires for it too, and the
+    // note switches from session phrasing ("in N days") to close phrasing
+    // ("Closes · N days left") - see the "shows the CLOSE milestone" test
+    // below for the same effect with a session that sits genuinely later
+    // than a separate end_date.
     vi.mocked(getOpportunities).mockResolvedValue([
       sessionAt('opp-s29', 'Session in 2.9 days', 2.9),
-      sessionAt('opp-s32', 'Session in 3.2 days', 3.2),
+      sessionAt('opp-s5', 'Session in 5 days', 5),
     ] as never);
     renderAdmin();
     const table = await findStudiesTable();
 
-    expect(note(table, 'Session in 2.9 days')).toHaveTextContent(/in 3 days$/);
+    expect(note(table, 'Session in 2.9 days')).toHaveTextContent('Closes · 2 days left');
     expect(note(table, 'Session in 2.9 days')).toHaveClass('admin-next__note--soon');
-    expect(note(table, 'Session in 3.2 days')).toHaveTextContent(/in 3 days$/);
-    expect(note(table, 'Session in 3.2 days')).not.toHaveClass('admin-next__note--soon');
+    expect(note(table, 'Session in 5 days')).toHaveTextContent(/in 5 days$/);
+    expect(note(table, 'Session in 5 days')).not.toHaveClass('admin-next__note--soon');
   });
 
-  it('colours at exactly 72 hours and not one minute after', async () => {
+  it('colours up to (and including) 3.99 days away, and not at a full 4.0 days (D1 boundary)', async () => {
     vi.mocked(getOpportunities).mockResolvedValue([
-      deadline('opp-72h', 'Closes at 72h', 3),
-      deadline('opp-72h1m', 'Closes at 72h 1m', 3 + 1 / (24 * 60)),
+      deadline('opp-399', 'Closes in 3.99 days', 3.99),
+      deadline('opp-400', 'Closes in 4.00 days', 4.0),
     ] as never);
     renderAdmin();
     const table = await findStudiesTable();
-    expect(note(table, 'Closes at 72h')).toHaveClass('admin-next__note--soon');
-    expect(note(table, 'Closes at 72h 1m')).not.toHaveClass('admin-next__note--soon');
+    expect(note(table, 'Closes in 3.99 days')).toHaveClass('admin-next__note--soon');
+    expect(note(table, 'Closes in 4.00 days')).not.toHaveClass('admin-next__note--soon');
   });
 
-  it('colours the note whenever the study is closing soon - a window ending inside 72h with the next session later (round 4)', async () => {
+  it('shows the CLOSE milestone, not the next session, whenever the study is closing soon - even though a session sits later (D1)', async () => {
     vi.mocked(getOpportunities).mockResolvedValue([
       { ...sessionAt('opp-window', 'Window ends in 2 days', 5), end_date: at(2) },
-      // Control: the same session with no closing window inside 72h.
+      // Control: the same session with no closing window inside the horizon.
       sessionAt('opp-no-window', 'No window, session in 5 days', 5),
     ] as never);
     renderAdmin();
     const table = await findStudiesTable();
 
-    // The note still describes the next session...
-    expect(note(table, 'Window ends in 2 days')).toHaveTextContent(/in 5 days$/);
-    // ...but is coloured, because the study is in the Closing soon chip.
+    // The note now names the CLOSE date, not the later session...
+    expect(note(table, 'Window ends in 2 days')).toHaveTextContent('Closes · 2 days left');
+    // ...and is coloured, because the study is in the Closing soon chip.
     expect(note(table, 'Window ends in 2 days')).toHaveClass('admin-next__note--soon');
+    expect(note(table, 'No window, session in 5 days')).toHaveTextContent(/in 5 days$/);
     expect(note(table, 'No window, session in 5 days')).not.toHaveClass('admin-next__note--soon');
     expect(screen.getByRole('button', { name: 'Closing soon 1' })).toBeInTheDocument();
   });
@@ -374,7 +388,8 @@ describe('day labels round DOWN; the warning colour is a 72-hour horizon (round 
     // Closed by hand with its window and a slot still ahead: nothing is next.
     vi.mocked(getOpportunities).mockResolvedValue([
       { ...sessionAt('opp-closed-early', 'Closed with a slot tomorrow', 1), status: 'closed', end_date: at(2) },
-      // Control: the same dates on a published study ARE coloured.
+      // Control: the same dates on a published study ARE coloured, and (D1)
+      // name the close date rather than the session.
       { ...sessionAt('opp-open', 'Open with a slot tomorrow', 1), end_date: at(2) },
     ] as never);
     renderAdmin();
@@ -383,7 +398,7 @@ describe('day labels round DOWN; the warning colour is a 72-hour horizon (round 
     expect(note(table, 'Closed with a slot tomorrow')).toHaveTextContent('Closed early');
     expect(note(table, 'Closed with a slot tomorrow')).not.toHaveClass('admin-next__note--soon');
     expect(note(table, 'Open with a slot tomorrow')).toHaveClass('admin-next__note--soon');
-    expect(note(table, 'Open with a slot tomorrow')).toHaveTextContent(/Tomorrow$/);
+    expect(note(table, 'Open with a slot tomorrow')).toHaveTextContent('Closes · 2 days left');
   });
 });
 

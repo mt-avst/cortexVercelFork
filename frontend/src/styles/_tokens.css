@@ -313,6 +313,14 @@
   --status-danger: var(--fs-danger);
   --status-success-text: #4ADE80;
   --status-danger-text: #F87171;
+  /* #160: `.alert-warning` carried a bare literal (#856404, Bootstrap's own
+     light-theme warning text) as its `color` in BOTH themes - on the dark
+     admin ground that measured ~3.3:1 against the card, ~2.4:1 at the
+     gradient's brightest point, both under the 4.5:1 floor. Same
+     success/danger-text split as above: --accent-amber (this file's own
+     brighter dark-mode amber, already used elsewhere as a dark-ground
+     warning ink) clears >=4.5:1 on every dark surface this alert sits on. */
+  --status-warning-text: var(--accent-amber);
   --status-info: #17a2b8;
 
   /* Tag Colors (Legacy) */

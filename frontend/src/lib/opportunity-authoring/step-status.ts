@@ -202,6 +202,7 @@ export interface PublishedReadinessSignal {
  * window exists on purpose (cto/AdaptaLabs#103, see the comment above
  * `ADMIN_RECENT_SESSIONS_ONLY`) for reasons unrelated to this signal, and
  * changing it is a backend decision outside this file's reach.
+ *   -> cto/AdaptaLabs#164
  */
 export const isPublishedButNotWorking = (
   opportunityStatus: string,

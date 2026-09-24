@@ -1,3 +1,10 @@
+// ponytail: this file is well past the house 800-line ceiling.
+//   components/admin/ already holds three extractions in the same spirit
+//   (PhoneStudyFilters, kebabOrder, AdminSnapshotStrip); the next cuts are
+//   buildTableRows (the tableRows useMemo and its TableRow type) and
+//   StudyRow (the per-opportunity <tr>/compact-card render inside the main
+//   table map) - neither needs more than a handful of props threaded
+//   through to lift out.
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import useDocumentTitle from '../hooks/useDocumentTitle';
 import { Link, Navigate, useNavigate, useLocation } from 'react-router-dom';
@@ -34,7 +41,13 @@ import {
   SortDirection,
   StatusFilter,
   StudySortField,
+  DEFAULT_SORT_FIELD,
+  DEFAULT_SORT_DIRECTION,
 } from '../utils/adminDashboard';
+import { COMPACT_ACTIONS_QUERY, PHONE_QUERY, useMatchMedia } from '../utils/adminBreakpoints';
+import { orderStudyKebabActions } from '../components/admin/kebabOrder';
+import { PhoneStudyFilters } from '../components/admin/PhoneStudyFilters';
+import { AdminSnapshotStrip } from '../components/admin/AdminSnapshotStrip';
 import {
   PUBLISHED_NOT_WORKING_LABEL,
   PUBLISHED_NOT_WORKING_PREFIX,
@@ -46,9 +59,10 @@ import AdminFeedback from '../components/AdminFeedback';
 import ErrorState from '../components/ErrorState';
 import ConfirmationModal from '../components/ConfirmationModal';
 import { Dropdown, DropdownItem, DropdownDivider, Icon, SortCaret } from '../components/ui';
-import { Settings, ClipboardList, Users, Clock, List, History, MessageSquare, Calendar, Download, Clapperboard, Flag, ArrowRight, MoreVertical, CheckCircle, AlertTriangle } from 'lucide-react';
-import { getStudyTypeGlyph } from '../utils/studyTypeIcons';
-import { useCloseStudyUndo, failureMessage, isInViewport, CLOSE_UNDO_MS } from '../hooks/useCloseStudyUndo';
+import { Settings, Clock, List, History, MessageSquare, Calendar, Download, Clapperboard, Flag, ArrowRight, MoreVertical, CheckCircle, AlertTriangle } from 'lucide-react';
+import { getStudyTypeGlyph, getStudyTypeAccentVar } from '../utils/studyTypeIcons';
+import { useCloseStudyUndo, failureMessage, isFullyInViewport, CLOSE_UNDO_MS } from '../hooks/useCloseStudyUndo';
+import { useScrollEdgeCue } from '../hooks/useScrollEdgeCue';
 import { ClosedStudyNoticeRow, CopyNoticeRow, StudyActionErrorRow } from '../components/StudyRowNotices';
 
 import { formatStudyDate, formatStudyDateCompact, formatClockTime, formatTimeZoneLabel } from '../utils/datetime';
@@ -61,9 +75,35 @@ import { formatStudyDate, formatStudyDateCompact, formatClockTime, formatTimeZon
  * exactly what the headers do. */
 type SortField = StudySortField;
 
-
 const Admin: React.FC = () => {
   const { user, loading, initialAuthCheck } = useAuth();
+  // Below 1024px the Research Studies row loses its visible state button
+  // (compact list items leave no room for a second control beside the
+  // kebab), so the kebab itself has to lead with that action instead.
+  // Below 576px the phone filter toolbar (PhoneStudyFilters) replaces the
+  // always-visible Status/Type/Sort-by fields. Both breakpoints
+  // live in utils/adminBreakpoints.ts, alongside the CSS rules
+  // that must stay in step with them.
+  const isCompactActions = useMatchMedia(COMPACT_ACTIONS_QUERY);
+  const isPhone = useMatchMedia(PHONE_QUERY);
+  // resizing across 576px while the phone Filters panel
+  // is open unmounts it - a device rotation, or a browser window drag - and
+  // whatever inside it held focus (the Status select) goes with it. A
+  // browser drops that focus on <body> rather than anywhere useful. Recovery
+  // rather than prevention: on the FIRST render after `isPhone` changes
+  // either way, if focus has actually landed on <body>, hand it to the
+  // search field - present in both layouts (searchInputRef, shared by
+  // PhoneStudyFilters and the >=576px filters row) - never left on the body.
+  const isPhoneMountedRef = useRef(false);
+  useEffect(() => {
+    if (!isPhoneMountedRef.current) {
+      isPhoneMountedRef.current = true;
+      return;
+    }
+    if (document.activeElement === document.body) {
+      searchInputRef.current?.focus();
+    }
+  }, [isPhone]);
   // Each page names itself in the browser tab; the "· Cortex" lock-up lives here
   // (the tab has no persistent header) rather than repeating in the on-page title.
   useDocumentTitle('Admin · Cortex');
@@ -100,8 +140,8 @@ const Admin: React.FC = () => {
   const searchInputRef = useRef<HTMLInputElement>(null);
   // Status ascending by default (Petra 3.2): broken studies first, then
   // drafts, then live studies by their next milestone, then closed ones.
-  const [sortField, setSortField] = useState<SortField>('status');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [sortField, setSortField] = useState<SortField>(DEFAULT_SORT_FIELD);
+  const [sortDirection, setSortDirection] = useState<SortDirection>(DEFAULT_SORT_DIRECTION);
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [_loadingStats, setLoadingStats] = useState(false);
   // Decision 2: "Show all researchers" toggle. Off by default, so an admin lands
@@ -123,13 +163,43 @@ const Admin: React.FC = () => {
   const [quickFilter, setQuickFilter] = useState<QuickFilter | null>(null);
   const tableRef = useRef<HTMLTableElement>(null);
   const quickFiltersRef = useRef<HTMLDivElement>(null);
+  // The tab strip's own scroll-edge cue: a tab's own count badge (13, 2,
+  // 8...) changes its button's width without necessarily changing the outer
+  // `<ul>`'s own box (it is clipped/scrolling already), which the hook's
+  // built-in ResizeObserver does not always catch - these four values are
+  // exactly what each badge reads, so passing them recomputes the cue
+  // whenever any of them change, on top of scroll/resize/box-resize.
+  const { ref: tabListRef, cue: tabScroll, update: updateTabScroll } = useScrollEdgeCue<HTMLUListElement>([
+    opportunities.length,
+    pendingApprovalsCount,
+    feedbackCount?.count,
+    dashboardStats?.total_bookings,
+  ]);
+  // A tab becoming active or gaining keyboard focus must be fully in view in
+  // its own (possibly scrolling) strip - `scrollIntoView` scoped to the
+  // nearest scroll ancestor only (`inline`/`block: 'nearest'`), so this never
+  // scrolls the PAGE, only the tab strip itself.
+  const scrollTabIntoView = (el: HTMLElement | null) => {
+    // jsdom (the unit-test DOM) has no `scrollIntoView` at all - not even a
+    // no-op stub - so calling it unconditionally crashed every test that
+    // clicks or focuses a tab (`TypeError: el?.scrollIntoView is not a
+    // function`), the same class of bug `supportsMatchMedia` above guards.
+    if (typeof el?.scrollIntoView === 'function') {
+      el.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+    }
+  };
   const resultCountRef = useRef<HTMLSpanElement>(null);
   // Set by a Needs attention card that applies its chip: once the filtered
   // list has rendered, bring the chip row and the first rows into view.
   const [revealTable, setRevealTable] = useState(false);
+  // The "N approvals waiting" card, mirroring the chip cards above.
+  // It switches tabs rather than filtering, so it needs its own target (the
+  // Completion Approvals tab button) rather than the chip row/result count.
+  const approvalsTabButtonRef = useRef<HTMLButtonElement>(null);
+  const [revealApprovalsTab, setRevealApprovalsTab] = useState(false);
   // Copy's outcome, shown in place under the study that was copied.
   const [copyNotice, setCopyNotice] = useState<
-    { id: string; title: string; tone: 'status' | 'error'; message: string } | null
+    { id: string; title: string; tone: 'status' | 'error' | 'warning'; message: string } | null
   >(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const copyRetryRef = useRef<HTMLButtonElement>(null);
@@ -183,6 +253,18 @@ const Admin: React.FC = () => {
     quickFiltersRef.current?.scrollIntoView?.({ block: 'start' });
     resultCountRef.current?.focus({ preventScroll: true });
   }, [revealTable]);
+
+  // The approvals card switches tabs with no visible result at 390/430
+  // (the tab strip sits below the fold there, the same class of bug fixed
+  // for the broken-studies card above) - scroll the tab strip into view and
+  // land focus on the now-active tab, the same hand-off `revealTable` gives
+  // the chip cards above.
+  useEffect(() => {
+    if (!revealApprovalsTab) return;
+    setRevealApprovalsTab(false);
+    approvalsTabButtonRef.current?.scrollIntoView?.({ block: 'start' });
+    approvalsTabButtonRef.current?.focus({ preventScroll: true });
+  }, [revealApprovalsTab]);
 
   // Whether any Research Studies filter is active - drives the "Clear filters"
   // affordance and the empty-state copy.
@@ -291,27 +373,76 @@ const Admin: React.FC = () => {
 
   /**
    * Focus a study's title link: where focus goes when its notice ends or its
-   * error is dismissed. If that link is no longer on screen - the row
-   * re-sorted away, or left the filtered table - focus goes to what now sits
-   * at the notice's old slot instead (`near`: the next row's link, then the
-   * previous row's), else the result count, else the study's own link. Never
-   * scrolls, and never lands off screen, so the next Tab does not jump the
-   * page either.
+   * error is dismissed. If that link is no longer FULLY on screen - the row
+   * re-sorted away, left the filtered table, or is only partly visible at a
+   * viewport edge - focus goes to what now sits at the notice's old slot
+   * instead (`near`: the next row's link, then the previous row's, each only
+   * if fully visible), else the result count, else the nearest row title that
+   * IS fully visible anywhere in the table, else the study's own link. Never
+   * scrolls, and never lands off screen (a lapsed Undo notice at
+   * 390x844 could hand focus to a title link straddling the viewport's bottom
+   * edge - `isInViewport` counts any overlap as "on screen", which is right
+   * for "is the reader currently looking at this" but wrong for an automatic
+   * focus target, so this uses the stricter `isFullyInViewport` throughout).
    */
   const focusStudy = useCallback((id: string, near: string[] = []) => {
     const table = tableRef.current;
     const link = (studyId: string) =>
       table?.querySelector<HTMLAnchorElement>(`a.row-title[data-study-id="${studyId}"]`) ?? null;
     const own = link(id);
-    let target: HTMLElement | null = own && isInViewport(own) ? own : null;
+    // the sticky thead's own bottom edge, ONLY when it is
+    // actually stuck (`rect.top <= 0` - sticky clamps it there; unstuck, it
+    // sits further down the page and blocks nothing at the viewport top).
+    // Below 1024px there is no thead at all (card view), so this is 0 there.
+    // `position: sticky` is set on the `th` cells themselves
+    // (_components.css, ".admin-dashboard table.admin-data-table thead th"),
+    // not on `<thead>` - that element carries no sticky positioning of its
+    // own and just scrolls normally, so measuring IT here always read a
+    // moving, never-clamped top and never reported "stuck".
+    const stickyHeaderBottom = (): number => {
+      const th = table?.querySelector('thead th');
+      if (!th) return 0;
+      const rect = th.getBoundingClientRect();
+      return rect.top <= 0 ? rect.bottom : 0;
+    };
+    const topBoundary = stickyHeaderBottom();
+    const visible = (el: HTMLElement | null): el is HTMLElement =>
+      el !== null && isFullyInViewport(el, topBoundary);
+    let target: HTMLElement | null = visible(own) ? own : null;
     if (!target) {
+      // the nearest fully-visible title BY DISTANCE, not
+      // the first one in DOM order - `own`'s own rect (even off screen, e.g.
+      // top -107 after a re-sort) is still a real layout position, so the
+      // title whose top sits closest to it is the one nearest where the
+      // reader was actually looking, wherever the table happened to sort it.
+      const ownRect = own?.getBoundingClientRect();
+      const nearestVisible = (elements: HTMLElement[]): HTMLElement | null => {
+        if (elements.length === 0) return null;
+        if (!ownRect) return elements[0];
+        let best: HTMLElement | null = null;
+        let bestDistance = Infinity;
+        for (const el of elements) {
+          const distance = Math.abs(el.getBoundingClientRect().top - ownRect.top);
+          if (distance < bestDistance) {
+            bestDistance = distance;
+            best = el;
+          }
+        }
+        return best;
+      };
       target =
-        near.map(link).find((el): el is HTMLAnchorElement => el !== null) ??
+        near.map(link).find(visible) ??
+        (visible(resultCountRef.current) ? resultCountRef.current : null) ??
+        nearestVisible(
+          Array.from(table?.querySelectorAll<HTMLAnchorElement>('a.row-title') ?? []).filter(visible)
+        ) ??
         resultCountRef.current ??
         own;
-      // No "first study" fallback: the result count renders whenever a filter
-      // is on, and with no filter the study's own row is always in the table,
-      // so `own` is the last resort that can actually be reached.
+      // No "first study" fallback beyond the on-screen scan above: the result
+      // count renders whenever the list has loaded (filtered or not - see
+      // its own render condition below), and with no filter the study's own
+      // row is always in the table, so `own` is the true last resort -
+      // reached only when nothing at all is on screen to land on instead.
     }
     target?.focus({ preventScroll: true });
   }, []);
@@ -319,7 +450,21 @@ const Admin: React.FC = () => {
   /** The studies around study `id`'s notice or error slot, before a re-sort:
    * the next row's, then the previous row's (its own row excepted). */
   const captureNeighbours = useCallback((id: string): string[] => {
-    const slot = tableRef.current?.querySelector(`tr[data-notice-for="${id}"]`);
+    // `data-notice-for` sits on a full `<tr>` at >=1024 (StudyRowNotices'
+    // sibling-row layout) but on a `td.col-notice` inside the study's own
+    // `<tr>` below 1024 (the compact in-card layout) - `closest('tr')`
+    // resolves both to the row whose neighbours we actually want. The bare
+    // `tr[data-notice-for]` selector this used to be never matched below
+    // 1024, so this always returned no neighbours there, and focus landed
+    // on the wrong study after a lapse.
+    // With no notice rendered yet (a Reopen captures straight after its PATCH,
+    // before its notice commits), the study's own row is the slot: it is
+    // still in place at that moment, and its neighbours are the ones the
+    // notice-only placeholder will sit between once the row leaves.
+    const slot = (
+      tableRef.current?.querySelector(`[data-notice-for="${id}"]`) ??
+      tableRef.current?.querySelector(`a.row-title[data-study-id="${id}"]`)
+    )?.closest('tr');
     if (!slot) return [];
     const studyOf = (tr: Element | null) =>
       tr?.querySelector<HTMLAnchorElement>('a.row-title')?.dataset.studyId;
@@ -377,23 +522,33 @@ const Admin: React.FC = () => {
     [quickFilteredOpportunities, sortField, sortDirection, now]
   );
 
-  // What the table draws. The same rows, with two in-place exceptions, both
-  // sorted on the study as it was BEFORE its close so they hold the place
-  // the reader was looking at:
+  // What the table draws. The same rows, with three in-place exceptions, all
+  // sorted on the study as it was BEFORE the change that moved it, so they
+  // hold the place the reader was looking at:
   //  - while a study's Close notice is up, its row sorts on that snapshot and
   //    stays under the pointer with Undo beneath it. If the live filters no
   //    longer match it (a closed study under the Broken chip), its notice
   //    stays alone in that place ('noticeOnly'), so Undo is still there.
   //  - after a refused Undo, the error takes the notice's slot on its own
   //    ('errorSlot'), while the row itself moves to its live place.
-  // Neither extra entry is counted: counts and filters read live status.
-  type TableRow = { study: Opportunity; kind: 'row' | 'noticeOnly' | 'errorSlot' };
+  //  - a Reopen has the same problem Close always had - reopening a study
+  //    under the Closed filter (or Broken, if it was also broken) takes it
+  //    out of the live list, so its "Reopened" notice (render loop, below)
+  //    has nowhere left to render. Mirrors 'noticeOnly' exactly, sorted on
+  //    the CLOSED snapshot the reopen started from (useCloseStudyUndo keeps
+  //    it on `reopenNotice.snapshot`) - 'reopenNoticeOnly' renders just the
+  //    "Reopened" notice, with no row above it.
+  // No extra entry is counted: counts and filters read live status.
+  type TableRow = { study: Opportunity; kind: 'row' | 'noticeOnly' | 'errorSlot' | 'reopenNoticeOnly' };
   const tableRows = useMemo((): TableRow[] => {
     const frozen = closeUndo.frozenSnapshot;
     const errorAnchor = closeUndo.actionError?.anchor ?? null;
-    if (!frozen && !errorAnchor) return sortedOpportunities.map((study) => ({ study, kind: 'row' }));
+    const reopenSnapshot = closeUndo.reopenNotice?.snapshot ?? null;
+    if (!frozen && !errorAnchor && !reopenSnapshot) {
+      return sortedOpportunities.map((study) => ({ study, kind: 'row' }));
+    }
     const query = debouncedSearchQuery.toLowerCase();
-    // Whether a pre-close snapshot would be on screen under the current filters.
+    // Whether a pre-change snapshot would be on screen under the current filters.
     const wasShown = (snapshot: Opportunity) =>
       (!query ||
         snapshot.title.toLowerCase().includes(query) ||
@@ -403,21 +558,33 @@ const Admin: React.FC = () => {
       matchesTypeFilter(snapshot, typeFilter) &&
       (!quickFilter || matchesQuickFilter(snapshot, quickFilter, now));
     const frozenLive = frozen !== null && quickFilteredOpportunities.some((opp) => opp.id === frozen.id);
-    let input: Opportunity[] = frozenLive
-      ? quickFilteredOpportunities.map((opp) => (opp.id === frozen.id ? frozen : opp))
-      : quickFilteredOpportunities;
+    // Still shown under the live filters, either way: the row
+    // sorts on its pre-reopen (closed) snapshot while the notice is up - the
+    // same freeze Close gives its own row - so it stays under the reader
+    // rather than jumping to its new, published sort position and taking
+    // focus and the notice off screen with it. Only a reopen the live
+    // filters now EXCLUDE (Closed, or Broken if it was also broken) needs
+    // the placeholder slot below instead.
+    const reopenLive =
+      reopenSnapshot !== null && quickFilteredOpportunities.some((opp) => opp.id === reopenSnapshot.id);
+    let input: Opportunity[] = quickFilteredOpportunities;
+    if (frozenLive) input = input.map((opp) => (opp.id === frozen!.id ? frozen! : opp));
+    if (reopenLive) input = input.map((opp) => (opp.id === reopenSnapshot!.id ? reopenSnapshot! : opp));
     if (frozen && !frozenLive && wasShown(frozen)) input = [...input, frozen];
     if (errorAnchor && wasShown(errorAnchor)) input = [...input, errorAnchor];
+    if (reopenSnapshot && !reopenLive && wasShown(reopenSnapshot)) input = [...input, reopenSnapshot];
     const liveById = new Map(opportunities.map((opp) => [opp.id, opp]));
     // sortStudies returns the same objects it was given, so the snapshots are
     // told apart from live rows by identity.
     return sortStudies(input, sortField, sortDirection, now).map((viewed): TableRow => {
       if (viewed === errorAnchor) return { study: viewed, kind: 'errorSlot' };
+      if (viewed === reopenSnapshot) return { study: liveById.get(viewed.id) ?? viewed, kind: reopenLive ? 'row' : 'reopenNoticeOnly' };
       if (viewed === frozen) return { study: liveById.get(viewed.id) ?? viewed, kind: frozenLive ? 'row' : 'noticeOnly' };
       return { study: viewed, kind: 'row' };
     });
   }, [
-    closeUndo.frozenSnapshot, closeUndo.actionError, sortedOpportunities, quickFilteredOpportunities, opportunities,
+    closeUndo.frozenSnapshot, closeUndo.actionError, closeUndo.reopenNotice, sortedOpportunities,
+    quickFilteredOpportunities, opportunities,
     debouncedSearchQuery, statusFilter, typeFilter, quickFilter, sortField, sortDirection, now,
   ]);
 
@@ -601,11 +768,25 @@ const Admin: React.FC = () => {
     // copy when the linked FirstHand study is gone or fails to clone,
     // rather than refusing the whole request - previously with no signal
     // here at all, so the researcher only found out by opening the copy.
+    //
+    // This used to run through the page-top `successMessage` banner - at
+    // 1440 its box sat -559 to -501 (above the viewport) whenever the copied
+    // row was in view, and it auto-dismissed after 5s whether anyone had
+    // scrolled up to read it or not. It is the most important thing Copy can
+    // say (the copy is empty and cannot run yet), so it now REPLACES the
+    // "Copied" status notice in the row's own slot instead -
+    // `showCopiedNotice` above already armed that notice's own lapse timer,
+    // which this clears before overwriting it, and a warning is never
+    // auto-dismissed (only Dismiss, or a later action on this same study,
+    // clears it).
     if (duplicated.study_copy_failed) {
-      setSuccessMessageVariant('warning');
-      setSuccessMessage('Study duplicated, but its questions could not be copied - the copy is empty and needs its own content before it can run.');
-      if (successTimerRef.current) clearTimeout(successTimerRef.current);
-      successTimerRef.current = setTimeout(() => setSuccessMessage(''), 5000);
+      clearCopyTimer();
+      setCopyNotice({
+        id: study.id,
+        title: study.title,
+        tone: 'warning',
+        message: `Copied “${study.title}”, but its questions could not be copied - the copy is empty and needs its own content before it can run.`,
+      });
     }
   };
 
@@ -672,8 +853,12 @@ const Admin: React.FC = () => {
             </div>
 
             {/* Success/Warning Message */}
+            {/* #160: no `mx-4` - the card's own padding already sets the content
+                edge (the same edge Needs attention and Operational snapshot sit
+                flush to below); the old horizontal margin doubled that inset and
+                sat the banner 16px right of everything under it. */}
             {successMessage && (
-              <div className={`alert ${successMessageVariant === 'warning' ? 'alert-warning' : 'alert-success'} mx-4 mt-4 mb-3`} role="alert">
+              <div className={`alert ${successMessageVariant === 'warning' ? 'alert-warning' : 'alert-success'} mt-4 mb-3`} role="alert">
                 {successMessage}
               </div>
             )}
@@ -739,7 +924,10 @@ const Admin: React.FC = () => {
                     <button
                       type="button"
                       className="admin-attention__card"
-                      onClick={() => setActiveTab('approvals')}
+                      onClick={() => {
+                        setActiveTab('approvals');
+                        setRevealApprovalsTab(true);
+                      }}
                     >
                       <span className="admin-attention__icon"><Clock size={20} aria-hidden /></span>
                       <span className="admin-attention__body">
@@ -785,106 +973,13 @@ const Admin: React.FC = () => {
               )}
             </section>
 
-            {/* Operational snapshot.
-                These numbers are OWNER-SCOPED for a researcher admin - the
-                backend filters every query on owner_user_id - and global for a
-                superadmin. Same cards, different meaning, and the page used to
-                say neither, so a count read as the platform total to the person
-                who owned part of it. The scope note keeps that honest.
-                "Overdue sessions" from the wireframe is omitted: the frontend
-                has no per-session completion flag to compute it from. */}
             {dashboardStats && (
-              <section className="admin-snapshot" aria-labelledby="admin-snapshot-heading">
-                <div className="admin-section-head">
-                  <h2 id="admin-snapshot-heading" className="admin-section-title">Operational snapshot</h2>
-                  <div className="d-flex align-items-center gap-2">
-                    {/* The scope note now reads the toggle, not the role: it is
-                        the caller's own studies until they widen it, whoever they
-                        are. */}
-                    <span className="stat-scope-note">
-                      {showAllResearchers
-                        ? 'Across every researcher on Cortex'
-                        : 'Your studies only'}
-                    </span>
-                    {/* Decision 2: one toggle for both the snapshot and the
-                        studies table. A pressed toggle button (stable label,
-                        aria-pressed carries the state) rather than a relabelling
-                        button, so a screen reader hears one control change state. */}
-                    <button
-                      type="button"
-                      className="admin-chip"
-                      aria-pressed={showAllResearchers}
-                      onClick={() => setShowAllResearchers((previous) => !previous)}
-                    >
-                      Show all researchers
-                    </button>
-                  </div>
-                </div>
-                <div className="admin-stat-grid mb-3">
-                  <div className="stat-card-col">
-                    <div className="card border-0 shadow-sm h-100 stat-card admin-stat-card">
-                      <div className="card-body stat-card-body">
-                        <div className="stat-card-header">
-                          <span className="text-uppercase stat-label">Active studies</span>
-                          <div className="stat-icon-wrapper">
-                            <ClipboardList size={20} className="stat-icon" />
-                          </div>
-                        </div>
-                        <h2 className="mb-0 stat-value">
-                          {dashboardStats.published_opportunities + dashboardStats.draft_opportunities}
-                        </h2>
-                        <small className="stat-subtitle">
-                          {dashboardStats.published_opportunities} published · {dashboardStats.draft_opportunities} draft
-                        </small>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="stat-card-col">
-                    <div className="card border-0 shadow-sm h-100 stat-card admin-stat-card">
-                      <div className="card-body stat-card-body">
-                        <div className="stat-card-header">
-                          <span className="text-uppercase stat-label">Participants</span>
-                          <div className="stat-icon-wrapper">
-                            <Users size={20} className="stat-icon" />
-                          </div>
-                        </div>
-                        <h2 className="mb-0 stat-value">{dashboardStats.total_participants}</h2>
-                        <small className="stat-subtitle">People who booked</small>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="stat-card-col">
-                    <div className="card border-0 shadow-sm h-100 stat-card admin-stat-card">
-                      <div className="card-body stat-card-body">
-                        <div className="stat-card-header">
-                          <span className="text-uppercase stat-label">Sessions this week</span>
-                          <div className="stat-icon-wrapper">
-                            <Calendar size={20} className="stat-icon" />
-                          </div>
-                        </div>
-                        <h2 className="mb-0 stat-value">{sessionsThisWeek.total}</h2>
-                        <small className="stat-subtitle">
-                          {sessionsThisWeek.upcoming} upcoming · {sessionsThisWeek.completed} completed
-                        </small>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="stat-card-col">
-                    <div className="card border-0 shadow-sm h-100 stat-card admin-stat-card">
-                      <div className="card-body stat-card-body">
-                        <div className="stat-card-header">
-                          <span className="text-uppercase stat-label">Open slots</span>
-                          <div className="stat-icon-wrapper">
-                            <Clock size={20} className="stat-icon" />
-                          </div>
-                        </div>
-                        <h2 className="mb-0 stat-value">{dashboardStats.available_slots}</h2>
-                        <small className="stat-subtitle">Across all published studies</small>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </section>
+              <AdminSnapshotStrip
+                dashboardStats={dashboardStats}
+                sessionsThisWeek={sessionsThisWeek}
+                showAllResearchers={showAllResearchers}
+                onToggleShowAllResearchers={() => setShowAllResearchers((previous) => !previous)}
+              />
             )}
 
             {/* Recent bookings moved into the Bookings tab below - it was
@@ -896,13 +991,33 @@ const Admin: React.FC = () => {
             <div className="row mb-3">
               <div className="col-12">
                 <div className="card border-0 shadow-sm admin-tabs-card">
-            <div className="admin-tabs-container tabs-container">
-              <ul className="nav nav-tabs nav-fill" role="tablist" style={{ border: 'none', margin: 0 }}>
+            {/* the scroll-edge cue (CSS ::before/::after on
+                this container, gated by these two modifier classes) and
+                scrollIntoView on focus/selection below - see tabListRef. */}
+            <div
+              className={`admin-tabs-container tabs-container${tabScroll.left ? ' admin-tabs-container--scroll-left' : ''}${
+                tabScroll.right ? ' admin-tabs-container--scroll-right' : ''
+              }`}
+            >
+              <ul
+                ref={tabListRef}
+                className="nav nav-tabs nav-fill"
+                role="tablist"
+                style={{ border: 'none', margin: 0 }}
+                onScroll={updateTabScroll}
+                // Focus events bubble (React's onFocus is focusin-backed), so
+                // one listener on the list covers every tab: Tab into any of
+                // them scrolls IT into view, not just the active one.
+                onFocus={(e) => scrollTabIntoView((e.target as HTMLElement).closest('.custom-tab-button'))}
+              >
                 <li className="nav-item" role="presentation">
                   <button
                     id="research-studies-tab-button"
                     className={`custom-tab-button ${activeTab === 'opportunities' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('opportunities')}
+                    onClick={(e) => {
+                      setActiveTab('opportunities');
+                      scrollTabIntoView(e.currentTarget);
+                    }}
                     role="tab"
                     aria-selected={activeTab === 'opportunities'}
                     aria-controls="research-studies-tab"
@@ -918,8 +1033,12 @@ const Admin: React.FC = () => {
                 <li className="nav-item" role="presentation">
                   <button
                     id="completion-approvals-tab-button"
+                    ref={approvalsTabButtonRef}
                     className={`custom-tab-button ${activeTab === 'approvals' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('approvals')}
+                    onClick={(e) => {
+                      setActiveTab('approvals');
+                      scrollTabIntoView(e.currentTarget);
+                    }}
                     role="tab"
                     aria-selected={activeTab === 'approvals'}
                     aria-controls="completion-approvals-tab"
@@ -937,7 +1056,10 @@ const Admin: React.FC = () => {
                   <button
                     id="feedback-tab-button"
                     className={`custom-tab-button ${activeTab === 'feedback' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('feedback')}
+                    onClick={(e) => {
+                      setActiveTab('feedback');
+                      scrollTabIntoView(e.currentTarget);
+                    }}
                     role="tab"
                     aria-selected={activeTab === 'feedback'}
                     aria-controls="feedback-tab"
@@ -957,7 +1079,10 @@ const Admin: React.FC = () => {
                   <button
                     id="bookings-tab-button"
                     className={`custom-tab-button ${activeTab === 'bookings' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('bookings')}
+                    onClick={(e) => {
+                      setActiveTab('bookings');
+                      scrollTabIntoView(e.currentTarget);
+                    }}
                     role="tab"
                     aria-selected={activeTab === 'bookings'}
                     aria-controls="bookings-tab"
@@ -983,10 +1108,64 @@ const Admin: React.FC = () => {
                   role="tabpanel"
                   aria-labelledby="research-studies-tab-button"
                 >
+                  {/* NO heading here,
+                      by design. The other three tab panels earn their own
+                      heading row because it is a toolbar carrying a real
+                      action (Refresh, Export, Export CSV); this one has none -
+                      the selected tab already reads "Research Studies 13" 30px
+                      above, and the tabpanel is already named by
+                      aria-labelledby. An earlier title-only row, added to match
+                      the other three panels' height, cost the fold 48px
+                      (841 to 889 at 1440x900, 11px of row 1 visible
+                      and no study readable). Fixed here by treating the filter
+                      row as this panel's own head row instead - see
+                      .filters-row in _components.css. */}
+                  {/* Below 576px this whole
+                      block - search, Status/Type/Sort-by, the quick-filter
+                      chips, the result count - is a genuinely different UI
+                      (a "Filters" disclosure button, not three always-on
+                      fields), not a CSS reflow of the same one, so it is a
+                      separate component (PhoneStudyFilters.tsx) rendered
+                      instead of, not alongside, the layout below. */}
+                  {isPhone ? (
+                    <PhoneStudyFilters
+                      searchQuery={searchQuery}
+                      onSearchChange={setSearchQuery}
+                      searchInputRef={searchInputRef}
+                      statusFilter={statusFilter}
+                      onStatusChange={setStatusFilter}
+                      typeFilter={typeFilter}
+                      onTypeChange={setTypeFilter}
+                      showSort={showSortControl}
+                      sortField={sortField}
+                      sortDirection={sortDirection}
+                      onSortFieldChange={(field) => {
+                        if (field !== sortField) handleSort(field);
+                      }}
+                      onToggleSortDirection={() => handleSort(sortField)}
+                      sortIsDefault={sortField === DEFAULT_SORT_FIELD && sortDirection === DEFAULT_SORT_DIRECTION}
+                      quickFilter={quickFilter}
+                      quickFilterCounts={quickFilterCounts}
+                      onToggleQuickFilter={toggleQuickFilter}
+                      hasActiveFilters={hasActiveFilters}
+                      resultShown={sortedOpportunities.length}
+                      resultTotal={opportunities.length}
+                      onClearFilters={clearAllFilters}
+                      resultCountRef={resultCountRef}
+                      containerRef={quickFiltersRef}
+                    />
+                  ) : (
+                  <>
                   {/* Filters - using flexbox instead of Bootstrap grid for precise alignment */}
+                  {/* Labels stay in the accessibility tree (programmatically
+                      associated via htmlFor/id) but no longer draw their own line
+                      above each field - that 0.75rem uppercase row was ~20px of the
+                      fold's own budget for three words ("Search Studies", "Status",
+                      "Study Type") a placeholder and a select's own selected option
+                      already say. */}
                   <div className="filters-row">
                     <div className="filter-field">
-                      <label htmlFor="searchFilter" className="form-label mb-2">
+                      <label htmlFor="searchFilter" className="form-label mb-2 visually-hidden">
                         Search Studies
                       </label>
                       <input
@@ -994,13 +1173,18 @@ const Admin: React.FC = () => {
                         type="text"
                         id="searchFilter"
                         className="form-control"
-                        placeholder="Search by title or description..."
+                        /* shortened from "Search by title
+                           or description..." - at 700-767px the field has no
+                           room for the longer string even after widening it
+                           (140px basis, the accessible label already says
+                           "Search Studies" and carries the full meaning). */
+                        placeholder="Search studies..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                       />
                     </div>
                     <div className="filter-field-sm">
-                      <label htmlFor="statusFilter" className="form-label mb-2">Status</label>
+                      <label htmlFor="statusFilter" className="form-label mb-2 visually-hidden">Status</label>
                       <select
                         id="statusFilter"
                         className="form-select"
@@ -1017,7 +1201,7 @@ const Admin: React.FC = () => {
                       </select>
                     </div>
                     <div className="filter-field-sm">
-                      <label htmlFor="typeFilter" className="form-label mb-2">Study Type</label>
+                      <label htmlFor="typeFilter" className="form-label mb-2 visually-hidden">Study Type</label>
                       <select
                         id="typeFilter"
                         className="form-select"
@@ -1069,16 +1253,42 @@ const Admin: React.FC = () => {
                     {/* The result count, Clear filters and Sort by are one
                         right-aligned group, so when the row runs out of room
                         they wrap together to the right edge - not Sort by
-                        alone, packed left, on a line of its own. The group is
-                        only rendered when it holds something. */}
-                    {(hasActiveFilters || showSortControl) && (
+                        alone, packed left, on a line of its own.
+                        The count itself always shows once the list has
+                        loaded, filtered or not - idle it just reads the
+                        total ("16 studies"), with Clear appearing beside it
+                        only once a filter narrows that further. It used to
+                        render only while a filter was active, leaving this
+                        whole slot's reserved height (min-height matches
+                        Clear's own 32px) empty at rest - a permanently blank
+                        band above the table with nothing in it to explain
+                        why the space was there.
+                        `hasActiveFilters ||` keeps the live region mounted
+                        through a background reload with a filter on: a plain
+                        `!loadingOpportunities` unmounts this `role=status`
+                        for the reload's duration, taking the count's own
+                        announcement with it.
+                        `opportunities.length > 0 ||` does the same with no
+                        filter on - `loadOpportunities` does not clear
+                        `opportunities` before it re-fetches, so a background
+                        reload still has the PREVIOUS count sitting in state
+                        while `loadingOpportunities` is true, and the region
+                        can stay mounted showing that stale-but-real count
+                        instead of unmounting and remounting on "58 studies"
+                        with nothing said in between - the same reasoning
+                        that keeps the phone's count permanently mounted
+                        (PhoneStudyFilters.tsx). Only the very first load
+                        (nothing fetched yet, `opportunities` still its `[]`
+                        initial value) still waits for `loadingOpportunities`
+                        to clear, so this never announces "0 studies" before
+                        the real count has loaded once. */}
+                    {(hasActiveFilters || !loadingOpportunities || opportunities.length > 0) && !error && (
                     <div className="admin-quick-filters__end">
-                      {hasActiveFilters && !loadingOpportunities && !error && (
-                        <span className="admin-result-count" role="status" ref={resultCountRef} tabIndex={-1}>
-                          {sortedOpportunities.length} of {opportunities.length}{' '}
-                          {opportunities.length === 1 ? 'study' : 'studies'}
-                        </span>
-                      )}
+                      <span className="admin-result-count" role="status" ref={resultCountRef} tabIndex={-1}>
+                        {hasActiveFilters
+                          ? `${sortedOpportunities.length} of ${opportunities.length} ${opportunities.length === 1 ? 'study' : 'studies'}`
+                          : `${opportunities.length} ${opportunities.length === 1 ? 'study' : 'studies'}`}
+                      </span>
                       {hasActiveFilters && (
                         <button
                           type="button"
@@ -1122,9 +1332,23 @@ const Admin: React.FC = () => {
                             <option value="next">Next / deadline</option>
                             <option value="created_at">Created</option>
                           </select>
-                          <button type="button" className="admin-card-sort-dir" onClick={() => handleSort(sortField)}>
-                            <span className="visually-hidden">Sort direction: </span>
-                            {sortDirection === 'asc' ? 'Ascending' : 'Descending'}
+                          <button
+                            type="button"
+                            className="admin-card-sort-dir"
+                            onClick={() => handleSort(sortField)}
+                            // below 576px this becomes an
+                            // icon-only 44px button (the minimum fix that fits here -
+                            // see the CSS comment beside `.admin-card-sort-dir`)
+                            // - the label text is hidden there, so the
+                            // accessible name has to come from `aria-label`
+                            // rather than the button's text content, at every
+                            // width (one name, not two mechanisms to keep in
+                            // sync).
+                            aria-label={`Sort direction: ${sortDirection === 'asc' ? 'Ascending' : 'Descending'}`}
+                          >
+                            <span className="admin-card-sort-dir__label" aria-hidden="true">
+                              {sortDirection === 'asc' ? 'Ascending' : 'Descending'}
+                            </span>
                             <SortCaret active direction={sortDirection} />
                           </button>
                         </div>
@@ -1132,7 +1356,8 @@ const Admin: React.FC = () => {
                     </div>
                     )}
                   </div>
-
+                  </>
+                  )}
 
                   {/* Error State */}
                   {error && (
@@ -1248,8 +1473,25 @@ const Admin: React.FC = () => {
                             // A refused Undo's error has its own slot (kind
                             // 'errorSlot'); every other error sits under its row.
                             const actionError = rowError && !rowError.anchor ? rowError : null;
+                            // below 1024px a notice must stay inside
+                            // the ONE grid/flex item its study already is (see
+                            // components/StudyRowNotices.tsx's own comment) - a card with
+                            // no row above it (errorSlot/noticeOnly/reopenNoticeOnly) gets
+                            // its own card chrome so it still reads as one list item, not
+                            // a bare strip.
                             if (kind === 'errorSlot') {
-                              return rowError ? (
+                              if (!rowError) return null;
+                              return isCompactActions ? (
+                                <tr key={`${opportunity.id}-error-slot`} className="admin-row-clickable admin-row-notice-card">
+                                  <StudyActionErrorRow
+                                    studyId={opportunity.id}
+                                    message={rowError.message}
+                                    onDismiss={closeUndo.dismissError}
+                                    errorRef={closeUndo.errorRef}
+                                    compact
+                                  />
+                                </tr>
+                              ) : (
                                 <StudyActionErrorRow
                                   key={`${opportunity.id}-error-slot`}
                                   studyId={opportunity.id}
@@ -1257,7 +1499,7 @@ const Admin: React.FC = () => {
                                   onDismiss={closeUndo.dismissError}
                                   errorRef={closeUndo.errorRef}
                                 />
-                              ) : null;
+                              );
                             }
                             // Undo is disabled on every notice while any Undo is in
                             // flight, so two reopen requests never race.
@@ -1268,12 +1510,44 @@ const Admin: React.FC = () => {
                                 undoing={closeUndo.undoingId !== null}
                                 onUndo={() => void closeUndo.undo()}
                                 undoButtonRef={closeUndo.undoButtonRef}
+                                compact={isCompactActions}
                               />
                             );
                             // The closed study no longer matches the filters: its
                             // notice alone holds its place (see tableRows).
                             if (kind === 'noticeOnly') {
-                              return <React.Fragment key={opportunity.id}>{noticeRow}</React.Fragment>;
+                              return isCompactActions ? (
+                                <tr key={opportunity.id} className="admin-row-clickable admin-row-notice-card">
+                                  {noticeRow}
+                                </tr>
+                              ) : (
+                                <React.Fragment key={opportunity.id}>{noticeRow}</React.Fragment>
+                              );
+                            }
+                            // The mirror case for Reopen - the now-published study
+                            // left the filtered list (Closed, or Broken if it was
+                            // also broken), so its "Reopened" notice renders alone,
+                            // in the sorted slot tableRows gave it, with no row
+                            // above it.
+                            if (kind === 'reopenNoticeOnly') {
+                              const reopenNoticeOnlyContent = closeUndo.reopenNotice?.id === opportunity.id && (
+                                <CopyNoticeRow
+                                  studyId={opportunity.id}
+                                  message={`Reopened “${closeUndo.reopenNotice.title}”`}
+                                  tone="status"
+                                  onDismiss={() => closeUndo.dismissReopenNotice(opportunity.id)}
+                                  compact={isCompactActions}
+                                />
+                              );
+                              return isCompactActions ? (
+                                <tr key={`${opportunity.id}-reopen-notice-only`} className="admin-row-clickable admin-row-notice-card">
+                                  {reopenNoticeOnlyContent}
+                                </tr>
+                              ) : (
+                                <React.Fragment key={`${opportunity.id}-reopen-notice-only`}>
+                                  {reopenNoticeOnlyContent}
+                                </React.Fragment>
+                              );
                             }
                             const recruitment = getStudyProgress(opportunity);
                             // Progress: booked / capacity when the study has sessions
@@ -1288,6 +1562,15 @@ const Admin: React.FC = () => {
                             const sessionDayLabel =
                               milestone?.kind === 'session' ? relativeDayLabel(milestone.date, now) : null;
                             const TypeGlyph = getStudyTypeGlyph(opportunity.type);
+                            // The compact list's type icon only (not its text,
+                            // which stays muted): the same per-type identity
+                            // colour the browse kicker, filter chips and setup
+                            // pods already share (`getStudyTypeAccentVar`, !484)
+                            // rather than a second colour system of its own.
+                            // Null for an unrecognised type, so the icon falls
+                            // back to its inherited muted colour instead of a
+                            // wrong one.
+                            const typeAccent = getStudyTypeAccentVar(opportunity.type);
                             // One call per row: the status cell renders this and
                             // also carries it as the label's `title`, and the
                             // readiness check reads six fields.
@@ -1303,10 +1586,17 @@ const Admin: React.FC = () => {
                             const canManage = canManageStudy(opportunity, user);
                             const primaryAction = getPrimaryStudyAction(opportunity, user);
                             const owner = opportunity.owner_name || opportunity.owner_email;
+                            // whether the compact list's line 3
+                            // (progress + Next) would show nothing but two empty
+                            // dashes - collapsed by CSS below (`[data-line3-empty]`)
+                            // rather than kept as dead space. Computed for every
+                            // width (cheap), read only under 1024px.
+                            const line3Empty = !recruitment && clicks === undefined && !milestone;
                             return (
                             <React.Fragment key={opportunity.id}>
                             <tr
                               className="admin-row-clickable"
+                              data-line3-empty={line3Empty || undefined}
                               /* The mouse's shortcut to the title link's own URL.
                                  The keyboard has the link itself (Tab, Enter), so
                                  the row is not a Tab stop and carries no key
@@ -1369,6 +1659,18 @@ const Admin: React.FC = () => {
                                 </div>
                               </td>
                               <td className="col-status" data-label="Status">
+                                {/* the compact media query's
+                                    `display: flex` on this td now carries `!important`
+                                    (_components.css) - `.admin-data-table td { display:
+                                    block !important }` (the phone/tablet card rule)
+                                    always beat a non-`!important` flex here, so the
+                                    status and type pills touched (~1.5px apart on
+                                    whitespace alone). A wrapper span was tried first, but
+                                    it changed the status label from a direct flex-item
+                                    descendant of this td to one two levels down, and that
+                                    broke the label's own clip on the DESKTOP table -
+                                    e2e/admin-pill-primitive.test.ts caught it rendering
+                                    fully unclipped at 1024/1440. */}
                                 {/*
                                   Row 6: four seeded PUBLISHED studies fail their
                                   own publish readiness (no questions, no
@@ -1419,10 +1721,81 @@ const Admin: React.FC = () => {
                                     {statusLabel}
                                   </span>
                                 </span>
+                                {/* the Auto-closed marker stays on every surface, including
+                                    the compact list; only the field LABELS were ever in
+                                    scope to drop. It sits beside the status pill in both
+                                    table and compact modes, same as today. */}
                                 {isAutoClosed(opportunity) && (
                                   <span className="admin-pill admin-pill--auto-closed">Auto-closed</span>
                                 )}
+                                {/* Compact list item, line 2: "the status pill, then the
+                                    type glyph and label" - a second copy of the type pill,
+                                    gated on `isCompactActions` rather than a CSS breakpoint. The
+                                    meta line's own type pill (`.admin-study-meta`, hidden below
+                                    1024px) lives inside a DIFFERENT table cell (`col-title`), and
+                                    a CSS grid cannot pull a child out of one grid item into
+                                    another's row - so this cannot just be CSS-repositioned. Real
+                                    conditional rendering rather than `display:none` matters here
+                                    for more than tidiness: jsdom (unit tests) applies no CSS, so
+                                    a CSS-only toggle would put the SAME "Live"/"Recorded"/etc.
+                                    text in the DOM twice at once and every `getByText` on it
+                                    would fail with "multiple elements found" - gating on the
+                                    same hook that already drives the kebab's own compact order
+                                    means jsdom (no `matchMedia`, `isCompactActions` always
+                                    false) never renders a second copy at all. */}
+                                {/* Muted text, not a second coloured capsule - the status
+                                    pill is the only coloured capsule on the card now. The
+                                    icon alone carries the type's identity colour (the same
+                                    per-type token the browse kicker, filter chips and setup
+                                    pods share, !484) so the type is still scannable at a
+                                    glance without a second heavy pill competing with the
+                                    status one. A list-scoped class
+                                    (`.admin-study-type-compact`), not the shared
+                                    `.admin-pill`/`getTypeBadgeClass` primitive every other
+                                    pill on the page depends on. Desktop is untouched: the
+                                    meta line's own type pill (`.admin-study-meta`, hidden
+                                    below 1024px) still renders the coloured capsule. */}
+                                {isCompactActions && (
+                                  <span className="admin-study-type-compact">
+                                    {TypeGlyph && (
+                                      <Icon
+                                        icon={TypeGlyph}
+                                        size={14}
+                                        aria-hidden="true"
+                                        style={typeAccent ? { color: typeAccent } : undefined}
+                                      />
+                                    )}
+                                    {getAdminTypeLabel(opportunity.type)}
+                                  </span>
+                                )}
                               </td>
+                              {/* Under Show all researchers the
+                                  compact list otherwise gives no way to tell whose
+                                  study is whose (55 anonymous items) - the desktop
+                                  meta line's owner is inside `.admin-study-meta`,
+                                  which the compact rule hides outright, so this is a
+                                  second copy, same conditional-render reasoning as
+                                  the type pill above (jsdom has no matchMedia, so no
+                                  duplicate node there). Its own cell, an ordinary
+                                  (non-100%-basis) flex item like Progress and Next
+                                  beside it, rather than forcing a full-width line
+                                  inside col-status: owner then shares line 3 with the
+                                  Next note (left/right) instead of costing its own
+                                  ~20px line every row. "by " is real text (not CSS
+                                  `content`, which some screen readers announce
+                                  inconsistently around generated content, and not
+                                  `aria-hidden`), so the same string is what everyone
+                                  reads. Independent of `line3Empty` below (which only
+                                  ever gates Progress/Next): the owner has nothing to
+                                  do with either being empty and must stay visible on
+                                  its own regardless. */}
+                              {isCompactActions && showAllResearchers && owner && (
+                                <td className="col-owner" data-label="Owner">
+                                  <span className="admin-study-owner" title={`Owner: ${owner}`}>
+                                    by {owner}
+                                  </span>
+                                </td>
+                              )}
                               {/* Progress: booked / capacity across the study's sessions, with
                                   the same progress bar and percentage the Recruitment cell drew.
                                   A published or closed study the server counts clicks for shows
@@ -1534,7 +1907,15 @@ const Admin: React.FC = () => {
                                       onMouseDown={(e) => e.stopPropagation()}
                                       aria-label={`Actions for ${opportunity.title}`}
                                     >
-                                      <Icon icon={MoreVertical} size={16} aria-hidden="true" />
+                                      {/* the drawn box is 32x32 -
+                                          the button underneath stays the 44x44 hit
+                                          target (`.admin-action-btn-kebab`, unchanged),
+                                          but only the compact-list CSS gives this inner
+                                          span its own visible border/fill, so the kebab
+                                          stops being the heaviest object on each card. */}
+                                      <span className="admin-action-btn-kebab__box">
+                                        <Icon icon={MoreVertical} size={16} aria-hidden="true" />
+                                      </span>
                                     </button>
                                   }
                                 >
@@ -1544,42 +1925,18 @@ const Admin: React.FC = () => {
                                       The participant page renders a draft for an admin
                                       (with a Draft badge), so Preview is live for drafts
                                       too. Edit is the owner's (or a superadmin's): the
-                                      server refuses anyone else's save. */}
-                                  {canManage ? (
-                                    <DropdownItem to={editPath}>Edit</DropdownItem>
-                                  ) : (
-                                    <DropdownItem disabled title="Only the owner can edit this study">
-                                      Edit
-                                    </DropdownItem>
-                                  )}
-                                  <DropdownItem to={studyPreviewPath(opportunity.id)}>
-                                    Preview as participant
-                                  </DropdownItem>
-                                  {/* Analytics for EVERY study type. The page always renders
-                                      an Overview (views/clicks), and the moderated types (test,
-                                      interview) reach their booked-participant roster only
-                                      through here - gating this to poll/survey/unmoderated left
-                                      that roster unreachable. Audit rows a04-row-actions-menu,
-                                      a64-analytics-live-session-participants.
-
-                                      Analytics is owner-scoped on the server (a non-owner gets a
-                                      403), so the menu tells the truth up front: only the owner or
-                                      a superadmin gets a live item, everyone else gets a disabled
-                                      one naming who owns it (row 8). Under the beta all-admin
-                                      switch that disables it on most rows for most viewers, by
-                                      design. */}
-                                  {canManage ? (
-                                    <DropdownItem to={studyAnalyticsPath(opportunity.id)}>
-                                      Analytics
-                                    </DropdownItem>
-                                  ) : (
-                                    <DropdownItem
-                                      disabled
-                                      title={`Only ${opportunity.owner_name ?? 'the study owner'} can view analytics for this study`}
-                                    >
-                                      Analytics
-                                    </DropdownItem>
-                                  )}
+                                      server refuses anyone else's save. Ordering itself
+                                      lives in kebabOrder.tsx now. */}
+                                  {orderStudyKebabActions({
+                                    isCompactActions,
+                                    canManage,
+                                    notWorking,
+                                    editPath,
+                                    previewPath: studyPreviewPath(opportunity.id),
+                                    analyticsPath: studyAnalyticsPath(opportunity.id),
+                                    ownerName: opportunity.owner_name ?? 'the study owner',
+                                    primaryActionTo: primaryAction.to,
+                                  })}
                                   {/* Copy is the owner's too: the server refuses
                                       anyone else's with a 403. */}
                                   {canManage ? (
@@ -1601,6 +1958,29 @@ const Admin: React.FC = () => {
                                       Close study
                                     </DropdownItem>
                                   )}
+                                  {/* Reopen study: the
+                                      mirror of Close, once its own Undo window has passed -
+                                      the only way back to published for a closed study
+                                      otherwise. Same gate as Close/Analytics, and the same
+                                      server-side publish guard Undo already runs, so a
+                                      broken study's refusal shows the same way (under the
+                                      row, the server's own reason). Hidden while THIS
+                                      study's own Undo notice is up:
+                                      that notice's own Undo button already sends the same
+                                      PATCH, and offering a second path to it here raced the
+                                      notice's timer/copy against Reopen's - simplest to have
+                                      exactly one live control for "un-close this study" at a
+                                      time, rather than teaching each path to cancel the
+                                      other's timer and text. */}
+                                  {opportunity.status === 'closed' && canManage && closeUndo.notice?.id !== opportunity.id && <DropdownDivider />}
+                                  {opportunity.status === 'closed' && canManage && closeUndo.notice?.id !== opportunity.id && (
+                                    <DropdownItem
+                                      disabled={closeUndo.reopeningId === opportunity.id}
+                                      onClick={() => void closeUndo.reopenStudy(opportunity)}
+                                    >
+                                      {closeUndo.reopeningId === opportunity.id ? 'Reopening…' : 'Reopen study'}
+                                    </DropdownItem>
+                                  )}
                                   <DropdownDivider />
                                   {/* Delete: the server refuses anyone but the owner or a
                                       superadmin ("Only the owner can delete this study"), so
@@ -1618,11 +1998,51 @@ const Admin: React.FC = () => {
                                 </Dropdown>
                                 </div>
                               </td>
+                              {/* below 1024px every notice for this
+                                  study renders HERE, inside its own `<tr>`, rather than as
+                                  a sibling row below - see components/StudyRowNotices.tsx's
+                                  own comment for why a sibling breaks the 800-1023.98px
+                                  grid. Each is its own extra flex child
+                                  (`.admin-data-table td.col-notice`, `flex-basis: 100%`),
+                                  so the card simply grows by a line. */}
+                              {isCompactActions && noticeRow}
+                              {isCompactActions && copyNotice?.id === opportunity.id && (
+                                <CopyNoticeRow
+                                  message={copyNotice.message}
+                                  tone={copyNotice.tone}
+                                  onRetry={() => {
+                                    setCopyNotice({ ...copyNotice, tone: 'status', message: `Copied “${copyNotice.title}”` });
+                                    void refreshAfterCopy(opportunity, true);
+                                  }}
+                                  onDismiss={() => dismissCopyNotice(opportunity.id)}
+                                  actionRef={copyRetryRef}
+                                  compact
+                                />
+                              )}
+                              {isCompactActions && closeUndo.reopenNotice?.id === opportunity.id && (
+                                <CopyNoticeRow
+                                  studyId={opportunity.id}
+                                  message={`Reopened “${closeUndo.reopenNotice.title}”`}
+                                  tone="status"
+                                  onDismiss={() => closeUndo.dismissReopenNotice(opportunity.id)}
+                                  compact
+                                />
+                              )}
+                              {isCompactActions && actionError && (
+                                <StudyActionErrorRow
+                                  studyId={opportunity.id}
+                                  message={actionError.message}
+                                  onDismiss={closeUndo.dismissError}
+                                  errorRef={closeUndo.errorRef}
+                                  compact
+                                />
+                              )}
                             </tr>
-                            {/* Close study's notices, in place under the row they
-                                are about (components/StudyRowNotices.tsx). */}
-                            {noticeRow}
-                            {copyNotice?.id === opportunity.id && (
+                            {/* >=1024px only: the desktop table keeps each notice as its
+                                own full-width sibling row, in place under the row it is
+                                about (components/StudyRowNotices.tsx). */}
+                            {!isCompactActions && noticeRow}
+                            {!isCompactActions && copyNotice?.id === opportunity.id && (
                               <CopyNoticeRow
                                 message={copyNotice.message}
                                 tone={copyNotice.tone}
@@ -1634,7 +2054,22 @@ const Admin: React.FC = () => {
                                 actionRef={copyRetryRef}
                               />
                             )}
-                            {actionError && (
+                            {/* Reopen's own announcement, the
+                                way Copy's does - CopyNoticeRow itself, role=status, no
+                                Retry. Rendered under the study's row, which sorts on its
+                                pre-reopen (closed) snapshot while the notice is up, the
+                                same freeze Close gives its own row (see `reopenSnapshot`
+                                above) - so the row, and this notice, stay under the
+                                reader rather than jumping to their live sort position. */}
+                            {!isCompactActions && closeUndo.reopenNotice?.id === opportunity.id && (
+                              <CopyNoticeRow
+                                studyId={opportunity.id}
+                                message={`Reopened “${closeUndo.reopenNotice.title}”`}
+                                tone="status"
+                                onDismiss={() => closeUndo.dismissReopenNotice(opportunity.id)}
+                              />
+                            )}
+                            {!isCompactActions && actionError && (
                               <StudyActionErrorRow
                                 studyId={opportunity.id}
                                 message={actionError.message}
