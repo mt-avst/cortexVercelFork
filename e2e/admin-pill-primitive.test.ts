@@ -490,7 +490,13 @@ test.describe('admin studies table pills share one box (#142)', () => {
       return {
         sideGap: a.left - s.right,
         belowGap: a.top - s.bottom,
-        sameLine: Math.abs(a.top - s.top) < 1,
+        // Same line means their vertical ranges overlap, not that their tops
+        // match exactly - the status pill (24px) and the marker (16px) can
+        // sit side by side, centred differently, and still share a line. A
+        // strict top-to-top compare reads that as "stacked" and then measures
+        // a negative, nonsensical "gap" between two elements that overlap
+        // horizontally instead.
+        sameLine: a.top < s.bottom && s.top < a.bottom,
       };
     });
 

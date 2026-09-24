@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 
-import { CLOSE_UNDO_MS, failureMessage, useCloseStudyUndo } from '../useCloseStudyUndo';
+import { CLOSE_UNDO_MS, failureMessage, isFullyInViewport, isInViewport, useCloseStudyUndo } from '../useCloseStudyUndo';
 import { updateOpportunity } from '../../api/client';
 import type { Opportunity } from '../../api/types';
 
@@ -72,6 +72,60 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+});
+
+/** A real element with a given bounding rect, for isInViewport/isFullyInViewport. */
+const elementAt = (rect: Partial<DOMRect>): HTMLElement => {
+  const el = document.createElement('a');
+  vi.spyOn(el, 'getBoundingClientRect').mockReturnValue({
+    top: 0, bottom: 0, left: 0, right: 0, width: 0, height: 0, x: 0, y: 0, toJSON: () => ({}),
+    ...rect,
+  } as DOMRect);
+  return el;
+};
+
+describe('isInViewport / isFullyInViewport (#160 follow-up)', () => {
+  const ORIGINAL_INNER_HEIGHT = window.innerHeight;
+  beforeEach(() => {
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
+  });
+  afterEach(() => {
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: ORIGINAL_INNER_HEIGHT });
+  });
+
+  it('an element with no box at all (not laid out, e.g. in a test DOM) counts as on screen for both', () => {
+    const el = elementAt({ width: 0, height: 0 });
+    expect(isInViewport(el)).toBe(true);
+    expect(isFullyInViewport(el)).toBe(true);
+  });
+
+  it('isInViewport counts ANY overlap - straddling either edge is still "in view"', () => {
+    expect(isInViewport(elementAt({ top: -10, bottom: 10, width: 50, height: 20 }))).toBe(true);
+    expect(isInViewport(elementAt({ top: 790, bottom: 810, width: 50, height: 20 }))).toBe(true);
+    expect(isInViewport(elementAt({ top: -30, bottom: -10, width: 50, height: 20 }))).toBe(false);
+    expect(isInViewport(elementAt({ top: 810, bottom: 830, width: 50, height: 20 }))).toBe(false);
+  });
+
+  it('isFullyInViewport requires BOTH edges on screen - straddling either edge fails it (the #160 bug)', () => {
+    // Straddles the bottom edge: isInViewport would say "on screen", but this
+    // is exactly the automatic-focus target isFullyInViewport must refuse.
+    expect(isFullyInViewport(elementAt({ top: 790, bottom: 810, width: 50, height: 20 }))).toBe(false);
+    // Straddles the top edge.
+    expect(isFullyInViewport(elementAt({ top: -10, bottom: 10, width: 50, height: 20 }))).toBe(false);
+    // Comfortably inside both edges.
+    expect(isFullyInViewport(elementAt({ top: 100, bottom: 120, width: 50, height: 20 }))).toBe(true);
+  });
+
+  it('respects a custom topBoundary - the sticky thead bottom edge, when it is currently stuck', () => {
+    // A title sitting at y=50-70 is fully in the plain viewport (topBoundary
+    // 0), but painted OVER by a thead stuck with its own bottom edge at 80.
+    const title = elementAt({ top: 50, bottom: 70, width: 100, height: 20 });
+    expect(isFullyInViewport(title, 0)).toBe(true);
+    expect(isFullyInViewport(title, 80)).toBe(false);
+    // Below the stuck header's bottom edge, it is reachable again.
+    const lowerTitle = elementAt({ top: 90, bottom: 110, width: 100, height: 20 });
+    expect(isFullyInViewport(lowerTitle, 80)).toBe(true);
+  });
 });
 
 describe('useCloseStudyUndo', () => {
@@ -572,5 +626,179 @@ describe('useCloseStudyUndo', () => {
     expect(onStatusChanged).not.toHaveBeenCalled();
     expect(setTimeoutSpy.mock.calls.some(([, ms]) => ms === 8000)).toBe(false);
     setTimeoutSpy.mockRestore();
+  });
+
+  /**
+   * Reopen: reachable from the row menu at any time on a closed study (C-M5),
+   * not only while that study's own Undo notice is up - the page hides the
+   * menu item then (Admin.tsx, "exactly one live control ... at a time"), so
+   * these exercise the hook directly, the way the page's own gate cannot.
+   */
+  describe('Reopen (C-M5)', () => {
+    it('PATCHes published, reports it, and shows a "Reopened" success notice with the pre-reopen snapshot', async () => {
+      const { result, onStatusChanged } = setup();
+      const x = study('x', 'Study X');
+      await act(async () => {
+        await result.current.reopenStudy(x);
+      });
+      expect(vi.mocked(updateOpportunity)).toHaveBeenCalledWith('x', { status: 'published' });
+      expect(onStatusChanged).toHaveBeenCalledWith('x', 'published');
+      expect(result.current.reopenNotice).toEqual({ id: 'x', title: 'Study X', snapshot: x });
+      expect(result.current.reopeningId).toBeNull();
+    });
+
+    it('clears a stale action error for the same study on a successful Reopen', async () => {
+      vi.mocked(updateOpportunity).mockRejectedValueOnce(new Error('first attempt failed'));
+      const { result } = setup();
+      await act(async () => {
+        await result.current.reopenStudy(study('x', 'Study X'));
+      });
+      expect(result.current.actionError?.id).toBe('x');
+
+      vi.mocked(updateOpportunity).mockResolvedValueOnce({} as never);
+      await act(async () => {
+        await result.current.reopenStudy(study('x', 'Study X'));
+      });
+      expect(result.current.actionError).toBeNull();
+      expect(result.current.reopenNotice?.id).toBe('x');
+    });
+
+    it("a Close clears that study's own stale Reopened notice (C-M5a) - the two must never show together", async () => {
+      const { result } = setup();
+      await act(async () => {
+        await result.current.reopenStudy(study('x', 'Study X'));
+      });
+      expect(result.current.reopenNotice?.id).toBe('x');
+
+      await act(async () => {
+        await result.current.closeStudy(study('x', 'Study X'));
+      });
+      expect(result.current.reopenNotice).toBeNull();
+      expect(result.current.notice?.id).toBe('x');
+    });
+
+    it('the sort stays frozen on the pre-reopen snapshot while the notice is up (C-M5c)', async () => {
+      const { result } = setup();
+      const beforeReopen = study('x', 'Study X');
+      await act(async () => {
+        await result.current.reopenStudy(beforeReopen);
+      });
+      // Admin.tsx sorts on this exact object while the notice is up, the way
+      // Close's own `frozenSnapshot` holds the row still under Close/Undo.
+      expect(result.current.reopenNotice?.snapshot).toBe(beforeReopen);
+    });
+
+    it('Dismiss hands focus to the in-view neighbour, captured before the notice goes, and takes a scroll hold (C-M5b/R3-H3)', async () => {
+      const captureNeighbours = vi.fn(() => ['next-row', 'previous-row']);
+      const { result, focusStudy } = setup(captureNeighbours);
+      await act(async () => {
+        await result.current.reopenStudy(study('x', 'Study X'));
+      });
+      expect(result.current.holdScroll).toBe(true);
+
+      act(() => {
+        result.current.dismissReopenNotice('x');
+      });
+      expect(captureNeighbours).toHaveBeenCalledWith('x');
+      expect(result.current.reopenNotice).toBeNull();
+      expect(focusStudy).toHaveBeenCalledWith('x', ['next-row', 'previous-row']);
+      expect(result.current.holdScroll).toBe(true);
+    });
+
+    it('an unattended lapse (8000ms) mirrors Dismiss: neighbours captured first, then the same hand-off', async () => {
+      const captureNeighbours = vi.fn(() => ['next-row']);
+      const { result, focusStudy } = setup(captureNeighbours);
+      vi.useFakeTimers();
+      await act(async () => {
+        await result.current.reopenStudy(study('x', 'Study X'));
+      });
+
+      act(() => {
+        vi.advanceTimersByTime(8000);
+      });
+      expect(result.current.reopenNotice).toBeNull();
+      expect(captureNeighbours).toHaveBeenCalledWith('x');
+      expect(focusStudy).toHaveBeenCalledWith('x', ['next-row']);
+      expect(result.current.holdScroll).toBe(true);
+    });
+
+    it('a lapse does nothing once the notice has already been dismissed (no double focus hand-off)', async () => {
+      const { result, focusStudy } = setup();
+      vi.useFakeTimers();
+      await act(async () => {
+        await result.current.reopenStudy(study('x', 'Study X'));
+      });
+      act(() => {
+        result.current.dismissReopenNotice('x');
+      });
+      focusStudy.mockClear();
+
+      act(() => {
+        vi.advanceTimersByTime(8000);
+      });
+      expect(focusStudy).not.toHaveBeenCalled();
+    });
+
+    it("a refusal (the publish guard, e.g. a 400) shows under the study's row, with NO anchor - unlike Undo's refusal, the row is already live", async () => {
+      vi.mocked(updateOpportunity).mockRejectedValueOnce({
+        response: { data: { error: 'This study has no upcoming session and cannot be reopened.' } },
+      });
+      const { result } = setup();
+      const { errorBox, cleanupEls } = attachRefs(result.current);
+      await act(async () => {
+        await result.current.reopenStudy(study('x', 'Study X'));
+      });
+      expect(result.current.actionError).toEqual({
+        id: 'x',
+        title: 'Study X',
+        message: 'Could not reopen “Study X”: This study has no upcoming session and cannot be reopened.',
+      });
+      expect(result.current.actionError?.anchor).toBeUndefined();
+      expect(result.current.reopenNotice).toBeNull();
+      expect(document.activeElement).toBe(errorBox);
+      cleanupEls();
+    });
+
+    it('guards per study: a second Reopen of the same study while the first is in flight sends only one PATCH', async () => {
+      const first = deferred<unknown>();
+      vi.mocked(updateOpportunity).mockReturnValue(first.promise as never);
+      const { result } = setup();
+      let a!: Promise<void>;
+      let b!: Promise<void>;
+      act(() => {
+        a = result.current.reopenStudy(study('x'));
+        b = result.current.reopenStudy(study('x'));
+      });
+      expect(result.current.reopeningId).toBe('x');
+      await act(async () => {
+        first.resolve({});
+        await Promise.all([a, b]);
+      });
+      expect(vi.mocked(updateOpportunity)).toHaveBeenCalledTimes(1);
+    });
+
+    it('an unattended lapse leaves focus alone, and does not call focusStudy, while it sits somewhere other than the body/study/notice (round 4 guard, M-1a)', async () => {
+      const { result, focusStudy } = setup();
+      vi.useFakeTimers();
+      await act(async () => {
+        await result.current.reopenStudy(study('x', 'Study X'));
+      });
+      expect(result.current.reopenNotice?.id).toBe('x');
+      // The reader moves on and types into an unrelated input - not the
+      // body, not the study's own row, not inside the notice - AFTER the
+      // success path's own (expected) focus hand-off above.
+      const input = document.createElement('input');
+      document.body.append(input);
+      input.focus();
+      expect(document.activeElement, 'setup: the input holds focus').toBe(input);
+      focusStudy.mockClear();
+      act(() => {
+        vi.advanceTimersByTime(8000);
+      });
+      expect(result.current.reopenNotice, 'the notice still clears on schedule').toBeNull();
+      expect(focusStudy, 'the reader was mid-typing elsewhere - the lapse must not steal focus').not.toHaveBeenCalled();
+      expect(document.activeElement, 'focus stays in the input').toBe(input);
+      input.remove();
+    });
   });
 });

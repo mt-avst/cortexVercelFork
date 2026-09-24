@@ -15,13 +15,17 @@
   justify-content: space-between;
   gap: 1rem;
   flex-wrap: wrap;
-  margin-bottom: 1.5rem;
+  /* Matches the Feedback and Bookings tab panels' own heading rows
+     (admin-feedback.css ".admin-feedback-head", _components.css
+     ".admin-bookings-head") - was 1.5rem/1.25rem here alone, so switching
+     tabs shifted the table underneath by the difference. */
+  margin-bottom: 1rem;
 }
 
 .pending-approvals__heading {
   margin: 0;
   color: var(--text-primary);
-  font-size: 1.25rem;
+  font-size: 0.95rem;
   font-weight: 600;
 }
 

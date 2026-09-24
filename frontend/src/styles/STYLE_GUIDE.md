@@ -235,7 +235,7 @@ All display, flex, and spacing utilities have responsive variants:
 ### Stat Cards
 
 ```html
-<div class="card stat-card admin-stat-card">
+<div class="card stat-card">
   <div class="card-body stat-card-body">
     <div class="stat-card-header">
       <span class="stat-label">Label</span>

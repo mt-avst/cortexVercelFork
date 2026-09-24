@@ -349,18 +349,34 @@ for (const theme of THEMES) {
       const failures: string[] = [];
       for (const width of [390, 1023, 1024, 1100, 1279, 1280, 1440]) {
         await resizeTo(page, width);
+        // Below 576, the Sort by field lives inside the phone Filters
+        // disclosure (`.admin-phone-filters__panel`), closed by default -
+        // "reachable" means opening it, the same one interaction a reader
+        // takes, not literally on screen already.
+        if (width < 576) {
+          const toggle = page.locator('.admin-phone-filters__toggle');
+          await expect(toggle, `${width}px: phone Filters toggle`).toBeVisible({ timeout: 3000 });
+          if ((await toggle.getAttribute('aria-expanded')) !== 'true') {
+            await toggle.click({ timeout: 3000 });
+            await expect(toggle, `${width}px: phone Filters toggle expanded`).toHaveAttribute('aria-expanded', 'true', {
+              timeout: 3000,
+            });
+          }
+        }
         const reachable = await page.evaluate((aliases) => {
           const p = window.__adminProbe;
           const fromHeaders = p
             .headerCells()
             .filter((th) => th.querySelector('button') && p.shown(th.querySelector('button')))
             .map((th) => p.norm(th.textContent));
-          const control = document.querySelector('.admin-card-sort');
-          const select = control?.querySelector('select');
-          const fromControl =
-            select && p.shown(control) && p.shown(select)
-              ? [...select.options].map((o) => aliases[p.norm(o.textContent)] ?? p.norm(o.textContent))
-              : [];
+          // `.admin-card-sort` (>=576px) or `#cardSortField` inside the now-open
+          // phone panel (<576px) - mutually exclusive, never both in the DOM.
+          const select = document.querySelector<HTMLSelectElement>(
+            '.admin-card-sort select, #cardSortField'
+          );
+          const fromControl = select && p.shown(select)
+            ? [...select.options].map((o) => aliases[p.norm(o.textContent)] ?? p.norm(o.textContent))
+            : [];
           return [...new Set([...fromHeaders, ...fromControl])].sort();
         }, SORT_OPTION_ALIASES);
         if (JSON.stringify(reachable) !== JSON.stringify(SORT_FIELDS)) {
