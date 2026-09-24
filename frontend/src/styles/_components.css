@@ -8708,6 +8708,28 @@ body.theme-light .booking-badge-survey {
   flex-shrink: 0;
 }
 
+/* Below 576px the title and a labelled Refresh do not fit on one row (390px:
+   Refresh wrapped between the title and its subtitle), so the button shows
+   only its icon. The label stays in the accessibility tree, so the button is
+   still named "Refresh". */
+@media (max-width: 575.98px) {
+  .my-bookings-refresh-btn {
+    gap: 0;
+  }
+
+  .my-bookings-refresh-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}
+
 .my-bookings-title {
   margin: 0;
   line-height: 1.2;

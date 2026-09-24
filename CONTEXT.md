@@ -29,6 +29,10 @@ Drawable window and actionable session added 2026-09-01 after #95 and #62.
   poll/survey vs usability studies). The two vocabularies never mix - see ADR-0001.
 - **Participant** / **Researcher** / **Admin** - the three actor roles. "Researcher admin"
   in older docs means researcher.
+- **Create & Manage** - the researcher workspace at `/admin`, where researchers create, run
+  and review studies. A page name, not a role: it was "Admin" or "the dashboard" until #169.
+- **Participate** - the participant study list at `/`, where people find studies to take part
+  in. It was "Browse studies" until #169. Both names live in `shared/pageNames.ts`.
 - **Step** - one unit of a study a participant moves through. Which types are authorable is
   governed by `authorableStepTypes` - never widen it casually (ADR-0001).
 - **Ponytail** - a deliberate simplification with a known ceiling, marked with a

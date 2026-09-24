@@ -71,7 +71,7 @@ describe('OpportunityAnalytics permission state (row 8)', () => {
     expect(screen.queryByRole('button', { name: /Retry/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Try Again/i })).not.toBeInTheDocument();
     // Back stays live.
-    expect(screen.getByRole('button', { name: /Back to Admin Dashboard/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Back to Create & Manage$/i })).toBeInTheDocument();
   });
 
   it('renders the transport-error state (with Retry) for a non-permission failure', async () => {
@@ -80,5 +80,7 @@ describe('OpportunityAnalytics permission state (row 8)', () => {
 
     expect(await screen.findByRole('button', { name: /Retry/i })).toBeInTheDocument();
     expect(screen.queryByText(/Dana Owner/)).not.toBeInTheDocument();
+    // #169: this state has its own Back button, separate from the refused one.
+    expect(screen.getByRole('button', { name: /^Back to Create & Manage$/ })).toBeInTheDocument();
   });
 });

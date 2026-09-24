@@ -9,6 +9,7 @@ import { SurveyRunner } from "../components/survey/SurveyRunner";
 import useDocumentTitle from "../hooks/useDocumentTitle";
 import { buildParticipantReturnUrl } from "../lib/recording/participant-return";
 import { Icon } from "../components/ui";
+import { PARTICIPATE } from "@shared/pageNames";
 
 /**
  * The participant surface for a native poll or survey, at `/survey/:token`.
@@ -24,7 +25,7 @@ import { Icon } from "../components/ui";
  * header nav, no footer feedback form stacked under an in-progress answer.
  * Unlike the recording surface, this is NOT a trap - a survey carries no
  * in-progress capture a stray click could cost, and this page supplies its
- * own explicit "Back to Cortex" exit (below) rather than relying on the
+ * own explicit "Back to Participate" exit (below) rather than relying on the
  * chrome that used to sit around it. There is also no ambient `<main>`
  * landmark once the chrome is gone, so this page supplies its own.
  */
@@ -107,7 +108,7 @@ export default function SurveySession() {
         </div>
         <Link to="/" className="btn btn-outline-secondary mt-3">
           <Icon icon={ArrowLeft} size={16} aria-hidden="true" className="me-1" />
-          Back to Cortex
+          Back to {PARTICIPATE}
         </Link>
       </main>
     );
@@ -148,7 +149,7 @@ export default function SurveySession() {
         ) : (
           <Link to="/" className="btn btn-outline-secondary">
             <Icon icon={ArrowLeft} size={16} aria-hidden="true" className="me-1" />
-          Back to Cortex
+          Back to {PARTICIPATE}
           </Link>
         )}
       </main>
@@ -163,7 +164,7 @@ export default function SurveySession() {
           meant to trap anyone. */}
       <Link to="/" className="btn btn-outline-secondary mb-3">
         <Icon icon={ArrowLeft} size={16} aria-hidden="true" className="me-1" />
-          Back to Cortex
+          Back to {PARTICIPATE}
       </Link>
       <SurveyRunner payload={payload} onComplete={() => setComplete(true)} />
     </main>

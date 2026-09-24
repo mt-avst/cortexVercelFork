@@ -58,6 +58,8 @@ describe('Studies page - task list vocabulary', () => {
     expect(
       await screen.findByRole('heading', { name: 'Task Lists' })
     ).toBeInTheDocument();
+    // #169: the way back names the researcher workspace by its new name.
+    expect(screen.getByRole('link', { name: 'Back to Create & Manage' })).toHaveAttribute('href', '/admin');
     expect(
       screen.getByRole('link', { name: 'New Task List' })
     ).toBeInTheDocument();

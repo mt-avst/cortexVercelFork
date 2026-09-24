@@ -101,3 +101,14 @@ describe('the notification-toggle success banner timer', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 });
+
+describe('the way back (#169)', () => {
+  it('names the researcher workspace Create & Manage', async () => {
+    render(
+      <MemoryRouter>
+        <Settings />
+      </MemoryRouter>
+    );
+    expect(await screen.findByRole('button', { name: /^Back to Create & Manage$/ })).toBeInTheDocument();
+  });
+});

@@ -450,19 +450,20 @@ describe('Collapsing phone menu', () => {
     expect(menu.getByRole('link', { name: /My bookings/i })).toBeInTheDocument();
   });
 
-  it('carries an admin to the dashboard from inside the menu', () => {
+  it('carries an admin to Create & Manage from inside the menu (#169)', () => {
     const { container } = renderFor('researcher_admin', '/');
     const menu = openMenu(container);
 
-    expect(menu.getByRole('link', { name: /^Admin$/ })).toBeInTheDocument();
+    expect(menu.getByRole('link', { name: /^Create & Manage$/ })).toHaveAttribute('href', '/admin');
     expect(menu.getByRole('link', { name: /Settings/i })).toBeInTheDocument();
   });
 
-  it('offers an admin Browse Studies from inside the menu while on an admin page', () => {
+  it('offers an admin Participate from inside the menu while on an admin page (#169)', () => {
     const { container } = renderFor('researcher_admin', '/admin');
     const menu = openMenu(container);
 
-    expect(menu.getByRole('link', { name: /Browse Studies/i })).toBeInTheDocument();
+    expect(menu.getByRole('link', { name: /^Participate$/ })).toHaveAttribute('href', '/');
+    expect(menu.queryByRole('link', { name: /Browse Studies/i })).not.toBeInTheDocument();
   });
 
   it('gives a signed-out visitor only the theme toggle, no menu button', () => {
@@ -531,7 +532,7 @@ describe('My bookings link (#165)', () => {
     const { container } = renderFor(role, path);
     fireEvent.click(within(container).getByRole('button', { name: 'Menu' }));
     const menu = container.querySelector('.header-actions--mobile .dropdown-menu') as HTMLElement;
-    const names = role === 'employee' ? [/^My bookings$/, /Submit Research Request/] : [/^My bookings$/, path === '/admin' ? /^Browse Studies$/ : /^Admin$/];
+    const names = role === 'employee' ? [/^My bookings$/, /Submit Research Request/] : [/^My bookings$/, path === '/admin' ? /^Participate$/ : /^Create & Manage$/];
     for (const name of names) {
       expect(within(menu).getByRole('link', { name }).querySelector('svg'), `${name} icon`).not.toBeNull();
     }

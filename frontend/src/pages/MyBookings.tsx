@@ -19,6 +19,7 @@ import ConfirmationModal from '../components/ConfirmationModal';
 import { Button, Card, CardBody, CardFooter, Alert, Spinner } from '../components/ui';
 import { ArrowLeft, RefreshCw, ExternalLink, CalendarX, Monitor } from 'lucide-react';
 import { isPublishableExternalLink } from '@shared/firsthand/url-safety';
+import { PARTICIPATE } from '@shared/pageNames';
 
 const MyBookings: React.FC = () => {
   useDocumentTitle('My bookings · Cortex');
@@ -273,10 +274,10 @@ const MyBookings: React.FC = () => {
             variant="outline-secondary"
             className="my-bookings-back-btn"
             onClick={() => navigate('/')}
-            title="Back to studies"
+            title={`Back to ${PARTICIPATE}`}
           >
             <ArrowLeft size={16} />
-            Back to studies
+            Back to {PARTICIPATE}
           </Button>
           <div className="my-bookings-header-content">
             <div className="my-bookings-title-row">
@@ -288,8 +289,8 @@ const MyBookings: React.FC = () => {
                 disabled={loading}
                 title="Refresh bookings"
               >
-                <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-                Refresh
+                <RefreshCw size={16} className={loading ? 'animate-spin' : ''} aria-hidden="true" />
+                <span className="my-bookings-refresh-label">Refresh</span>
               </Button>
             </div>
             <p className="my-bookings-subtitle">Manage your study bookings</p>
@@ -313,7 +314,7 @@ const MyBookings: React.FC = () => {
               <CardBody className="empty-state-container">
                 <CalendarX size={48} className="empty-state-icon" />
                 <h3 className="empty-state-title">No upcoming sessions</h3>
-                <p className="empty-state-subtitle">Browse the Cortex dashboard to find studies to participate in.</p>
+                <p className="empty-state-subtitle">Find a study to take part in on {PARTICIPATE}.</p>
                 <Button
                   variant="primary"
                   onClick={() => navigate('/')}

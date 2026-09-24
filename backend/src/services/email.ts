@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import { logger } from '../utils/logger';
+import { CREATE_AND_MANAGE } from '../../../shared/pageNames';
 
 export interface EmailTemplate {
   subject: string;
@@ -540,7 +541,7 @@ This is an automated reminder from the Adaptalabs Impact Lab.
         </div>
         
         <p>You can manage your opportunities at:</p>
-        <p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/admin" style="color: #007bff;">Admin Dashboard</a></p>
+        <p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/admin" style="color: #007bff;">${this.e(CREATE_AND_MANAGE)}</a></p>
         
         <hr style="margin: 30px 0; border: none; border-top: 1px solid #dee2e6;">
         <p style="color: #6c757d; font-size: 14px;">
@@ -560,7 +561,7 @@ Participant: ${participantName} (${participantEmail})
 Action: ${action === 'booked' ? 'Booked' : 'Cancelled'}
 
 You can manage your opportunities at:
-${process.env.FRONTEND_URL || 'http://localhost:3000'}/admin
+${CREATE_AND_MANAGE}: ${process.env.FRONTEND_URL || 'http://localhost:3000'}/admin
 
 This is an automated notification from the Adaptalabs Impact Lab.
     `;

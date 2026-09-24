@@ -21,7 +21,7 @@ This guide will help you create and manage research opportunities on AdaptaLabs.
 6. [Polls and Surveys Answered in Cortex](#polls-and-surveys-answered-in-cortex)
 7. [Consent](#consent)
 8. [Publishing Opportunities](#publishing-opportunities)
-9. [Dashboard and Analytics](#dashboard-and-analytics)
+9. [Create & Manage and Analytics](#create-manage-and-analytics)
 10. [Settings](#settings)
 11. [Managing Bookings](#managing-bookings)
 12. [Tips and Best Practices](#tips-and-best-practices)
@@ -33,15 +33,15 @@ This guide will help you create and manage research opportunities on AdaptaLabs.
 ### Accessing Admin Features
 
 1. Sign in with your admin account
-2. Click **"Admin"** in the header (or go to `/admin`)
-3. You'll see the admin dashboard
+2. Click **"Create & Manage"** in the header (or go to `/admin`)
+3. You'll see the Create & Manage page, where you create and run your studies
 
-Below 992px wide, the header folds into one menu button: Admin, Browse Studies, My bookings and the profile items are all inside it.
+Below 992px wide, the header folds into one menu button: Create & Manage, Participate, My bookings and the profile items are all inside it.
 **My bookings** is in every signed-in header, so you can get back to sessions you have booked in other people's studies.
 
-### Admin Dashboard Overview
+### Create & Manage Overview
 
-The dashboard shows, top to bottom:
+The page shows, top to bottom:
 - **Needs attention**: broken studies, completion reports waiting for approval and studies closing soon, each with a link that takes you to them
 - **Operational snapshot**: active studies, participants, sessions this week and open slots. It counts your own studies; **Show all researchers** widens it to everyone's
 - **Four tabs**: Research Studies, Completion Approvals, Feedback and Bookings. See [Research Studies table](#research-studies-table) below
@@ -74,12 +74,12 @@ An opportunity you are **editing** opens with its steps already marked, because 
 
 Two controls used to look almost identical and do very different things. They are now named apart:
 
-- **Exit to dashboard**, at the top of the page, leaves the form. If you have unsaved changes it asks first, and you can choose to stay
+- **Exit to Create & Manage**, at the top of the page, leaves the form. If you have unsaved changes it asks first, and you can choose to stay
 - **Previous: {step name}**, at the bottom of every step after the first, goes back one step and names where it is going - *Previous: Task List*, *Previous: Basic Info*
 
 ### Step 1: Start Creating
 
-1. Go to Admin Dashboard
+1. Go to **Create & Manage**
 2. Click **"Create New Opportunity"** button
 3. You'll see the opportunity form
 
@@ -145,7 +145,7 @@ The next step is the study's advert copy:
 
 ### Adding Sessions to Existing Opportunities
 
-1. Go to Admin Dashboard
+1. Go to **Create & Manage**
 2. Find the opportunity
 3. Click **"Edit"**
 4. Scroll to Sessions section
@@ -197,7 +197,7 @@ Use a **Live session** or **Interview** instead when you need to be in the room.
 
 ### Step 1: Create the opportunity
 
-1. Go to Admin Dashboard
+1. Go to **Create & Manage**
 2. Click **"Create New Opportunity"**
 3. On the **Study type** step, choose **🖥️ Recorded session** (under Async studies)
 4. Fill in Title and Purpose on the **Basic Information** step
@@ -495,9 +495,9 @@ The panel does not appear on a draft or a closed opportunity, because neither ca
 
 ---
 
-## Dashboard and Analytics
+## Create & Manage and Analytics
 
-### Dashboard Statistics
+### Create & Manage Statistics
 
 The operational snapshot shows four figures for your studies (or every researcher's, with **Show all researchers**):
 - **Active studies**: published and draft studies
@@ -621,7 +621,7 @@ As an admin, you can cancel bookings:
 
 ### Duplicating Opportunities
 
-1. Go to Admin Dashboard
+1. Go to **Create & Manage**
 2. Find the opportunity
 3. Click **"Duplicate"** button
 4. A new draft opportunity is created with:
@@ -634,7 +634,7 @@ As an admin, you can cancel bookings:
 
 ### Deleting Opportunities
 
-1. Go to Admin Dashboard
+1. Go to **Create & Manage**
 2. Find the opportunity
 3. Click **"Delete"** button
 4. Confirm deletion
@@ -674,7 +674,7 @@ Closed sessions:
 2. **Capacity Planning**: Set realistic capacity limits
 3. **Location Details**: Always include meeting links or locations
 4. **Buffer Time**: Leave time between sessions if needed
-5. **Monitor Bookings**: Check dashboard regularly
+5. **Monitor Bookings**: Check Create & Manage regularly
 
 ### Communication
 

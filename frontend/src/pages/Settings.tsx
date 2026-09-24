@@ -6,6 +6,7 @@ import { logger } from '../utils/logger';
 import AdminManagement from '../components/AdminManagement';
 import { Card, CardHeader, CardBody, Alert, Spinner } from '../components/ui';
 import { ArrowLeft, UserCog, Bell, AlertTriangle, CheckCircle, MailCheck, MailX } from 'lucide-react';
+import { CREATE_AND_MANAGE } from '@shared/pageNames';
 
 const Settings: React.FC = () => {
   const { user, loading, initialAuthCheck } = useAuth();
@@ -120,7 +121,7 @@ const Settings: React.FC = () => {
                   onClick={() => navigate('/admin')}
                 >
                   <ArrowLeft size={16} className="me-2" />
-                  Back to Dashboard
+                  Back to {CREATE_AND_MANAGE}
                 </button>
                 <h1 className="h4 mb-0">Settings</h1>
               </div>
