@@ -7,6 +7,7 @@ import ConsentStateChip from '../components/ConsentStateChip';
 import { Alert, Card, CardBody, StatusBadge, type StatusType } from '../components/ui';
 import { isStudyReadOnly } from '../utils/studyOwnership';
 import { formatDateTime } from '../utils/datetime';
+import { CREATE_AND_MANAGE } from '../lib/pageNames';
 import type { FirstHandStudy } from '../api/types';
 
 /**
@@ -96,7 +97,7 @@ const Studies: React.FC = () => {
   return (
     <div className="py-4">
       <Link className="btn btn-link px-0 mb-3" to="/admin">
-        Back to admin
+        Back to {CREATE_AND_MANAGE}
       </Link>
 
       {/*

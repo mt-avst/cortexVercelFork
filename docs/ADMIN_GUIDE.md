@@ -33,15 +33,15 @@ This guide will help you create and manage research opportunities on AdaptaLabs.
 ### Accessing Admin Features
 
 1. Sign in with your admin account
-2. Click **"Admin"** in the header (or go to `/admin`)
-3. You'll see the admin dashboard
+2. Click **"Create & Manage"** in the header (or go to `/admin`)
+3. You'll see the Create & Manage page, where you create and run your studies
 
-Below 992px wide, the header folds into one menu button: Admin, Browse Studies, My bookings and the profile items are all inside it.
+Below 992px wide, the header folds into one menu button: Create & Manage, Participate, My bookings and the profile items are all inside it.
 **My bookings** is in every signed-in header, so you can get back to sessions you have booked in other people's studies.
 
-### Admin Dashboard Overview
+### Create & Manage Overview
 
-The dashboard shows, top to bottom:
+The page shows, top to bottom:
 - **Needs attention**: broken studies, completion reports waiting for approval and studies closing soon, each with a link that takes you to them
 - **Operational snapshot**: active studies, participants, sessions this week and open slots. It counts your own studies; **Show all researchers** widens it to everyone's
 - **Four tabs**: Research Studies, Completion Approvals, Feedback and Bookings. See [Research Studies table](#research-studies-table) below
@@ -79,7 +79,7 @@ Two controls used to look almost identical and do very different things. They ar
 
 ### Step 1: Start Creating
 
-1. Go to Admin Dashboard
+1. Go to **Create & Manage**
 2. Click **"Create New Opportunity"** button
 3. You'll see the opportunity form
 
@@ -145,7 +145,7 @@ The next step is the study's advert copy:
 
 ### Adding Sessions to Existing Opportunities
 
-1. Go to Admin Dashboard
+1. Go to **Create & Manage**
 2. Find the opportunity
 3. Click **"Edit"**
 4. Scroll to Sessions section
@@ -197,7 +197,7 @@ Use a **Live session** or **Interview** instead when you need to be in the room.
 
 ### Step 1: Create the opportunity
 
-1. Go to Admin Dashboard
+1. Go to **Create & Manage**
 2. Click **"Create New Opportunity"**
 3. On the **Study type** step, choose **🖥️ Recorded session** (under Async studies)
 4. Fill in Title and Purpose on the **Basic Information** step
@@ -621,7 +621,7 @@ As an admin, you can cancel bookings:
 
 ### Duplicating Opportunities
 
-1. Go to Admin Dashboard
+1. Go to **Create & Manage**
 2. Find the opportunity
 3. Click **"Duplicate"** button
 4. A new draft opportunity is created with:
@@ -634,7 +634,7 @@ As an admin, you can cancel bookings:
 
 ### Deleting Opportunities
 
-1. Go to Admin Dashboard
+1. Go to **Create & Manage**
 2. Find the opportunity
 3. Click **"Delete"** button
 4. Confirm deletion

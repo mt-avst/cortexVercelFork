@@ -19,6 +19,7 @@ import SessionsTab from '../components/opportunity-analytics/SessionsTab';
 import ParticipantsTab from '../components/opportunity-analytics/ParticipantsTab';
 import { useBookingArtifacts } from '../components/opportunity-analytics/useBookingArtifacts';
 import { ArrowLeft, Info } from 'lucide-react';
+import { CREATE_AND_MANAGE } from '../lib/pageNames';
 
 // Width reserved for the y-axis value labels, left of the plot area.
 const BAR_CHART_Y_AXIS_WIDTH = 30;
@@ -515,7 +516,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
               onClick={() => navigate('/admin')}
             >
               <ArrowLeft size={16} className="me-2" />
-              Back to Admin Dashboard
+              Back to {CREATE_AND_MANAGE}
             </button>
             <ErrorState
               title="Analytics are owner-only"
@@ -542,7 +543,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
               onClick={() => navigate('/admin')}
             >
               <ArrowLeft size={16} className="me-2" />
-              Back to Admin Dashboard
+              Back to {CREATE_AND_MANAGE}
             </button>
             <ErrorState
               title="Unable to Load Analytics"

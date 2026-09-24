@@ -192,7 +192,7 @@ Follow the **`docs/END_TO_END_TESTING_CHECKLIST.md`** step-by-step.
 **Goal**: Verify admin can create opportunities
 
 1. Sign in as admin
-2. Go to Admin Dashboard
+2. Go to Create & Manage
 3. Click "Create New Opportunity"
 4. Fill in:
    - Type: Test
@@ -219,7 +219,7 @@ Follow the **`docs/END_TO_END_TESTING_CHECKLIST.md`** step-by-step.
 3. Click "Open Poll" or "Open Survey"
 4. Verify external link opens
 5. Sign in as admin
-6. Go to Admin Dashboard
+6. Go to Create & Manage
 7. Find the poll/survey
 8. Check "Clicks" column shows 1
 9. Click "Analytics"

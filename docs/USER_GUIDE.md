@@ -51,7 +51,7 @@ A direct link to a specific study will open without signing in, but you'll need 
 
 ### Viewing All Opportunities
 
-- The home page shows all available opportunities
+- The **Participate** page (the home page) shows all available opportunities
 - Each opportunity card shows:
   - **Type**: Live session, Recorded session, Poll, Survey, Interview or One question
   - **Title**: Name of the opportunity

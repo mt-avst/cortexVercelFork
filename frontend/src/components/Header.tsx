@@ -6,6 +6,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import LoadingSpinner from './LoadingSpinner';
 import ConfirmationModal from './ConfirmationModal';
 import { requestAdminAccess } from '../api/client';
+import { CREATE_AND_MANAGE, PARTICIPATE } from '../lib/pageNames';
 import { Dropdown, DropdownItem, DropdownDivider, DropdownHeader } from './ui';
 import CortexMark from './CortexMark';
 import {
@@ -182,7 +183,7 @@ const Header: React.FC = memo(() => {
         myBookings,
         <GuardedLink key="admin" to="/admin" className={primary}>
           <LayoutDashboard size={16} className="me-2" aria-hidden="true" />
-          Admin
+          {CREATE_AND_MANAGE}
         </GuardedLink>,
       ];
     }
@@ -195,7 +196,7 @@ const Header: React.FC = memo(() => {
             menu's text-x drift (the squashed ShieldPlus icon, fixed above
             with `flex-shrink: 0`, was the first). */}
         <List size={16} className="me-2" aria-hidden="true" />
-        Browse Studies
+        {PARTICIPATE}
       </GuardedLink>,
     ];
   };
