@@ -131,7 +131,7 @@ A direct link to a specific study will open without signing in, but you'll need 
 
 ### Viewing Your Bookings
 
-1. Click **"My Bookings"** in the header (when logged in)
+1. Click **"My Bookings"** in the header (when logged in). Below 992px wide it is inside the header's menu button
 2. You'll see:
    - **Upcoming bookings**: sessions still to come
    - **Past bookings**: sessions that have happened
