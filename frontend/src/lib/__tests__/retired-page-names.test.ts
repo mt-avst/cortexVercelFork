@@ -101,7 +101,7 @@ describe('retired page names (#169)', () => {
     for (const a of ALLOWED) {
       expect(scanned, `${a.file} is not a file the scan reads - fix or delete the ALLOWED entry`).toContain(a.file);
       const source = readFileSync(join(REPO, a.file), 'utf8');
-      expect(literalTexts(source, a.file.endsWith('.tsx')), `${a.file}: "${a.text}" is gone - delete the ALLOWED entry`).toContain(a.text);
+      expect(literalTexts(source, a.file.endsWith('.tsx')), `${a.file}: "${a.text}" is gone - fix or delete the ALLOWED entry`).toContain(a.text);
       expect(RETIRED.some((re) => re.test(a.text)), `${a.file}: "${a.text}" matches no RETIRED pattern - delete the ALLOWED entry`).toBe(true);
     }
   });
