@@ -21,7 +21,7 @@ This guide will help you create and manage research opportunities on AdaptaLabs.
 6. [Polls and Surveys Answered in Cortex](#polls-and-surveys-answered-in-cortex)
 7. [Consent](#consent)
 8. [Publishing Opportunities](#publishing-opportunities)
-9. [Create & Manage and Analytics](#create--manage-and-analytics)
+9. [Create & Manage and Analytics](#create-manage-and-analytics)
 10. [Settings](#settings)
 11. [Managing Bookings](#managing-bookings)
 12. [Tips and Best Practices](#tips-and-best-practices)

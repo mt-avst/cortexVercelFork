@@ -449,9 +449,11 @@ async function toggleShowAll(page: Page, expectedRows: number): Promise<void> {
   const toggle = page.getByRole('button', { name: 'Show all researchers' });
   const next = (await toggle.getAttribute('aria-pressed')) === 'true' ? 'false' : 'true';
   await toggle.click({ timeout: 3000 });
-  // Wait on the toggle itself, not only the row count: when both scopes serve
-  // the same number of rows the count matches before the refetch has even
-  // started, and a caller that measured straight away read the list mid-load.
+  // Confirms the click registered. It does NOT prove the scope=all list has
+  // reloaded: aria-pressed flips on click, before the refetch. Where both
+  // scopes serve the same number of rows the count below cannot tell either,
+  // so a caller that measures straight after must poll its own measurement
+  // (see "owner at 390", the one caller in that position today).
   await expect(toggle, 'Show all researchers pressed state').toHaveAttribute('aria-pressed', next, { timeout: 3000 });
   await expect(rows(page), 'rows after Show all researchers').toHaveCount(expectedRows, { timeout: 5000 });
 }

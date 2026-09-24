@@ -21,8 +21,8 @@ Only two suites are meaningful here, and one of them cannot fully pass:
 | `npm run test:smoke` | 7 passed, 2 skipped | read-only, tolerates the signed-out view |
 | `npm run test:a11y:prod` | 11 passed, **3 failed** | the three failures are the Okta-gated pages |
 
-The three accessibility failures are **not** accessibility defects. Admin
-Dashboard, Forms and My Bookings navigate to the Okta sign-in page mid-scan,
+The three accessibility failures are **not** accessibility defects. Create &
+Manage (the "Admin Dashboard" spec), Forms and My Bookings navigate to the Okta sign-in page mid-scan,
 which destroys the axe execution context. Testing them needs a stored
 authenticated storage state, which nobody has set up. `test:a11y:prod`
 therefore exits non-zero by design until that exists.
