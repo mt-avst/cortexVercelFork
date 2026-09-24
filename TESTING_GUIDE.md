@@ -21,8 +21,8 @@ Only two suites are meaningful here, and one of them cannot fully pass:
 | `npm run test:smoke` | 7 passed, 2 skipped | read-only, tolerates the signed-out view |
 | `npm run test:a11y:prod` | 11 passed, **3 failed** | the three failures are the Okta-gated pages |
 
-The three accessibility failures are **not** accessibility defects. Admin
-Dashboard, Forms and My Bookings navigate to the Okta sign-in page mid-scan,
+The three accessibility failures are **not** accessibility defects. Create &
+Manage (the "Admin Dashboard" spec), Forms and My Bookings navigate to the Okta sign-in page mid-scan,
 which destroys the axe execution context. Testing them needs a stored
 authenticated storage state, which nobody has set up. `test:a11y:prod`
 therefore exits non-zero by design until that exists.
@@ -192,7 +192,7 @@ Follow the **`docs/END_TO_END_TESTING_CHECKLIST.md`** step-by-step.
 **Goal**: Verify admin can create opportunities
 
 1. Sign in as admin
-2. Go to Admin Dashboard
+2. Go to Create & Manage
 3. Click "Create New Opportunity"
 4. Fill in:
    - Type: Test
@@ -219,7 +219,7 @@ Follow the **`docs/END_TO_END_TESTING_CHECKLIST.md`** step-by-step.
 3. Click "Open Poll" or "Open Survey"
 4. Verify external link opens
 5. Sign in as admin
-6. Go to Admin Dashboard
+6. Go to Create & Manage
 7. Find the poll/survey
 8. Check "Clicks" column shows 1
 9. Click "Analytics"
@@ -273,7 +273,7 @@ Follow the **`docs/END_TO_END_TESTING_CHECKLIST.md`** step-by-step.
 - [ ] Open on mobile device
 - [ ] Test navigation
 - [ ] Test booking flow
-- [ ] Test admin dashboard
+- [ ] Test Create & Manage
 - [ ] Verify buttons are clickable
 - [ ] Check text readability
 

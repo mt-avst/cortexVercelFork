@@ -63,7 +63,7 @@ const LocationProbe: React.FC = () => (
 
 /**
  * Header and form under ONE provider, the way `AppChromeLayout` mounts them.
- * On an admin page the Header renders a "Browse Studies" link to '/', which is
+ * On an admin page the Header renders a "Participate" link to '/', which is
  * the header navigation this test drives.
  */
 const renderWithHeader = () =>
@@ -82,7 +82,7 @@ const renderWithHeader = () =>
   );
 
 const headerBrowseLink = () =>
-  screen.getAllByRole('link', { name: /Browse Studies/i })[0];
+  screen.getAllByRole('link', { name: /^Participate$/i })[0];
 
 // Title lives on the Basic Info step now, split out of the Study type step
 // (D1/D3 reshape), so making the form dirty means choosing a type and walking
@@ -145,7 +145,7 @@ describe('the Header links respect the form guard (WZ-13)', () => {
     // On the next page a header link must navigate freely - the unmounted
     // form's guard is gone. Delete the cleanup and this click is intercepted by
     // the stale guard instead, so the destination never renders.
-    fireEvent.click(screen.getByRole('link', { name: /^Admin$/i }));
+    fireEvent.click(screen.getByRole('link', { name: /^Create & Manage$/i }));
     await waitFor(() => expect(screen.getByText('Admin page')).toBeInTheDocument());
     expect(screen.queryByText(/Leave without saving\?/i)).not.toBeInTheDocument();
   });

@@ -150,6 +150,18 @@ beforeEach(() => {
 });
 
 describe('Admin page', () => {
+  // #169: the researcher workspace is named for what researchers do there.
+  // The route stays /admin; only the visible name changed. Literals on
+  // purpose - a test that read the name from the same constant as the page
+  // could not see the name change.
+  it('names the page Create & Manage in its heading and the tab title (#169)', async () => {
+    renderAdmin();
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Create & Manage' })).toBeInTheDocument();
+    expect(document.title).toBe('Create & Manage · Cortex');
+    expect(screen.queryByRole('heading', { level: 1, name: 'Admin' })).not.toBeInTheDocument();
+  });
+
   it('renders the dashboard for a researcher_admin: header actions, stats and the opportunities row', async () => {
     renderAdmin();
 

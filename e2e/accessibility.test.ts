@@ -212,7 +212,7 @@ test.describe('Accessibility Tests', () => {
     
     // Wait for page to load (use 'load' not 'networkidle' - production often has ongoing requests)
     await page.waitForLoadState('load');
-    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Browse studies' }), page.getByText('Accessibility Test Opportunity').first());
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Participate' }), page.getByText('Accessibility Test Opportunity').first());
     
     // Run accessibility check
     const accessibilityScanResults = await new AxeBuilder({ page }).analyze();
@@ -234,7 +234,7 @@ test.describe('Accessibility Tests', () => {
     
     await page.reload();
     await page.waitForLoadState('load');
-    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Browse studies' }), page.getByText('Accessibility Test Opportunity').first());
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Participate' }), page.getByText('Accessibility Test Opportunity').first());
     
     const accessibilityScanResults = await new AxeBuilder({ page }).analyze();
     
@@ -298,7 +298,7 @@ test.describe('Accessibility Tests', () => {
 
     await page.goto('/admin');
     await page.waitForLoadState('load');
-    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Admin' }), page.locator('.admin-data-table tbody tr').first());
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Create & Manage' }), page.locator('.admin-data-table tbody tr').first());
 
     const accessibilityScanResults = await new AxeBuilder({ page }).analyze();
 
@@ -384,7 +384,7 @@ test.describe('Accessibility Tests', () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/admin');
     await page.waitForLoadState('load');
-    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Admin' }), page.locator('.admin-data-table td.col-actions').first());
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Create & Manage' }), page.locator('.admin-data-table td.col-actions').first());
 
     // The studies table must have reflowed to cards (a real table would carry
     // its intrinsic min-width and re-open the horizontal scroll).
@@ -826,7 +826,7 @@ test.describe('Accessibility Tests', () => {
   test('Header navigation should be accessible', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('load');
-    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Browse studies' }), page.getByText('Accessibility Test Opportunity').first());
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Participate' }), page.getByText('Accessibility Test Opportunity').first());
     
     // Test header specifically
     const header = page.locator('header');
@@ -851,7 +851,7 @@ test.describe('Accessibility Tests', () => {
   test('Skip link should be functional', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('load');
-    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Browse studies' }), page.getByText('Accessibility Test Opportunity').first());
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Participate' }), page.getByText('Accessibility Test Opportunity').first());
     
     // Check if skip link exists
     const skipLink = page.locator('a.skip-link');
@@ -885,7 +885,7 @@ test.describe('Accessibility Tests', () => {
   test('Keyboard navigation should work', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('load');
-    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Browse studies' }), page.getByText('Accessibility Test Opportunity').first());
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Participate' }), page.getByText('Accessibility Test Opportunity').first());
     
     // Tab through interactive elements
     await page.keyboard.press('Tab');
@@ -899,7 +899,7 @@ test.describe('Accessibility Tests', () => {
   test('Color contrast should meet WCAG AA standards', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('load');
-    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Browse studies' }), page.getByText('Accessibility Test Opportunity').first());
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Participate' }), page.getByText('Accessibility Test Opportunity').first());
     
     // Check accessibility with color contrast rules
     const accessibilityScanResults = await new AxeBuilder({ page })
@@ -912,7 +912,7 @@ test.describe('Accessibility Tests', () => {
   test('Images should have alt text', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('load');
-    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Browse studies' }), page.getByText('Accessibility Test Opportunity').first());
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Participate' }), page.getByText('Accessibility Test Opportunity').first());
     
     // Check image accessibility
     const images = page.locator('img');
@@ -929,7 +929,7 @@ test.describe('Accessibility Tests', () => {
   test('Form inputs should have labels', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('load');
-    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Browse studies' }), page.getByText('Accessibility Test Opportunity').first());
+    await expectRendered(page, page.getByRole('heading', { level: 1, name: 'Participate' }), page.getByText('Accessibility Test Opportunity').first());
     
     // Check form accessibility
     const inputs = page.locator('input[type="text"], input[type="email"], input[type="number"], select, textarea');
@@ -1155,6 +1155,28 @@ test.describe('Accessibility Tests', () => {
     await expect(page.locator('.booking-card-empty')).toHaveCount(2);
     const results = await new AxeBuilder({ page }).analyze();
     expectNoViolations(results, 'My Bookings (empty)');
+  });
+
+  test('My Bookings keeps its title and Refresh on one row at 390px, with the subtitle under the title', async ({ page }) => {
+    // At 390px "My bookings" and a labelled Refresh button did not fit on one
+    // row, so Refresh wrapped BETWEEN the title and its subtitle. Below 576px
+    // the button shows only its icon; its accessible name is still "Refresh".
+    await page.setViewportSize({ width: 390, height: 844 });
+    await stubParticipant(page, { upcoming: [], past: [] }, []);
+    await page.goto('/');
+    await page.evaluate(() => sessionStorage.setItem('loginRedirect', 'true'));
+    await page.goto('/my-bookings');
+    const title = page.getByRole('heading', { level: 1, name: 'My bookings' });
+    const refresh = page.getByRole('button', { name: 'Refresh' });
+    await expectRendered(page, title, refresh);
+
+    const t = (await title.boundingBox())!;
+    const r = (await refresh.boundingBox())!;
+    const sub = (await page.locator('.my-bookings-subtitle').boundingBox())!;
+    expect(r.y, 'Refresh starts inside the title row').toBeLessThan(t.y + t.height);
+    expect(r.x, 'Refresh sits to the right of the title').toBeGreaterThanOrEqual(t.x + t.width);
+    expect(r.x + r.width, 'Refresh stays on screen').toBeLessThanOrEqual(390);
+    expect(sub.y, 'the subtitle follows the whole row').toBeGreaterThanOrEqual(Math.max(t.y + t.height, r.y + r.height));
   });
 
   test('My Bookings page (populated) should be accessible', async ({ page }) => {

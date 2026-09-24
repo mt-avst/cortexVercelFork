@@ -7,6 +7,7 @@
 //   through to lift out.
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import useDocumentTitle from '../hooks/useDocumentTitle';
+import { CREATE_AND_MANAGE } from '@shared/pageNames';
 import { Link, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { getOpportunities, deleteOpportunity, duplicateOpportunity, getDashboardStats, DashboardStats, exportBookingsCsv, getPendingApprovals, getFeedback } from '../api/client';
@@ -106,7 +107,7 @@ const Admin: React.FC = () => {
   }, [isPhone]);
   // Each page names itself in the browser tab; the "· Cortex" lock-up lives here
   // (the tab has no persistent header) rather than repeating in the on-page title.
-  useDocumentTitle('Admin · Cortex');
+  useDocumentTitle(`${CREATE_AND_MANAGE} · Cortex`);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -818,7 +819,7 @@ const Admin: React.FC = () => {
             <div className="card-header card-header-transparent">
               <div className="admin-header-section">
                 <div>
-                  <h1 className="mb-1 cortex-page-title">Admin</h1>
+                  <h1 className="mb-1 cortex-page-title">{CREATE_AND_MANAGE}</h1>
                   <p className="admin-subtitle">Manage research studies, bookings, and participant feedback</p>
                 </div>
                 <div className="admin-table-actions">

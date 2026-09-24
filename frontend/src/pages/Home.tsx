@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import useDocumentTitle from '../hooks/useDocumentTitle';
+import { PARTICIPATE } from '@shared/pageNames';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { getOpportunities } from '../api/client';
 import { Opportunity } from '../api/types';
@@ -48,7 +49,7 @@ const Home: React.FC = memo(() => {
 
   // Signed-out visitors on "/" get the Landing hero, not this browse view, so
   // their tab reads the brand; signed-in, it names the page they are on.
-  useDocumentTitle(user ? 'Browse studies · Cortex' : 'Cortex');
+  useDocumentTitle(user ? `${PARTICIPATE} · Cortex` : 'Cortex');
 
   const presentationListing =
     import.meta.env.VITE_PRESENTATION_LISTING === 'true';
@@ -221,7 +222,7 @@ const Home: React.FC = memo(() => {
           <div className="container mt-4" style={{ position: 'relative', zIndex: 10 }}>
             <div className="row" style={{ marginBottom: 'var(--spacing-section)' }}>
               <div className="col-12">
-                <h1 className="mb-3 cortex-page-title" style={{ fontSize: '3.25rem' }}>Browse studies</h1>
+                <h1 className="mb-3 cortex-page-title" style={{ fontSize: '3.25rem' }}>{PARTICIPATE}</h1>
 
               {/* Welcome text */}
               <div className="home-intro-text">

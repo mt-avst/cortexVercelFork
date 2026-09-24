@@ -144,6 +144,7 @@ import { formatClockTime } from '../utils/datetime';
 
 import { CreateOpportunityRequest, UpdateOpportunityRequest, Opportunity, Session, Screener, ScreenerQuestion } from '../api/types';
 import { TrendingUp, AlertTriangle, CheckCircle, LogOut, Calendar } from 'lucide-react';
+import { CREATE_AND_MANAGE } from '@shared/pageNames';
 
 /**
  * Unmoderated studies run with logged-in Cortex users, so an external
@@ -4163,7 +4164,7 @@ const OpportunityForm: React.FC = () => {
       setError(
         overlapMessage
           ? `${overlapMessage.replace(/\.$/, '')}. The study was saved but its time slots were not - change the times on the Session Management step and save again.`
-          : 'The study was saved but its time slots were not. Add them from the dashboard.'
+          : `The study was saved but its time slots were not. Add them from ${CREATE_AND_MANAGE}.`
       );
       /*
        * Reported to the CALLER, not only to `setError`.
@@ -5344,7 +5345,7 @@ const OpportunityForm: React.FC = () => {
                 onClick={() => requestExit('/admin')}
               >
                 <LogOut size={16} className="me-1" />
-                Exit to dashboard
+                Exit to {CREATE_AND_MANAGE}
               </button>
               {/* Analytics for every study TYPE, once published - the
                   analytics page renders an Overview for all types and is the
@@ -5502,7 +5503,7 @@ const OpportunityForm: React.FC = () => {
                     className={`btn btn-sm ${successMessage.includes('DRAFT') ? 'btn-outline-warning' : 'btn-outline-success'}`}
                     onClick={() => navigate('/admin', { state: { refresh: true, timestamp: Date.now() } })}
                   >
-                    Return to Dashboard
+                    Return to {CREATE_AND_MANAGE}
                   </button>
                 </div>
               )}
