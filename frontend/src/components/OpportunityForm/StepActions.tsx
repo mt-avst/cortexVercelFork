@@ -157,10 +157,10 @@ const StepActions: React.FC<StepActionsProps> = ({
       a utility class here would always win over the narrower gap this row
       needs at its tightest width, and only `!important` could take it
       back - the one thing this block is written to need nowhere. No
-      `justify-content` utility either - the primary control's own
-      `margin-inline-start: auto` (`_components.css`) is what gives the row
-      its right edge, whatever else it does or doesn't render beside it, so
-      there is nothing left for a `space-between` to do.
+      `justify-content` utility either - an auto inline-start margin on the
+      primary control (or on Save, where Save exists - see
+      `_components.css`) gives the row its right edge, so there is nothing
+      left for a `space-between` to do.
     */}
     <div className="step-actions__row d-flex align-items-center">
       {onPrevious ? (

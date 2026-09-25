@@ -14196,9 +14196,10 @@ body.theme-light .btn-ghost-danger {
 
    Every control sizes to its own content and may shrink; nothing here
    guesses a shared floor width or counts how many controls the row has.
-   Two things instead do all the work as the row narrows: the primary
-   control's own `margin-inline-start: auto` gives the row one consistent
-   right edge without a spacer element, and Previous/Save each collapse to
+   Two things instead do all the work as the row narrows: an auto
+   inline-start margin on the primary control (or on Save, where Save
+   exists) gives the row one consistent right edge without a spacer
+   element, and Previous/Save each collapse to
    a fixed 44x44 icon-only square below their own fixed breakpoint - 899px
    for Previous, 719px for Save, measured against each label's own longest
    state, not decided at render time by whether the label currently fits.
@@ -14316,9 +14317,9 @@ body.theme-light .btn-ghost-danger {
 
 /*
  * Where Save exists, the auto margin above has to move to IT instead of
- * staying on the primary: Save is Previous's sibling, not the primary's,
- * so without this the row's only spacer sits between Save and the primary
- * and pushes Save over to sit against Previous on the left, nowhere near
+ * staying on the primary: the spacer sits before whichever element carries
+ * it, so on the primary it would fall between Save and the primary
+ * and push Save over to sit against Previous on the left, nowhere near
  * the button it commits alongside. Moving the spacer to Save closes that
  * gap, and the second rule below cancels the auto margin the first rule on
  * this page would otherwise still put on the primary that immediately

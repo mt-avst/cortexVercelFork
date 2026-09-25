@@ -2422,7 +2422,7 @@ test.describe('Accessibility Tests', () => {
             at(`${control.name} right edge ${control.right} exceeds its card's ${cardBox.right}`)
           ).toBeLessThanOrEqual(cardBox.right + 1);
 
-          // Every control shares one 44px height from the phone floor up
+          // Every control clears the 44px floor from the phone floor up
           // through 899px - not just the 44x44 icon-only squares, but an
           // uncollapsed Save or the primary too.
           if (width <= UNIFORM_HEIGHT_MAX) {
@@ -2714,8 +2714,7 @@ test.describe('Accessibility Tests', () => {
 
   /**
    * #167: `.momentum-table-container` used to clip the Actions column
-   * outright at phone widths (`overflow: hidden` winning by source order
-   * over Bootstrap's own `.table-responsive` on the same element) - the
+   * outright at phone widths (the container's own `overflow: hidden`) - the
    * delete control for a session with no bookings was there in the DOM but
    * never reachable. `overflow-x: auto` on the container is the fix: the
    * table keeps its intrinsic width and the CONTAINER scrolls to reach it,

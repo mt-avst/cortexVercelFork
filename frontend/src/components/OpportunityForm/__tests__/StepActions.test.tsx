@@ -354,7 +354,7 @@ describe('StepActions - Previous keeps its accessible name for the icon-only lay
     const button = screen.getByRole('button', { name: 'Previous: Consent' });
     expect(button).toHaveAttribute('aria-label', 'Previous: Consent');
     // The visible label span is still in the DOM too - CSS alone hides it
-    // below 608px, React never conditionally renders it - so a regression
+    // below 900px, React never conditionally renders it - so a regression
     // that deletes only the ATTRIBUTE cannot hide behind the visible text
     // this same query would otherwise also satisfy.
     expect(button.querySelector('.step-actions__label')).toHaveTextContent('Previous: Consent');
