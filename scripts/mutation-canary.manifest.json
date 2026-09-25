@@ -3142,7 +3142,7 @@
   {
     "id": "admin-progress-native-never-falls-back-to-clicks",
     "why": "cto/AdaptaLabs#162. The Progress cell's response count is a headcount of people who answered; its click count is page views including admin previews, a different and misleading unit, and a native question has no click total to fall back to at all. Dropping the `!nativeSurvey` guard makes `clicks` fall back to `clicks_total` whenever `responses_total` is absent - a failed response-totals batch on the server, say - so a researcher would see a page-view count presented as a response count on the dashboard they use to judge whether a study needs attention. Proven by mutation before entry: reverting this line to fall back on status alone compiles and leaves every other case in the file green; only the named test, whose fixture carries a real `clicks_total` specifically so the dash cannot be explained by having nothing to fall back to, fails.",
-    "file": "frontend/src/pages/Admin.tsx",
+    "file": "frontend/src/components/admin/StudyRow.tsx",
     "anchor": "const clicks = opportunity.status !== 'draft' && !nativeSurvey ? opportunity.clicks_total : undefined;",
     "mutation": "const clicks = opportunity.status !== 'draft' ? opportunity.clicks_total : undefined;",
     "runner": "vitest",
@@ -3153,7 +3153,7 @@
   {
     "id": "admin-progress-line3-empty-checks-responses-undefined",
     "why": "cto/AdaptaLabs#162. The compact card layout collapses the Progress-and-Next line via `data-line3-empty` when it would otherwise show two empty dashes; `line3Empty` names `responses === undefined` explicitly because a native question has no session ratio and no click count by type, so its response count is the only thing that can keep the line open. Dropping that clause makes a published question with a real response count report the line as empty and collapse it under 1024px, hiding the one number that page has to show. Proven by mutation before entry: dropping `responses === undefined &&` from the condition compiles and leaves the paired draft case, whose outcome does not depend on the clause, green; only the named test, asserting the published case carries no `data-line3-empty`, fails.",
-    "file": "frontend/src/pages/Admin.tsx",
+    "file": "frontend/src/components/admin/StudyRow.tsx",
     "anchor": "!recruitment && responses === undefined && clicks === undefined && !milestone;",
     "mutation": "!recruitment && clicks === undefined && !milestone;",
     "runner": "vitest",
