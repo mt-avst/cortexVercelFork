@@ -270,6 +270,18 @@ export interface Opportunity {
   total_booked?: number;
   total_capacity?: number;
   /**
+   * All-time count of distinct participants who have answered at least one
+   * question (cto/AdaptaLabs#162) - the Create & Manage table's Progress
+   * cell's "N responses" for a native (`delivery_mode === 'native'`) poll,
+   * survey or question row, same definition as the analytics Results tab's
+   * "N participants" headline. Admin list responses only, and PRESENT ONLY
+   * for that shape of row: absent for every other type or delivery mode, or
+   * when the server's read of the counts failed or was skipped as busy -
+   * never a fabricated 0. 0 IS a real value here - it means the row is that
+   * shape and has collected no answers yet.
+   */
+  responses_total?: number;
+  /**
    * True when the system closed the study (its end date passed, or its last
    * session ended); false when a researcher closed it by hand, or it is not
    * closed. Set by the server only - no client can write it.

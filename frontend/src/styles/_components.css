@@ -3453,12 +3453,12 @@ body.admin-dashboard-page .main > .container {
   line-height: 18px;
 }
 
-/* Progress: a session study's ratio + bar, or a sessionless study's clicks.
-   Proportional figures here: the count is left-aligned and followed by a
-   word, and Manrope's tabular "1" sits in a full-width slot, so "18 clicks"
-   read as "1 8 clicks". (The ratio and percentage above the bar keep their
-   tabular figures.) */
-.admin-progress-clicks {
+/* Progress: a session study's ratio + bar, or a sessionless study's response
+   or click count (cto/AdaptaLabs#162). Proportional figures here: the count
+   is left-aligned and followed by a word, and Manrope's tabular "1" sits in a
+   full-width slot, so "18 clicks" read as "1 8 clicks". (The ratio and
+   percentage above the bar keep their tabular figures.) */
+.admin-progress-count {
   font-variant-numeric: normal;
   color: var(--text-primary);
 }
