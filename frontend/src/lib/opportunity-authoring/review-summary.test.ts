@@ -186,7 +186,8 @@ describe('buildReviewSummary', () => {
 
     /*
      * #111 moved Status off Basic Information and onto Review as a live
-     * control (`ReviewStep`'s own `<select id="status">`), rather than a
+     * control (`ReviewStep`'s own Draft/Published pods since #167, a
+     * `<select id="status">` before it), rather than a
      * read-only summary row here - `buildReviewSummary` no longer emits a
      * "Status" item in the basics section at all, so an assertion against
      * one can only pass by accident (a missing item reads as `undefined`,

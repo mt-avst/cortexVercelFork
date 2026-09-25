@@ -1721,5 +1721,1083 @@ test.describe('Accessibility Tests', () => {
     const successFill = await resolveColourToken(page, '--status-success');
     expect(contrastRatio(successFill, darkAppBg)).toBeLessThan(4.5);
   });
-});
 
+  /**
+   * #167: no axe scan reached the Review step's
+   * Status pods at all - "Forms should be accessible" above scans step 1 of
+   * a brand-new study, before Review is ever mounted. This mocks a real
+   * edit (a poll with its external link already set, so readiness passes
+   * and no refusal alert competes with the scan) and drives to Review the
+   * same way an author does - the "Review" tab in the steps strip - for a
+   * draft AND a published study, in both themes.
+   */
+  const mockReviewableOpportunity = async (
+    page: import('@playwright/test').Page,
+    status: 'draft' | 'published'
+  ): Promise<void> => {
+    await page.route('**/api/me', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'admin-1',
+          name: 'Admin User',
+          email: 'admin@example.com',
+          role: 'researcher_admin',
+        }),
+      });
+    });
+    await page.route('**/api/opportunities/opp-pods', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'opp-pods',
+          type: 'poll',
+          title: 'Status pods accessibility fixture',
+          purpose_one_liner: 'A purpose long enough to pass validation',
+          description_optional: '',
+          product_optional: '',
+          status,
+          default_duration_minutes: 30,
+          external_link_optional: 'https://example.com/poll',
+          participant_type_required: 'any',
+          can_edit: true,
+        }),
+      });
+    });
+    await page.route('**/api/opportunities/opp-pods/sessions**', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+    });
+  };
+
+  const goToReviewStep = async (page: import('@playwright/test').Page): Promise<void> => {
+    const strip = page.getByRole('navigation', { name: 'Form steps' });
+    await expect(strip).toBeVisible({ timeout: 15000 });
+    await strip.getByRole('button', { name: /Review/ }).click();
+    await page.waitForSelector('[data-testid="review-step"]', { state: 'visible', timeout: 10000 });
+  };
+
+  for (const theme of ['light', 'dark'] as const) {
+    for (const status of ['draft', 'published'] as const) {
+      test(`Review step Status pods are accessible - ${status}, ${theme} mode`, async ({ page }) => {
+        await mockReviewableOpportunity(page, status);
+        await page.goto('/');
+        await page.evaluate((t) => localStorage.setItem('theme', t), theme);
+        await page.goto('/admin/opportunities/opp-pods/edit');
+        await page.waitForLoadState('load');
+        await expect(page.locator(`body.theme-${theme}`)).toHaveCount(1);
+
+        await goToReviewStep(page);
+
+        const group = page.getByRole('radiogroup', { name: 'Status' });
+        await expect(group).toBeVisible();
+        const checkedRadio = page.getByRole('radio', {
+          name: status === 'draft' ? /^Draft/ : /^Published/,
+        });
+        await expect(checkedRadio).toBeChecked();
+
+        const results = await new AxeBuilder({ page }).include('[data-testid="review-step"]').analyze();
+        expectNoViolations(results, `Review step Status pods (${status}, ${theme})`);
+      });
+    }
+  }
+
+  /**
+   * #167: the selected pod's meaning text failed AA in light theme
+   * (measured 4.47:1 on selected Draft, 4.33:1 on selected Published) before
+   * the fix moved it onto `--text-secondary`. jsdom cannot paint
+   * `color-mix()` fills, so this reads the REAL, composited colours a
+   * browser resolved - not the CSS source.
+   *
+   * `getComputedStyle` on a `color-mix()`/`color-mix()`-derived fill does not
+   * resolve to one stable syntax: Chromium returned classic `rgb(r g b)` for
+   * the text, `color(srgb r g b)` (0-1 floats) for the selected Draft pod's
+   * background, and `oklab(l a b / alpha)` WITH a non-1 alpha for the
+   * selected Published pod's background - three different shapes from three
+   * calls to the same `getComputedStyle().color`. A regex over "the numbers
+   * in the string" read the oklab and color() floats as if they were 0-255
+   * integers and reported a false ~2.3:1 for a fill directly remeasured
+   * at 7+:1 - the wrong answer looked exactly like a real failure until the
+   * raw strings were printed. Painting each colour onto a 1x1 canvas and
+   * reading the pixel back sidesteps every syntax the engine might choose,
+   * including alpha compositing, since `CanvasRenderingContext2D.fillStyle`
+   * accepts any valid CSS `<color>` and `getImageData` always returns plain
+   * 0-255 sRGB.
+   */
+  const paintedRGB = async (
+    page: import('@playwright/test').Page,
+    colour: string,
+    overRGB: [number, number, number] = [255, 255, 255]
+  ): Promise<[number, number, number]> =>
+    page.evaluate(
+      ({ colour, overRGB }) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 1;
+        canvas.height = 1;
+        const ctx = canvas.getContext('2d')!;
+        ctx.fillStyle = `rgb(${overRGB[0]}, ${overRGB[1]}, ${overRGB[2]})`;
+        ctx.fillRect(0, 0, 1, 1);
+        ctx.fillStyle = colour;
+        ctx.fillRect(0, 0, 1, 1);
+        const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+        return [r, g, b] as [number, number, number];
+      },
+      { colour, overRGB }
+    );
+
+  test('Selected pod meaning text clears AA contrast in light theme (#167)', async ({ page }) => {
+    await mockReviewableOpportunity(page, 'draft');
+    await page.goto('/');
+    await page.evaluate(() => localStorage.setItem('theme', 'light'));
+    await page.goto('/admin/opportunities/opp-pods/edit');
+    await page.waitForLoadState('load');
+    await expect(page.locator('body.theme-light')).toHaveCount(1);
+    await goToReviewStep(page);
+
+    const readSelectedMeaningContrast = async (label: 'Draft' | 'Published') => {
+      const meaning = page
+        .locator('.status-pod.is-selected .status-pod__meaning')
+        .filter({ hasText: label === 'Draft' ? 'Not visible to users' : 'Visible to users' });
+      await expect(meaning).toBeVisible();
+      const { text, bg, cardBg } = await meaning.evaluate((el) => {
+        const pod = el.closest('.status-pod') as HTMLElement;
+        // The review card behind the pod - what the pod's own (possibly
+        // translucent) fill actually composites against on screen.
+        const card = el.closest('.card, .border.rounded') as HTMLElement | null;
+        return {
+          text: getComputedStyle(el).color,
+          bg: getComputedStyle(pod).backgroundColor,
+          cardBg: card ? getComputedStyle(card).backgroundColor : 'rgb(255, 255, 255)',
+        };
+      });
+      const cardRGB = await paintedRGB(page, cardBg);
+      const podRGB = await paintedRGB(page, bg, cardRGB);
+      const textRGB = await paintedRGB(page, text, podRGB);
+      return contrastRatio(textRGB, podRGB);
+    };
+
+    const draftRatio = await readSelectedMeaningContrast('Draft');
+    expect(
+      draftRatio,
+      `selected Draft pod meaning text measures ${draftRatio.toFixed(2)}:1, below the 4.5 AA floor`
+    ).toBeGreaterThanOrEqual(4.5);
+
+    // Choose Published and measure that fill too - the selected state named both. The
+    // radio itself is visually hidden (clip technique, `StatusPods.tsx`), so
+    // its own `<label>` - the real clickable surface - is what a pointer
+    // actually reaches; clicking the radio locator directly fights
+    // Playwright's actionability check against the label sitting on top of it.
+    await page.locator('label.status-pod').filter({ hasText: 'Published' }).click();
+    const publishedRatio = await readSelectedMeaningContrast('Published');
+    expect(
+      publishedRatio,
+      `selected Published pod meaning text measures ${publishedRatio.toFixed(2)}:1, below the 4.5 AA floor`
+    ).toBeGreaterThanOrEqual(4.5);
+  });
+
+  /**
+   * #167: the poll-type Review step (and the Share card a draft study
+   * shows beneath it) never forces the page to scroll sideways, at the
+   * phone floor and every width either side of the two-button footer's own
+   * collapse boundary. A cheap, type-independent companion to the
+   * interview-type footer invariant matrix below - poll has no Save
+   * Changes shortcut on this row, and reaches Review by a different route,
+   * so this is coverage the matrix does not otherwise give. One earlier
+   * step (Your link) proves the fix is the shared footer row, not
+   * something Review-specific.
+   */
+  const scrollWithinViewport = async (
+    page: import('@playwright/test').Page
+  ): Promise<{ scrollW: number; clientW: number }> =>
+    page.evaluate(() => ({
+      scrollW: document.documentElement.scrollWidth,
+      clientW: document.documentElement.clientWidth,
+    }));
+
+  for (const width of [320, 390, 576, 600, 608] as const) {
+    for (const status of ['draft', 'published'] as const) {
+      test(`Review step has no horizontal scroll at ${width}px (${status})`, async ({ page }) => {
+        await mockReviewableOpportunity(page, status);
+        await page.setViewportSize({ width, height: 844 });
+        await page.goto('/admin/opportunities/opp-pods/edit');
+        await page.waitForLoadState('load');
+        await goToReviewStep(page);
+
+        const { scrollW, clientW } = await scrollWithinViewport(page);
+        expect(
+          scrollW,
+          `document scrollWidth ${scrollW} exceeds the ${width}px viewport (clientWidth ${clientW})`
+        ).toBeLessThanOrEqual(clientW + 1);
+      });
+    }
+
+    test(`Your link step has no horizontal scroll at ${width}px (earlier step, draft)`, async ({ page }) => {
+      await mockReviewableOpportunity(page, 'draft');
+      await page.setViewportSize({ width, height: 844 });
+      await page.goto('/admin/opportunities/opp-pods/edit');
+      await page.waitForLoadState('load');
+      const strip = page.getByRole('navigation', { name: 'Form steps' });
+      await expect(strip).toBeVisible({ timeout: 15000 });
+      await strip.getByRole('button', { name: 'Your link' }).click();
+      await expect(page.getByRole('heading', { name: 'External Link', level: 2 })).toBeVisible();
+
+      const { scrollW, clientW } = await scrollWithinViewport(page);
+      expect(
+        scrollW,
+        `document scrollWidth ${scrollW} exceeds the ${width}px viewport (clientWidth ${clientW})`
+      ).toBeLessThanOrEqual(clientW + 1);
+    });
+  }
+
+  /**
+   * #167: the width-tiered footer model (fixed 608px/480px breakpoints,
+   * 260px floors, `:has()` control counting) was replaced with a handful of
+   * invariants that must hold at every width instead of at tuned tiers:
+   * natural content widths; the primary control filling the row's
+   * remaining space only below 576px, otherwise sitting at its own natural
+   * width with its right edge on the row's own (below 576px and above it
+   * alike, via `margin-inline-start: auto` - no spacer element); Previous
+   * collapsing to a fixed 44x44 icon-only square below 900px and Save
+   * below 720px, Save's accessible name following its state through a
+   * visually-hidden label; at 900px and up Save sitting immediately left
+   * of the primary rather than at the row's far left; every control
+   * sharing one 44px height from 609-899px; the primary's own "X: " prefix
+   * visually hidden below 360px with its accessible name unchanged; every
+   * icon holding its own size rather than shrinking with the row; no label
+   * ever truncated or split mid-word; the row never scrolling the page or
+   * its own card sideways.
+   *
+   * The seven states below are the ones measured directly against a real
+   * build before this model shipped: four on a published, moderated
+   * (interview) study - Basic Info edited (the one step with no Previous
+   * at all), Audience with and without an edit (Previous, Save AND the
+   * primary all real, at the product's longest labels - the row's worst
+   * case), and Session Management - and three on a draft of the same type
+   * - Study type (the first step, neither Previous nor Save), Session
+   * Management, and Review (whose terminal control submits rather than
+   * continuing). Each is checked at every width either side of the CSS's
+   * own 359/360/575/576/608/609/719/720/899/900 boundaries.
+   */
+  const FOOTER_WIDTHS = [
+    320, 359, 360, 390, 480, 575, 576, 608, 609, 700, 719, 720, 740, 800, 899, 900, 1200, 1440,
+  ] as const;
+
+  // The width either side of which each rule switches, named once so the
+  // assertions below read as what they are rather than as bare numbers.
+  const PREVIOUS_COLLAPSE_MAX = 899;
+  const SAVE_COLLAPSE_MAX = 719;
+  const PRIMARY_FILL_MAX = 575;
+  const UNIFORM_HEIGHT_MAX = 899;
+  const PREFIX_HIDE_MAX = 359;
+  const DESKTOP_MIN = 900;
+
+  const FOOTER_PUBLISHED_ID = '0aa00001-0000-4000-8000-000000000005';
+  const FOOTER_DRAFT_ID = 'opp-footer-draft';
+
+  const mockFooterPublishedOpportunity = async (page: import('@playwright/test').Page): Promise<void> => {
+    // Registered first, so checked LAST (Playwright tries routes in reverse
+    // registration order): any mutating call this page makes is aborted
+    // rather than reaching a server, and any GET this test has not named
+    // explicitly gets the same 500 fallback the shared beforeEach uses.
+    await page.route((url) => url.pathname.startsWith('/api/'), async (route) => {
+      if (route.request().method() !== 'GET') {
+        await route.abort();
+        return;
+      }
+      await route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"unmocked GET"}' });
+    });
+    await page.route('**/api/me', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'admin-1',
+          name: 'Admin User',
+          email: 'admin@example.com',
+          role: 'researcher_admin',
+        }),
+      });
+    });
+    await page.route(`**/api/opportunities/${FOOTER_PUBLISHED_ID}`, async (route) => {
+      if (route.request().method() !== 'GET') {
+        await route.abort();
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: FOOTER_PUBLISHED_ID,
+          type: 'interview',
+          title: 'Server to Cloud migration: what actually hurt',
+          purpose_one_liner: 'Talk us through a migration you worked on, including the parts that went badly.',
+          description_optional: '',
+          product_optional: '',
+          meeting_location_optional: 'Google Meet (link sent on booking)',
+          status: 'published',
+          default_duration_minutes: 60,
+          external_link_optional: '',
+          participant_type_required: 'any',
+          target_roles: [],
+          can_edit: true,
+        }),
+      });
+    });
+    await page.route(`**/api/opportunities/${FOOTER_PUBLISHED_ID}/sessions**`, async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+    });
+  };
+
+  const mockFooterDraftOpportunity = async (page: import('@playwright/test').Page): Promise<void> => {
+    await page.route('**/api/me', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'admin-1',
+          name: 'Admin User',
+          email: 'admin@example.com',
+          role: 'researcher_admin',
+        }),
+      });
+    });
+    await page.route(`**/api/opportunities/${FOOTER_DRAFT_ID}`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: FOOTER_DRAFT_ID,
+          type: 'interview',
+          title: 'A moderated study fixture for the footer row',
+          purpose_one_liner: 'A purpose long enough to pass validation',
+          description_optional: '',
+          product_optional: '',
+          meeting_location_optional: 'Google Meet',
+          status: 'draft',
+          default_duration_minutes: 45,
+          external_link_optional: '',
+          participant_type_required: 'any',
+          target_roles: [],
+          can_edit: true,
+        }),
+      });
+    });
+    await page.route(`**/api/opportunities/${FOOTER_DRAFT_ID}/sessions**`, async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+    });
+  };
+
+  const gotoP2E = async (page: import('@playwright/test').Page): Promise<void> => {
+    await mockFooterPublishedOpportunity(page);
+    await page.goto('/');
+    await page.goto(`/admin/opportunities/${FOOTER_PUBLISHED_ID}/edit`);
+    await page.waitForLoadState('load');
+    const strip = page.getByRole('navigation', { name: 'Form steps' });
+    await expect(strip).toBeVisible({ timeout: 15000 });
+    await strip.getByRole('button', { name: 'Basic Info' }).click();
+    await expect(page.getByRole('heading', { name: 'Basic Information', level: 2 })).toBeVisible();
+    await page.locator('#title').fill('Server to Cloud migration: what actually hurt, updated');
+    await expect(page.getByRole('button', { name: 'Save Changes' })).toBeVisible();
+  };
+
+  const gotoP3 = async (page: import('@playwright/test').Page): Promise<void> => {
+    await mockFooterPublishedOpportunity(page);
+    await page.goto('/');
+    await page.goto(`/admin/opportunities/${FOOTER_PUBLISHED_ID}/edit`);
+    await page.waitForLoadState('load');
+    const strip = page.getByRole('navigation', { name: 'Form steps' });
+    await expect(strip).toBeVisible({ timeout: 15000 });
+    await strip.getByRole('button', { name: 'Audience' }).click();
+    await expect(page.getByRole('heading', { name: 'Audience', level: 2 })).toBeVisible();
+  };
+
+  const gotoP3E = async (page: import('@playwright/test').Page): Promise<void> => {
+    await mockFooterPublishedOpportunity(page);
+    await page.goto('/');
+    await page.goto(`/admin/opportunities/${FOOTER_PUBLISHED_ID}/edit`);
+    await page.waitForLoadState('load');
+    const strip = page.getByRole('navigation', { name: 'Form steps' });
+    await expect(strip).toBeVisible({ timeout: 15000 });
+    await strip.getByRole('button', { name: 'Audience' }).click();
+    await expect(page.getByRole('heading', { name: 'Audience', level: 2 })).toBeVisible();
+    await page.locator('#participant_type_required').selectOption('specific');
+    const details = page.locator('#participant_type_specific_details');
+    await expect(details).toBeVisible();
+    // A real keystroke-driven edit, not a value assigned in one step - the
+    // field `hasChanges()` compares is the one an author actually typed
+    // into.
+    await details.pressSequentially('Engineers only');
+    await expect(page.getByRole('button', { name: 'Save Changes' })).toBeVisible();
+  };
+
+  const gotoP4 = async (page: import('@playwright/test').Page): Promise<void> => {
+    await mockFooterPublishedOpportunity(page);
+    await page.goto('/');
+    await page.goto(`/admin/opportunities/${FOOTER_PUBLISHED_ID}/edit`);
+    await page.waitForLoadState('load');
+    const strip = page.getByRole('navigation', { name: 'Form steps' });
+    await expect(strip).toBeVisible({ timeout: 15000 });
+    await strip.getByRole('button', { name: 'Session Management' }).click();
+    await expect(page.getByRole('heading', { name: 'Session Management', level: 2 })).toBeVisible();
+  };
+
+  const gotoD1 = async (page: import('@playwright/test').Page): Promise<void> => {
+    await mockFooterDraftOpportunity(page);
+    await page.goto('/');
+    await page.goto(`/admin/opportunities/${FOOTER_DRAFT_ID}/edit`);
+    await page.waitForLoadState('load');
+    // "Start a study", not "Study type" (StudyTypePicker.tsx): the heading
+    // only reads "Study type" once a PUBLISHED study locks the picker -
+    // this fixture is a draft, so it stays on the interactive picker's own
+    // heading.
+    await expect(page.getByRole('heading', { name: 'Start a study', level: 2 })).toBeVisible();
+  };
+
+  const gotoD4 = async (page: import('@playwright/test').Page): Promise<void> => {
+    await mockFooterDraftOpportunity(page);
+    await page.goto('/');
+    await page.goto(`/admin/opportunities/${FOOTER_DRAFT_ID}/edit`);
+    await page.waitForLoadState('load');
+    const strip = page.getByRole('navigation', { name: 'Form steps' });
+    await expect(strip).toBeVisible({ timeout: 15000 });
+    await strip.getByRole('button', { name: 'Session Management' }).click();
+    await expect(page.getByRole('heading', { name: 'Session Management', level: 2 })).toBeVisible();
+  };
+
+  const gotoD6 = async (page: import('@playwright/test').Page): Promise<void> => {
+    await mockFooterDraftOpportunity(page);
+    await page.goto('/');
+    await page.goto(`/admin/opportunities/${FOOTER_DRAFT_ID}/edit`);
+    await page.waitForLoadState('load');
+    const strip = page.getByRole('navigation', { name: 'Form steps' });
+    await expect(strip).toBeVisible({ timeout: 15000 });
+    await strip.getByRole('button', { name: /Review/ }).click();
+    await page.waitForSelector('[data-testid="review-step"]', { state: 'visible', timeout: 10000 });
+  };
+
+  interface FooterControlBox {
+    name: string;
+    width: number;
+    height: number;
+    left: number;
+    right: number;
+    label: {
+      scrollWidth: number;
+      clientWidth: number;
+      overflowWrap: string;
+      wordBreak: string;
+      firstLineTop: number | null;
+      firstLineBottom: number | null;
+    } | null;
+    icon: { top: number; bottom: number; width: number; height: number } | null;
+    // The primary's "X: " prefix, split into its own span and visually
+    // hidden below 360px (accessible name unchanged - it stays in the DOM,
+    // clipped rather than removed). Null on a control with no such span
+    // (Previous, Save, and a primary whose label has no ": " to split).
+    prefixVisuallyHidden: boolean | null;
+  }
+
+  interface FooterRowMetrics {
+    row: { left: number; right: number; width: number };
+    card: { left: number; right: number } | null;
+    docScrollW: number;
+    docClientW: number;
+    previous: FooterControlBox | null;
+    save: FooterControlBox | null;
+    primary: FooterControlBox | null;
+  }
+
+  const measureFooterRow = async (page: import('@playwright/test').Page): Promise<FooterRowMetrics | null> =>
+    page.evaluate(() => {
+      const rowEl = document.querySelector('.step-actions .d-flex') as HTMLElement | null;
+      if (!rowEl) return null;
+      const cardEl = rowEl.closest('.card') as HTMLElement | null;
+      const rowRect = rowEl.getBoundingClientRect();
+      const cardRect = cardEl ? cardEl.getBoundingClientRect() : null;
+
+      // A clip-technique element (position: absolute, collapsed to ~1x1) is
+      // still in the accessible tree but contributes nothing to what a
+      // sighted reader sees - true of Save's hidden label today and of the
+      // primary's hidden "X: " prefix. Detected by geometry/positioning
+      // rather than by class name, so this keeps working whichever element
+      // carries the technique.
+      const isClippedFromView = (el: Element): boolean => {
+        const r = el.getBoundingClientRect();
+        return getComputedStyle(el).position === 'absolute' && r.width <= 1 && r.height <= 1;
+      };
+
+      const describe = (el: Element | null) => {
+        if (!el) return null;
+        const buttonEl = el as HTMLElement;
+        const rect = buttonEl.getBoundingClientRect();
+        const label = buttonEl.querySelector('.step-actions__label') as HTMLElement | null;
+        const icon = buttonEl.querySelector('svg') as SVGElement | null;
+        let labelInfo = null;
+        let prefixVisuallyHidden: boolean | null = null;
+        if (label) {
+          const style = getComputedStyle(label);
+          const prefix = label.querySelector('.step-actions__label-prefix');
+          if (prefix) {
+            prefixVisuallyHidden = isClippedFromView(prefix);
+          }
+          let firstLineTop: number | null = null;
+          let firstLineBottom: number | null = null;
+          const walker = document.createTreeWalker(label, NodeFilter.SHOW_TEXT, {
+            acceptNode: (node) => {
+              const parent = node.parentElement;
+              if (parent && isClippedFromView(parent)) {
+                return NodeFilter.FILTER_SKIP;
+              }
+              return NodeFilter.FILTER_ACCEPT;
+            },
+          });
+          const textNode = walker.nextNode();
+          if (textNode && textNode.textContent && textNode.textContent.trim().length > 0) {
+            const range = document.createRange();
+            range.setStart(textNode, 0);
+            range.setEnd(textNode, Math.min(4, textNode.textContent.length));
+            const r = range.getBoundingClientRect();
+            firstLineTop = r.top;
+            firstLineBottom = r.bottom;
+          }
+          labelInfo = {
+            scrollWidth: label.scrollWidth,
+            clientWidth: label.clientWidth,
+            overflowWrap: style.overflowWrap,
+            wordBreak: style.wordBreak,
+            firstLineTop,
+            firstLineBottom,
+          };
+        }
+        let iconInfo = null;
+        if (icon) {
+          const r = icon.getBoundingClientRect();
+          iconInfo = { top: r.top, bottom: r.bottom, width: r.width, height: r.height };
+        }
+        return {
+          name: buttonEl.getAttribute('aria-label') || (buttonEl.textContent || '').trim(),
+          width: rect.width,
+          height: rect.height,
+          prefixVisuallyHidden,
+          left: rect.left,
+          right: rect.right,
+          label: labelInfo,
+          icon: iconInfo,
+        };
+      };
+
+      return {
+        row: { left: rowRect.left, right: rowRect.right, width: rowRect.width },
+        card: cardRect ? { left: cardRect.left, right: cardRect.right } : null,
+        docScrollW: document.documentElement.scrollWidth,
+        docClientW: document.documentElement.clientWidth,
+        previous: describe(rowEl.querySelector('.step-actions__previous')),
+        save: describe(rowEl.querySelector('.step-actions__save')),
+        primary: describe(rowEl.lastElementChild),
+      };
+    });
+
+  const FOOTER_STATES: Array<{
+    name: string;
+    description: string;
+    goto: (page: import('@playwright/test').Page) => Promise<void>;
+    hasPrevious: boolean;
+    previousLabel?: string;
+    hasSave: boolean;
+    primaryName: string;
+  }> = [
+    {
+      name: 'P2E',
+      description: 'published, Basic Info edited',
+      goto: gotoP2E,
+      hasPrevious: false,
+      hasSave: true,
+      primaryName: 'Continue: Audience',
+    },
+    {
+      name: 'P3',
+      description: 'published, Audience, no edit',
+      goto: gotoP3,
+      hasPrevious: true,
+      previousLabel: 'Basic Info',
+      hasSave: false,
+      primaryName: 'Continue: Session Management',
+    },
+    {
+      name: 'P3E',
+      description: 'published, Audience, edited',
+      goto: gotoP3E,
+      hasPrevious: true,
+      previousLabel: 'Basic Info',
+      hasSave: true,
+      primaryName: 'Continue: Session Management',
+    },
+    {
+      name: 'P4',
+      description: 'published, Session Management, no edit',
+      goto: gotoP4,
+      hasPrevious: true,
+      previousLabel: 'Audience',
+      hasSave: false,
+      primaryName: 'Continue: Consent',
+    },
+    {
+      name: 'D1',
+      description: 'draft, Study type (first step)',
+      goto: gotoD1,
+      hasPrevious: false,
+      hasSave: false,
+      primaryName: 'Continue: Basic Info',
+    },
+    {
+      name: 'D4',
+      description: 'draft, Session Management',
+      goto: gotoD4,
+      hasPrevious: true,
+      previousLabel: 'Audience',
+      hasSave: false,
+      primaryName: 'Continue: Consent',
+    },
+    {
+      name: 'D6',
+      description: 'draft, Review (submits)',
+      goto: gotoD6,
+      hasPrevious: true,
+      previousLabel: 'Consent',
+      hasSave: false,
+      primaryName: 'Save changes',
+    },
+  ];
+
+  for (const state of FOOTER_STATES) {
+    test(`the step footer (${state.name}: ${state.description}) holds every invariant from 320-1440px`, async ({
+      page,
+    }) => {
+      await state.goto(page);
+
+      for (const width of FOOTER_WIDTHS) {
+        await page.setViewportSize({ width, height: 900 });
+        const m = await measureFooterRow(page);
+        const at = (msg: string): string => `${state.name} at ${width}px: ${msg}`;
+        expect(m, at('the footer row never rendered')).not.toBeNull();
+        const { row, card, docScrollW, docClientW, previous, save, primary } = m as FooterRowMetrics;
+        expect(card, at('no .card ancestor was found for the footer row')).not.toBeNull();
+        const cardBox = card as NonNullable<typeof card>;
+
+        // The row never forces the page to scroll sideways.
+        expect(
+          docScrollW,
+          at(`document scrollWidth ${docScrollW} exceeds the viewport (clientWidth ${docClientW})`)
+        ).toBeLessThanOrEqual(docClientW + 1);
+
+        // Exactly the controls this state has, no more and no fewer.
+        expect(Boolean(previous), at('Previous rendered when it should not have, or the reverse')).toBe(
+          state.hasPrevious
+        );
+        expect(Boolean(save), at('Save Changes rendered when it should not have, or the reverse')).toBe(
+          state.hasSave
+        );
+        expect(primary, at('the primary control never rendered')).not.toBeNull();
+        const primaryBox = primary as FooterControlBox;
+        expect(
+          primaryBox.name,
+          at(`primary control reads "${primaryBox.name}", not "${state.primaryName}"`)
+        ).toBe(state.primaryName);
+
+        const controls = [previous, save, primary].filter((c): c is FooterControlBox => c !== null);
+        for (const control of controls) {
+          // Every control stays inside the row, and inside whichever card
+          // contains it.
+          expect(
+            control.right,
+            at(`${control.name} right edge ${control.right} exceeds the row's ${row.right}`)
+          ).toBeLessThanOrEqual(row.right + 1);
+          expect(
+            control.left,
+            at(`${control.name} left edge ${control.left} is left of the row's ${row.left}`)
+          ).toBeGreaterThanOrEqual(row.left - 1);
+          expect(
+            control.right,
+            at(`${control.name} right edge ${control.right} exceeds its card's ${cardBox.right}`)
+          ).toBeLessThanOrEqual(cardBox.right + 1);
+
+          // Every control clears the 44px floor from the phone floor up
+          // through 899px - not just the 44x44 icon-only squares, but an
+          // uncollapsed Save or the primary too.
+          if (width <= UNIFORM_HEIGHT_MAX) {
+            expect(
+              control.height,
+              at(`${control.name} height ${control.height} is below the 44px touch target`)
+            ).toBeGreaterThanOrEqual(44);
+          }
+
+          // A control with a visible label - i.e. not one of the icon-only
+          // squares - never truncates or breaks it mid-word, holds its
+          // icon at full size, and keeps that icon level with the label's
+          // first line rather than letting it drop to its own line.
+          const isIconOnly = control !== primary && control.width <= 46;
+          if (!isIconOnly && control.label) {
+            expect(
+              control.label.scrollWidth,
+              at(
+                `${control.name} label is truncated: scrollWidth ${control.label.scrollWidth} exceeds clientWidth ${control.label.clientWidth}`
+              )
+            ).toBeLessThanOrEqual(control.label.clientWidth);
+            expect(
+              control.label.overflowWrap,
+              at(`${control.name} label overflow-wrap is "${control.label.overflowWrap}"`)
+            ).not.toBe('break-word');
+            expect(
+              control.label.overflowWrap,
+              at(`${control.name} label overflow-wrap is "${control.label.overflowWrap}"`)
+            ).not.toBe('anywhere');
+            expect(
+              control.label.wordBreak,
+              at(`${control.name} label word-break is "${control.label.wordBreak}"`)
+            ).not.toBe('break-all');
+
+            if (control.icon) {
+              expect(
+                control.icon.width,
+                at(`${control.name} icon shrank to ${control.icon.width}px wide`)
+              ).toBeGreaterThanOrEqual(14);
+              expect(
+                control.icon.height,
+                at(`${control.name} icon shrank to ${control.icon.height}px tall`)
+              ).toBeGreaterThanOrEqual(14);
+              if (control.label.firstLineTop !== null && control.label.firstLineBottom !== null) {
+                const iconTop = control.icon.top;
+                const iconBottom = control.icon.bottom;
+                const textTop = control.label.firstLineTop;
+                const textBottom = control.label.firstLineBottom;
+                const overlaps = Math.max(iconTop, textTop) <= Math.min(iconBottom, textBottom);
+                expect(
+                  overlaps,
+                  at(
+                    `${control.name} icon (top ${iconTop.toFixed(1)}-${iconBottom.toFixed(1)}) does not vertically overlap its label's first line (${textTop.toFixed(1)}-${textBottom.toFixed(1)}) - the icon is on its own line`
+                  )
+                ).toBe(true);
+              }
+            }
+          }
+        }
+
+        // Previous collapses to a fixed 44x44 icon-only square below
+        // 900px, Save below 720px - two different thresholds, because Save
+        // fits its label at natural widths from 720px where Previous's own
+        // "Previous: <longest step>" still needs the full 900. Each keeps
+        // the accessible name that lets a screen reader announce it
+        // regardless of whether its label is on screen.
+        if (previous) {
+          if (width <= PREVIOUS_COLLAPSE_MAX) {
+            expect(
+              previous.width,
+              at(`Previous is ${previous.width}px wide below 900px, not the 44px icon-only square`)
+            ).toBeLessThanOrEqual(46);
+            expect(
+              previous.height,
+              at(`Previous is ${previous.height}px tall below 900px, not the 44px icon-only square`)
+            ).toBeLessThanOrEqual(46);
+          } else {
+            expect(
+              previous.width,
+              at(`Previous is still the 44px icon-only square at ${previous.width}px wide, at and above 900px`)
+            ).toBeGreaterThan(46);
+          }
+          expect(previous.name, at(`Previous's accessible name is "${previous.name}"`)).toBe(
+            `Previous: ${state.previousLabel}`
+          );
+        }
+        if (save) {
+          if (width <= SAVE_COLLAPSE_MAX) {
+            expect(
+              save.width,
+              at(`Save is ${save.width}px wide below 720px, not the 44px icon-only square`)
+            ).toBeLessThanOrEqual(46);
+            expect(
+              save.height,
+              at(`Save is ${save.height}px tall below 720px, not the 44px icon-only square`)
+            ).toBeLessThanOrEqual(46);
+          } else {
+            expect(
+              save.width,
+              at(`Save is still the 44px icon-only square at ${save.width}px wide, at and above 720px`)
+            ).toBeGreaterThan(46);
+          }
+          expect(save.name, at(`Save's accessible name is "${save.name}"`)).toBe('Save Changes');
+        }
+
+        // The primary's own "X: " prefix (split into `.step-actions__label-
+        // prefix`) is visually hidden below 360px and visible from 360px
+        // up - true only of a primary whose label actually has a ": " to
+        // split (Review's "Save changes" does not).
+        if (state.primaryName.includes(': ')) {
+          expect(
+            primaryBox.prefixVisuallyHidden,
+            at('the primary label has no .step-actions__label-prefix span to hide')
+          ).not.toBeNull();
+          expect(
+            primaryBox.prefixVisuallyHidden,
+            at(
+              width <= PREFIX_HIDE_MAX
+                ? 'the primary "X: " prefix is on screen below 360px, not visually hidden'
+                : 'the primary "X: " prefix is visually hidden at 360px and up, not on screen'
+            )
+          ).toBe(width <= PREFIX_HIDE_MAX);
+          // Hidden or not, the accessible name is always the FULL label -
+          // `primaryBox.name` above is read straight off `textContent`,
+          // which does not care whether an ancestor is visually clipped,
+          // so that assertion already covers this; this branch only adds
+          // the visual half `textContent` cannot see.
+        }
+
+        // The primary control's own right edge is the row's right edge on
+        // every step, whether or not it has a Previous to its left.
+        expect(
+          Math.abs(primaryBox.right - row.right),
+          at(`primary right edge ${primaryBox.right} vs the row's ${row.right}`)
+        ).toBeLessThanOrEqual(2);
+
+        // Only below 576px does the primary fill the room the row has
+        // rather than sitting at its own natural width - the regression
+        // this pins once left 104px of dead space between the last fixed
+        // control and the primary, on a step with no Previous or Save to
+        // absorb it. From 576-899px the primary itself keeps its own
+        // natural width; a small gap before it there is not necessarily
+        // the primary filling, though - where Save exists it carries the
+        // row's own spacer (its `margin-inline-start: auto`, unscoped by
+        // width) and can legitimately close that gap on its own, so the
+        // negative form of this check only holds on a step with neither
+        // Previous nor Save, where nothing else can explain a closed gap.
+        const preceding = [previous, save].filter((c): c is FooterControlBox => c !== null);
+        if (width <= PRIMARY_FILL_MAX) {
+          if (preceding.length > 0) {
+            const precedingRight = Math.max(...preceding.map((c) => c.right));
+            expect(
+              primaryBox.left - precedingRight,
+              at(
+                `primary sits ${(primaryBox.left - precedingRight).toFixed(1)}px clear of the last fixed control - it is not filling the row`
+              )
+            ).toBeLessThanOrEqual(16);
+          } else {
+            expect(
+              row.width - primaryBox.width,
+              at(`primary is ${(row.width - primaryBox.width).toFixed(1)}px narrower than the row - it is not filling it`)
+            ).toBeLessThanOrEqual(16);
+          }
+        } else if (width < DESKTOP_MIN && preceding.length === 0) {
+          expect(
+            row.width - primaryBox.width,
+            at(
+              `primary is only ${(row.width - primaryBox.width).toFixed(1)}px narrower than the row at 576-899px - it is filling the row when it should hold its natural width`
+            )
+          ).toBeGreaterThan(40);
+        }
+
+        // At and above 900px the row lays out Previous, Save and the
+        // primary left to right in that order - the same order the markup
+        // always had, main included - and where Save exists it sits
+        // immediately beside the primary (an 8px gap, main's own
+        // placement) rather than at the row's far left with the primary's
+        // own auto margin claiming all the free space on its own.
+        if (width >= DESKTOP_MIN) {
+          if (previous && save) {
+            expect(previous.left, at('Previous is not left of Save at desktop widths')).toBeLessThan(save.left);
+          }
+          if (previous) {
+            expect(previous.left, at('Previous is not left of the primary at desktop widths')).toBeLessThan(
+              primaryBox.left
+            );
+          }
+          if (save) {
+            expect(save.left, at('Save is not left of the primary at desktop widths')).toBeLessThan(
+              primaryBox.left
+            );
+            expect(
+              primaryBox.left - save.right,
+              at(
+                `Save sits ${(primaryBox.left - save.right).toFixed(1)}px clear of the primary at desktop widths - it is not beside it`
+              )
+            ).toBeLessThanOrEqual(16);
+          }
+        }
+      }
+    });
+  }
+
+  /**
+   * #167: the Status help line's warning icon used to render on its own
+   * line above the text it warns about (the same defect an earlier fix
+   * already closed for the alerts above it) - `.status-help-icon`'s
+   * `inline-flex` + `vertical-align` fix
+   * (`review-step.css`) is what this pins, at a phone and a desktop width,
+   * by comparing the icon's own top edge against the first line of the
+   * text it sits beside (a `Range` over the text node, not the whole
+   * `<strong>`, so a taller icon than line-height cannot pass by
+   * coincidence).
+   */
+  for (const width of [390, 1200] as const) {
+    test(`Status help warning icon sits inline with its text at ${width}px`, async ({ page }) => {
+      await mockReviewableOpportunity(page, 'draft');
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/admin/opportunities/opp-pods/edit');
+      await page.waitForLoadState('load');
+      await goToReviewStep(page);
+
+      const alignment = await page.evaluate(() => {
+        const strong = document.querySelector('#status-help strong.text-warning');
+        const icon = strong?.querySelector('svg.status-help-icon');
+        if (!strong || !icon) return null;
+        const iconRect = icon.getBoundingClientRect();
+        const walker = document.createTreeWalker(strong, NodeFilter.SHOW_TEXT);
+        const textNode = walker.nextNode();
+        if (!textNode || !textNode.textContent) return null;
+        const range = document.createRange();
+        range.setStart(textNode, 0);
+        range.setEnd(textNode, Math.min(4, textNode.textContent.length));
+        const textRect = range.getBoundingClientRect();
+        return { iconTop: iconRect.top, textTop: textRect.top };
+      });
+      expect(alignment, 'the Status help icon or its text node was not found').not.toBeNull();
+      const { iconTop, textTop } = alignment as { iconTop: number; textTop: number };
+      expect(
+        Math.abs(iconTop - textTop),
+        `icon top ${iconTop} vs text top ${textTop} - more than 4px apart`
+      ).toBeLessThanOrEqual(4);
+    });
+  }
+
+  /**
+   * #167: the Status box (`review-status-box`) and the Share card beneath it
+   * both read `--card-padding` now - directly (`.card`), or via the hook
+   * `opportunity-form-mobile.css` gives the plain-div Status box below
+   * 576px - so their inner padding matches at every width, not just
+   * >=576px where they already agreed. Draft only:
+   * the plain "Share this study" `.card` this compares against only renders
+   * for a draft study (a published study shows `ShareOpportunityLink`
+   * instead, a different component with its own padding).
+   */
+  for (const width of [390, 1200] as const) {
+    test(`Status and Share cards have equal inner padding at ${width}px`, async ({ page }) => {
+      await mockReviewableOpportunity(page, 'draft');
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/admin/opportunities/opp-pods/edit');
+      await page.waitForLoadState('load');
+      await goToReviewStep(page);
+      await expect(page.getByRole('heading', { name: 'Share this study' })).toBeVisible();
+
+      const padding = await page.evaluate(() => {
+        const statusBox = document.querySelector('.review-status-box');
+        const shareCard = document.querySelector('.review-footer .card');
+        if (!statusBox || !shareCard) return null;
+        const s = getComputedStyle(statusBox);
+        const c = getComputedStyle(shareCard);
+        return {
+          statusLeft: parseFloat(s.paddingLeft),
+          statusTop: parseFloat(s.paddingTop),
+          shareLeft: parseFloat(c.paddingLeft),
+          shareTop: parseFloat(c.paddingTop),
+        };
+      });
+      expect(padding, 'the Status box or the Share card was not found').not.toBeNull();
+      const { statusLeft, statusTop, shareLeft, shareTop } = padding as {
+        statusLeft: number;
+        statusTop: number;
+        shareLeft: number;
+        shareTop: number;
+      };
+      expect(statusLeft, `Status padding-left ${statusLeft} vs Share padding-left ${shareLeft}`).toBe(shareLeft);
+      expect(statusTop, `Status padding-top ${statusTop} vs Share padding-top ${shareTop}`).toBe(shareTop);
+    });
+  }
+
+  /**
+   * #167: `.momentum-table-container` used to clip the Actions column
+   * outright at phone widths (the container's own `overflow: hidden`) - the
+   * delete control for a session with no bookings was there in the DOM but
+   * never reachable. `overflow-x: auto` on the container is the fix: the
+   * table keeps its intrinsic width and the CONTAINER scrolls to reach it,
+   * while the page itself never grows past the viewport. Reuses the
+   * published footer fixture above with a real (non-empty) sessions
+   * response, since the empty-sessions state renders a CTA instead of a
+   * table.
+   */
+  test("AdminSessionManager's table scrolls horizontally at 320px, with the Actions delete button reachable", async ({
+    page,
+  }) => {
+    await mockFooterPublishedOpportunity(page);
+    await page.route(`**/api/opportunities/${FOOTER_PUBLISHED_ID}/sessions**`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          {
+            id: 'session-1',
+            opportunity_id: FOOTER_PUBLISHED_ID,
+            start_time: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+            end_time: new Date(Date.now() + 24 * 60 * 60 * 1000 + 60 * 60 * 1000).toISOString(),
+            capacity: 4,
+            booked_count: 0,
+            remaining: 4,
+            location_or_meet_link_optional: 'https://meet.google.com/a-very-long-meeting-link-abc',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+        ]),
+      });
+    });
+
+    await page.setViewportSize({ width: 320, height: 844 });
+    await page.goto('/');
+    await page.goto(`/admin/opportunities/${FOOTER_PUBLISHED_ID}/edit`);
+    await page.waitForLoadState('load');
+    const strip = page.getByRole('navigation', { name: 'Form steps' });
+    await expect(strip).toBeVisible({ timeout: 15000 });
+    await strip.getByRole('button', { name: 'Session Management' }).click();
+    await expect(page.getByRole('heading', { name: 'Session Management', level: 2 })).toBeVisible();
+
+    const deleteButton = page.getByRole('button', { name: /^Remove session on/ });
+    // The session rows render once from the form's own sessions and again
+    // when the step's sessions request resolves (on main too), so the first
+    // button found can be replaced mid-scroll. Retry until the scroll lands
+    // on the settled element.
+    await expect(async () => {
+      await deleteButton.scrollIntoViewIfNeeded({ timeout: 1000 });
+      await expect(deleteButton).toBeVisible({ timeout: 1000 });
+    }).toPass({ timeout: 10000 });
+
+    const metrics = await page.evaluate(() => {
+      const container = document.querySelector('.momentum-table-container');
+      if (!container) return null;
+      return {
+        scrollW: container.scrollWidth,
+        clientW: container.clientWidth,
+        overflowX: getComputedStyle(container).overflowX,
+        docScrollW: document.documentElement.scrollWidth,
+        docClientW: document.documentElement.clientWidth,
+      };
+    });
+    expect(metrics, 'the .momentum-table-container never rendered').not.toBeNull();
+    const { scrollW, clientW, overflowX, docScrollW, docClientW } = metrics as {
+      scrollW: number;
+      clientW: number;
+      overflowX: string;
+      docScrollW: number;
+      docClientW: number;
+    };
+
+    expect(
+      overflowX,
+      `overflow-x is "${overflowX}", not auto - the container cannot scroll to reach its own Actions column`
+    ).toBe('auto');
+    expect(
+      scrollW,
+      `table container scrollWidth ${scrollW} is no wider than its clientWidth ${clientW} - nothing to scroll, so this fixture proves nothing`
+    ).toBeGreaterThan(clientW);
+    expect(
+      docScrollW,
+      `document scrollWidth ${docScrollW} exceeds the 320px viewport (clientWidth ${docClientW})`
+    ).toBeLessThanOrEqual(docClientW + 1);
+  });
+});

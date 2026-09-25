@@ -21,6 +21,7 @@ import {
   summaryMessageFor,
 } from './helpers/error-summary';
 import { chooseStudyType } from './helpers/study-type-picker';
+import { setStatus as reviewSetStatus } from './helpers/review-status';
 import { createOpportunity, getFirstHandStudies, getOpportunity, updateOpportunity } from '../../api/client';
 import { getFirstHandStudy } from '../../api/firsthand-studies';
 
@@ -221,18 +222,14 @@ const submitFromLastStep = (name: RegExp = /^(Create study|Save changes)$/) => {
 };
 
 /**
- * Choose Status from Review (#111 moved the control off Basic Information).
- *
- * Review has no `<label htmlFor="status">` any more - only an
- * `<h3>Status</h3>` heading - so it is the one `<select>` Review renders,
- * found by role rather than by name. Walks to Review first if it is not
- * already on screen; the caller is left ON Review afterwards.
+ * Choose Status from Review (#111 moved the control off Basic Information;
+ * #167 turned it from a `<select>` into two Draft/Published pods - see
+ * `helpers/review-status.ts`). Walks to Review first if it is not already on
+ * screen; the caller is left ON Review afterwards.
  */
 const setStatus = (status: 'draft' | 'published') => {
   walkToReview();
-  fireEvent.change(within(screen.getByTestId('review-step')).getByRole('combobox'), {
-    target: { value: status }
-  });
+  reviewSetStatus(status);
 };
 
 describe('clearTypeConditionalErrors', () => {
@@ -307,11 +304,15 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     ).toBeInTheDocument();
     // Status (#111) is no longer on the first step - it moved to Review, the
     // last decision on the form rather than the first. See
-    // `ReviewStep.test.tsx` for the control itself. Queried by id rather than
-    // an accessible name: Review's own Status control has none (see
-    // `ReviewStep.tsx` - only an `<h3>Status</h3>` heading), so a name-scoped
-    // query would report "absent" whether or not the control existed.
-    expect(document.getElementById('status')).toBeNull();
+    // `ReviewStep.test.tsx` for the control itself. Queried by its
+    // radiogroup role and accessible name (StatusPods, #167 - every option
+    // id is stable, `${name}-${value}`, never a bare `id="status"`, so that
+    // would be null here regardless of whether Review has mounted and would
+    // prove nothing): its absence is a real, if indirect, proof that Review
+    // itself has not mounted yet.
+    expect(
+      screen.queryByRole('radiogroup', { name: 'Status' })
+    ).not.toBeInTheDocument();
     // Create mode makes no fetch for an existing opportunity.
     expect(vi.mocked(getOpportunity)).not.toHaveBeenCalled();
   });
