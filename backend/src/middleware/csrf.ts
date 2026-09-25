@@ -19,6 +19,11 @@ const EXEMPT_PATH_PREFIXES = [
   '/api/cron/',
   '/api/auth/logout',
   '/auth/logout',
+  // Password sign-in form on Vercel previews (routes/demoSignIn.ts): an HTML
+  // form cannot send the x-csrf-token header, so that route checks Origin
+  // itself. Only mounted when isCredentialedDemoLoginEnabled().
+  '/auth/demo-login',
+  '/api/auth/demo-login',
 ];
 
 export interface CsrfProtectionOptions {

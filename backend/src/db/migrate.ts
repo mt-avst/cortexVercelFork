@@ -1231,6 +1231,18 @@ export async function runMigrations() {
     `);
     console.log('✅ Created user_sessions table');
 
+    // Seeded password for the demo accounts on Vercel previews
+    // (services/demoCredentials.ts). Rows exist only while SEED_DEMO_PASSWORD
+    // is set; db/seed.ts deletes them all when it is not.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS demo_credentials (
+        user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        password_hash TEXT NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    console.log('✅ Created demo_credentials table');
+
     console.log('✅ Database migrations completed successfully');
   } catch (error) {
     console.error('❌ Migration failed:', error);

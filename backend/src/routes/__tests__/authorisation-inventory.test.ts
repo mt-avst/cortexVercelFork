@@ -798,6 +798,48 @@ const discovered = (): Record<string, Verdict> => ({
   ...IN_HANDLER_GATES
 });
 
+/**
+ * ROUTERS MOUNTED ONLY UNDER A GIVEN ENVIRONMENT, and that environment.
+ *
+ * `demoSignIn.ts` (password sign-in for seeded demo accounts) is mounted by
+ * `auth.ts` only on an opted-in Vercel preview, so the test-env walk above can
+ * never reach it. Rather than exempting the file, reachability is checked under
+ * the env that mounts it, in an isolated module registry - an unreachable
+ * router still fails, and the guard below pins that the env really is the gate.
+ */
+const ENV_GATED_ROUTERS: Record<string, Record<string, string>> = {
+  'demoSignIn.ts': { ENABLE_DEMO_LOGIN: 'true', VERCEL_ENV: 'preview' },
+};
+
+function withEnv<T>(env: Record<string, string | undefined>, fn: () => T): T {
+  const previous: Record<string, string | undefined> = {};
+  for (const key of Object.keys(env)) {
+    previous[key] = process.env[key];
+    if (env[key] === undefined) delete process.env[key];
+    else process.env[key] = env[key];
+  }
+  try {
+    return fn();
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
+function reachedUnderEnv(file: string): boolean {
+  return withEnv(ENV_GATED_ROUTERS[file], () => {
+    let found = false;
+    jest.isolateModules(() => {
+      const auth = (require('../auth') as { default: Router }).default;
+      const target = (require(path.join(ROUTES_DIR, file)) as { default: unknown }).default;
+      found = routersReachedFrom([auth]).has(target);
+    });
+    return found;
+  });
+}
+
 describe('the authorisation inventory', () => {
   /** A throwaway route carrying `chain` in the given order, ready to walk. */
   const reversed = (...chain: express.RequestHandler[]) => {
@@ -836,6 +878,7 @@ describe('the authorisation inventory', () => {
     const reached = routersReachedFrom(ROOTS.map(([, router]) => router));
 
     const unreached = ROUTER_FILES.filter((file) => {
+      if (file in ENV_GATED_ROUTERS) return !reachedUnderEnv(file);
       const module = require(path.join(ROUTES_DIR, file)) as { default?: unknown };
       return !reached.has(module.default);
     });
@@ -893,6 +936,7 @@ describe('the authorisation inventory', () => {
       'bookings.ts',
       'calendar.ts',
       'cron.ts',
+      'demoSignIn.ts',
       'feedback.ts',
       'firsthand-session.ts',
       'firsthand.ts',
@@ -1360,5 +1404,43 @@ describe('the development-only login routes', () => {
     expect(
       registered.filter((route) => !authRoutesUnder('production').includes(route))
     ).toEqual(DEV_LOGIN_PATHS);
+  });
+});
+
+/**
+ * THE PREVIEW PASSWORD SIGN-IN (routes/demoSignIn.ts) EXISTS ONLY ON AN
+ * OPTED-IN VERCEL PREVIEW. Its POST is `public` by middleware: the gate is in
+ * the handler - an Origin check, then the seeded demo password
+ * (services/demoCredentials.ts), pinned by demoSignIn.test.ts and
+ * demoCredentials.test.ts. What this pins is where it can exist at all.
+ */
+describe('the preview password sign-in routes', () => {
+  const PREVIEW_SIGN_IN = ['GET /auth/demo-login', 'POST /auth/demo-login'];
+
+  const authRoutesWith = (env: Record<string, string | undefined>): string[] =>
+    withEnv(env, () => {
+      let router: Router | undefined;
+      jest.isolateModules(() => {
+        router = (require('../auth') as { default: Router }).default;
+      });
+      return Object.keys(inventory(router!, '/auth')).sort();
+    });
+
+  it('registers both on an opted-in Vercel preview (control)', () => {
+    const registered = authRoutesWith({ NODE_ENV: 'production', ENABLE_DEMO_LOGIN: 'true', VERCEL_ENV: 'preview' });
+    expect(PREVIEW_SIGN_IN.filter((route) => registered.includes(route))).toEqual(PREVIEW_SIGN_IN);
+  });
+
+  it.each([
+    ['Vercel production, even opted in', { NODE_ENV: 'production', ENABLE_DEMO_LOGIN: 'true', VERCEL_ENV: 'production' }],
+    ['a preview that has not opted in', { NODE_ENV: 'production', ENABLE_DEMO_LOGIN: undefined, VERCEL_ENV: 'preview' }],
+    ['off Vercel (Kubera), even opted in', { NODE_ENV: 'production', ENABLE_DEMO_LOGIN: 'true', VERCEL_ENV: undefined }],
+  ])('registers neither on %s', (_name, env) => {
+    const registered = authRoutesWith(env);
+    expect(PREVIEW_SIGN_IN.filter((route) => registered.includes(route))).toEqual([]);
+  });
+
+  it('is reachable from the app roots under the env that mounts it', () => {
+    expect(reachedUnderEnv('demoSignIn.ts')).toBe(true);
   });
 });

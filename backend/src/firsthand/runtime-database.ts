@@ -43,6 +43,16 @@ export function getRuntimeDatabaseUrl() {
   // decides persistence mode: a DB_URL-only environment that flipped mode to
   // filesystem while migrations ran fine against postgres is a proven outage
   // pattern (Cortex ran mock data for a week that way).
+  //
+  // On Vercel only Neon's own variables count (config/databaseUrl.ts), so a
+  // stray DB_URL can never point this pool somewhere the main pool is not.
+  if (process.env.VERCEL) {
+    return (
+      process.env.DATABASE_URL?.trim() ||
+      process.env.POSTGRES_URL?.trim() ||
+      null
+    );
+  }
   return (
     process.env.DATABASE_URL?.trim() ||
     process.env.POSTGRES_URL?.trim() ||
