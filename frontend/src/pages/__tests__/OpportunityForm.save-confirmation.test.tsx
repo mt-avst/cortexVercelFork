@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import OpportunityForm from '../OpportunityForm';
 import { getOpportunity, getSessions, updateOpportunity } from '../../api/client';
+import { setStatus as reviewSetStatus } from './helpers/review-status';
 
 /**
  * #109: a save that gave no acknowledgement read as a dead end.
@@ -202,9 +203,7 @@ describe('OpportunityForm - editing during the Saved window clears it immediatel
       // navigating away and back to reach it. Only 550ms have elapsed since
       // the confirmation armed - nowhere near the 3000ms literal the draft
       // window uses - so if this clears it, the edit did it, not the timer.
-      fireEvent.change(document.getElementById('status')!, {
-        target: { value: 'published' }
-      });
+      reviewSetStatus('published');
 
       expect(commitButton()).not.toHaveTextContent('Saved');
       expect(commitButton()).toHaveTextContent('Save changes');
@@ -242,9 +241,7 @@ describe('OpportunityForm - editing during the Saved window clears it immediatel
       await vi.advanceTimersByTimeAsync(250);
       expect(commitButton()).toHaveTextContent('Saved');
 
-      fireEvent.change(document.getElementById('status')!, {
-        target: { value: 'draft' }
-      });
+      reviewSetStatus('draft');
 
       expect(commitButton()).not.toHaveTextContent('Saved');
       expect(commitButton()).toHaveTextContent('Save changes');
@@ -305,9 +302,7 @@ describe('OpportunityForm - a save that overlaps a later edit', () => {
 
     // A second decision, made while the first save is still on the wire and
     // the request already carries `status: 'draft'`.
-    fireEvent.change(document.getElementById('status')!, {
-      target: { value: 'published' }
-    });
+    reviewSetStatus('published');
 
     // The server's own account of what it actually stored - still draft,
     // since that is what the in-flight request carried.
@@ -400,12 +395,8 @@ describe('OpportunityForm - the Saved confirmation timer dies with the form', ()
       // An edit re-enables the control (it drops "Saved"), so a second save
       // can land 1000ms into the first one's window.
       await vi.advanceTimersByTimeAsync(950);
-      fireEvent.change(document.getElementById('status')!, {
-        target: { value: 'published' }
-      });
-      fireEvent.change(document.getElementById('status')!, {
-        target: { value: 'draft' }
-      });
+      reviewSetStatus('published');
+      reviewSetStatus('draft');
       fireEvent.click(commitButton());
       await vi.advanceTimersByTimeAsync(50);
       expect(commitButton()).toHaveTextContent('Saved');

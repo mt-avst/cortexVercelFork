@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import OpportunityForm from '../OpportunityForm';
 import { getOpportunity, updateOpportunity } from '../../api/client';
 import { chooseStudyType } from './helpers/study-type-picker';
+import { setStatus as reviewSetStatus } from './helpers/review-status';
 
 vi.mock('../../contexts/AuthContext', () => ({
   useAuth: () => ({
@@ -424,12 +425,7 @@ describe('the strip reports steps other than the first', () => {
     // there directly. Review is the sixth step on a recorded study since the
     // D1/D3 reshape.
     fireEvent.click(steps()[5]);
-    // Review's Status control has no `<label htmlFor="status">` - only an
-    // `<h3>Status</h3>` heading - so it is found by role, scoped to Review,
-    // rather than by name.
-    fireEvent.change(within(screen.getByTestId('review-step')).getByRole('combobox'), {
-      target: { value: 'published' }
-    });
+    reviewSetStatus('published');
     fireEvent.click(screen.getByRole('button', { name: /Create study/i }));
 
     // Publishing an unmoderated study with no tasks fails on step 4.

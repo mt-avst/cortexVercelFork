@@ -15,6 +15,7 @@ import {
   summaryMessages,
 } from './helpers/error-summary';
 import { chooseStudyType } from './helpers/study-type-picker';
+import { setStatus as reviewSetStatus } from './helpers/review-status';
 
 /*
  * D1 - one validation rule set, one vocabulary, reachable by keyboard.
@@ -150,17 +151,12 @@ const walkToReview = () => {
 };
 
 /**
- * Choose Status from Review (#111 moved the control off Basic Information).
- *
- * Review has no `<label htmlFor="status">` any more - only an
- * `<h3>Status</h3>` heading - so it is the one `<select>` Review renders,
- * found by role rather than by name. Must be called once Review is on
- * screen (e.g. after `walkToReview()`).
+ * Choose Status from Review (#111 moved the control off Basic Information;
+ * #167 turned it from a `<select>` into two Draft/Published pods - see
+ * `helpers/review-status.ts`). Must be called once Review is on screen (e.g.
+ * after `walkToReview()`).
  */
-const setStatus = (status: 'draft' | 'published') =>
-  fireEvent.change(within(screen.getByTestId('review-step')).getByRole('combobox'), {
-    target: { value: status },
-  });
+const setStatus = (status: 'draft' | 'published') => reviewSetStatus(status);
 
 const submitFromReview = (status?: 'draft' | 'published') => {
   walkToReview();

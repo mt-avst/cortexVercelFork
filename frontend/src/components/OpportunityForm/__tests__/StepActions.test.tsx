@@ -266,7 +266,7 @@ describe('StepActions - D9: one commit colour, fixed-width nav buttons (row 24)'
     expect(screen.getByRole('button', { name: 'Create opportunity' })).toHaveClass('btn-success');
   });
 
-  it('Previous, Continue and the terminal button all carry the fixed-width class', () => {
+  it('Previous and the forward control both carry the shared nav-button hook class', () => {
     render(
       <StepActions
         onPrevious={noop}
@@ -325,5 +325,38 @@ describe('StepActions - D9: one commit colour, fixed-width nav buttons (row 24)'
     const shortcut = screen.getByRole('button', { name: 'Save Changes' });
     expect(shortcut).toHaveClass('btn-primary');
     expect(shortcut).not.toHaveClass('btn-success');
+  });
+});
+
+/**
+ * #167: below 900px Previous collapses to an icon-only square
+ * (`_components.css`, the 899px media block) - jsdom applies no CSS, so it
+ * cannot see that layout itself, only what stays true regardless of it.
+ * `aria-label` is set unconditionally in StepActions.tsx (not derived from
+ * the now-hidden visible label), which is what keeps the button announcing
+ * "Previous: <step>" once the visible word disappears - the accessible-name
+ * half a real browser is not needed for; the icon-only geometry itself is
+ * pinned in the accessibility Playwright config instead.
+ */
+describe('StepActions - Previous keeps its accessible name for the icon-only layout', () => {
+  it('carries an aria-label with the full "Previous: <step>" text, unconditionally', () => {
+    render(
+      <StepActions
+        onPrevious={noop}
+        previousLabel="Consent"
+        onNext={noop}
+        nextLabel="Review"
+        isEdit
+        saving={false}
+        disabled={false}
+      />
+    );
+    const button = screen.getByRole('button', { name: 'Previous: Consent' });
+    expect(button).toHaveAttribute('aria-label', 'Previous: Consent');
+    // The visible label span is still in the DOM too - CSS alone hides it
+    // below 608px, React never conditionally renders it - so a regression
+    // that deletes only the ATTRIBUTE cannot hide behind the visible text
+    // this same query would otherwise also satisfy.
+    expect(button.querySelector('.step-actions__label')).toHaveTextContent('Previous: Consent');
   });
 });

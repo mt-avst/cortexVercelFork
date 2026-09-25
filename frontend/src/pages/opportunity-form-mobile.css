@@ -1,0 +1,58 @@
+/*
+ * #167: at phone widths the OpportunityForm content column was squeezed to
+ * ~228px by four stacked paddings, each a side - the App shell's own
+ * `.container` (20px, shared with every page, left untouched here), then
+ * THIS page's own `.container-fluid.opportunity-form` (20px), `.card` (24px)
+ * and `.tab-content.p-4` (16px). 80px a side, 160px total, out of a 390px
+ * phone.
+ *
+ * Trimmed below Bootstrap's own 576px `sm` breakpoint, so >=576px keeps
+ * every existing tablet/desktop padding unchanged. This file is imported
+ * directly by `OpportunityForm.tsx` (unlayered CSS, the same pattern
+ * `review-step.css` already uses) rather than added to `_components.css`,
+ * so it overrides `.container-fluid` and the `.p-4` utility - both inside
+ * named cascade layers - without needing `!important`: an unlayered rule
+ * always wins over a layered one regardless of specificity or source order.
+ */
+@media (max-width: 575.98px) {
+  .opportunity-form.container-fluid {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  /*
+   * #167: the card's own padding, and `.card-header`'s bleed trick, both
+   * read `--card-padding` (`_components.css`) rather than a fixed value -
+   * `.card-header` pulls a negative margin of `calc(var(--card-padding) *
+   * -1)` on every side and adds the same amount back as padding, which only
+   * cancels while the card's own padding IS `--card-padding`. Overriding
+   * the TOKEN here, rather than `.card`'s `padding` directly, is what keeps
+   * that cancellation true at this width without a second, per-side
+   * `.card-header` override to keep in step by hand: a previous version set
+   * `.card`'s padding on its own, left `--card-padding` at its desktop
+   * 24px, and the header's math went stale on every side - most visibly the
+   * title sitting 1px below the card's top edge.
+   *
+   * 16px (`--spacing-4`, the scale's next step down from 24px) rather than
+   * the 8px this used to trim to: 8px read as cramped once the Status and
+   * Share cards were compared side by side.
+   */
+  .opportunity-form {
+    --card-padding: var(--spacing-4);
+  }
+
+  .opportunity-form .tab-content.p-4 {
+    padding: var(--spacing-1);
+  }
+
+  /*
+   * #167: the Status box (`ReviewStep.tsx`) is a plain `border rounded p-6`
+   * div, not a `.card`, so it never reads `--card-padding` on its own -
+   * `.review-status-box` is the hook this file uses to bring it down to the
+   * same padding as the `.card` rule above, so its heading stays aligned
+   * with the "Share this study" card beneath it at this width too.
+   */
+  .opportunity-form .review-status-box {
+    padding: var(--card-padding);
+  }
+}

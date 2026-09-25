@@ -1935,9 +1935,29 @@ const ListView: React.FC<{
       <style>
         {`
           .momentum-table-container {
+            /* #167: position: relative makes this the containing block for
+               any absolutely-positioned descendant inside its cells - the
+               visually-hidden "Copied" live region below (clip technique,
+               position: absolute) had no positioned ancestor otherwise, so
+               it escaped this container's own clip/scroll region and
+               inflated the PAGE's scrollWidth at 320px even though the span
+               itself is a 1x1px box nobody can see. */
+            position: relative;
             background: transparent;
             border-radius: var(--card-radius);
-            overflow: hidden;
+            /* overflow-x: auto is what scrolls the Actions column into
+               view at narrow widths - there is no Bootstrap here for a
+               separate .table-responsive to do it instead, even though
+               this element also carries that class name (below); this
+               rule is the only thing making it scroll. overflow-y: hidden
+               isn't what keeps the rounded corners above - border-radius
+               does that on its own - it's here because a browser that sees
+               overflow-x set to anything but visible computes an unset
+               overflow-y as auto, not visible, and would otherwise give
+               this container its own vertical scrollbar alongside the
+               page's. */
+            overflow-x: auto;
+            overflow-y: hidden;
           }
           .momentum-table-container table {
             width: 100%;

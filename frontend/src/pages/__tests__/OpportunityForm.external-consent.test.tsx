@@ -12,6 +12,7 @@ import {
   type DraftedOpportunity
 } from '../../api/client';
 import { chooseStudyType } from './helpers/study-type-picker';
+import { setStatus as reviewSetStatus } from './helpers/review-status';
 
 /**
  * The external-tool consent affirmation, loaded from and saved to the server
@@ -302,7 +303,8 @@ describe('loading the external consent affirmation', () => {
  * passes. The wiring is in the page, so the test has to be too.
  */
 describe('the Review consent line while the author is publishing', () => {
-  const statusControl = () => screen.getByRole('combobox', { name: 'Status' });
+  const publishedRadio = () =>
+    screen.getByRole('radio', { name: /Published/ }) as HTMLInputElement;
 
   it('a never-recorded draft set to Published still reads not yet confirmed', async () => {
     vi.mocked(getOpportunity).mockResolvedValue(EXTERNAL_ROW() as never);
@@ -312,8 +314,8 @@ describe('the Review consent line while the author is publishing', () => {
     expect(reviewConsent().text).toContain('Not yet confirmed');
 
     goToStep('Review');
-    fireEvent.change(statusControl(), { target: { value: 'published' } });
-    expect(statusControl()).toHaveValue('published');
+    reviewSetStatus('published');
+    expect(publishedRadio().checked).toBe(true);
 
     const review = reviewConsent();
     expect(review.text).toContain('Not yet confirmed');
@@ -329,7 +331,7 @@ describe('the Review consent line while the author is publishing', () => {
     await awaitLoaded();
 
     goToStep('Review');
-    fireEvent.change(statusControl(), { target: { value: 'published' } });
+    reviewSetStatus('published');
     fireEvent.click(await consentCheckbox());
 
     const review = reviewConsent();

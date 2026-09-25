@@ -15,6 +15,7 @@ import {
 import { getFirstHandStudy } from '../../api/firsthand-studies';
 import { AUTOSAVE_MIN_INTERVAL_MS } from '../../lib/opportunity-authoring/autosave';
 import { chooseStudyType } from './helpers/study-type-picker';
+import { setStatus as reviewSetStatus } from './helpers/review-status';
 
 /**
  * The autosave as an author meets it.
@@ -224,18 +225,12 @@ const goToReview = () => {
 };
 
 /**
- * Choose Status from Review.
- *
- * Review has no `<label htmlFor="status">` any more - only an
- * `<h3>Status</h3>` heading (see `git show 1b744f5 -- BasicInfoTab.tsx` for
- * the label it used to carry) - so it is the one `<select>` Review renders,
- * found by role rather than by name.
+ * Choose Status from Review (Draft/Published pods since #167 - see
+ * `helpers/review-status.ts`).
  */
 const setStatus = (status: 'draft' | 'published') => {
   goToReview();
-  fireEvent.change(within(screen.getByTestId('review-step')).getByRole('combobox'), {
-    target: { value: status }
-  });
+  reviewSetStatus(status);
 };
 
 beforeEach(() => {
