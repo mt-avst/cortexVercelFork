@@ -313,11 +313,11 @@ describe("the row's inline button is the state's next verb (Petra 3.4)", () => {
     expect(await screen.findByTestId('probe')).toHaveTextContent(destination);
   });
 
-  it('the title is a real link to the edit page', async () => {
+  it('the title is a real link to the study overview page', async () => {
     renderAdmin();
     const table = await findStudiesTable();
     const link = within(rowFor(table, 'Live study')).getByRole('link', { name: 'Live study' });
-    expect(link).toHaveAttribute('href', '/admin/opportunities/opp-live/edit');
+    expect(link).toHaveAttribute('href', '/admin/opportunities/opp-live');
   });
 });
 

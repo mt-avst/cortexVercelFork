@@ -245,6 +245,23 @@ h6, .h6 {
   color: var(--text-primary);
 }
 
+/* `.alert-heading` (ErrorState.tsx) can render at any level from <h2> to
+   <h6> so the page outline stays correct wherever the alert sits, but every
+   level must look identical - only the tag changes, never the visual. `.h5`
+   already wins font-size/weight/colour over the h2,.h2/h3,.h3 rule above
+   (class beats element on specificity), but font-family is set by tag alone
+   there with no `.h5` counterpart to out-rank it, so an <h2>/<h3>-level
+   alert kept the display face instead of the body font a real <h5> inherits
+   from `body`. Card-scoped theme rules in _themes.css layer Fraunces and a
+   surface-specific colour back on for `.alert-heading` inside
+   `.analytics-container .card`, at higher specificity than this, so an
+   in-card alert heading matches the card's own `<h2 class="h5">` section
+   headings (in dark theme that sets Fraunces on in-card alerts on
+   purpose); this rule alone covers every other context. */
+.alert-heading.h5 {
+  font-family: var(--font-family-base);
+}
+
 p {
   margin-bottom: var(--spacing-4);
   color: var(--text-body);
@@ -316,6 +333,16 @@ a:hover {
 a:focus-visible {
   outline: var(--focus-outline);
   outline-offset: var(--focus-outline-offset);
+}
+
+/* A link sitting inline in running body text, distinguished from the
+   surrounding copy by colour alone, does not meet WCAG 1.4.1 (Use of
+   Colour) unless that colour itself carries 3:1 contrast against the text
+   around it - the accent tokens this app uses for link colour do not
+   reliably clear that bar. Underlined at rest closes the gap without
+   changing the colour token. */
+.link-underline {
+  text-decoration: underline;
 }
 
 /* ============================================================
