@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
 import useDocumentTitle from '../hooks/useDocumentTitle';
 import { PARTICIPATE } from '@shared/pageNames';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { getOpportunities } from '../api/client';
+import { getOpportunities, checkParticipateVisit } from '../api/client';
 import { Opportunity } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -44,6 +44,18 @@ const Home: React.FC = memo(() => {
   // burst of keystrokes collapses to one pass over the loaded set.
   const [searchInput, setSearchInput] = useState('');
   const debouncedQuery = useDebounce(searchInput, 200);
+
+  // #168 "New since your last visit". Which currently-loaded studies were
+  // published since this participant's last visit and have not yet been
+  // opened - see checkParticipateVisit for the fail-closed contract.
+  const [newOpportunityIds, setNewOpportunityIds] = useState<Set<string>>(new Set());
+  // Prevent React StrictMode double-execution (same pattern as
+  // AuthContext's hasCheckedAuth) - the dev-only double-invoke would
+  // otherwise fire two visit calls a beat apart for one real visit. Holds the
+  // id the visit was last checked for, not a bare boolean: a boolean stays
+  // true across a user switch within the same mounted
+  // instance and would silently skip re-asking for the new identity.
+  const checkedVisitForUserIdRef = useRef<string | null>(null);
 
   const { user } = useAuth();
 
@@ -121,6 +133,44 @@ const Home: React.FC = memo(() => {
     // are filtered out of the response.
   }, [location.pathname, loadOpportunities]);
 
+  // #168: independent of loadOpportunities above - a slow or failing visit
+  // check must never block or delay the rendered rows, so it is its own
+  // effect rather than a step inside that fetch. Same pathname gate as that
+  // effect (the Participate page only), and once per signed-in identity per
+  // mount (the ref guard), and only once we know who is signed in: a
+  // signed-out visitor gets the Landing hero, not this list, so there is
+  // nothing to mark.
+  // Opening a study and coming back re-mounts Home (it is a sibling route,
+  // not nested under this one), which resets the ref and re-asks - that
+  // fresh answer is what clears a badge for a study just opened.
+  //
+  // Keyed on user?.id, not the user object: AuthContext has no periodic
+  // re-check (fetchUser runs once at mount, StrictMode-guarded; refreshAuth
+  // exists but nothing in the app calls it today), so `user` does not
+  // currently churn reference on its own. A primitive id is still the safer
+  // dependency - it can only change when the signed-in identity actually
+  // does, where the object reference would be one AuthContext change away
+  // from doing that on every render for the same identity. The ref itself
+  // now holds that id rather than a plain boolean, so a user switch within
+  // the same mounted Home instance re-asks instead of the guard reading as
+  // "already checked" for whoever is signed in now.
+  useEffect(() => {
+    if (location.pathname !== '/' || !user || checkedVisitForUserIdRef.current === user.id) {
+      return;
+    }
+    checkedVisitForUserIdRef.current = user.id;
+
+    checkParticipateVisit()
+      .then((result) => {
+        setNewOpportunityIds(new Set(result.newOpportunityIds));
+      })
+      .catch(() => {
+        // checkParticipateVisit already fails closed and never rejects - this
+        // is a second line of defence, not the primary one, so a badge
+        // silently staying off is the only visible effect of reaching it.
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname, user?.id]);
 
   // Check for booking success parameter and show banner
   useEffect(() => {
@@ -349,6 +399,7 @@ const Home: React.FC = memo(() => {
                       key={opportunity.id}
                       opportunity={opportunity}
                       role={user?.role}
+                      isNew={newOpportunityIds.has(opportunity.id)}
                     />
                   ))}
                 </ul>

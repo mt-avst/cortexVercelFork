@@ -277,4 +277,60 @@ describe('OpportunityRow', () => {
     const meta = screen.getByTestId('opportunity-row-meta');
     expect(within(meta).queryByText(/\+\d/)).toBeNull();
   });
+
+  // #168 "New since your last visit".
+  describe('the New badge', () => {
+    it('shows no New badge by default', () => {
+      renderRow(opp({}));
+
+      expect(screen.queryByText('New')).toBeNull();
+    });
+
+    it('shows a New badge when isNew is set', () => {
+      render(
+        <MemoryRouter>
+          <OpportunityRow opportunity={opp({})} isNew />
+        </MemoryRouter>
+      );
+
+      expect(screen.getByText('New')).toBeVisible();
+    });
+
+    // Announced with the title rather than orphaned elsewhere in the row -
+    // see the aria-describedby note in OpportunityRow.tsx.
+    it('associates the badge with the heading rather than leaving it unannounced', () => {
+      render(
+        <MemoryRouter>
+          <OpportunityRow opportunity={opp({ title: 'Triage a failing Bitbucket pipeline' })} isNew />
+        </MemoryRouter>
+      );
+
+      const heading = screen.getByRole('heading', { level: 2 });
+      const describedBy = heading.getAttribute('aria-describedby');
+      expect(describedBy).toBeTruthy();
+      expect(document.getElementById(describedBy as string)).toHaveTextContent('New');
+    });
+
+    // Participate only ever lists published studies (cto/AdaptaLabs#168), so
+    // an admin's own " · published" suffix said nothing and cost the kicker a
+    // line beside the New badge - dropped, while a draft or closed suffix
+    // (the case worth an admin's attention) still shows. Pinned here,
+    // together with isNew, because the two combine on the same row.
+    it("never shows the admin ' · published' suffix, with or without the New badge, while ' · draft' still shows", () => {
+      const { unmount } = render(
+        <MemoryRouter>
+          <OpportunityRow opportunity={opp({ status: 'published' })} role="researcher_admin" isNew />
+        </MemoryRouter>
+      );
+      expect(screen.queryByText(/· published/i)).toBeNull();
+      unmount();
+
+      render(
+        <MemoryRouter>
+          <OpportunityRow opportunity={opp({ status: 'draft' })} role="researcher_admin" isNew />
+        </MemoryRouter>
+      );
+      expect(screen.getByText(/· draft/i)).toBeVisible();
+    });
+  });
 });
