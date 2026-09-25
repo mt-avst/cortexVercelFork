@@ -32,9 +32,19 @@ vi.mock('../../contexts/ThemeContext', () => ({ useTheme: () => ({ theme: 'light
 vi.mock('../../components/PendingApprovals', () => ({ default: () => null }));
 vi.mock('../../components/AdminFeedback', () => ({ default: () => null }));
 
+// Function declarations hoist with their body (unlike `const`), so this stays
+// callable from inside `vi.hoisted`'s callback below even though that runs
+// before this line - `vi.hoisted` moves its call to the top of the module.
+function futureIso(msFromNow: number): string {
+  return new Date(Date.now() + msFromNow).toISOString();
+}
+
 // A bookable study with a single 3-capacity session holding 2 bookings, so the
 // Booked ratio has a value ("2 / 3") that a Capacity column would repeat.
-const SESSION_START = '2026-08-19T22:00:00.000Z';
+// Date.now()-relative (cto/AdaptaLabs#164): a hard-coded past date reads
+// Broken under the "no upcoming slot" rule, which is not what this fixture is
+// for - these tests are about column layout, not triage state.
+const SESSION_START = futureIso(7 * 24 * 60 * 60 * 1000);
 
 const fixtures = vi.hoisted(() => ({
   opportunity: {
@@ -50,8 +60,8 @@ const fixtures = vi.hoisted(() => ({
       {
         id: 'sess-1',
         opportunity_id: 'opp-1',
-        start_time: '2026-08-19T22:00:00.000Z',
-        end_time: '2026-08-19T22:45:00.000Z',
+        start_time: futureIso(7 * 24 * 60 * 60 * 1000),
+        end_time: futureIso(7 * 24 * 60 * 60 * 1000 + 45 * 60 * 1000),
         capacity: 3,
         booked_count: 2,
         created_at: '2026-07-01T10:00:00.000Z',
@@ -79,7 +89,7 @@ const fixtures = vi.hoisted(() => ({
         id: 'bk-1',
         opportunity_id: 'opp-1',
         opportunity_title: 'Checkout usability test',
-        session_start: '2026-08-19T22:00:00.000Z',
+        session_start: futureIso(7 * 24 * 60 * 60 * 1000),
         participant_name: 'Demo User 2',
         participant_email: 'demo2@example.com',
         status: 'booked',
@@ -159,6 +169,20 @@ const findStudiesTable = async (): Promise<HTMLElement> => {
   expect(table).not.toBeNull();
   return table as HTMLElement;
 };
+
+// cto/AdaptaLabs#164: SESSION_START moved off a fixed 2026-08-19 date so it
+// stays in the future as the suite ages. This is the control - it proves the
+// fixture study reads as an ordinary Published row, not Broken, so every
+// other test in this file exercises column layout and not triage state.
+describe('Research Studies table: the fixture study is Published, not Broken', () => {
+  it('reads Published: its only session ends after now', async () => {
+    renderAdmin();
+    const table = await findStudiesTable();
+    const row = (await within(table).findByText('Checkout usability test')).closest('tr') as HTMLElement;
+    const label = row.querySelector('.admin-study-status__label');
+    expect(label?.textContent).toMatch(/^published$/i);
+  });
+});
 
 describe('Research Studies table: Capacity and Booked said the same thing', () => {
   it('has no Capacity column, because Progress already carries the capacity as its denominator', async () => {

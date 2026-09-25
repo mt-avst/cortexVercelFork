@@ -19,6 +19,22 @@ vi.mock('../../contexts/ThemeContext', () => ({
 }));
 
 /**
+ * A slot time for the `AdminSessionManager` stub below, relative to the real
+ * clock rather than a fixed 2030 date - the test that reads it is only about
+ * whether an unsaved slot marks the form dirty, not whether the slot is
+ * upcoming, but a literal future year is a #164-shaped trap waiting to
+ * happen regardless. `vi.hoisted` because the `vi.mock` factory below runs
+ * before this module's own top-level code.
+ */
+const STUB_SESSION_TIME = vi.hoisted(() => {
+  const start = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  return {
+    start: start.toISOString(),
+    end: new Date(start.getTime() + 30 * 60 * 1000).toISOString(),
+  };
+});
+
+/**
  * Reports the backward- and forward-navigation props it was handed, so the
  * page's wiring can be asserted here while the control's own rendering is
  * asserted where the real component is rendered, in
@@ -55,7 +71,7 @@ vi.mock('../../components/AdminSessionManager', () => ({
         type="button"
         onClick={() =>
           onSessionsChange?.([
-            { id: 'temp-session-1', start_time: '2030-01-01T10:00:00Z', end_time: '2030-01-01T10:30:00Z' }
+            { id: 'temp-session-1', start_time: STUB_SESSION_TIME.start, end_time: STUB_SESSION_TIME.end }
           ])
         }
       >

@@ -5,7 +5,8 @@ import type { ReviewSection } from '../../lib/opportunity-authoring/review-summa
 import {
   PUBLISHED_NOT_WORKING_LABEL,
   PUBLISHED_NOT_WORKING_PREFIX,
-  PUBLISHED_NOT_WORKING_DESCRIPTION
+  PUBLISHED_NOT_WORKING_DESCRIPTION,
+  type ShareLinkUnstartableReason
 } from '../../lib/opportunity-authoring/step-status';
 import FieldError from './FieldError';
 import ShareOpportunityLink from '../ShareOpportunityLink';
@@ -93,11 +94,33 @@ interface ReviewStepProps {
    * `status` above, which this component already holds.
    *
    * `startable` mirrors `ShareOpportunityLink`'s own prop of the same name -
-   * computed by the page the same way `OpportunityDetail` computes it, so a
-   * published study with e.g. no session slots yet does not get told it is
-   * ready to share when a participant could not actually start it.
+   * computed by the page the same way `OpportunityDetail` computes it (both
+   * ask the SAME `findPublishProblems` for a live session or interview,
+   * passing `hasBookableSlot: hasUpcomingSlot(sessions, now)` - the same
+   * `end_time > now` rule cto/AdaptaLabs#164 pins for the "Broken" pill - and
+   * `hasMeetingLocation`), so a published study missing its slot, its venue,
+   * or both does not get told it is ready to share when a participant could
+   * not actually start it. `OpportunityDetail` used to check only the slot
+   * here, so a moderated study missing only its venue read Broken on the
+   * Create & Manage table and unshareable on this screen while its own admin
+   * detail page still offered a live, ready-to-share link.
+   *
+   * `unstartableReason`, also passed straight through, is what lets
+   * `ShareOpportunityLink` name the RIGHT missing thing when `startable` is
+   * false: a live session or interview can be unstartable for want of an
+   * upcoming slot, a venue, or both independently, and neither is fixed by
+   * supplying the other - so this is
+   * `deriveShareLinkUnstartableReason(publishProblemCodes)`
+   * (`lib/opportunity-authoring/step-status.ts`), not read from the type
+   * alone. Optional, like `ShareOpportunityLink`'s own prop of the same
+   * name: a caller that omits it gets that component's original generic
+   * wording.
    */
-  shareLink: { opportunityId: string; startable: boolean } | null;
+  shareLink: {
+    opportunityId: string;
+    startable: boolean;
+    unstartableReason?: ShareLinkUnstartableReason;
+  } | null;
   /**
    * The viewer's role, threaded straight through to `ShareOpportunityLink`'s
    * own admin gate. This form is already admin-only (see the redirect in
@@ -399,6 +422,7 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
             status={status}
             role={role}
             startable={shareLink.startable}
+            unstartableReason={shareLink.unstartableReason}
           />
         )}
 

@@ -6,6 +6,7 @@ import {
   STEP_STATUS_LABEL,
   describeStepPosition,
   deriveStepStatus,
+  hasUpcomingSlot,
   isPublishedButNotWorking,
   stepsHoldingErrors
 } from './step-status';
@@ -173,18 +174,47 @@ describe('PUBLISHED_NOT_WORKING_LABEL', () => {
   });
 });
 
+describe('hasUpcomingSlot (cto/AdaptaLabs#164)', () => {
+  const NOW = new Date('2026-09-24T12:00:00.000Z');
+  const end = (isoEnd: string) => ({ end_time: isoEnd });
+
+  it('is false with no sessions', () => {
+    expect(hasUpcomingSlot([], NOW)).toBe(false);
+  });
+
+  it('is true when at least one session has not yet ended', () => {
+    expect(hasUpcomingSlot([end('2026-09-01T00:00:00.000Z'), end('2026-09-25T00:00:00.000Z')], NOW)).toBe(true);
+  });
+
+  it('is false when every session has already ended', () => {
+    expect(hasUpcomingSlot([end('2026-09-01T00:00:00.000Z'), end('2026-09-20T00:00:00.000Z')], NOW)).toBe(false);
+  });
+
+  it('is strictly greater than now: a session ending at exactly now does not count', () => {
+    expect(hasUpcomingSlot([end(NOW.toISOString())], NOW)).toBe(false);
+  });
+
+  it('is true one millisecond after now', () => {
+    expect(hasUpcomingSlot([end(new Date(NOW.getTime() + 1).toISOString())], NOW)).toBe(true);
+  });
+
+  it('treats an unparseable end_time as not upcoming, not as a crash', () => {
+    expect(hasUpcomingSlot([end('not-a-date')], NOW)).toBe(false);
+  });
+});
+
 describe('isPublishedButNotWorking', () => {
   const signal = (over: Partial<Parameters<typeof isPublishedButNotWorking>[1]> = {}) => ({
     type: 'test',
     hasLinkedStudy: false,
     externalLink: null,
-    sessionCount: 1,
+    hasUpcomingSlot: true,
     meetingLocation: 'Zoom',
     ...over
   });
 
   it('is false for a draft, however broken its content is', () => {
-    expect(isPublishedButNotWorking('draft', signal({ sessionCount: 0, meetingLocation: '' }))).toBe(false);
+    expect(isPublishedButNotWorking('draft', signal({ hasUpcomingSlot: false, meetingLocation: '' }))).toBe(false);
   });
 
   it('is true for a published moderated study with no venue', () => {
@@ -192,7 +222,7 @@ describe('isPublishedButNotWorking', () => {
   });
 
   it('is true for a published moderated study with no bookable slot', () => {
-    expect(isPublishedButNotWorking('published', signal({ sessionCount: 0 }))).toBe(true);
+    expect(isPublishedButNotWorking('published', signal({ hasUpcomingSlot: false }))).toBe(true);
   });
 
   it('is true for a published hand-off with no link and no linked study', () => {
@@ -224,7 +254,7 @@ describe('isPublishedButNotWorking', () => {
     expect(
       isPublishedButNotWorking(
         'published',
-        signal({ type: 'survey', deliveryMode: 'native', sessionCount: undefined, meetingLocation: undefined })
+        signal({ type: 'survey', deliveryMode: 'native', hasUpcomingSlot: undefined, meetingLocation: undefined })
       )
     ).toBe(false);
   });
