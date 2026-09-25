@@ -61,6 +61,7 @@ vi.mock('../../api/client', () => ({
   getOpportunity: vi.fn(),
   getRecordedStudyBrief: vi.fn(),
   trackOpportunityClick: vi.fn().mockResolvedValue(undefined),
+  markOpportunityOpened: vi.fn().mockResolvedValue(undefined),
   bookSession: vi.fn(),
   getMyCalendarEvents: vi.fn(async () => []),
   startRecordedStudySession: vi.fn(),

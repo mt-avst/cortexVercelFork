@@ -30,6 +30,10 @@ const STUDIES: Opportunity[] = [
 
 vi.mock('../../api/client', () => ({
   getOpportunities: vi.fn(async () => STUDIES),
+  // #168: independent fetch Home also makes on mount - stub it so it never
+  // hits a real client, and answer "nothing new" like the real fail-closed
+  // contract does on an unmocked call.
+  checkParticipateVisit: vi.fn(async () => ({ newOpportunityIds: [] })),
 }));
 
 vi.mock('../../contexts/AuthContext', () => ({

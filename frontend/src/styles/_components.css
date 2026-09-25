@@ -7007,8 +7007,8 @@ body.theme-light .study-summary-line {
 /* No side padding of its own: the tile's `.card` padding (24px) is its one
    inset. The extra 12px each side left 153px of a 225px tile at 1024px, which
    wrapped "SESSIONS THIS / WEEK" and "Across all published / studies" and
-   dropped that tile's baselines out of line with its neighbours (Admin table
-   Step 1 fix round, 2026-09-23). Scoped `.admin-dashboard` so it also
+   dropped that tile's baselines out of line with its neighbours (measured
+   2026-09-23). Scoped `.admin-dashboard` so it also
    outranks - by source order at equal specificity - the
    `.admin-dashboard .card-body` side padding that the 1400/1920/2560px media
    rules near the top of this file add (24/32/40px): without it the double
@@ -14429,7 +14429,14 @@ body.theme-dark {
 .opportunity-row__kind {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
+  /* Only takes effect once `flex-wrap: wrap` has put the [glyph label] unit,
+     the #168 badge and an admin's status onto more than one line (320/390px:
+     a long type name plus a long status can each take their own line).
+     `gap` alone already sets this spacing on a single line; naming it
+     separately here is only for when it is between wrapped lines instead. */
+  row-gap: 4px;
   font-size: 0.65rem;
   font-weight: 600;
   letter-spacing: 0.12em;
@@ -14441,12 +14448,68 @@ body.theme-dark {
   margin: 0 0 6px;
 }
 
+/* Glyph + label as a single flex-wrap unit (cto/AdaptaLabs#168): keeps the
+   two together on whichever line they land on, so the kicker's own
+   `flex-wrap` above only ever breaks between [glyph label], [New] and
+   [· status], never inside the pair. */
+.opportunity-row__kind-type {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  /* Without this the label text itself is still free to wrap word-by-word
+     inside the unit (measured: "Recorded session" broke after "Recorded",
+     stranding the glyph with only the first word) - `flex-wrap` on the
+     parent only ever decides where THIS unit as a whole breaks, not what
+     happens inside it. */
+  white-space: nowrap;
+}
+
 .opportunity-row__kind-glyph {
   flex-shrink: 0;
 }
 
 .opportunity-row__status {
   opacity: 0.75;
+  /* An admin-only " · draft" / " · closed" suffix (OpportunityRow omits
+     "published", which Participate always is). Kept as one unit so the
+     kicker's flex-wrap breaks between items, never inside this word. */
+  white-space: nowrap;
+}
+
+/* #168 "New since your last visit". Deliberately NOT --study-type-color (that
+   slot identifies the study type) and NOT the brand orange (spent on
+   selection elsewhere). Also NOT --status-info (tried first): in dark mode
+   --status-info is #17a2b8, a teal
+   close enough to the !484 pod system's own per-type accents that the badge
+   read as if it were naming the study's type rather than flagging it as new
+   - a live-session card in particular sits right next to its own similarly-
+   toned type colour. Uses --opportunity-row-title instead: plain ink, the
+   same colour as the row's own heading, so the badge can only read as text
+   (which it is - bold weight + the pill border are what mark it as a badge),
+   never as a second, competing type signal.
+   Contrast (WCAG relative luminance, sRGB, computed from the token hex
+   values - not measured from a live render): light #14213D on the row's
+   ~white ground is 15.97:1; dark #FFFFFF on the row's ~#0A0E18 ground is
+   19.29:1. Both are the row title's own figures, so both clear the 4.5:1 AA
+   floor for the 0.65rem text this inherits from .opportunity-row__kind by a
+   wide margin, and border-color: currentColor carries the same ratio for the
+   pill outline, well above the 3:1 non-text floor. */
+.opportunity-row__badge-new {
+  display: inline-flex;
+  align-items: center;
+  color: var(--opportunity-row-title);
+  font-weight: 700;
+  /* line-height: 1, not the inherited body line-height: at this font-size the
+     badge's own box (text line-height + border + padding) came out taller
+     than an unbadged row's kicker line, so a row gaining a badge - which can
+     happen after the page has already rendered, on a slow /visit response -
+     grew 4px and shifted every row below it. Collapsing the badge's own line
+     box to its font size removes the extra height the border/padding no
+     longer has to absorb. */
+  line-height: 1;
+  padding: 1px 6px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
 }
 
 .opportunity-row__title {
@@ -14487,11 +14550,19 @@ body.theme-dark {
   color: var(--opportunity-row-meta);
 }
 
+/* Pre-existing, unrelated to #168: the global `li { margin-bottom: var(--spacing-2) }`
+   reset (_base.css) was leaking into this horizontal row. Every item but the
+   last child carried an 8px bottom margin the others did not, so within the
+   shared flex line `align-items: center` centred the shorter (unmarginated)
+   last item 4px lower than its siblings - moving as the row's own content
+   pushed a different item last, not a fixed "tag icon" bug. Reset to 0: gap
+   already spaces these items in both axes. */
 .opportunity-row__meta-item {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
+  margin: 0;
 }
 
 .opportunity-row__meta-item svg {
@@ -14681,7 +14752,21 @@ body.theme-dark {
   color: var(--opportunity-row-title);
 }
 
+/* cto/AdaptaLabs#168: below 640px (the `@media (max-width: 640px)` block
+   further down), `.opportunity-row__link` becomes a column, which turns the row's
+   own width into `.opportunity-row__action`'s CROSS axis. `align-items:
+   flex-start` on the column sizes cross-axis children by fit-content
+   clamped to the row's available width, and once the label text is long
+   enough to not fit, `white-space: nowrap` gives the text zero
+   shrinkability - every pixel of that clamp fell on this icon, collapsing
+   it to a 0-width SVG (invisible, not just squeezed) on "Start recorded
+   session" at 320px. `flex-shrink: 0` here matches the protection the row
+   already gives the whole action block in the un-columned layout (`flex: 0
+   0 auto` above): the icon may push the row a few pixels past its own
+   fit-content box into the page's own padding instead, which stays fully
+   on-screen at 320px (measured), rather than disappearing. */
 .opportunity-row__action svg {
+  flex-shrink: 0;
   transition: transform 0.15s ease;
 }
 

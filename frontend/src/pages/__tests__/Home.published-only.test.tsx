@@ -17,7 +17,11 @@ import { getOpportunities } from '../../api/client';
  * contract the fix rests on; the route's own scoping is proven server-side.
  */
 vi.mock('../../api/client', () => ({
-  getOpportunities: vi.fn(async () => [])
+  getOpportunities: vi.fn(async () => []),
+  // #168: independent fetch Home also makes on mount - stub it so it never
+  // hits a real client, and answer "nothing new" like the real fail-closed
+  // contract does on an unmocked call.
+  checkParticipateVisit: vi.fn(async () => ({ newOpportunityIds: [] })),
 }));
 
 vi.mock('../../contexts/AuthContext', () => ({

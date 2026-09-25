@@ -14,8 +14,12 @@ import { getStudyTypeGlyph, getStudyTypeAccentVar } from '../utils/studyTypeIcon
 
 type OpportunityRowProps = {
   opportunity: Opportunity;
-  /** The viewer's role. Only admins ever see a status. */
+  /** The viewer's role. Only admins ever see a status, and only a non-published one. */
   role?: User['role'];
+  /** #168: published since the participant's last visit to Participate, and
+      not yet opened. Home computes this by intersecting the visit endpoint's
+      ids with what is actually rendered; the row only draws the badge. */
+  isNew?: boolean;
 };
 
 /**
@@ -40,7 +44,7 @@ type OpportunityRowProps = {
  * action reads as a button without being one: a real button nested inside a
  * link is two tab stops and two targets for a single destination.
  */
-export function OpportunityRow({ opportunity, role }: OpportunityRowProps) {
+export function OpportunityRow({ opportunity, role, isNew }: OpportunityRowProps) {
   const isAdmin = role === 'researcher_admin' || role === 'superadmin';
   const isBookable = opportunity.type === 'test' || opportunity.type === 'interview';
 
@@ -97,6 +101,17 @@ export function OpportunityRow({ opportunity, role }: OpportunityRowProps) {
   const TypeGlyph = getStudyTypeGlyph(opportunity.type);
   const typeAccent = getStudyTypeAccentVar(opportunity.type);
 
+  // #168 "New" badge. Lives in the kicker line, not the type-colour slot: the
+  // per-type colour identifies WHAT the study is (the !484 pod system), and
+  // selection orange is spent on the selected state - neither is available to
+  // repurpose here. Sitting next to the kicker rather than inside the title
+  // means it can never push the title onto an extra line, and it uses the
+  // kicker's own small-caps sizing so it adds no new scale to the row.
+  // aria-describedby rather than moving it inside the h2: the badge is
+  // still announced when a screen-reader user navigates by heading, but the
+  // heading's accessible name stays just the title.
+  const newBadgeId = isNew ? `opportunity-row-new-${opportunity.id}` : undefined;
+
   return (
     <li className="opportunity-row">
       {/* No aria-label. An explicit label REPLACES the link's content as its
@@ -109,9 +124,25 @@ export function OpportunityRow({ opportunity, role }: OpportunityRowProps) {
             className="opportunity-row__kind"
             style={typeAccent ? ({ '--study-type-color': typeAccent } as React.CSSProperties) : undefined}
           >
-            {TypeGlyph && <TypeGlyph size={13} aria-hidden="true" className="opportunity-row__kind-glyph" />}
-            {getParticipantFacingType(opportunity.type)}
-            {isAdmin && (
+            {/* Glyph and label wrapped as one unit so `flex-wrap` on the kicker
+                below only ever breaks BETWEEN [glyph label] / [New] / [· status] -
+                never inside the pair, which is what let the glyph strand itself
+                alone on the first line at 320/390px while its own label wrapped
+                to the second. */}
+            <span className="opportunity-row__kind-type">
+              {TypeGlyph && <TypeGlyph size={13} aria-hidden="true" className="opportunity-row__kind-glyph" />}
+              {getParticipantFacingType(opportunity.type)}
+            </span>
+            {isNew && (
+              <span className="opportunity-row__badge-new" id={newBadgeId}>
+                New
+              </span>
+            )}
+            {/* "published" is omitted: Participate only lists published studies,
+                so for an admin it said nothing and cost the kicker a line at
+                390px beside the #168 New badge. A draft or closed status, the
+                case worth an admin's attention, still shows. */}
+            {isAdmin && opportunity.status !== 'published' && (
               <span className="opportunity-row__status"> · {opportunity.status}</span>
             )}
           </p>
@@ -120,7 +151,9 @@ export function OpportunityRow({ opportunity, role }: OpportunityRowProps) {
               an h3 here skips a level and axe reports heading-order. Light-mode
               h1-h3 all take the display face and the size comes from the class,
               so this renders identically. */}
-          <h2 className="opportunity-row__title">{opportunity.title}</h2>
+          <h2 className="opportunity-row__title" aria-describedby={newBadgeId}>
+            {opportunity.title}
+          </h2>
 
           {opportunity.purpose_one_liner && (
             <p className="opportunity-row__purpose">{opportunity.purpose_one_liner}</p>

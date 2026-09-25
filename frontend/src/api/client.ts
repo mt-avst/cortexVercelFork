@@ -17,6 +17,19 @@ declare global {
   }
 }
 
+declare module 'axios' {
+  export interface AxiosRequestConfig {
+    /**
+     * Opt out of the global 401 -> login redirect (below) for this one
+     * request. Used only by checkParticipateVisit and markOpportunityOpened,
+     * whose docblocks promise a 401 never surfaces to the viewer - without
+     * this flag the shared response interceptor would redirect to login on
+     * their behalf regardless of what either function returns or catches.
+     */
+    skipAuthRedirect?: boolean;
+  }
+}
+
 /**
  * Primary API client for all frontend API requests
  * 
@@ -144,9 +157,12 @@ api.interceptors.response.use(
     
     // Only redirect to login for actual 401s, not during initial load or after login
     // IMPORTANT: Don't auto-redirect during initial auth check to prevent automatic admin login
-    if (error.response?.status === 401 && 
+    // skipAuthRedirect opts a single request out entirely - see checkParticipateVisit and
+    // markOpportunityOpened below, which fail closed and must never bounce the viewer to login.
+    if (error.response?.status === 401 &&
         !isInitialAuthCheck &&
-        window.location.pathname !== '/' && 
+        !error.config?.skipAuthRedirect &&
+        window.location.pathname !== '/' &&
         !window.location.pathname.includes('/auth/')) {
       
       const isAdmin = isAdminRoute();
@@ -742,6 +758,81 @@ export const trackOpportunityClick = async (
       clickType,
     });
     return { ok: false };
+  }
+};
+
+/**
+ * Shared base path for every #168 "New since your last visit" endpoint, so a
+ * late contract tweak to the path is a one-line change in one place.
+ */
+const PARTICIPATE_BASE_PATH = '/participate';
+
+export interface ParticipateVisitResponse {
+  newOpportunityIds: string[];
+}
+
+/**
+ * "New since your last visit" (cto/AdaptaLabs#168). Called once per
+ * Participate page mount, independently of the study list fetch - see
+ * Home.tsx. Marks this visit server-side and answers which of the
+ * currently-visible studies were published since the visit before last and
+ * have not yet been opened - see markOpportunityOpened below for what clears
+ * that "opened" state, across every study type.
+ *
+ * Fails closed, the same shape as getAiDraftingAvailable above: a badge is
+ * cosmetic, never worth failing or delaying the list for, so a 401, 429,
+ * 503, a network error, or an e2e mock with no route for this at all, all
+ * answer "nothing new" rather than surfacing anywhere. This function only
+ * adds a logger.debug line (dev-only) on top - it does not log alone. The
+ * shared response interceptor above already runs logger.apiError (error
+ * level) on any failed request, this one included, before the rejection
+ * ever reaches this catch; a missed badge is silent to the VIEWER, not to
+ * the logs. skipAuthRedirect on the request stops a 401 here from also
+ * bouncing the viewer to login via that shared interceptor.
+ */
+export const checkParticipateVisit = async (): Promise<ParticipateVisitResponse> => {
+  try {
+    const response = await api.post(`${PARTICIPATE_BASE_PATH}/visit`, undefined, { skipAuthRedirect: true });
+    const ids = response.data?.newOpportunityIds;
+    return { newOpportunityIds: Array.isArray(ids) ? ids : [] };
+  } catch (error) {
+    logger.debug('Participate visit check failed', {
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
+    return { newOpportunityIds: [] };
+  }
+};
+
+/**
+ * "New since your last visit" (cto/AdaptaLabs#168), the other half: clears
+ * an opportunity's own New badge the moment a signed-in participant opens
+ * it, for every study type - not just the poll/survey/unmoderated subset the
+ * existing `trackOpportunityClick(id, 'view')` call above records for
+ * analytics, which this is deliberately separate from (see
+ * OpportunityDetail.tsx for where both fire, and why). The response body is
+ * ignorable - callers only care whether the call happened, not what it
+ * answers.
+ *
+ * Fire-and-forget and fails closed: this clears a cosmetic badge, not a
+ * navigation gate, so a 401, 404 (not published/visible), 429, a 5xx or a
+ * network error must never surface to the viewer. The caller does not need
+ * to await or catch this. As with checkParticipateVisit above, the debug
+ * line here is in addition to the shared response interceptor's own
+ * error-level log for the same failed request, not instead of it, and
+ * skipAuthRedirect on the request is what keeps a 401 here from also
+ * bouncing the viewer to login: without it, opening an expired session on a
+ * poll/survey/recorded/question detail page - the one page where this call
+ * is often the only session-requiring request - would redirect on its
+ * behalf even though this function itself never rejects.
+ */
+export const markOpportunityOpened = async (opportunityId: string): Promise<void> => {
+  try {
+    await api.post(`${PARTICIPATE_BASE_PATH}/opened/${opportunityId}`, undefined, { skipAuthRedirect: true });
+  } catch (error) {
+    logger.debug('Participate opened-marker failed', {
+      errorMessage: error instanceof Error ? error.message : String(error),
+      opportunityId,
+    });
   }
 };
 

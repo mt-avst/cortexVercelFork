@@ -654,6 +654,10 @@ const EXPECTED_AUTHORISATION: Record<string, Verdict> = {
   // stats.ts
   'GET /api/stats/platform': 'public',
 
+  // participate.ts - cto/AdaptaLabs#168, "New since your last visit"
+  'POST /api/participate/visit': 'session',
+  'POST /api/participate/opened/:opportunityId': 'session',
+
   // firsthand-session.ts - the participant runtime, token-bound
   'GET /api/firsthand/session/:token': 'participant-token',
   'GET /api/firsthand/session/:token/runtime': 'participant-token',
@@ -694,7 +698,7 @@ const EXPECTED_AUTHORISATION: Record<string, Verdict> = {
  * guards cannot notice the table changing - which is the whole point of a
  * count here.
  */
-const EXPECTED_ROUTE_COUNT = 99;
+const EXPECTED_ROUTE_COUNT = 101;
 
 /** Every router file in `src/routes`, read off disk rather than listed. */
 const ROUTER_FILES = fs
@@ -830,8 +834,8 @@ describe('the authorisation inventory', () => {
     // mounts nothing, so from that root alone the answer is one router; a set
     // pre-filled from disk answers 16 whatever it is handed.
     expect(routersReachedFrom([cronRouter]).size).toBe(1);
-    expect(routersReachedFrom([apiRouter]).size).toBe(15);
-    expect(routersReachedFrom(ROOTS.map(([, router]) => router)).size).toBe(17);
+    expect(routersReachedFrom([apiRouter]).size).toBe(16);
+    expect(routersReachedFrom(ROOTS.map(([, router]) => router)).size).toBe(18);
 
     // And it really is traversing rather than echoing its input: `api.ts` is
     // handed in alone and `session-outputs.ts` comes back with it.
@@ -839,7 +843,7 @@ describe('the authorisation inventory', () => {
     // THIS DOES NOT PROVE RECURSION, and should not be read as if it does.
     // Deleting `queue.push(...)` - making the walk depth-1 with no recursion at
     // all - passes every assertion here, because the mount graph is FLAT today:
-    // `api.ts` mounts all thirteen sub-routers directly, so depth-1 and depth-N
+    // `api.ts` mounts all fifteen sub-routers directly, so depth-1 and depth-N
     // are indistinguishable. A router nested two deep would be missed by
     // `routersReachedFrom`, though `inventory()` recurses separately so its
     // routes would still reach the table.
@@ -874,6 +878,7 @@ describe('the authorisation inventory', () => {
       'gamification.ts',
       'notificationPreferences.ts',
       'opportunities.ts',
+      'participate.ts',
       'session-outputs.ts',
       'sessions.ts',
       'stats.ts',

@@ -21,6 +21,7 @@ export default defineConfig({
     'admin-studies-table-density.test.ts',
     'admin-studies-table-triage.test.ts',
     'admin-table-chrome-layout.test.ts',
+    'participate-new-badge.test.ts',
   ],
   fullyParallel: false,
   forbidOnly: !!process.env.CI,

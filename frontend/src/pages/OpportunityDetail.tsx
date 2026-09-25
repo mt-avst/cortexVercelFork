@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { getOpportunity, bookSession, trackOpportunityClick, getMyCalendarEvents, getMyBookings, getRecordedStudyBrief, startRecordedStudySession, startSurveySession, submitScreener } from '../api/client';
+import { getOpportunity, bookSession, trackOpportunityClick, markOpportunityOpened, getMyCalendarEvents, getMyBookings, getRecordedStudyBrief, startRecordedStudySession, startSurveySession, submitScreener } from '../api/client';
 import type { ParticipantScreener, RecordedStudyBrief, ScreenerOutcome } from '@shared/types';
 import { formatStudyDate, formatTimeRange, formatTimeZoneLabel, formatClockTime, formatDateTime } from '../utils/datetime';
 import { describeCalendarClash } from '../utils/calendarClash';
@@ -319,7 +319,7 @@ const OpportunityDetail: React.FC = () => {
    * and without it the click would fall through to the external hand-off or to
    * nothing at all.
    *
-   * NO `!completion.completed` TERM (cto/AdaptaLabs#129, LOW-8). It was here
+   * NO `!completion.completed` TERM (cto/AdaptaLabs#129). It was here
    * and it was inert twice over: `completed` and `inProgress` are mutually
    * exclusive before this component sees them, and `hasCompletedNativeSurvey`
    * renders above the button branch anyway. Deleting it removed nothing - all
@@ -328,9 +328,9 @@ const OpportunityDetail: React.FC = () => {
    * the guard against a state it never guarded.
    *
    * WHAT CARRIES THE EXCLUSION, stated exactly, because the first version of
-   * this comment pointed at one half of it and called it pinned (LOW-2 of
-   * the review pass on the same ticket). TWO redundant server guards produce
-   * it, either of which holds alone:
+   * this comment pointed at one half of it and called it pinned, which
+   * was wrong. TWO redundant server guards produce it, either of which
+   * holds alone:
    *   - `inProgress: !completed && isInFlightRuntimeSession(...)` in
    *     `participantSessionSummaryForOpportunity`, and
    *   - `isInFlightRuntimeSession`'s OWN `isAnsweredRuntimeStatus` early
@@ -511,6 +511,49 @@ const OpportunityDetail: React.FC = () => {
       // Silently fail - tracking shouldn't block user experience
     });
   }, [opportunity?.id]);
+
+  // #168 "New since your last visit": clear this opportunity's own badge the
+  // moment a signed-in participant opens it, for every study type - not just
+  // the poll/survey/unmoderated subset the view-click call above records for
+  // analytics, which this is deliberately separate from (see
+  // markOpportunityOpened in api/client.ts). Gated on a PUBLISHED study only:
+  // the New badge is scoped to what Participate shows, so an admin previewing
+  // a draft here (status !== 'published') never fires it. Fire-and-forget -
+  // markOpportunityOpened swallows its own errors.
+  //
+  // Guarded PER STUDY ID (and per signed-in user - see below), not once per
+  // component instance: this page is reachable from another study's detail
+  // page (related studies, "next up" links, back/forward) without an
+  // unmount in between, since React Router reuses the OpportunityDetail
+  // instance across two matches of the same route pattern and only
+  // opportunity.id changes. A plain `useRef(false)` guard fired for the
+  // first study loaded in an instance and then silently no-opped for every
+  // study loaded after it in the same instance - study b opened right after
+  // study a never marked b at all. Holding the last MARKED key instead (not
+  // a boolean) still absorbs React StrictMode's dev-only double-invoke (the
+  // second call sees the same key already marked and skips), but a genuine
+  // change fires again.
+  //
+  // Keyed on `${user.id}:${loadedId}`, not loadedId alone: keying on the
+  // study id only would miss a user switch on the SAME study within the
+  // same mounted instance (the ref would already read as marked for the
+  // study, for whoever is signed in now) - not reachable today (nothing
+  // swaps the signed-in user without a remount), but the same StrictMode-safe
+  // shape as the study-id guard above costs nothing extra here.
+  const markedOpenedKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const loadedId = opportunity?.id;
+    const loadedStatus = opportunity?.status;
+    if (!user || !loadedId || loadedStatus !== 'published') {
+      return;
+    }
+    const key = `${user.id}:${loadedId}`;
+    if (markedOpenedKeyRef.current === key) {
+      return;
+    }
+    markedOpenedKeyRef.current = key;
+    markOpportunityOpened(loadedId);
+  }, [user, opportunity?.id, opportunity?.status]);
 
   // Load the shape of a recorded study - how many tasks, how long - so the page
   // can state it rather than relying on the description mentioning it.
