@@ -7,6 +7,7 @@ import { logger } from '../utils/logger';
 import { createOAuthStateGuard, OAuthStateResult } from '../utils/oauthState';
 import { sessionCookieName, sessionCookieClearOptions } from '../utils/hostCookie';
 import { isGoogleOAuthDemoMode } from '../../../shared/utils/demoMode';
+import { isDemoLoginAllowed } from '../utils/demoLogin';
 import {
   parseBootstrapSuperadminEmails,
   shouldElevateToSuperadmin,
@@ -152,8 +153,8 @@ router.get('/login', async (req, res) => {
     // Check if OIDC client is available, retrying initialization if needed
     const oidcClient = await ensureClient();
     if (!oidcClient) {
-      if (process.env.NODE_ENV === 'development') {
-        // In development, redirect to demo login
+      if (isDemoLoginAllowed()) {
+        // In development (or an opted-in Vercel preview), redirect to demo login
         return res.redirect('/auth/demo-login');
       } else {
         return res.status(500).json({ error: 'Authentication service unavailable' });
@@ -201,8 +202,8 @@ router.get('/callback', validateQuery(oauthCallbackQuerySchema), async (req, res
     // Check if OIDC client is available, retrying initialization if needed
     const oidcClient = await ensureClient();
     if (!oidcClient) {
-      if (process.env.NODE_ENV === 'development') {
-        // In development, redirect to demo login
+      if (isDemoLoginAllowed()) {
+        // In development (or an opted-in Vercel preview), redirect to demo login
         return res.redirect('/auth/demo-login');
       } else {
         return res.status(500).json({ error: 'Authentication service unavailable' });
@@ -354,7 +355,7 @@ router.get('/google-login', async (req, res) => {
     const isDemoMode = isGoogleOAuthDemoMode();
 
     if (isDemoMode) {
-      if (process.env.NODE_ENV !== 'development') {
+      if (!isDemoLoginAllowed()) {
         logger.error('Google OAuth is not configured and demo login is disabled outside development');
         return res.status(500).json({ error: 'Authentication service unavailable' });
       }
@@ -422,7 +423,7 @@ router.get('/google-callback', validateQuery(oauthCallbackQuerySchema), async (r
     const isDemoMode = isGoogleOAuthDemoMode();
     const isDemoLoginRequest = isDemoMode || code === 'demo-code';
 
-    if (isDemoLoginRequest && process.env.NODE_ENV !== 'development') {
+    if (isDemoLoginRequest && !isDemoLoginAllowed()) {
       logger.error('Demo Google login attempted outside development mode');
       return res.status(500).json({ error: 'Authentication service unavailable' });
     }
@@ -640,8 +641,8 @@ router.get('/google-callback', validateQuery(oauthCallbackQuerySchema), async (r
   }
 });
 
-// Demo routes for development
-if (process.env.NODE_ENV === 'development') {
+// Demo routes for development (and opted-in Vercel previews - utils/demoLogin.ts)
+if (isDemoLoginAllowed()) {
   /**
    * Helper function to auto-connect calendar for demo users
    * Extracts the repeated calendar token logic from demo login routes

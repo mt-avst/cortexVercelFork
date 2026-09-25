@@ -45,6 +45,7 @@ fork follow from that:
 | `SESSION_SECRET` | yes | 32+ random characters (`openssl rand -hex 32`) |
 | `CRON_SECRET` | yes | random string; Vercel Cron sends it automatically |
 | `DATABASE_URL` | yes | set by the Neon integration |
+| `ENABLE_DEMO_LOGIN` | previews only | `true`, set for the **Preview** environment only. Enables demo sign-in on previews; ignored in production (see below). |
 | `SKIP_OIDC` | until Okta is set up | `true` (stops a failed discovery on every cold start) |
 | `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_REDIRECT_URL` | for sign-in | an Okta app whose redirect URI is `https://<domain>/auth/callback` |
 | `BOOTSTRAP_SUPERADMIN_EMAILS` | optional | first sign-in by these addresses becomes superadmin |
@@ -54,10 +55,17 @@ fork follow from that:
 
 ## Not done yet
 
-- **Sign-in on previews.** The Okta app has no redirect URI for Vercel preview hostnames,
-  so a preview can serve pages and `/api/health` but nobody can sign in. The fix is either
-  an Okta app whose redirect URIs cover the preview domain, or a fixed auth-callback host.
-  The development-only demo sign-in routes are deliberately **not** enabled on Vercel.
+- **Real sign-in on previews.** For now previews use **demo sign-in**: `/auth/demo-login`
+  (a seeded employee) and `/auth/admin-login` (a seeded `researcher_admin`). This is a
+  deliberate, owner-approved shortcut (2026-09-25). It needs `ENABLE_DEMO_LOGIN=true`
+  **and** Vercel's own `VERCEL_ENV=preview`, so production cannot turn it on
+  (`backend/src/utils/demoLogin.ts`, pinned by its test). It is safe only because
+  previews sit behind Deployment Protection (step 4 above); never turn that off while
+  this switch is set.
+  - Use the **branch** link (`…-git-<branch>-….vercel.app`). After sign-in the app
+    redirects there, and the session cookie belongs to the host that set it.
+  - The real fix is an Okta app with redirect URIs covering the preview domain. Production
+    needs the `OIDC_*` variables either way.
 - **Recordings and artefact uploads (S3).** On Kubera the pod's IAM role (IRSA) granted S3.
   Vercel needs AWS OIDC federation to an IAM role and a bucket for this fork. Until then,
   FirstHand recording uploads fail.
