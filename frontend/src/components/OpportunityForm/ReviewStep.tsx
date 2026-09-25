@@ -10,8 +10,19 @@ import {
 } from '../../lib/opportunity-authoring/step-status';
 import FieldError from './FieldError';
 import ShareOpportunityLink from '../ShareOpportunityLink';
+import StatusPods, { type StatusPodOption } from '../StatusPods';
 import type { User } from '@shared/types';
 import './review-step.css';
+
+/**
+ * Draft/Published (#167): the same two pods everywhere this choice is made -
+ * see `StudyEditor.tsx`'s own three-pod list (it adds Archived) for the
+ * sibling call site that shares this component.
+ */
+const STATUS_PODS: StatusPodOption<'draft' | 'published'>[] = [
+  { value: 'draft', label: 'Draft', meaning: 'Not visible to users', tone: 'warning' },
+  { value: 'published', label: 'Published', meaning: 'Visible to users', tone: 'success' }
+];
 
 /** One publish blocker, already resolved to the step that fixes it. */
 interface PublishProblemPreview {
@@ -276,52 +287,63 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
       </div>
 
       {publishProblems && publishProblems.length > 0 ? (
-        <div className="alert alert-warning" role="alert">
-          <AlertTriangle size={16} className="me-2" aria-hidden="true" />
-          {/* A study SAVED as published is already live, so "cannot be
-              published yet" would tell its author the opposite of the truth
-              (#157). Read from the saved status, never the Status control:
-              choosing Published on an unsaved study does not publish it. */}
-          <p className="mb-2">
-            {storedStatus === 'published' ? 'This published study has problems:' : 'This study cannot be published yet:'}
-          </p>
-          <ul className="mb-0 ps-3">
-            {publishProblems.map((problem) => (
-              <li key={problem.stepId}>
-                {problem.message}{' '}
-                <button
-                  type="button"
-                  className="btn btn-link p-0 align-baseline"
-                  onClick={() => onEdit(problem.stepId)}
-                >
-                  Go to {problem.stepTitle}
-                </button>
-              </li>
-            ))}
-          </ul>
+        /* d-flex align-items-start (#167): the icon was an inline sibling of
+           the block-level `<p>` below it, which forced it onto its own line
+           above the sentence rather than beside it - the same shape the
+           `studyConflict` banner in OpportunityForm.tsx needed the same fix
+           for. align-items-start, not -center: a multi-line message centred
+           against a 16px icon floats the icon into the message's middle
+           instead of level with its first line. */
+        <div className="alert alert-warning d-flex align-items-start" role="alert">
+          <AlertTriangle size={16} className="me-2 flex-shrink-0" aria-hidden="true" />
+          <div>
+            {/* A study SAVED as published is already live, so "cannot be
+                published yet" would tell its author the opposite of the truth
+                (#157). Read from the saved status, never the Status control:
+                choosing Published on an unsaved study does not publish it. */}
+            <p className="mb-2">
+              {storedStatus === 'published' ? 'This published study has problems:' : 'This study cannot be published yet:'}
+            </p>
+            <ul className="mb-0 ps-3">
+              {publishProblems.map((problem) => (
+                <li key={problem.stepId}>
+                  {problem.message}{' '}
+                  <button
+                    type="button"
+                    className="btn btn-link p-0 align-baseline"
+                    onClick={() => onEdit(problem.stepId)}
+                  >
+                    Go to {problem.stepTitle}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       ) : (
         publishRefusal && (
-          <div className="alert alert-warning" role="alert">
-            <AlertTriangle size={16} className="me-2" aria-hidden="true" />
-            {publishRefusal.message}{' '}
-            {/*
-              Never disabled. The server is the authority on whether this
-              opportunity may be published, and a disabled button that turns out
-              to be wrong - because this preview drifted from the server's own
-              rule, or because the author fixes the problem some other way first -
-              is a control the author cannot recover from without leaving the
-              page. A clickable link to the offending step costs nothing when the
-              preview is right and loses nothing when it is not: the save itself
-              still enforces the rule either way.
-            */}
-            <button
-              type="button"
-              className="btn btn-link p-0 align-baseline"
-              onClick={() => onEdit(publishRefusal.stepId)}
-            >
-              Go to {publishRefusal.stepTitle}
-            </button>
+          <div className="alert alert-warning d-flex align-items-start" role="alert">
+            <AlertTriangle size={16} className="me-2 flex-shrink-0" aria-hidden="true" />
+            <div>
+              {publishRefusal.message}{' '}
+              {/*
+                Never disabled. The server is the authority on whether this
+                opportunity may be published, and a disabled button that turns out
+                to be wrong - because this preview drifted from the server's own
+                rule, or because the author fixes the problem some other way first -
+                is a control the author cannot recover from without leaving the
+                page. A clickable link to the offending step costs nothing when the
+                preview is right and loses nothing when it is not: the save itself
+                still enforces the rule either way.
+              */}
+              <button
+                type="button"
+                className="btn btn-link p-0 align-baseline"
+                onClick={() => onEdit(publishRefusal.stepId)}
+              >
+                Go to {publishRefusal.stepTitle}
+              </button>
+            </div>
           </div>
         )
       )}
@@ -380,31 +402,43 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
         rather than one more card among the summaries.
       */}
       <div className="review-footer">
-        <div className="border rounded p-3 mb-3">
+        {/*
+          `p-6` (1.5rem/24px, `--spacing-6`), not `p-3` (#167): the "Share
+          this study" card beneath this box is a real `.card`, whose own
+          padding is `--card-padding` (also 1.5rem) - `p-3` (0.75rem) sat
+          this box's heading ~12px closer to its own edge than the heading
+          below it, so the two boxes read as two different rhythms stacked
+          on top of each other. Same value, both themes - no token invented.
+
+          `review-status-box` (#167): this box is a plain div, not a `.card`,
+          so `opportunity-form-mobile.css`'s own `<576px` trim - which
+          matches `.opportunity-form .card` and so already reaches the Share
+          card below - never reached it; the two went back out of rhythm
+          below 576px even though they agree here. The class is the hook
+          that file uses to bring this box down to the same padding at that
+          width too.
+        */}
+        <div className="border rounded p-6 mb-3 review-status-box">
           <h3 id="status-heading" className="h6 mb-2">Status</h3>
           <div id="status-help" className="form-text mb-2">
             {status === 'draft' ? (
               <strong className="text-warning">
-                <AlertTriangle size={14} className="me-1" aria-hidden="true" />
+                <AlertTriangle size={14} className="status-help-icon me-1" aria-hidden="true" />
                 DRAFT - Not visible to users. Change to Published to make visible.
               </strong>
             ) : (
               'Published studies are visible to all users'
             )}
           </div>
-          <select
-            id="status"
-            className={`form-select ${statusError ? 'is-invalid' : ''}`}
-            style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto', maxWidth: '360px' }}
+          <StatusPods
+            name="status"
+            legendId="status-heading"
+            options={STATUS_PODS}
             value={status}
-            onChange={(e) => onStatusChange(e.target.value as 'draft' | 'published')}
-            aria-labelledby="status-heading"
-            aria-describedby={statusError ? 'status-error status-help' : 'status-help'}
-            aria-invalid={statusError ? 'true' : 'false'}
-          >
-            <option value="draft">Draft - Not visible to users</option>
-            <option value="published">Published - Visible to users</option>
-          </select>
+            onChange={onStatusChange}
+            describedBy={statusError ? 'status-error status-help' : 'status-help'}
+            invalid={Boolean(statusError)}
+          />
           {statusError && <FieldError id="status-error">{statusError}</FieldError>}
         </div>
 

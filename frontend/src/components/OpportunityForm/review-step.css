@@ -194,3 +194,19 @@
   padding-top: 1.5rem;
   border-top: 1px solid var(--border-subtle-current);
 }
+
+/*
+ * #167: `_reset.css` sets `svg { display: block }`, so a lucide glyph
+ * breaks an inline flow onto its own line unless told otherwise - here the
+ * warning icon inside the Status help line's `<strong>` rendered above the
+ * words it warns about instead of beside their first line. `inline-flex`
+ * restores inline flow; `vertical-align` lines its centre up against the
+ * text rather than its default baseline (the same fix `.admin-th-sort-caret`
+ * in `_components.css` already applies to its own lucide glyph). Text that
+ * wraps past the icon's line continues at the full line width, same as any
+ * inline element followed by running text.
+ */
+.status-help-icon {
+  display: inline-flex;
+  vertical-align: -0.15em;
+}

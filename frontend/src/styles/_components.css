@@ -14189,17 +14189,20 @@ body.theme-light .btn-ghost-danger {
 }
 
 /* ------------------------------------------------------------
-   STEP ACTIONS (row 24 / D9)
+   STEP ACTIONS (row 24 / D9, #167)
 
    Sticky so the primary action stays reachable without scrolling a long
    step - the whole point of a bottom action row is that it is always there.
-   Previous/Continue/the terminal button share one fixed floor width so the
-   row does not reflow as the label changes: measured 202-306px unclamped
-   (verify-claims #10, "Continue: Session Management" the widest), because
-   the label carries the destination step's name. A min-width rather than a
-   fixed one lets an exceptionally long label still grow past the floor
-   instead of clipping the text a screen reader also reads as the button's
-   name.
+
+   Every control sizes to its own content and may shrink; nothing here
+   guesses a shared floor width or counts how many controls the row has.
+   Two things instead do all the work as the row narrows: an auto
+   inline-start margin on the primary control (or on Save, where Save
+   exists) gives the row one consistent right edge without a spacer
+   element, and Previous/Save each collapse to
+   a fixed 44x44 icon-only square below their own fixed breakpoint - 899px
+   for Previous, 719px for Save, measured against each label's own longest
+   state, not decided at render time by whether the label currently fits.
    ------------------------------------------------------------ */
 .step-actions {
   position: sticky;
@@ -14214,8 +14217,248 @@ body.theme-light .btn-ghost-danger {
   background: var(--surface-card-current);
 }
 
-.step-actions__nav-button {
-  min-width: 260px;
+/* The row's own gap between Previous/Save/the primary - not the `gap-2`
+   utility (see StepActions.tsx's comment on this class) - so the narrow
+   tier below can tighten it without an `!important` fighting a later
+   cascade layer for it. */
+.step-actions__row {
+  column-gap: var(--spacing-2);
+}
+
+/*
+ * `flex: 0 1 auto` (shrink allowed, basis from content) plus `min-width: 0`
+ * (which removes the flex item's own content-based floor) are what let a
+ * control shrink below its label's natural width instead of forcing the
+ * row wider than its container. `column-gap` replaces the `me-2`/`ms-2`
+ * margin utilities the icon used to carry (StepActions.tsx): a margin
+ * stays fixed as a control shrinks, so once the label needed the space the
+ * icon's margin had already claimed it anyway; a flex gap is one number
+ * both answer to, and it disappears on its own once the label is removed
+ * from flow by the icon-only collapse below.
+ *
+ * Below 609px a control needs the real 44px touch-target floor `.btn`'s
+ * own `min-height` (`--min-click-area`, 40px) does not give it, and
+ * `--spacing-3` keeps its horizontal padding narrower than `.btn`'s own
+ * `--spacing-4` so a shrinking row keeps more of its width for the label.
+ * `>=609px` drops both overrides in favour of a padding this codebase has
+ * no other token for (`--spacing-5`) but which matches this row's own
+ * buttons on main pixel for pixel - the desktop row stays exactly the one
+ * main already ships, not a second opinion about it.
+ */
+.step-actions__control {
+  display: inline-flex;
+  align-items: center;
+  column-gap: var(--spacing-2);
+  min-width: 0;
+  flex: 0 1 auto;
+  min-height: 44px;
+  padding: var(--spacing-2) var(--spacing-3);
+}
+
+@media (min-width: 609px) {
+  .step-actions__control {
+    min-height: var(--min-click-area);
+    padding: var(--spacing-2) var(--spacing-5);
+  }
+}
+
+/*
+ * Between 609px and 899px, Previous/Save are still 44px icon squares (the
+ * breakpoints below) while the primary sits beside them at `--min-click-area`
+ * (40px) - the query above resolves first in source order, so without this
+ * the primary is visibly shorter than the icons flanking it. Naming 44px
+ * here rather than reusing a token keeps this rule legible as "match the
+ * icon squares" on its own, without a reader having to chase a shared
+ * constant to see why the two numbers must move together.
+ */
+@media (min-width: 609px) and (max-width: 899px) {
+  .step-actions__control {
+    min-height: 44px;
+  }
+}
+
+/*
+ * Labels never truncate and never split a word: `overflow-wrap: normal`
+ * (not `break-word`, which produces mid-word breaks) keeps every break at
+ * a space, so a control can only ever grow TALLER as it narrows, never
+ * clip or mangle the text a screen reader also reads as its accessible
+ * name. `white-space: normal` is what lets it wrap at all - `.btn` text is
+ * un-wrapped by default.
+ */
+.step-actions__label {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: normal;
+}
+
+/* An icon inside a shrinking flex button is itself a flex item once its
+   parent's content box narrows below the icon+text row's natural size;
+   `_reset.css`'s `svg { max-width: 100% }` would otherwise let the icon
+   itself shrink before the text did. Icons are a fixed size, never the
+   thing this row gives up first, and the spinner (not an svg) needs the
+   same protection while a save is in flight. */
+.step-actions__control svg,
+.step-actions__control .spinner-border {
+  flex-shrink: 0;
+}
+
+/*
+ * The primary control is always the row's last child - Previous and Save,
+ * where either exists, come before it - and `margin-inline-start: auto`
+ * is what gives it a consistent right edge on its own, whatever else the
+ * row does or doesn't render beside it. A step with no Previous needs no
+ * spacer element the way a `justify-content: space-between` row would; a
+ * row with Previous and/or Save still lands the primary at the same edge
+ * without this rule needing to know how many siblings it has.
+ */
+.step-actions__row .step-actions__control:last-child {
+  margin-inline-start: auto;
+}
+
+/*
+ * Where Save exists, the auto margin above has to move to IT instead of
+ * staying on the primary: the spacer sits before whichever element carries
+ * it, so on the primary it would fall between Save and the primary
+ * and push Save over to sit against Previous on the left, nowhere near
+ * the button it commits alongside. Moving the spacer to Save closes that
+ * gap, and the second rule below cancels the auto margin the first rule on
+ * this page would otherwise still put on the primary that immediately
+ * follows it, so the two buttons land side by side at the row's one right
+ * edge with just the row's own `column-gap` between them.
+ */
+.step-actions__row .step-actions__save {
+  margin-inline-start: auto;
+}
+
+.step-actions__row .step-actions__save + .step-actions__control:last-child {
+  margin-inline-start: 0;
+}
+
+/*
+ * Below 576px natural widths no longer leave the primary its own comfortable
+ * space - `flex-grow` resolves before an auto margin claims any leftover
+ * space, so setting it here is enough on its own: the primary grows to
+ * fill the room the row has instead of sitting at its content width with a
+ * gap beside it, and the rules above stop finding any space left to act on.
+ */
+@media (max-width: 575px) {
+  .step-actions__row .step-actions__control:last-child {
+    flex: 1 1 auto;
+  }
+}
+
+/*
+ * Below 900px even natural widths no longer leave room for every label:
+ * measured against the row's worst case - Previous, Save AND the primary
+ * all real, "Continue: Session Management" the longest label the product
+ * has - shrinking Save alone (leaving Previous expanded) still left the
+ * primary under its longest word's own width. Previous and Save each
+ * collapse to the same fixed 44x44 icon-only square, but not at the same
+ * breakpoint: measured against every step's real labels, Save's own text
+ * ("Save Changes"/"Saving..."/"Saved") still fits single-line down to
+ * 720px in both edit modes, so it keeps its label 180px longer than
+ * Previous's, which needs the full 900px because it carries the step name
+ * too ("Previous: <step>"). Neither depends on this for its accessible
+ * name: Previous keeps the unconditional `aria-label` set in
+ * StepActions.tsx, and Save keeps the same `.step-actions__label` span
+ * that already carries "Save Changes"/"Saving..."/"Saved" for every state,
+ * visually hidden with the app's `.visually-hidden` clip technique instead
+ * of `display: none` (inlined here, not added as a class, so it wins on
+ * specificity the same way the rest of this block does) - taken out of
+ * flow so it claims no `column-gap` beside the icon it no longer shares
+ * the button with.
+ *
+ * `.step-actions__row .step-actions__previous`/`.step-actions__save` (two
+ * classes each) is what wins over the plain `.step-actions__control` rule
+ * above on specificity alone, with no `!important` needed - a selector
+ * that is simply more specific on its face is a much harder thing to break
+ * by accident later than one that depends on staying below a rule it must
+ * out-rank in source order.
+ */
+@media (max-width: 899px) {
+  .step-actions__row .step-actions__previous {
+    flex: 0 0 44px;
+    width: 44px;
+    min-width: 44px;
+    max-width: 44px;
+    height: 44px;
+    padding: 0;
+  }
+
+  .step-actions__row .step-actions__previous .step-actions__label {
+    display: none;
+  }
+}
+
+@media (max-width: 719px) {
+  .step-actions__row .step-actions__save {
+    flex: 0 0 44px;
+    width: 44px;
+    min-width: 44px;
+    max-width: 44px;
+    height: 44px;
+    padding: 0;
+  }
+
+  .step-actions__row .step-actions__save .step-actions__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}
+
+/*
+ * Below 480px the primary is the only control still carrying a label (both
+ * Previous and Save, where they exist, are already 44px icons) - but at
+ * the very narrowest supported widths even ITS own longest word needs more
+ * room than the two fixed icons either side of it leave by default.
+ * Tightening the row's own gap and the primary's padding claims that room
+ * back without touching either icon's real 44x44 touch target.
+ */
+@media (max-width: 479px) {
+  .step-actions__row {
+    column-gap: var(--spacing-1);
+  }
+
+  .step-actions__row .step-actions__control:last-child {
+    column-gap: var(--spacing-1);
+    padding: var(--spacing-2) var(--spacing-2);
+  }
+}
+
+/*
+ * Below 360px the primary is still wrapping its longest state onto three
+ * lines even after the row-level tightening above - "Continue: Session
+ * Management" measured three lines at both 320px and 340px, pushing the
+ * whole sticky row noticeably taller. `.step-actions__label-prefix`
+ * (`StepActions.tsx` splits the label at its first ": " into this span
+ * plus the rest) is the generic verb ahead of the colon; hiding it here
+ * with the app's `.visually-hidden` clip technique (inlined, not the
+ * class, for the same specificity reason the rest of this block is)
+ * leaves only the destination visible, which is the shorter of the two
+ * ways to lose ten-plus characters and the one that keeps the unique part
+ * of the label on screen. The text stays in the DOM either way, so the
+ * button's accessible name - the full "Continue: <destination>" a screen
+ * reader reads - never changes.
+ */
+@media (max-width: 359px) {
+  .step-actions__label-prefix {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
 }
 
 /* ============================================================

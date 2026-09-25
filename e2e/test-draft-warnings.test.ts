@@ -36,18 +36,22 @@ test('draft warning appears in create opportunity form', async ({ page }) => {
   await page.click('text=Continue: Review');
   await page.waitForTimeout(500);
 
-  // Check status dropdown is set to draft by default. `#status` is a stable
-  // id, not an accessible name - Review's Status control has no
-  // `<label htmlFor="status">` any more, only an `<h3>Status</h3>` heading.
-  const statusValue = await page.inputValue('#status');
-  expect(statusValue).toBe('draft');
+  // Check the Draft pod is checked by default. Review's Status control is a
+  // radiogroup of two pods (#167), not a `<select>` - each option is a real
+  // `<input type="radio">` with a stable `${name}-${value}` id, so there is
+  // no single `#status` element any more to read an `inputValue` from.
+  const draftPod = page.getByRole('radiogroup', { name: 'Status' }).getByRole('radio', { name: /^Draft/ });
+  await expect(draftPod).toBeChecked();
 
-  // Check if status help text shows the warning
+  // Check if status help text shows the warning. The icon here is a lucide
+  // `AlertTriangle` SVG, not the "⚠️" glyph the success banner below uses
+  // for the same warning - `toContainText('⚠️ DRAFT')` could never match
+  // this element (pre-existing on main, before #167 too: the icon was never
+  // text).
   const statusHelp = await page.locator('#status-help');
-  await expect(statusHelp).toContainText('⚠️ DRAFT');
-  await expect(statusHelp).toContainText('Not visible to users');
+  await expect(statusHelp).toContainText('DRAFT - Not visible to users');
 
-  console.log('✅ Draft warning is visible in status dropdown!');
+  console.log('✅ Draft warning is visible beside the Status pods!');
 
   // Submit the form
   await page.click('button:has-text("Create opportunity")');

@@ -123,11 +123,14 @@ test.describe('M6 Poll Click Tracking', () => {
       .click();
     await page.waitForTimeout(300);
 
-    // Review's Status control has no `<label htmlFor="status">` any more -
-    // only an `<h3>Status</h3>` heading - so `#status` (a stable id, not an
-    // accessible name) is what still finds it.
-    await page.waitForSelector('#status', { state: 'visible', timeout: 10000 });
-    await page.selectOption('#status', 'published');
+    // Review's Status control is a radiogroup of two pods (#167), not a
+    // `<select>` - `role="radiogroup"` labelled "Status" by the
+    // `<h3 id="status-heading">`, each option a real `<input type="radio">`
+    // whose own `<label>` (the visible pod) is what a pointer actually
+    // reaches, since the radio itself is visually hidden.
+    const publishedPod = page.getByRole('radiogroup', { name: 'Status' }).locator('label.status-pod').filter({ hasText: 'Published' });
+    await publishedPod.waitFor({ state: 'visible', timeout: 10000 });
+    await publishedPod.click();
     await page.waitForTimeout(800);
 
     // Scroll to bottom where submit button is and click the terminal control

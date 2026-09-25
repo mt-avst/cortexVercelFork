@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import OpportunityForm from '../OpportunityForm';
 import { getOpportunity, updateOpportunity } from '../../api/client';
+import { setStatus as reviewSetStatus, statusIsChecked } from './helpers/review-status';
 
 /**
  * The edit form must not be interactive before its data arrives.
@@ -96,19 +97,6 @@ const goToBasicInfo = async () => {
   );
 };
 
-/**
- * Review's Status control (#111) has no `<label htmlFor="status">` - it sits
- * under an `<h3>Status</h3>` heading instead, unlike its old Basic
- * Information home, which did have one (see `git show 1b744f5 --
- * BasicInfoTab.tsx`). `getByLabelText` therefore cannot find it post-move;
- * it is the only `<select>` Review renders, so `getByRole('combobox')`,
- * scoped to the review step, finds it without relying on a name that does
- * not exist. Filed as a real accessibility regression worth a follow-up
- * fix - not something a test file can correct.
- */
-const statusControl = () =>
-  within(screen.getByTestId('review-step')).getByRole('combobox') as HTMLSelectElement;
-
 describe('OpportunityForm edit-mode hydration gate', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -131,8 +119,13 @@ describe('OpportunityForm edit-mode hydration gate', () => {
     );
 
     expect(firstPaint).toContain('Loading study');
-    // The controls the author could otherwise reach and have silently discarded.
-    expect(firstPaint).not.toContain('id="status"');
+    // The controls the author could otherwise reach and have silently
+    // discarded. `name="status"` (StatusPods, #167), not `id="status"` -
+    // every option's own id is now stable (`${name}-${value}`), never a bare
+    // `id="status"`, so that string can never appear at all and would prove
+    // nothing here; the radio group's shared `name` attribute is still
+    // exactly "status" and still only appears once Review's control mounts.
+    expect(firstPaint).not.toContain('name="status"');
     expect(firstPaint).not.toContain('id="title"');
     expect(firstPaint).not.toContain('Save Changes');
   });
@@ -160,7 +153,7 @@ describe('OpportunityForm edit-mode hydration gate', () => {
     // Status (#111) now lives on Review, not Basic Information - reach it
     // before reading it.
     advanceToReview();
-    expect(statusControl().value).toBe('draft');
+    expect(statusIsChecked('draft')).toBe(true);
   });
 
   it('a status chosen after hydration survives to the save payload', async () => {
@@ -177,7 +170,7 @@ describe('OpportunityForm edit-mode hydration gate', () => {
     await screen.findByLabelText(/title/i);
     advanceToReview();
 
-    fireEvent.change(statusControl(), { target: { value: 'published' } });
+    reviewSetStatus('published');
 
     // On Review the commit control is the terminal "Save changes" button,
     // not the per-step "Save Changes" shortcut (there is deliberately no

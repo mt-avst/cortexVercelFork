@@ -125,17 +125,15 @@ const walkToReview = async (user: ReturnType<typeof userEvent.setup>) => {
 };
 
 /**
- * Choose Status from Review (#111 moved the control off Basic Information).
- *
- * Review has no `<label htmlFor="status">` any more - only an
- * `<h3>Status</h3>` heading - so it is the one `<select>` Review renders,
- * found by role rather than by name. Callers must reach Review first (e.g.
- * via `walkToReview`).
+ * Choose Status from Review (#111 moved the control off Basic Information;
+ * #167 turned it from a `<select>` into two Draft/Published pods). Callers
+ * must reach Review first (e.g. via `walkToReview`).
  */
-const setStatus = async (user: ReturnType<typeof userEvent.setup>, status: string) => {
-  await user.selectOptions(
-    within(screen.getByTestId('review-step')).getByRole('combobox'),
-    status
+const setStatus = async (user: ReturnType<typeof userEvent.setup>, status: 'draft' | 'published') => {
+  await user.click(
+    within(screen.getByTestId('review-step')).getByRole('radio', {
+      name: status === 'draft' ? /Draft/ : /Published/
+    })
   );
 };
 

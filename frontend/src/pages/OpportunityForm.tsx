@@ -147,6 +147,7 @@ import { formatClockTime } from '../utils/datetime';
 import { CreateOpportunityRequest, UpdateOpportunityRequest, Opportunity, Session, Screener, ScreenerQuestion } from '../api/types';
 import { TrendingUp, AlertTriangle, CheckCircle, LogOut, Calendar } from 'lucide-react';
 import { CREATE_AND_MANAGE } from '@shared/pageNames';
+import './opportunity-form-mobile.css';
 
 /**
  * Unmoderated studies run with logged-in Cortex users, so an external
@@ -241,7 +242,8 @@ export const FIELD_LOCATIONS: Record<string, { tab: number; control?: string }> 
   // Title and Purpose are the study's advert copy, on the Basic Info step (tab 2
   // since Study type and Basic Info split apart), not the Study type step.
   title: { tab: 2, control: 'title' },
-  // `status` has no entry, deliberately: it is a closed two-option select and
+  // `status` has no entry, deliberately: it is a closed two-option choice
+  // (a `StatusPods` radiogroup since #167, previously a `<select>`) and
   // no validator in this file ever assigns `errors.status` or
   // `fieldErrors.status`, so it is a field that can never fail - the
   // completeness test below asserts exactly that. Moving its control to
@@ -5600,12 +5602,14 @@ const OpportunityForm: React.FC = () => {
                   edits the refusal exists to protect; a second tab shows the
                   saved version beside them instead. */}
               {studyConflict && (
-                <div className="alert alert-warning mx-4 mt-4 mb-0" role="alert">
-                  <AlertTriangle size={18} className="me-2" />
-                  <strong>Somebody else saved this while you were editing.</strong>{' '}
-                  Nothing has been saved and your edits are still here. Open this
-                  opportunity in a new tab to see what changed, then either copy
-                  their changes across or save again to replace their version.
+                <div className="alert alert-warning mx-4 mt-4 mb-0 d-flex align-items-start" role="alert">
+                  <AlertTriangle size={18} className="me-2 flex-shrink-0" aria-hidden="true" />
+                  <div>
+                    <strong>Somebody else saved this while you were editing.</strong>{' '}
+                    Nothing has been saved and your edits are still here. Open this
+                    opportunity in a new tab to see what changed, then either copy
+                    their changes across or save again to replace their version.
+                  </div>
                 </div>
               )}
 
