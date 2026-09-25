@@ -171,11 +171,11 @@ describe('the owner gate on the row menu (review P4 follow-up)', () => {
 });
 
 describe('a row click is a plain single click only', () => {
-  it('navigates to the edit page on a plain single click (the control)', async () => {
+  it('navigates to the study overview on a plain single click (the control)', async () => {
     renderAdmin();
     const table = await findStudiesTable();
     clickRowCell(rowFor(table, 'Live study'));
-    expect(await screen.findByTestId('probe')).toHaveTextContent('EDIT /admin/opportunities/opp-live/edit');
+    expect(await screen.findByTestId('probe')).toHaveTextContent('OVERVIEW /admin/opportunities/opp-live');
   });
 
   it.each([
@@ -416,7 +416,7 @@ describe('the Closing soon card (round 3 copy)', () => {
 });
 
 describe("a non-manager's row goes to the participant Preview (round 3)", () => {
-  it('points the title link at the Preview for someone else\'s study, and at the edit page for your own', async () => {
+  it('points the title link at the Preview for someone else\'s study, and at the study overview for your own', async () => {
     renderAdmin();
     await findStudiesTable();
     const table = await showAllResearchers();
@@ -425,10 +425,10 @@ describe("a non-manager's row goes to the participant Preview (round 3)", () => 
       'href',
       '/opportunities/opp-colleague'
     );
-    // Control: your own study's title goes to its edit page.
+    // Control: your own study's title goes to its overview page.
     expect(within(rowFor(table, 'Live study')).getByRole('link', { name: 'Live study' })).toHaveAttribute(
       'href',
-      '/admin/opportunities/opp-live/edit'
+      '/admin/opportunities/opp-live'
     );
   });
 
@@ -440,14 +440,14 @@ describe("a non-manager's row goes to the participant Preview (round 3)", () => 
     expect(await screen.findByTestId('probe')).toHaveTextContent('PREVIEW /opportunities/opp-colleague');
   });
 
-  it("gives a superadmin the edit page for anyone's study (the control)", async () => {
+  it("gives a superadmin the overview page for anyone's study (the control)", async () => {
     auth.value = { user: SUPERADMIN_USER, loading: false, initialAuthCheck: true };
     renderAdmin();
     await findStudiesTable();
     const table = await showAllResearchers();
     expect(within(rowFor(table, 'Colleague study')).getByRole('link', { name: 'Colleague study' })).toHaveAttribute(
       'href',
-      '/admin/opportunities/opp-colleague/edit'
+      '/admin/opportunities/opp-colleague'
     );
   });
 });

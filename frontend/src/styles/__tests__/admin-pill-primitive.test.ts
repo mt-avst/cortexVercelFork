@@ -32,31 +32,36 @@ import { join } from 'path';
  * and fail by name on, is the shape of the source: the shared class present
  * on all three pills, the bootstrap badge gone, and the metrics/
  * label-truncation rules that make the visible fix possible.
+ *
+ * cto/AdaptaLabs#163: the per-opportunity row markup these pins describe -
+ * including all three pills - moved out of `pages/Admin.tsx` into its own
+ * `components/admin/StudyRow.tsx` (a deliberate extraction, behaviour
+ * unchanged). The source-pin assertions below read that file now.
  */
 
-const ADMIN_TSX = readFileSync(join(__dirname, '..', '..', 'pages', 'Admin.tsx'), 'utf8');
+const STUDY_ROW_TSX = readFileSync(join(__dirname, '..', '..', 'components', 'admin', 'StudyRow.tsx'), 'utf8');
 const CSS = readFileSync(join(__dirname, '..', '_components.css'), 'utf8');
 
 describe('admin studies table pill primitive (#142)', () => {
   it('the type pill carries the shared .admin-pill class', () => {
-    expect(ADMIN_TSX).toMatch(/className=\{`admin-pill \$\{getTypeBadgeClass\(opportunity\.type\)\}/);
+    expect(STUDY_ROW_TSX).toMatch(/className=\{`admin-pill \$\{getTypeBadgeClass\(opportunity\.type\)\}/);
   });
 
   it('the status pill carries the shared .admin-pill class', () => {
     // Open-ended after the status modifier: a broken published study appends
     // `admin-study-status--not-working` inside the same template (#149).
-    expect(ADMIN_TSX).toMatch(/className=\{`admin-pill admin-study-status admin-study-status--\$\{opportunity\.status\}/);
+    expect(STUDY_ROW_TSX).toMatch(/className=\{`admin-pill admin-study-status admin-study-status--\$\{opportunity\.status\}/);
   });
 
   it('the auto-closed marker is not a bootstrap badge', () => {
-    expect(ADMIN_TSX).toMatch(/className="admin-pill admin-pill--auto-closed"/);
-    expect(ADMIN_TSX).not.toMatch(/badge bg-dark/);
+    expect(STUDY_ROW_TSX).toMatch(/className="admin-pill admin-pill--auto-closed"/);
+    expect(STUDY_ROW_TSX).not.toMatch(/badge bg-dark/);
   });
 
   it('the type pill lives in the Study cell now - there is no Type column for it', () => {
-    expect(ADMIN_TSX).not.toMatch(/className="col-type"/);
+    expect(STUDY_ROW_TSX).not.toMatch(/className="col-type"/);
     // It sits inside the Study cell's meta line, ahead of the purpose text.
-    expect(ADMIN_TSX).toMatch(
+    expect(STUDY_ROW_TSX).toMatch(
       /<td className="col-title"[\s\S]*?<div className="admin-study-meta">\s*<span className=\{`admin-pill \$\{getTypeBadgeClass/
     );
   });
@@ -99,12 +104,12 @@ describe('admin studies table pill primitive (#142)', () => {
     // tag fails on any attribute added beside the class - which is a pin
     // reporting on its own spelling rather than on the structure it is here to
     // hold.
-    expect(ADMIN_TSX).toMatch(/<span\s+className="admin-study-status__label"[^>]*>/);
+    expect(STUDY_ROW_TSX).toMatch(/<span\s+className="admin-study-status__label"[^>]*>/);
     // The hover title. It carries the label's own value, except for a broken
     // published study, where it carries the full meaning the short "Broken"
     // cannot (#157) - the pill's fill and glyph are the Draft pill's and do
     // not say "published". Behaviour is pinned in Admin.readiness-state.test.
-    expect(ADMIN_TSX).toMatch(
+    expect(STUDY_ROW_TSX).toMatch(
       /<span\s+className="admin-study-status__label"\s+title=\{notWorking \? PUBLISHED_NOT_WORKING_DESCRIPTION : statusLabel\}\s*>\s*\{statusLabel\}\s*<\/span>/
     );
     expect(CSS).toMatch(

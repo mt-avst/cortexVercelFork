@@ -553,14 +553,18 @@ export const canManageStudy = (opportunity: Opportunity, viewer: StudyViewer | n
 export const studyEditPath = (id: string): string => `/admin/opportunities/${id}/edit`;
 export const studyAnalyticsPath = (id: string): string => `/admin/opportunities/${id}/analytics`;
 export const studyPreviewPath = (id: string): string => `/opportunities/${id}`;
+/** cto/AdaptaLabs#163's study overview page. */
+export const studyOverviewPath = (id: string): string => `/admin/opportunities/${id}`;
 
 /**
- * Where a row goes - its title link and a click anywhere on the row: the edit
- * page for someone who can edit it, the participant page for anyone else
- * (the server refuses them the edit save).
+ * Where a row goes - its title link and a click anywhere on the row: the
+ * study's own overview page for someone who can manage it (cto/AdaptaLabs#163),
+ * the participant page for anyone else. Bookings and analytics are owner-only
+ * on the server, so a non-manager's own overview would be mostly 403 panels -
+ * Preview is the page that actually works for them.
  */
 export const studyRowPath = (opportunity: Opportunity, viewer: StudyViewer | null | undefined): string =>
-  canManageStudy(opportunity, viewer) ? studyEditPath(opportunity.id) : studyPreviewPath(opportunity.id);
+  canManageStudy(opportunity, viewer) ? studyOverviewPath(opportunity.id) : studyPreviewPath(opportunity.id);
 
 /** The row's inline button: the next thing to do to the study in its state. */
 export interface PrimaryStudyAction {

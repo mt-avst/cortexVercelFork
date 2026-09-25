@@ -23,6 +23,7 @@ const Settings = lazy(() => import('./pages/Settings'));
 const SurveySession = lazy(() => import('./pages/SurveySession'));
 const GamificationPage = lazy(() => import('./pages/Gamification'));
 const OpportunityAnalyticsPage = lazy(() => import('./pages/OpportunityAnalytics'));
+const OpportunityOverviewPage = lazy(() => import('./pages/OpportunityOverview'));
 const SessionReviewPage = lazy(() => import('./pages/SessionReview'));
 const Feedback = lazy(() => import('./pages/Feedback'));
 const Studies = lazy(() => import('./pages/Studies'));
@@ -127,6 +128,12 @@ function App() {
                       assert on the SAME declaration rather than a copy of it -
                       see there for why the nesting is load-bearing. */}
                   {opportunityFormRoutes(<OpportunityForm />)}
+                  {/* cto/AdaptaLabs#163: the study's own overview page. React
+                      Router ranks a static segment (`new`, `edit`, `analytics`)
+                      above a dynamic one, so this never swallows the routes
+                      above or below it - it only matches when nothing more
+                      specific does. */}
+                  <Route path="/admin/opportunities/:id" element={<OpportunityOverviewPage />} />
                   <Route path="/admin/opportunities/:id/analytics" element={<OpportunityAnalyticsPage />} />
                   <Route path="/admin/opportunities/:id/sessions/:sessionId/review" element={<SessionReviewPage />} />
                   <Route path="/my-bookings" element={<MyBookings />} />
