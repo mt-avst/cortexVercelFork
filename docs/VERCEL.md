@@ -31,7 +31,8 @@ fork follow from that:
 
 ## Setting up the project (once)
 
-1. **Create a project** in the AdaptaWorks team and import this GitHub repository. Leave
+1. **Create a project** in the AdaptaWorks team and import this GitHub repository
+   (done 2026-09-25: `cortex-vercel`, Vercel Authentication on every deployment URL). Leave
    the framework as "Other": `vercel.json` sets the install, build and output settings.
 2. **Connect Neon** from the project's Storage tab, with preview branching on. Each preview
    deployment then gets its own database branch and `DATABASE_URL`. The backend refuses

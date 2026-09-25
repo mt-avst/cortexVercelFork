@@ -3,6 +3,9 @@
   "version": "7.4.0",
   "description": "Adaptalabs recruitment app root package",
   "private": true,
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "test:backend": "cd backend && npm test",
     "test:backend:vitest": "cd backend && npm run test:vitest",
