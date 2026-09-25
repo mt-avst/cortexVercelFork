@@ -708,13 +708,23 @@ body.theme-light .btn-outline-secondary:hover {
 
 /* Fix, light: the Broken pill's own light ink (#8a5a29, see
    `.admin-study-status--not-working`) and a darkened warning amber border,
-   so the button reads as the pill's action rather than the brand orange. */
-body.theme-light .admin-dashboard table .admin-action-primary--fix {
+   so the button reads as the pill's action rather than the brand orange. A
+   shared class, not scoped to `.admin-dashboard table` - the study overview
+   page's own Fix action (cto/AdaptaLabs#163) reads it too. `.btn-outline-
+   secondary` is named alongside the class on purpose, not just `.btn`: the
+   dark pair below needs it to out-rank the table's own `body.theme-dark
+   .admin-dashboard table .btn-outline-secondary` (0,3,2), one class ahead of
+   `.btn.admin-action-primary--fix` alone (0,3,1) - a class-count fight, not
+   one source order can settle. This block has no such competing rule today,
+   but is kept at the same (0,4,1) as the dark pair so the two stay
+   identical and neither depends on a table rule that only exists on one
+   side. */
+body.theme-light .btn.btn-outline-secondary.admin-action-primary--fix {
   color: #8a5a29;
   border-color: color-mix(in srgb, var(--status-warning) 80%, #000000);
 }
 
-body.theme-light .admin-dashboard table .admin-action-primary--fix:hover {
+body.theme-light .btn.btn-outline-secondary.admin-action-primary--fix:hover {
   color: #8a5a29;
   border-color: color-mix(in srgb, var(--status-warning) 80%, #000000);
   background: color-mix(in srgb, var(--status-warning) 18%, #ffffff);
@@ -1489,13 +1499,21 @@ body.theme-dark .admin-dashboard .dropdown > .btn:hover {
 /* Fix - the inline action on a Broken row - speaks the Broken pill's amber,
    not the orange of selection and the brand: the same ink as the pill and
    the soon note, with the full warning amber as its border. The light pair is
-   in the light block (search "Fix, light"). */
-body.theme-dark .admin-dashboard table .admin-action-primary--fix {
+   in the light block (search "Fix, light"). A shared class, not scoped to
+   `.admin-dashboard table` - see that block for why. Needs `.btn-outline-
+   secondary` in the selector, not just `.btn`: inside the table, `.btn`
+   alone would lose to `body.theme-dark .admin-dashboard table
+   .btn-outline-secondary` (0,3,2) - one class ahead of
+   `.btn.admin-action-primary--fix` alone (0,3,1), which would read as the
+   table's own grey instead of amber. `.btn-outline-secondary` alongside the
+   class reaches (0,4,1) and wins on class count, not on `.btn` or where
+   either rule sits in the file. */
+body.theme-dark .btn.btn-outline-secondary.admin-action-primary--fix {
   color: color-mix(in srgb, var(--status-warning) 80%, var(--text-primary));
   border-color: var(--status-warning);
 }
 
-body.theme-dark .admin-dashboard table .admin-action-primary--fix:hover {
+body.theme-dark .btn.btn-outline-secondary.admin-action-primary--fix:hover {
   color: color-mix(in srgb, var(--status-warning) 80%, var(--text-primary));
   border-color: var(--status-warning);
   background: color-mix(in srgb, var(--status-warning) 18%, transparent);
@@ -2603,8 +2621,21 @@ body.theme-dark .analytics-container .card:hover {
 
 body.theme-dark .analytics-container .card h2,
 body.theme-dark .analytics-container .card h5,
-body.theme-dark .analytics-container .card h6 {
+body.theme-dark .analytics-container .card h6,
+body.theme-dark .analytics-container .card .alert-heading.h5 {
   color: #FFFFFF;
+}
+
+/* `.alert-heading.h5` needs its font-family repeated here: a real <h2>/<h3>
+   already gets Fraunces from the
+   h1,.h1,h2,.h2,h3,.h3 rule in _base.css (element selector, untouched by
+   theme), but `.alert-heading.h5`'s own base-font override
+   (_base.css, two classes) out-specifies that element selector wherever the
+   alert renders at <h2>/<h3>/<h4> - correct outside a card, wrong in one,
+   so it is set to Fraunces here to match the card's own `<h2 class="h5">`
+   section headings (deliberately, including for a level-5 alert in a card). */
+body.theme-dark .analytics-container .card .alert-heading.h5 {
+  font-family: var(--font-family-display, 'Fraunces', Georgia, 'Times New Roman', serif);
 }
 
 body.theme-dark .analytics-container .card .text-muted {
@@ -2636,7 +2667,8 @@ body.theme-light .analytics-container .card:hover {
 
 body.theme-light .analytics-container .card h2,
 body.theme-light .analytics-container .card h5,
-body.theme-light .analytics-container .card h6 {
+body.theme-light .analytics-container .card h6,
+body.theme-light .analytics-container .card .alert-heading.h5 {
   color: var(--fs-ink);
   font-family: var(--font-family-display, 'Fraunces', Georgia, serif);
 }

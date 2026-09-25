@@ -214,7 +214,7 @@ describe('a Close in flight', () => {
 
     // Control: the same click navigates once nothing is in flight.
     clickRowCell(rowFor(table, 'Draft study'));
-    expect(await screen.findByTestId('probe')).toHaveTextContent('EDIT /admin/opportunities/opp-draft/edit');
+    expect(await screen.findByTestId('probe')).toHaveTextContent('OVERVIEW /admin/opportunities/opp-draft');
   });
 });
 

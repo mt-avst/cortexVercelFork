@@ -120,6 +120,11 @@ export const renderAdmin = () =>
         <Route path="/admin" element={<Admin />} />
         <Route path="/admin/opportunities/:id/edit" element={<Probe label="EDIT" />} />
         <Route path="/admin/opportunities/:id/analytics" element={<Probe label="ANALYTICS" />} />
+        {/* cto/AdaptaLabs#163: a manager's title link and row click land here
+            now, not on the edit page - see studyRowPath. Static segments
+            (`edit`, `analytics`) above still win over this dynamic one, the
+            same ranking App.tsx relies on. */}
+        <Route path="/admin/opportunities/:id" element={<Probe label="OVERVIEW" />} />
         <Route path="/opportunities/:id" element={<Probe label="PREVIEW" />} />
       </Routes>
     </MemoryRouter>

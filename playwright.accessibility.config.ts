@@ -12,15 +12,20 @@ import { defineConfig, devices } from '@playwright/test';
  * was executed by nothing but a developer's own machine - the `test-a11y` job
  * in `.gitlab-ci.yml`, which serves a real `vite build` through `vite preview`
  * on localhost:3100, is the only gate either of these suites has.
+ * `opportunity-overview-a11y.test.ts` and `admin-fix-button-colour.test.ts`
+ * (cto/AdaptaLabs#163) joined it route-mocked from birth, for the same
+ * reason.
  */
 export default defineConfig({
   testDir: './e2e',
   testMatch: [
     'accessibility.test.ts',
+    'admin-fix-button-colour.test.ts',
     'admin-pill-primitive.test.ts',
     'admin-studies-table-density.test.ts',
     'admin-studies-table-triage.test.ts',
     'admin-table-chrome-layout.test.ts',
+    'opportunity-overview-a11y.test.ts',
     'participate-new-badge.test.ts',
   ],
   fullyParallel: false,

@@ -743,7 +743,7 @@ test.describe('Admin studies table triage: Broken, three ways (AC16)', () => {
 });
 
 test.describe('Admin studies table triage: row actions (AC15)', () => {
-  test('AC15 every title is a link to its edit page, and a row click opens the same URL', async ({ page, baseURL }) => {
+  test('AC15 every title is a link to its overview page, and a row click opens the same URL', async ({ page, baseURL }) => {
     await open(page, baseURL);
     const links = await page.evaluate(() => {
       const p = window.__adminProbe;
@@ -752,16 +752,19 @@ test.describe('Admin studies table triage: row actions (AC15)', () => {
         return a ? [p.norm(a.textContent), new URL(a.href).pathname] : ['(no link)', ''];
       });
     });
-    const want = STATUS_ASC_ORDER.map((t) => [t, `/admin/opportunities/${idOf(t)}/edit`]);
+    // cto/AdaptaLabs#163: a manager's title link goes to the study overview
+    // now, not the edit form - every study on this owner-scoped table is
+    // the viewer's own, so every row is affected.
+    const want = STATUS_ASC_ORDER.map((t) => [t, `/admin/opportunities/${idOf(t)}`]);
     expect(links, 'title links, in table order').toEqual(want);
 
     await sinkApiForNavigation(page);
     // A plain cell, away from every control.
     await row(page, PUBLISHED_MINE).locator('td').nth(2).click({ timeout: 3000 });
-    await expect(page).toHaveURL(new RegExp(`/admin/opportunities/${idOf(PUBLISHED_MINE)}/edit$`), { timeout: 5000 });
+    await expect(page).toHaveURL(new RegExp(`/admin/opportunities/${idOf(PUBLISHED_MINE)}$`), { timeout: 5000 });
   });
 
-  test('AC15 Tab goes title link, action link, kebab, row by row; Enter on a title opens its edit page', async ({
+  test('AC15 Tab goes title link, action link, kebab, row by row; Enter on a title opens its overview page', async ({
     page,
     baseURL,
   }) => {
@@ -795,7 +798,7 @@ test.describe('Admin studies table triage: row actions (AC15)', () => {
     await link.focus();
     await sinkApiForNavigation(page);
     await page.keyboard.press('Enter');
-    await expect(page).toHaveURL(new RegExp(`/admin/opportunities/${idOf(PUBLISHED_MINE)}/edit$`), { timeout: 5000 });
+    await expect(page).toHaveURL(new RegExp(`/admin/opportunities/${idOf(PUBLISHED_MINE)}$`), { timeout: 5000 });
   });
 
   test('AC15 the kebab opens on Enter and Space, arrows move, Escape closes and returns focus', async ({
@@ -1460,7 +1463,7 @@ test.describe('Admin studies table triage: fix round (REVIEW-STEP2B-visual)', ()
     // Control: the same cell, clicked plainly, does navigate.
     await sinkApiForNavigation(page);
     await cell.click({ timeout: 3000 });
-    await expect(page).toHaveURL(new RegExp(`/admin/opportunities/${idOf(PUBLISHED_MINE)}/edit$`), { timeout: 5000 });
+    await expect(page).toHaveURL(new RegExp(`/admin/opportunities/${idOf(PUBLISHED_MINE)}$`), { timeout: 5000 });
   });
 
   test('under the Status select the count keeps its denominator (13) and Needs attention keeps its cards', async ({
@@ -1714,9 +1717,9 @@ test.describe('Admin studies table triage: round 3', () => {
     await expect(titleLink(page, PUBLISHED_MINE), 'your own title is a link').toHaveCount(1, { timeout: 3000 });
     const href = await titleLink(page, OTHER_PUBLISHED).evaluate((a) => new URL((a as HTMLAnchorElement).href).pathname);
     expect(href, 'title link').toBe(`/opportunities/${idOf(OTHER_PUBLISHED)}`);
-    // Control: your own study's title still opens its edit page.
+    // Control: your own study's title still opens its overview page.
     const own = await titleLink(page, PUBLISHED_MINE).evaluate((a) => new URL((a as HTMLAnchorElement).href).pathname);
-    expect(own, 'your own title link').toBe(`/admin/opportunities/${idOf(PUBLISHED_MINE)}/edit`);
+    expect(own, 'your own title link').toBe(`/admin/opportunities/${idOf(PUBLISHED_MINE)}`);
     await sinkApiForNavigation(page);
     await row(page, OTHER_PUBLISHED).locator('td').nth(2).click({ timeout: 3000 });
     await expect(page, 'row click').toHaveURL(new RegExp(`/opportunities/${idOf(OTHER_PUBLISHED)}$`), { timeout: 5000 });
