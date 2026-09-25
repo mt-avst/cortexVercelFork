@@ -355,6 +355,94 @@ export async function runMigrations() {
       ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS external_consent_confirmed BOOLEAN
     `);
 
+    // "New since your last visit" (cto/AdaptaLabs#168). WHEN a study first
+    // became visible on Participate, read together with participate_visits
+    // and participant_study_opens below. NULL means "never recorded" - every
+    // opportunity that predates this column, and by decision (2026-09-24)
+    // that is exactly the set that must never show as New. No backfill.
+    //
+    // Stamped on the create INSERT's direct draft->published, and in the
+    // PATCH status branch (routes/opportunities.ts) only on a transition
+    // INTO published FROM draft. A published study can go back to draft -
+    // `PATCH { status: 'draft' }` is a real, allowed unpublish - so an
+    // unpublish-then-republish re-stamps it to the later NOW(). A REOPEN
+    // (closed->published on a row that already carries a `published_at`
+    // from an earlier publish) leaves it alone, so an already-seen study
+    // does not resurface as New that way.
+    //
+    // The rare cost: a study closed before it was ever published
+    // (draft->closed->published) is also never stamped, because that first
+    // publish reaches this column as `closed`, not `draft`. A null
+    // `published_at` on a `closed`-going-`published` row cannot be told
+    // apart from a study that predates this column, and stamping that leg
+    // would resurface a pre-column study, every participant having already
+    // seen it, as newly published - so the narrower from-draft-only rule
+    // covers both, and reopening either stays quiet. A duplicate never
+    // inherits the source's value either, because the duplicate INSERT does
+    // not name this column at all (it always creates as draft). Idempotent
+    // add for existing databases.
+    await client.query(`
+      ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ
+    `);
+
+    // The participant's own visit clock (cto/AdaptaLabs#168). One row per
+    // user (PK doubles as the upsert conflict target). `last_seen_at` is
+    // touched on every call to POST /api/participate/visit; `previous_visit_
+    // end_at` only moves when a gap of PARTICIPATE_VISIT_GAP_MINUTES
+    // (routes/participate.ts) has elapsed since the last call, which is what
+    // "a visit has ended" means here - a page refresh or a trip into a study
+    // and back keeps calling within the gap and never moves the cutoff, so
+    // badges earned this session do not clear themselves. No row means no
+    // prior visit; the route's first-ever call for a user inserts one and
+    // returns an empty New list (first visit marks nothing, per decision).
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS participate_visits (
+        user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        previous_visit_end_at TIMESTAMPTZ
+      )
+    `);
+
+    // Which studies THIS user has opened, for the same feature
+    // (cto/AdaptaLabs#168). Opening a study clears its badge, and this table -
+    // not `opportunity_clicks` - is what POST /api/participate/visit's "not
+    // opened since" check reads.
+    //
+    // `opportunity_clicks` cannot serve that check: its own INSERT route
+    // (`POST /:id/click`) refuses a `view` click for every type except
+    // poll/survey/unmoderated (opportunities.ts), so a test/interview/question
+    // study's badge would never clear. Widening that gate was ruled out
+    // because it would change what `/:id/analytics` counts for those types.
+    // `participant_study_opens` is
+    // written by its own route (`POST /api/participate/opened/:opportunityId`)
+    // instead, called for every type on the same "study details opened" event.
+    //
+    // PK on (user_id, opportunity_id): one row per user per study, so the route
+    // upserts rather than inserting a new row on every open - `opened_at` is
+    // "most recently opened", not a log. ON DELETE CASCADE both ways, matching
+    // `participate_visits` above: neither a deleted user nor a deleted
+    // opportunity should leave an orphan row here.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS participant_study_opens (
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        opportunity_id UUID NOT NULL REFERENCES opportunities(id) ON DELETE CASCADE,
+        opened_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (user_id, opportunity_id)
+      )
+    `);
+
+    // The PK above is (user_id, opportunity_id), so it does not serve a lookup
+    // keyed on opportunity_id alone - `opportunity_id` is the SECOND column,
+    // not a usable prefix. `ON DELETE CASCADE` on the opportunity_id FK needs
+    // exactly that lookup to find the rows to remove. Harmless and cheap at
+    // today's size: named here rather than left implicit, so a table that
+    // grows enough for a cascading delete to matter
+    // does not have to wait on someone noticing the gap first.
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_participant_study_opens_opportunity
+      ON participant_study_opens(opportunity_id)
+    `);
+
     // HOW A STUDY CLOSED. `true` means a lifecycle sweep closed it
     // (`autoCloseOpportunityIfNeeded` / `autoClosePublishedStudiesPastEndDate`
     // in utils/opportunityLifecycle.ts, which set it in the same UPDATE as the
@@ -1141,7 +1229,7 @@ export async function runMigrations() {
     
     // Create index for click_type filtering
     await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_clicks_type 
+      CREATE INDEX IF NOT EXISTS idx_clicks_type
       ON opportunity_clicks(opportunity_id, click_type, clicked_at)
     `);
 

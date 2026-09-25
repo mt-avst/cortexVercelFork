@@ -17,6 +17,7 @@ import statsRouter from './stats';
 import firsthandRouter from './firsthand';
 import firsthandSessionRouter from './firsthand-session';
 import sessionOutputsRouter from './session-outputs';
+import participateRouter from './participate';
 
 const router: Router = Router();
 
@@ -91,6 +92,9 @@ router.use('/feedback', feedbackRouter);
 
 // Mount stats routes (public, no auth required)
 router.use('/stats', statsRouter);
+
+// "New since your last visit" (cto/AdaptaLabs#168): POST /api/participate/visit
+router.use('/participate', participateRouter);
 
 // Mount the participant runtime API (B4): requireAuth + token->user binding.
 // Registered before the broader '/firsthand' so the specific prefix wins

@@ -71,6 +71,7 @@ vi.mock('../../components/CalendarGrid', () => ({
 vi.mock('../../api/client', () => ({
   getOpportunity: vi.fn(async () => ({ ...fixture })),
   trackOpportunityClick: vi.fn().mockResolvedValue(undefined),
+  markOpportunityOpened: vi.fn().mockResolvedValue(undefined),
   bookSession: vi.fn(),
   getMyCalendarEvents: vi.fn(async () => []),
   getMyBookings: vi.fn(async () => ({ upcoming: [], past: [] })),

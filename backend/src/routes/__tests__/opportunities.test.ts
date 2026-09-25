@@ -1252,7 +1252,13 @@ describe('Opportunities API', () => {
         target_roles: null,
         // No external_consent_confirmed in the request body, so the create
         // binds null - "never recorded" (cto/AdaptaLabs#136).
-        external_consent_confirmed: null
+        external_consent_confirmed: null,
+        // status is 'draft' above (cto/AdaptaLabs#168). This does NOT bind
+        // the timestamp itself - the VALUES clause
+        // computes that with `CASE WHEN $23 THEN NOW() END`, the database's
+        // own clock, not the app's - only whether this create is a direct
+        // draft->published, which the request is not.
+        published_at: false
       };
 
       for (const [column, value] of Object.entries(expected)) {
@@ -5714,7 +5720,16 @@ describe('Opportunities API', () => {
 
     // Named at the site in routes/opportunities.ts; repeated here only as a
     // key set, so this test can assert coverage without restating the prose.
-    const EXCLUDED_COLUMNS = ['external_consent_confirmed'];
+    //
+    // `published_at` (cto/AdaptaLabs#168) joins `external_consent_confirmed`
+    // here for the same shape of reason: a duplicate always creates as
+    // draft, so it never has a publish moment to copy, and inheriting the
+    // ORIGINAL's `published_at` would let a copy show as "New" for a publish
+    // event that was never its own (or, worse, silently NOT show as new when
+    // the original predates the column). Absent from duplicate's INSERT
+    // entirely, so the column defaults to null like any other never-published
+    // row.
+    const EXCLUDED_COLUMNS = ['external_consent_confirmed', 'published_at'];
 
     /**
      * THE COVERAGE ASSERTION. Every column create's INSERT names must appear

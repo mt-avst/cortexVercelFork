@@ -22,6 +22,7 @@ import {
 } from '../validation/schemas';
 import { AppError, ValidationError, NotFoundError, ForbiddenError, asyncHandler } from '../utils/errorHandler';
 import { toPublicOpportunity, toPublicSession } from '../utils/publicOpportunity';
+import { PARTICIPANT_VISIBLE_OPPORTUNITY_SQL } from '../utils/participantVisibility';
 import {
   loadOpportunityProgressTotals,
   mockOpportunityProgressTotals,
@@ -1590,7 +1591,7 @@ router.get('/', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req: Re
       params.push(status);
     } else if (!isAdmin) {
       // Non-admins may only ever see published studies, regardless of any status query param
-      conditions.push(`o.status = 'published'`);
+      conditions.push(PARTICIPANT_VISIBLE_OPPORTUNITY_SQL);
     }
 
     // Decision 2: scope the admin table to the caller's own studies when the
@@ -2186,8 +2187,27 @@ router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOp
       owner_user_id, external_link_optional, firsthand_study_id, participant_type_required,
       participant_type_specific_details, start_date, end_date, delivery_mode,
       consent_text, consent_template_id, consent_template_version, screener,
-      target_roles, external_consent_confirmed
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20::jsonb, $21::jsonb, $22)
+      target_roles, external_consent_confirmed, published_at
+    ) VALUES (
+      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19,
+      $20::jsonb, $21::jsonb, $22,
+      -- "New since your last visit" (cto/AdaptaLabs#168). Stamped
+      -- here from the DATABASE's clock, not the app's - this is the same
+      -- draft->published moment the PATCH branch below stamps with its own
+      -- NOW(), and two disagreeing sources (app new Date() here, DB NOW()
+      -- there) could drift against each other and against the visit-cutoff
+      -- and click-timestamp columns, which are always DB time. One clock
+      -- for every timestamp this feature compares.
+      --
+      -- $23 carries the yes/no ("is this create a direct publish"), not $8
+      -- (status) reused: Postgres infers $8's type as the opportunity_status
+      -- enum from the column list above, and comparing that same parameter
+      -- against the bare string 'published' in a CASE raises
+      -- "inconsistent types deduced for parameter" (42P08) on a real
+      -- Postgres (the mocked pool in the unit tests never type-checks
+      -- parameters). A dedicated boolean parameter sidesteps the reuse.
+      CASE WHEN $23 THEN NOW() END
+    )
     RETURNING *
   `;
 
@@ -2341,7 +2361,11 @@ router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOp
     // boolean column - no jsonb cast needed. Absent in the request binds null,
     // the honest "never recorded" value. Same expression as the mock path
     // above, deliberately: one rule, spelled one way.
-    data.external_consent_confirmed ?? null
+    data.external_consent_confirmed ?? null,
+    // published_at ($23, cto/AdaptaLabs#168) - NOT the timestamp itself (the
+    // SQL literal above computes that with NOW()), just whether this create
+    // is a direct draft->published. See the comment in the query.
+    data.status === 'published'
   ];
 
   let result;
@@ -2368,6 +2392,7 @@ router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOp
     updated_at: result.rows[0].updated_at.toISOString(),
     start_date: result.rows[0].start_date ? result.rows[0].start_date.toISOString() : null,
     end_date: result.rows[0].end_date ? result.rows[0].end_date.toISOString() : null,
+    published_at: result.rows[0].published_at ? result.rows[0].published_at.toISOString() : null,
     sessions: [],
     // Same contract as the PATCH response: present only when this request
     // actually wrote a study, so absence means "nothing to say" rather than
@@ -3389,6 +3414,32 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
       updateFields.push('auto_closed = false');
     }
 
+    // "New since your last visit" (cto/AdaptaLabs#168), same derivation shape
+    // as `auto_closed` immediately above and for the same reason: not in the
+    // update schema, not in the allow-list, a literal rather than a
+    // parameter, appended after the loop.
+    //
+    // Set only on a transition INTO published FROM draft - the ordinary
+    // first-or-republish case, the one moment a study starts being visible to
+    // participants who were not already looking at it as a draft. An
+    // unpublish-then-republish (draft->published again) re-stamps to the
+    // later NOW() by the same rule.
+    //
+    // A REOPEN (closed->published, the table's Close-with-Undo) deliberately
+    // does NOT reach this branch, including the rare case of a study closed
+    // before it was ever published (draft->closed->published): that first
+    // publish is never marked New. The cost is accepted because a study that
+    // predates this column (published before it existed, so `published_at`
+    // is null) and a study closed-before-first-publish are indistinguishable
+    // from here - both are `status === 'closed'` with a null `published_at` -
+    // and stamping the closed->published transition would resurface a
+    // pre-column study, every participant having already seen it, as newly
+    // published. Reopening one must stay quiet, so the narrower from-draft-only
+    // rule covers both.
+    if (data.status === 'published' && existingOpp.rows[0].status === 'draft') {
+      updateFields.push('published_at = NOW()');
+    }
+
     // An in-place study update changes no column on `opportunities`, so a request
     // whose entire content was the authored task list or question set leaves this
     // empty. Refusing it here would answer "No fields to update" for a save that
@@ -3461,6 +3512,7 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
       updated_at: result.rows[0].updated_at.toISOString(),
       start_date: result.rows[0].start_date ? result.rows[0].start_date.toISOString() : null,
       end_date: result.rows[0].end_date ? result.rows[0].end_date.toISOString() : null,
+      published_at: result.rows[0].published_at ? result.rows[0].published_at.toISOString() : null,
       sessions: [],
       /**
        * The linked study's revision after this write, for the caller's NEXT
@@ -3780,7 +3832,7 @@ function refuseClosedStudyMint(res: Response, opportunityId: string, route: 'rec
 
 /**
  * The survey-session mint refusal for a terminal, answer-carrying session
- * (cto/AdaptaLabs#155, review pass 1 M1). No frontend reads this yet - the
+ * (cto/AdaptaLabs#155). No frontend reads this yet - the
  * survey client has no branch for it - so it is a plain string today, but a
  * `code` alongside it, the same shape `OPPORTUNITY_CLOSED_CODE` already uses,
  * means a future frontend fix has something to switch on instead of matching
@@ -4299,7 +4351,7 @@ router.post('/:id/survey-session', requireAuth, participantSessionMintLimiter, p
         }
 
         /*
-         * IN-FLIGHT, not merely unanswered (cto/AdaptaLabs#129, LOW-8).
+         * IN-FLIGHT, not merely unanswered (cto/AdaptaLabs#129).
          *
          * Before this, ANY unanswered row was resumed - an abandoned session from
          * months ago, one whose 24-hour token expired the day it was minted -
@@ -4362,7 +4414,7 @@ router.post('/:id/survey-session', requireAuth, participantSessionMintLimiter, p
        * terminal-unanswered (`abandoned`/`failed`), and not past its own token's
        * expiry. So it excludes another participant's session, a session under a
        * different opportunity, an already-answered or uploading one (409 above),
-       * a dead one (LOW-8), and - the case that matters here - somebody who never
+       * a dead one, and - the case that matters here - somebody who never
        * started at all, who reaches this line and is refused. Nothing the caller
        * supplies takes part in that decision.
        *

@@ -9,11 +9,20 @@ import { logger } from './logger';
 // GET /api/opportunities, GET /api/opportunities/:id, and
 // GET /api/opportunities/:id/sessions. That third one is easy to miss - it
 // returns bare session rows rather than an opportunity, which is why
-// toPublicSession is exported separately - and it leaked for the whole life of
-// the first version of this fix. If you add a fourth, it comes through here
-// too.
+// toPublicSession is exported separately. If you add a fourth, it comes
+// through here too.
 //
-// Two things are stripped, for different reasons.
+// NINE fields are stripped outright. EIGHT of them are
+// stripped by the destructure in toPublicOpportunity below: owner_user_id,
+// owner_name, owner_email (OWNER IDENTITY, below),
+// external_consent_confirmed, published_at, and total_booked /
+// total_capacity / auto_closed (the admin dashboard fields). The ninth,
+// location_or_meet_link_optional (THE SESSION JOINING LINK, below), is session-level rather than opportunity-level, so it is stripped
+// separately, by toPublicSession. The screener is NOT on this list: it is
+// REDACTED, not stripped - see toParticipantScreenerField.
+//
+// Those with the sharpest reasoning are documented in their own paragraphs
+// below rather than inline:
 //
 // OWNER IDENTITY (owner_user_id plus the joined owner_name / owner_email) is an
 // admin-surface concern: the participant landing page never renders it, so the
@@ -56,15 +65,26 @@ import { logger } from './logger';
 // external tool's own consent handling - not a fact the participant page
 // renders or needs. Unlike the screener it has no partial shape to preserve,
 // so it is a plain destructure below rather than a redaction function.
+//
+// PUBLISHED_AT (cto/AdaptaLabs#168) is stripped for a narrower reason than
+// the others: it is not sensitive on its own, but
+// GET /api/opportunities and GET /api/opportunities/:id select `o.*` and
+// serve non-admins with `optionalAuth` - no login at all - so it would reach
+// an anonymous caller. The "New since your last visit" feature it supports
+// is driven entirely by POST /api/participate/visit's own response
+// (`newOpportunityIds`), which is authenticated and scoped to the caller;
+// nothing participant-facing reads this column directly. Admins keep it (the
+// studies table and the create/PATCH responses bypass this serialiser
+// entirely, per the isAdmin branches at each call site).
 
 /**
  * What this serialiser can accept.
  *
- * Named for the job rather than for the owner fields: an earlier version called
- * this OwnerFields and returned `Omit<T, keyof OwnerFields>`, so widening the
- * constraint to reach `sessions` would have silently deleted sessions from
- * every participant payload. The return type is decoupled below so that trap
- * cannot be reintroduced by tidying the generic back to `keyof`.
+ * Named for the job rather than for the owner fields, and deliberately NOT
+ * used as `Omit<T, keyof PublicSerialisable>`: tying the return type to this
+ * interface's keys would silently drop `sessions` from every participant
+ * payload the moment the constraint widens to include it. The return type
+ * (`PublicView<T>` below) is decoupled for exactly that reason.
  */
 interface PublicSerialisable {
   owner_user_id?: unknown;
@@ -76,6 +96,7 @@ interface PublicSerialisable {
   total_booked?: unknown;
   total_capacity?: unknown;
   auto_closed?: unknown;
+  published_at?: unknown;
 }
 
 /**
@@ -126,6 +147,7 @@ type PublicView<T> = Omit<
   | 'total_booked'
   | 'total_capacity'
   | 'auto_closed'
+  | 'published_at'
 > &
   (T extends { sessions: infer S extends readonly unknown[] }
     ? { sessions: { [K in keyof S]: PublicSession<S[K]> } }
@@ -163,6 +185,9 @@ export function toPublicOpportunity<T extends PublicSerialisable>(opportunity: T
     total_booked: _totalBooked,
     total_capacity: _totalCapacity,
     auto_closed: _autoClosed,
+    // "New since your last visit" (cto/AdaptaLabs#168). See the module
+    // comment above.
+    published_at: _publishedAt,
     ...publicView
   } = opportunity;
 
@@ -181,8 +206,8 @@ export function toPublicOpportunity<T extends PublicSerialisable>(opportunity: T
   }
 
   // Anything else unrecognised FAILS CLOSED. This is a control whose job is
-  // withholding a credential, so passing an unknown shape through untouched -
-  // which the first version did - means every link goes out and no test fails.
+  // withholding a credential, so passing an unknown shape through untouched
+  // would mean every link goes out and no test fails.
   if (!Array.isArray(publicView.sessions)) {
     logger.error('Unexpected sessions shape in the public serialiser, withholding them', {
       sessionsType: typeof publicView.sessions,

@@ -103,6 +103,40 @@ describe('toPublicOpportunity', () => {
     expect(view.status).toBe('published');
   });
 
+  /**
+   * PUBLISHED_AT (cto/AdaptaLabs#168): stripped for participants and
+   * anonymous callers, because GET /api/opportunities and
+   * GET /api/opportunities/:id select `o.*` and serve `optionalAuth` - no
+   * login at all - so it would otherwise reach an anonymous caller.
+   * The column also drives the "New since your last visit" badge, which no
+   * non-admin caller needs to compute themselves.
+   *
+   * This is the only jest (no-database) test that exercises this serialiser
+   * with the column present; the route-level check is in
+   * opportunities.published-at-postgres.test.ts, which runs in the DB job.
+   *
+   * Both states, same reasoning as the external-consent test above: a strip
+   * guarded on truthiness would pass the null arm (an opportunity that
+   * predates this column, which is never New by decision) and only catch the
+   * timestamp case.
+   */
+  it.each([
+    ['a real timestamp', '2026-09-20T09:00:00.000Z'],
+    ['null (predates the column)', null],
+  ])('removes published_at, %s', (_label, publishedAt) => {
+    const view = toPublicOpportunity({ ...opportunity, published_at: publishedAt }) as Record<
+      string,
+      unknown
+    >;
+
+    expect(view).not.toHaveProperty('published_at');
+    // The control: the owner identity beside it is still stripped, so the new
+    // destructure did not displace the old ones.
+    expect(view).not.toHaveProperty('owner_user_id');
+    // And it is not simply dropping everything.
+    expect(view.title).toBe('Checkout flow walkthrough');
+  });
+
   it('removes the joining link from every session, not just the first', () => {
     const view = toPublicOpportunity(opportunity) as { sessions: Record<string, unknown>[] };
 
