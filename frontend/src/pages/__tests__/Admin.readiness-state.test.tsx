@@ -117,6 +117,13 @@ describe('Admin dashboard row: published but not working (row 6)', () => {
   });
 
   it('shows the ordinary status word for a published study that is actually ready', async () => {
+    // The page reads `now` from the real clock at mount (Admin.tsx), so the
+    // one session that keeps this study NOT Broken (cto/AdaptaLabs#164:
+    // `end_time > now`) is placed relative to the real clock at import time,
+    // the same convention `helpers/admin-triage.tsx` uses, rather than a
+    // fixed date this suite would outlive.
+    const sessionEnd = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const sessionStart = new Date(Date.now() + 24 * 60 * 60 * 1000 - 45 * 60 * 1000).toISOString();
     opportunities.value = [
       {
         id: 'opp-fine',
@@ -132,8 +139,8 @@ describe('Admin dashboard row: published but not working (row 6)', () => {
           {
             id: 'sess-1',
             opportunity_id: 'opp-fine',
-            start_time: '2026-08-19T22:00:00.000Z',
-            end_time: '2026-08-19T22:45:00.000Z',
+            start_time: sessionStart,
+            end_time: sessionEnd,
             capacity: 3,
             booked_count: 2,
             created_at: '2026-07-01T10:00:00.000Z',
@@ -175,4 +182,84 @@ describe('Admin dashboard row: published but not working (row 6)', () => {
     expect(within(row as HTMLElement).getByText('DRAFT')).toBeInTheDocument();
     expect(within(row as HTMLElement).queryByText('Broken')).not.toBeInTheDocument();
   });
+});
+
+/**
+ * cto/AdaptaLabs#164, rendered end to end: a live session or interview whose
+ * only slot has already ended must read Broken on the row, whether that slot
+ * is still inside the admin list's 14-day tail (still present in `sessions`)
+ * or has aged out of it (`sessions: []`, the same shape as never having had
+ * one at all). `adminDashboard.triage.test.ts` pins the same two cases at
+ * `isStudyBroken` and the Broken quick-filter directly; this is the proof
+ * that the page agrees. Dates are relative to `Date.now()` (Admin.tsx reads
+ * the real clock at mount), the same convention the "actually ready" test
+ * above uses, so the suite does not go stale.
+ */
+describe('Admin dashboard row: #164, a live session/interview with only an ended slot is Broken', () => {
+  const daysAgo = (days: number): string => new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+
+  for (const type of ['test', 'interview'] as const) {
+    it(`a published ${type} whose only slot ended 3 days ago (inside the 14-day tail) reads Broken`, async () => {
+      opportunities.value = [
+        {
+          id: `opp-ended-inside-${type}`,
+          type,
+          title: `Ended 3 days ago (${type})`,
+          purpose_one_liner: 'Only slot already ended',
+          default_duration_minutes: 30,
+          status: 'published',
+          created_at: '2026-07-01T10:00:00.000Z',
+          updated_at: '2026-07-01T10:00:00.000Z',
+          meeting_location_optional: 'Zoom',
+          sessions: [
+            {
+              id: 'sess-ended',
+              opportunity_id: `opp-ended-inside-${type}`,
+              start_time: daysAgo(3),
+              end_time: new Date(new Date(daysAgo(3)).getTime() + 45 * 60 * 1000).toISOString(),
+              capacity: 1,
+              booked_count: 1,
+              created_at: '2026-07-01T10:00:00.000Z',
+              updated_at: '2026-07-01T10:00:00.000Z',
+              remaining: 0,
+            },
+          ],
+        },
+      ];
+      renderAdmin();
+      const table = await findStudiesTable();
+      const row = (await within(table).findByText(`Ended 3 days ago (${type})`)).closest('tr');
+      expect(row).not.toBeNull();
+
+      expect(within(row as HTMLElement).getByText('Broken')).toBeInTheDocument();
+      expect(within(row as HTMLElement).queryByText('PUBLISHED')).not.toBeInTheDocument();
+    });
+
+    it(`a published ${type} whose only slot ended 20 days ago (outside the tail, sessions: []) reads Broken`, async () => {
+      opportunities.value = [
+        {
+          id: `opp-ended-outside-${type}`,
+          type,
+          title: `Ended 20 days ago (${type})`,
+          purpose_one_liner: 'Only slot aged out of the admin list tail',
+          default_duration_minutes: 30,
+          status: 'published',
+          created_at: '2026-07-01T10:00:00.000Z',
+          updated_at: '2026-07-01T10:00:00.000Z',
+          meeting_location_optional: 'Zoom',
+          // The 14-day tail (ADMIN_RECENT_SESSIONS_ONLY) would never send a
+          // session that ended 20 days ago - this is what the list response
+          // actually looks like for this study, not a simplification.
+          sessions: [],
+        },
+      ];
+      renderAdmin();
+      const table = await findStudiesTable();
+      const row = (await within(table).findByText(`Ended 20 days ago (${type})`)).closest('tr');
+      expect(row).not.toBeNull();
+
+      expect(within(row as HTMLElement).getByText('Broken')).toBeInTheDocument();
+      expect(within(row as HTMLElement).queryByText('PUBLISHED')).not.toBeInTheDocument();
+    });
+  }
 });

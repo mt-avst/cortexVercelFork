@@ -113,6 +113,26 @@ const OPPORTUNITY = (over: Record<string, unknown> = {}) => ({
   ...over
 });
 
+/**
+ * An upcoming slot, relative to the real clock rather than a fixed 2030 date
+ * - cto/AdaptaLabs#164 made `shareLinkStartable` read `end_time` against
+ * `now`, so a literal future year would silently become "already ended" once
+ * the calendar caught up with it.
+ */
+const upcomingSession = (id: string) => {
+  const start = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  return {
+    id,
+    opportunity_id: 'opp-1',
+    start_time: start.toISOString(),
+    end_time: new Date(start.getTime() + 30 * 60 * 1000).toISOString(),
+    capacity: 1,
+    booked_count: 0,
+    remaining: 1,
+    location_or_meet_link_optional: ''
+  };
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getSessions).mockResolvedValue([] as never);
@@ -201,18 +221,7 @@ describe('OpportunityForm - the share link OpportunityForm computes for Review (
       vi.mocked(getOpportunity).mockResolvedValue(
         OPPORTUNITY({ type: 'test', status: 'published', meeting_location_optional: 'Zoom' }) as never
       );
-      vi.mocked(getSessions).mockResolvedValue([
-        {
-          id: 'sess-1',
-          opportunity_id: 'opp-1',
-          start_time: '2030-01-07T10:00:00.000Z',
-          end_time: '2030-01-07T10:30:00.000Z',
-          capacity: 1,
-          booked_count: 0,
-          remaining: 1,
-          location_or_meet_link_optional: ''
-        }
-      ] as never);
+      vi.mocked(getSessions).mockResolvedValue([upcomingSession('sess-1')] as never);
       renderEdit();
       // Study type - the landing step since D5 - carries no Title field any
       // more, so the strip itself is the load anchor.
@@ -228,18 +237,7 @@ describe('OpportunityForm - the share link OpportunityForm computes for Review (
       vi.mocked(getOpportunity).mockResolvedValue(
         OPPORTUNITY({ type: 'interview', status: 'published', meeting_location_optional: 'Zoom' }) as never
       );
-      vi.mocked(getSessions).mockResolvedValue([
-        {
-          id: 'sess-1',
-          opportunity_id: 'opp-1',
-          start_time: '2030-01-07T10:00:00.000Z',
-          end_time: '2030-01-07T10:30:00.000Z',
-          capacity: 1,
-          booked_count: 0,
-          remaining: 1,
-          location_or_meet_link_optional: ''
-        }
-      ] as never);
+      vi.mocked(getSessions).mockResolvedValue([upcomingSession('sess-1')] as never);
       renderEdit();
       // Study type - the landing step since D5 - carries no Title field any
       // more, so the strip itself is the load anchor.

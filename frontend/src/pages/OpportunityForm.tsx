@@ -52,6 +52,8 @@ import {
   STEP_STATUS_LABEL,
   deriveStepStatus,
   describeStepPosition,
+  deriveShareLinkUnstartableReason,
+  hasUpcomingSlot,
   stepsHoldingErrors,
   type StepStatus
 } from '../lib/opportunity-authoring/step-status';
@@ -2166,23 +2168,58 @@ const OpportunityForm: React.FC = () => {
       formData.status === 'published' &&
       (formData.type === 'test' || formData.type === 'interview')
     ) {
-      // Audit row 15: a live session or an interview is taken by BOOKING a slot.
-      // Published with none, it appears on the dashboard as LIVE and on the
+      // Audit row 15: a live session or an interview is taken by BOOKING a slot,
+      // and cto/AdaptaLabs#164 sharpened WHICH slots count: one that has already
+      // ENDED cannot be booked either, so `sessions.length > 0` used to let a
+      // published edit through on nothing but a memory of a slot. Published
+      // with none upcoming, it appears on the dashboard as LIVE and on the
       // participant home as "Book a time" with nothing bookable behind it, and
-      // Review reports the study Completed. `sessions` holds the slots the
-      // author has added (temporary and persisted alike), so gate publish on
-      // there being at least one - which also flips the Session Management step
-      // off "Completed" while it is empty.
+      // Review reports the study Completed. `hasUpcomingSlot` is the one
+      // predicate this rule is asked through everywhere on this page (the
+      // Review preview below and `shareLinkStartable` read the same call), so
+      // gate publish on it - which also flips the Session Management step off
+      // "Completed" while nothing upcoming exists.
+      //
+      // `new Date()` here rather than the render's shared `now` (used by the
+      // Review preview and `shareLinkStartable` below): this callback is
+      // memoised with `useCallback`, and a `Date` object is a new reference on
+      // every render, so closing over `now` and adding it to the dependency
+      // array would defeat the memo and trip `react-hooks/exhaustive-deps`.
+      //
+      // For every render-time reader - the stepper chip (`liveErrorSteps`
+      // calls this function directly, unmemoised, on every render;
+      // cto/AdaptaLabs#164) and the Review banner a little further down
+      // (built from the same render's `now`) - this and `now` are read
+      // microseconds apart in the same synchronous render pass, so the chip
+      // and the banner cannot show two different verdicts while the page
+      // just sits open. That was NOT true before `liveErrorSteps` stopped
+      // being memoised: it used to be `useMemo`d and could go on repeating
+      // an old answer, read from
+      // an old clock, across any number of renders that did not touch
+      // `sessions` or `formData` - so the chip could keep reading "Completed"
+      // past the moment its only slot ended while the banner, re-read fresh
+      // every render, already disagreed with it.
+      //
+      // It is NOT the same instant for `collectValidationErrors`' call from
+      // `handleSubmit`: that runs when the author actually clicks Save, which
+      // can be well after the render that last computed `now` for the
+      // banner. That gap does not matter here regardless: this very check,
+      // right below, calls `hasUpcomingSlot(sessions, new Date())` - its OWN
+      // fresh clock, read at the moment Save runs - so a slot that ended
+      // while the author sat on Review is still caught and refused even if
+      // no render happened in between to bring the chip or the banner
+      // up to date first.
       //
       // This client gate is the fast half: it blocks the commit and flips the
       // Session Management chip off "Completed" before any request. The server
       // now enforces the same rule (cto/AdaptaLabs#118 - a `bookable_slot_required`
       // branch in `findPublishProblem`, the wizard's slots-before-publish
       // reorder in `handleSubmit`, and the Review preview via `publishRefusal`),
-      // so a direct-API publish of a slotless test/interview is refused too.
-      if (sessions.length === 0) {
-        errors.sessions =
-          'Add at least one session slot before publishing a live session or interview';
+      // so a direct-API publish of a test/interview with no upcoming slot is
+      // refused too. The message is read off `PUBLISH_PROBLEM_MESSAGES` rather
+      // than restated, so this and the server's own refusal cannot drift apart.
+      if (!hasUpcomingSlot(sessions, new Date())) {
+        errors.sessions = PUBLISH_PROBLEM_MESSAGES.bookable_slot_required;
       }
     }
 
@@ -2454,17 +2491,29 @@ const OpportunityForm: React.FC = () => {
     }
 
     return errors;
-    // Memoised so that everything derived from it - `liveErrorSteps`, and
-    // `statusOfStep` through it - is stable across renders that did not change
-    // the form.
+    // Memoised so a caller that keeps this reference around - the two
+    // `fresh = computeValidationErrors()` calls in the submit paths,
+    // `collectValidationErrors` below - gets the SAME function across a
+    // render that changed none of the state in the dependency array, rather
+    // than a new one it has no reason to want.
+    //
+    // `liveErrorSteps` (below) no longer leans on THIS memo for freshness
+    // (cto/AdaptaLabs#164): it used to be `useMemo(() =>
+    // stepsHoldingErrors(computeValidationErrors(), locateField),
+    // [computeValidationErrors])`, which skipped calling this function at all
+    // whenever the reference below had not changed - stale for as long as
+    // Review kept re-rendering for some OTHER reason without `sessions` or
+    // `formData` moving, while the `new Date()` inside this function's own
+    // slot check kept moving regardless. It now calls this function directly
+    // on every render instead, so how fresh the stepper's answer is no longer
+    // depends on this memo at all - only on how often the component renders,
+    // which is every time `now` below is re-read for the same reason.
     //
     // It does NOT help on the typing path, and it would be easy to write a
     // comment claiming it does: `handleInputChange` rebuilds `formData` on
     // every keystroke, so this is recreated on every keystroke too. What stops
     // the live region talking over an author who is typing is the
-    // `lastAnnouncedStep` guard, not this. The memo earns its place on the
-    // renders driven by other state - `validationErrors`, `activeTab`,
-    // `saving`, `sessions`, `refusalCount` - which is most of them.
+    // `lastAnnouncedStep` guard, not this.
   }, [formData, deliveryMode, studyIsReadOnly, hasLinkedStudy, studyMissing, sessions]);
 
   /**
@@ -2507,10 +2556,35 @@ const OpportunityForm: React.FC = () => {
     () => stepsHoldingErrors(validationErrors, locateField),
     [validationErrors]
   );
-  const liveErrorSteps = useMemo(
-    () => stepsHoldingErrors(computeValidationErrors(), locateField),
-    [computeValidationErrors]
-  );
+  //
+  // NOT wrapped in `useMemo` (cto/AdaptaLabs#164). It used to be keyed on
+  // `[computeValidationErrors]`, which skipped calling that function - and so
+  // skipped reading a fresh clock for the slot check inside it - on any
+  // render where the callback's own reference had not changed, however long
+  // Review kept re-rendering off some other piece of state in the meantime.
+  // The stepper could keep reading a step "Completed" past the moment its
+  // only slot ended, while the Review banner a few lines below (built fresh
+  // every render from its own `now`) already said otherwise - two readings
+  // of the same rule, taken microseconds apart, allowed to disagree only
+  // because one of them was cached.
+  //
+  // Calling it plainly instead costs one more evaluation, per render, of a
+  // small fixed set of field comparisons - reasoned rather than profiled:
+  // `computeValidationErrors` is a straight sequence of `if`s over
+  // `formData`'s own fields, plus `hasUpcomingSlot` over `sessions` and
+  // `collectScreenerErrors` over `screener_questions`, neither unbounded and
+  // neither looping over the other. Nothing here is async or touches the
+  // DOM. Not already run at this frequency: on the formData-driven (typing)
+  // path this callback's own reference DOES change every keystroke, so the old
+  // memo recomputed on the render that changed `formData` - but a typing
+  // burst produces MORE render passes than dependency-changing ones (the old
+  // memo's key stays the same reference across a render that changed
+  // nothing it depends on), and the old, memoised version skipped exactly
+  // those - about half of them, measured. This is a real increase in how
+  // often the small comparison above runs while typing, not a free
+  // deduplication of work that was happening anyway; it buys the correctness
+  // the comment above this one is about.
+  const liveErrorSteps = stepsHoldingErrors(computeValidationErrors(), locateField);
 
   const statusOfStep = useCallback(
     (step: FormStep): StepStatus =>
@@ -2676,6 +2750,41 @@ const OpportunityForm: React.FC = () => {
       : null;
 
   /**
+   * The clock `hasUpcomingSlot` reads for the Review preview
+   * (cto/AdaptaLabs#164): the Time slots row below, the publish-problem
+   * preview's slot gate, and `shareLinkStartable`. One `now` shared across
+   * those three plain render-time calculations, so they cannot read a
+   * different instant and disagree with each other over a millisecond.
+   *
+   * `computeValidationErrors` above (~line 2055) does NOT close over this
+   * `now` - it is a memoised `useCallback`, and putting an object that is
+   * new on every render into its dependency array defeats the memo and
+   * trips `react-hooks/exhaustive-deps` for exactly that reason. Its own
+   * slot check calls `hasUpcomingSlot(sessions, new Date())` directly
+   * instead.
+   *
+   * That instant and this render's `now` land microseconds apart in the same
+   * render pass for every render-time reader of `computeValidationErrors` -
+   * `liveErrorSteps` calls it directly, unmemoised, on every render
+   * (cto/AdaptaLabs#164) - which is what keeps the stepper chip and this
+   * Review preview from showing two different verdicts about the same slot
+   * while the page just sits open. It is not the same instant for a SAVE
+   * click reaching `computeValidationErrors` through `handleSubmit`, which
+   * can land after the render that last set this `now` - see the note
+   * beside that call: the gap does not matter because that check reads its
+   * OWN fresh clock at the moment of the click regardless of any render, so
+   * it does not depend on one having happened first.
+   *
+   * Read fresh on every render rather than threaded in or memoised: this page
+   * has no existing notion of "now" to reuse (unlike Admin.tsx's own `now`),
+   * the whole block it feeds is already plain `const`s recomputed every
+   * render rather than `useMemo`d, and a `new Date()` here needs no timer -
+   * the value only has to be as fresh as the render it is read in, and Review
+   * re-rendering on its own gives that for free.
+   */
+  const now = new Date();
+
+  /**
    * The check-answers screen, derived on EVERY render rather than snapshotted
    * when the author arrives on it.
    *
@@ -2770,7 +2879,13 @@ const OpportunityForm: React.FC = () => {
     copiedFromStudyId: formData.copied_from_study_id,
     copiedFromStudyTitle: formData.copied_from_title,
     linkedStudyId: formData.firsthand_study_id?.trim() ?? '',
-    sessionCount: sessions.length
+    sessionCount: sessions.length,
+    // The same predicate the slot gate and `shareLinkStartable` read
+    // (cto/AdaptaLabs#164): a study can hold sessions that have all already
+    // ended, and `sessionCount` alone cannot tell the Time slots row that -
+    // it would read as satisfied on a count that is, by the server's own
+    // rule, not bookable.
+    hasUpcomingSlot: hasUpcomingSlot(sessions, now)
   };
   const reviewSections = buildReviewSummary(reviewSummaryInput);
   const reviewHeader = buildReviewHeader(reviewSummaryInput);
@@ -2815,17 +2930,24 @@ const OpportunityForm: React.FC = () => {
     externalLink: formData.external_link_optional,
     /*
      * Preview parity for the slot gate (#118). The server refuses a bookable
-     * publish with no upcoming slot; passing the count here lets Review show
+     * publish with no upcoming slot; passing the answer here lets Review show
      * that refusal PROACTIVELY, the same way every other publish problem is
      * previewed - the blocking `computeValidationErrors` arm (row 15's "S")
-     * stops the commit, and this makes the Review banner name it too.
+     * stops the commit, and this makes the Review banner name it too. The two
+     * arms both call `hasUpcomingSlot(sessions, ...)` (cto/AdaptaLabs#164, one
+     * on `now`, the other on its own `new Date()` inside `computeValidationErrors`
+     * - see the note beside `now`'s declaration above), so they cannot disagree
+     * about whether the commit is actually stopped.
      *
-     * `sessions.length > 0`, not an upcoming-only count: the wizard cannot add a
-     * past slot (the slot picker offers future times), so in the form these are
-     * the same set, and this mirrors `shareLinkStartable` below rather than
-     * duplicating the server's `end_time > NOW()` clock here.
+     * `hasUpcomingSlot(sessions, now)`, not `sessions.length > 0`: an EDIT of
+     * an old study can hold only slots that have already ended, and the
+     * wizard's own picker offering only future times does not make that
+     * untrue - it only means a freshly-added slot can't be one. This is the
+     * exact clock `shareLinkStartable` below reads too, so the two cannot
+     * disagree with each other or with the server's own `end_time > NOW()`
+     * gate.
      */
-    hasBookableSlot: sessions.length > 0,
+    hasBookableSlot: hasUpcomingSlot(sessions, now),
     /*
      * Preview parity for the meeting-location gate (row 9). The venue moved off
      * step 1 onto the publish arm, so Review previews its absence the same way
@@ -2900,16 +3022,44 @@ const OpportunityForm: React.FC = () => {
    * banner said could not start.
    *
    * Checked first, and everything below is unreached once it fires - the
-   * test/interview arm mirrors `OpportunityDetail`'s own
-   * `hasStartablePath`/inline expression for the one shape `publishProblems`
-   * says nothing about (it does not model slots), so a session-less booking
-   * type is still caught even when the list itself is empty.
+   * test/interview arm mirrors `OpportunityDetail`'s own `ShareOpportunityLink`
+   * `startable` prop (NOT `hasStartablePath`, a different gate for a different
+   * button that does not cover test/interview at all), reading the same
+   * `hasUpcomingSlot(sessions, now)` the slot gate above passes as
+   * `hasBookableSlot` (cto/AdaptaLabs#164 - `OpportunityDetail` used to read
+   * `sessions.length > 0` there instead, so a study Review and the Create &
+   * Manage table both called Broken still showed a ready-to-share link on its
+   * own admin detail page). The two branches agree by construction now - a
+   * test/interview with no upcoming slot already fails
+   * `publishProblems.length > 0` above and never reaches this line - but this
+   * stays its own explicit check rather than an assumption about the branch
+   * above, since it mirrors a rule that lives in a different file
+   * (`OpportunityDetail`) and the two are not guaranteed to stay in lockstep.
    */
   const shareLinkStartable = publishProblems.length > 0
     ? false
     : formData.type === 'test' || formData.type === 'interview'
-    ? sessions.length > 0
+    ? hasUpcomingSlot(sessions, now)
     : true;
+
+  /**
+   * WHICH requirement is missing, for `ShareOpportunityLink`'s copy
+   * (cto/AdaptaLabs#164). Derived from `publishProblemCodes`
+   * above rather than from `formData.type` alone: a bookable type can be
+   * unstartable for its venue instead of its slot
+   * (`meeting_location_required`), for both at once, or for its slot alone -
+   * and adding a session does not fix a missing venue, so the slot-specific
+   * sentence is only right when `bookable_slot_required` is actually one of
+   * the problems found. `deriveShareLinkUnstartableReason`
+   * (`lib/opportunity-authoring/step-status.ts`) is the one place that
+   * mapping is written, so this and `OpportunityDetail.tsx`'s own call
+   * cannot start naming a different blocker than each other.
+   * `publishProblemCodes` rather than `publishProblems` (the resolved,
+   * step-attached list): only the codes are needed here, and reading the raw
+   * list means this cannot be tripped up by `stepForPublishProblem` ever
+   * failing to resolve a step for a code that is still genuinely present.
+   */
+  const shareLinkUnstartableReason = deriveShareLinkUnstartableReason(publishProblemCodes);
 
   /**
    * Say the step change out loud.
@@ -3051,8 +3201,9 @@ const OpportunityForm: React.FC = () => {
       // buttons on the first two tabs - so an author who rewrote their tasks,
       // their consent wording, the starting URL, either duration or the study
       // period had no way to save it from where they were standing. Only
-      // reachable at all now that A1 loads these back in: before it, they never
-      // held anything but their defaults in edit mode.
+      // reachable at all now that an opportunity's authored content is loaded
+      // back into the form: before that, they never held anything but their
+      // defaults in edit mode.
       //
       // inline_survey_questions and inline_survey_consent_text are deliberately
       // absent from this block: they are already compared above, and adding
@@ -3079,7 +3230,8 @@ const OpportunityForm: React.FC = () => {
       // lengths differ and the stringifications match, so a length clause is
       // exactly the "looks like coverage while testing nothing" shape the note
       // above warns about - it cannot be killed by a mutation on its own. The
-      // survey pair a few lines up has the same redundancy and predates A1;
+      // survey pair a few lines up has the same redundancy and predates the
+      // fix that loads an opportunity's authored content back into the form;
       // removing it is a tidy of its own rather than something to smuggle in
       // here.
       JSON.stringify(withoutClientIds(formData.inline_study_steps)) !==
@@ -3225,7 +3377,8 @@ const OpportunityForm: React.FC = () => {
      * Checked BEFORE the two comparisons below, because both measure against
      * the baseline the LOAD produced and an autosave deliberately does not
      * refresh that - declaring that what we sent is now what is stored is the
-     * mistake A1 exists to undo, and re-reading the opportunity mid-sentence
+     * same mistake loading an opportunity's authored content back into the
+     * form exists to undo, and re-reading the opportunity mid-sentence
      * is the loss autosave exists to prevent. So on an autosaved form both
      * instruments report unsaved work indefinitely, and the author is warned
      * about losing something that is already on the server. Warned every time,
@@ -4532,7 +4685,8 @@ const OpportunityForm: React.FC = () => {
         // stored.
         //
         // This used to do `setOriginalFormData({ ...formData })`, which is the
-        // same mistake on the way out that A1 just fixed on the way in: a
+        // same mistake on the way out that loading an opportunity's authored
+        // content back into the form just fixed on the way in: a
         // baseline seeded from a fiction. It asserts the request body was
         // stored verbatim, so `hasChanges()` goes false, the Save button
         // disappears, and the author gets positive confirmation that content
@@ -6265,7 +6419,11 @@ const OpportunityForm: React.FC = () => {
                         statusError={validationErrors.status}
                         shareLink={
                           persistedOpportunityId
-                            ? { opportunityId: persistedOpportunityId, startable: shareLinkStartable }
+                            ? {
+                                opportunityId: persistedOpportunityId,
+                                startable: shareLinkStartable,
+                                unstartableReason: shareLinkUnstartableReason
+                              }
                             : null
                         }
                         role={user?.role}

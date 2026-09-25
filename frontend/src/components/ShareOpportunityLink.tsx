@@ -2,6 +2,7 @@ import React, { useEffect, useId, useRef, useState } from 'react';
 
 import { Button } from './ui';
 import type { Opportunity, User } from '@shared/types';
+import type { ShareLinkUnstartableReason } from '../lib/opportunity-authoring/step-status';
 
 type CopyState = 'idle' | 'copied' | 'failed';
 
@@ -26,6 +27,30 @@ type ShareOpportunityLinkProps = {
    * rule on the host page: `!firsthand_study_id && !external_link_optional`.
    */
   startable?: boolean;
+  /**
+   * WHY `startable` is false, so the copy below can name the actual blocker
+   * instead of guessing it from the opportunity's type (cto/AdaptaLabs#164).
+   * A live session or interview starts by booking a slot, but it is not the
+   * ONLY thing that can keep one unstartable - it also needs a venue
+   * (`meeting_location_required`), and a missing venue is not fixed by
+   * booking a slot. Naming the slot every time a bookable type was
+   * unstartable, regardless of which requirement was actually unmet, was the
+   * bug this replaces: a moderated study missing only its venue used to be
+   * told to "add an upcoming session" when one already existed.
+   *
+   * `ShareLinkUnstartableReason` (`lib/opportunity-authoring/step-status.ts`)
+   * rather than a bespoke type here: both call sites (`OpportunityForm`'s
+   * Review step and `OpportunityDetail`) derive this from the SAME
+   * `findPublishProblems` codes through that module's
+   * `deriveShareLinkUnstartableReason`, so this component only ever
+   * receives an answer the two pages already agree on. A named reason
+   * rather than a second boolean, deliberately: a boolean can only ever mean
+   * "it's the slot" or "it isn't", and a third requirement - or both at once
+   * - would need more booleans this component has to learn about by name
+   * anyway. Optional: a caller that omits it, or that cannot yet tell which
+   * requirement failed, gets the original generic sentence, unchanged.
+   */
+  unstartableReason?: ShareLinkUnstartableReason;
 };
 
 /**
@@ -44,6 +69,7 @@ export function ShareOpportunityLink({
   status,
   role,
   startable = true,
+  unstartableReason,
 }: ShareOpportunityLinkProps) {
   const [copyState, setCopyState] = useState<CopyState>('idle');
   const urlRef = useRef<HTMLAnchorElement>(null);
@@ -170,10 +196,51 @@ export function ShareOpportunityLink({
             </Button>
           </div>
         ) : (
-          <p className="text-danger mb-0" style={{ fontSize: '0.875rem' }}>
-            Participants cannot start this yet, so the button on this page is
-            disabled. Add a session, a task list or a link before sharing,
-            depending on the study type.
+          <p className="validation-error mb-0" style={{ fontSize: '0.875rem' }}>
+            {/*
+              `.validation-error` (cto/AdaptaLabs#164), not `.text-danger`:
+              `.validation-error` is the token `FieldError` already uses for
+              every other inline error sentence on this form - the SAME
+              class, so this sentence reads as a warning wherever it renders.
+              `.text-danger` is not a missing Bootstrap class - it is a real
+              utility of its own (`_utilities.css`) - but it resolves to the
+              same danger colour and would lose to the same page-scoped card
+              rules `.validation-error` did, so switching classes would not
+              have fixed anything on its own.
+
+              On `OpportunityDetail` a bare `.validation-error` (`_themes.css`)
+              used to lose to that page's own more specific `.card-body p` /
+              `.card p` rules and paint as body text instead of a warning.
+              Fixed with `.opportunity-detail-page .card-body
+              p.validation-error` overrides, one class more specific and in
+              the same themes layer, no `!important` - AA-checked: brand
+              orange in dark, `#DC2626` in light, on both pages.
+
+              "So the button on this page is disabled" is dropped rather than
+              kept: it is false on `ReviewStep` (the authoring form has no
+              participant-facing button at all - this whole block is admin-only
+              copy about a link) and false on `OpportunityDetail` for a
+              test/interview (no CTA button gates those two types either; an
+              empty calendar does). "Participants cannot start this yet" is
+              true wherever this component renders, which is the only claim
+              this sentence needs to make.
+            */}
+            Participants cannot start this yet.{' '}
+            {
+              // Named by the caller, not guessed from the type
+              // (cto/AdaptaLabs#164): a bookable study can be
+              // unstartable for want of a slot, a venue, or both at once, and
+              // neither is fixed by supplying the other - so each case gets
+              // its own honest instruction rather than the slot wording every
+              // time a bookable type was unstartable.
+              unstartableReason === 'no_upcoming_slot'
+                ? 'Add an upcoming session before sharing.'
+                : unstartableReason === 'no_meeting_location'
+                ? 'Add a meeting location before sharing.'
+                : unstartableReason === 'no_upcoming_slot_and_no_meeting_location'
+                ? 'Add an upcoming session and a meeting location before sharing.'
+                : 'Add a session, a task list or a link before sharing, depending on the study type.'
+            }
           </p>
         )}
 

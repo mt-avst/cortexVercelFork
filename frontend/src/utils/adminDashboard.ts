@@ -13,7 +13,7 @@
  */
 import { Opportunity, Session } from '../api/types';
 import { getClosingTime, getParticipantFacingType } from './opportunityUtils';
-import { isPublishedButNotWorking } from '../lib/opportunity-authoring/step-status';
+import { hasUpcomingSlot, isPublishedButNotWorking } from '../lib/opportunity-authoring/step-status';
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
@@ -169,19 +169,25 @@ export const needsRecruitment = (opportunity: Opportunity): boolean => {
  * reading of `isPublishedButNotWorking` from the fields the list response
  * carries. The one place the table, the chips, the status filter, the Needs
  * attention card and the status sort all ask, so they cannot disagree.
+ *
+ * `now` is passed to `hasUpcomingSlot` (cto/AdaptaLabs#164): a study is
+ * Broken only when it has no slot that has not yet ended, matching the
+ * server's own publish and session-delete guards (`end_time > NOW()`,
+ * strictly, whatever its capacity) rather than merely having no sessions at
+ * all.
  */
-export const isStudyBroken = (opportunity: Opportunity): boolean =>
+export const isStudyBroken = (opportunity: Opportunity, now: Date): boolean =>
   isPublishedButNotWorking(opportunity.status, {
     type: opportunity.type,
     deliveryMode: opportunity.delivery_mode,
     hasLinkedStudy: Boolean(opportunity.firsthand_study_id),
     externalLink: opportunity.external_link_optional,
-    sessionCount: (opportunity.sessions ?? []).length,
+    hasUpcomingSlot: hasUpcomingSlot(opportunity.sessions ?? [], now),
     meetingLocation: opportunity.meeting_location_optional,
   });
 
-export const getBrokenStudies = (opportunities: Opportunity[]): Opportunity[] =>
-  opportunities.filter(isStudyBroken);
+export const getBrokenStudies = (opportunities: Opportunity[], now: Date): Opportunity[] =>
+  opportunities.filter((opportunity) => isStudyBroken(opportunity, now));
 
 export type QuickFilter = 'broken' | 'needs-recruitment' | 'draft' | 'closing-soon' | 'fully-booked';
 
@@ -201,7 +207,7 @@ export const matchesQuickFilter = (
 ): boolean => {
   switch (filter) {
     case 'broken':
-      return isStudyBroken(opportunity);
+      return isStudyBroken(opportunity, now);
     case 'needs-recruitment':
       return needsRecruitment(opportunity);
     case 'draft':
@@ -251,9 +257,13 @@ export const statusFilterToWire = (filter: StatusFilter): Opportunity['status'] 
 export const matchesTypeFilter = (opportunity: Opportunity, type: string): boolean =>
   type === '' || opportunity.type === type;
 
-export const matchesStatusFilter = (opportunity: Opportunity, filter: StatusFilter): boolean => {
+export const matchesStatusFilter = (
+  opportunity: Opportunity,
+  filter: StatusFilter,
+  now: Date,
+): boolean => {
   if (filter === '') return true;
-  if (filter === 'broken') return isStudyBroken(opportunity);
+  if (filter === 'broken') return isStudyBroken(opportunity, now);
   return opportunity.status === filter;
 };
 
@@ -351,8 +361,8 @@ export const isNextNoteWarned = (opportunity: Opportunity, now: Date): boolean =
  */
 export const STATUS_RANK = { broken: 0, draft: 1, published: 2, closed: 3 } as const;
 
-export const getStatusRank = (opportunity: Opportunity): number => {
-  if (isStudyBroken(opportunity)) return STATUS_RANK.broken;
+export const getStatusRank = (opportunity: Opportunity, now: Date): number => {
+  if (isStudyBroken(opportunity, now)) return STATUS_RANK.broken;
   switch (opportunity.status) {
     case 'draft':
       return STATUS_RANK.draft;
@@ -383,7 +393,7 @@ interface StudySortKeys {
 
 const sortKeysFor = (opportunity: Opportunity, now: Date): StudySortKeys => ({
   title: opportunity.title,
-  rank: getStatusRank(opportunity),
+  rank: getStatusRank(opportunity, now),
   next: getUpcomingMilestoneTime(opportunity, now),
   created: new Date(opportunity.created_at).getTime() || 0,
 });
@@ -568,11 +578,12 @@ export interface PrimaryStudyAction {
 export const getPrimaryStudyAction = (
   opportunity: Opportunity,
   viewer: StudyViewer | null | undefined,
+  now: Date,
 ): PrimaryStudyAction => {
   if (!canManageStudy(opportunity, viewer)) {
     return { label: 'Preview', to: studyPreviewPath(opportunity.id) };
   }
-  if (isStudyBroken(opportunity)) return { label: 'Fix', to: studyEditPath(opportunity.id) };
+  if (isStudyBroken(opportunity, now)) return { label: 'Fix', to: studyEditPath(opportunity.id) };
   if (opportunity.status === 'draft') return { label: 'Edit', to: studyEditPath(opportunity.id) };
   return { label: 'Analytics', to: studyAnalyticsPath(opportunity.id) };
 };
