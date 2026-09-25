@@ -14,16 +14,15 @@ import { logger } from './logger';
 //
 // NINE fields are stripped outright. EIGHT of them are
 // stripped by the destructure in toPublicOpportunity below: owner_user_id,
-// owner_name, owner_email (OWNER IDENTITY, one paragraph below),
+// owner_name, owner_email (OWNER IDENTITY, below),
 // external_consent_confirmed, published_at, and total_booked /
 // total_capacity / auto_closed (the admin dashboard fields). The ninth,
-// location_or_meet_link_optional (THE SESSION JOINING LINK, one paragraph
-// below), is session-level rather than opportunity-level, so it is stripped
+// location_or_meet_link_optional (THE SESSION JOINING LINK, below), is session-level rather than opportunity-level, so it is stripped
 // separately, by toPublicSession. The screener is NOT on this list: it is
 // REDACTED, not stripped - see toParticipantScreenerField.
 //
-// The two documented at length here carry the sharpest reasoning, which is
-// why they get their own paragraphs rather than an inline comment:
+// Those with the sharpest reasoning are documented in their own paragraphs
+// below rather than inline:
 //
 // OWNER IDENTITY (owner_user_id plus the joined owner_name / owner_email) is an
 // admin-surface concern: the participant landing page never renders it, so the

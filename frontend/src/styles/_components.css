@@ -14752,8 +14752,8 @@ body.theme-dark {
   color: var(--opportunity-row-title);
 }
 
-/* cto/AdaptaLabs#168: below the 640px breakpoint
-   above, `.opportunity-row__link` becomes a column, which turns the row's
+/* cto/AdaptaLabs#168: below 640px (the `@media (max-width: 640px)` block
+   further down), `.opportunity-row__link` becomes a column, which turns the row's
    own width into `.opportunity-row__action`'s CROSS axis. `align-items:
    flex-start` on the column sizes cross-axis children by fit-content
    clamped to the row's available width, and once the label text is long

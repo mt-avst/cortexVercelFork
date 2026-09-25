@@ -111,9 +111,9 @@ describe('toPublicOpportunity', () => {
    * The column also drives the "New since your last visit" badge, which no
    * non-admin caller needs to compute themselves.
    *
-   * This is the only test that exercises this serialiser with the column
-   * present: without it, deleting the destructure leaves the backend suite
-   * green.
+   * This is the only jest (no-database) test that exercises this serialiser
+   * with the column present; the route-level check is in
+   * opportunities.published-at-postgres.test.ts, which runs in the DB job.
    *
    * Both states, same reasoning as the external-consent test above: a strip
    * guarded on truthiness would pass the null arm (an opportunity that
