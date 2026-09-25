@@ -16,10 +16,12 @@ import ShareOpportunityLink from '../components/ShareOpportunityLink';
 import { RecordedStudyExpectations } from '../components/RecordedStudyExpectations';
 import { getParticipantFacingType, getEligibilityNote, getTypeBadgeClass, getCardHoverColor, getClosingTime, getTimeRemainingUntil } from '../utils/opportunityUtils';
 import { getStudyTypeGlyph } from '../utils/studyTypeIcons';
+import { hasUpcomingSlot, deriveShareLinkUnstartableReason } from '../lib/opportunity-authoring/step-status';
 import { logger } from '../utils/logger';
 import { runsNativeSurvey } from '@shared/firsthand/delivery';
-import { bookingConsentText } from '@shared/firsthand/consent-templates';
+import { bookingConsentText, MODERATED_CONSENT_TYPES } from '@shared/firsthand/consent-templates';
 import { isPublishableExternalLink } from '@shared/firsthand/url-safety';
+import { findPublishProblems } from '@shared/firsthand/publish-readiness';
 import { ExternalHandoff, ExternalDestinationNote } from '../components/ExternalHandoff';
 import { RefreshCw, CheckCircle, Calendar, Info, LayoutGrid, Table2, ArrowLeft } from 'lucide-react';
 import { Icon } from '../components/ui';
@@ -1149,6 +1151,15 @@ const OpportunityDetail: React.FC = () => {
   const eligibilityNote = getEligibilityNote(opportunity);
 
   /**
+   * The clock this render reads for everything below that asks whether a
+   * session is still upcoming: this page's own `hasUpcomingSessions` and the
+   * share block's `startable`/`unstartableReason` a little further down
+   * (cto/AdaptaLabs#164). One value, read once, so the two cannot read a
+   * different instant and disagree with each other.
+   */
+  const now = new Date();
+
+  /**
    * Whether any session is still bookable-in-principle - not yet ended.
    *
    * #113: a published live-session study whose sessions are all in the past
@@ -1160,13 +1171,55 @@ const OpportunityDetail: React.FC = () => {
    * sessions" state instead of the grid; the researcher's Session Management
    * grid is a different surface and is unchanged.
    *
-   * `end_time >= now` is the same boundary the table view and CalendarGrid
-   * already use for "past" (`isSessionPast`), so a session still running counts
-   * as upcoming and the live calendar still mounts.
+   * `hasUpcomingSlot` (`end_time > now`, strict), NOT `>=`: this used to build
+   * its own `>=` check to match CalendarGrid's own "past" boundary
+   * (`isSessionPast`, `<`, so a session ending at literally now still paints
+   * as running rather than past) - harmless for a calendar deciding what
+   * colour to paint a cell. This value now also feeds the share block below,
+   * which has to agree with the server's own `end_time > NOW()` publish and
+   * session-delete guards exactly (cto/AdaptaLabs#164), so it takes the
+   * server's strict boundary instead. The two surfaces can disagree only for
+   * the single millisecond a session ends exactly on, which nothing here can
+   * observe happening.
    */
-  const hasUpcomingSessions = Boolean(
-    opportunity.sessions?.some(s => new Date(s.end_time) >= new Date())
-  );
+  const hasUpcomingSessions = hasUpcomingSlot(opportunity.sessions ?? [], now);
+
+  /**
+   * Every unmet publish requirement a live session or interview has right
+   * now, feeding the share block's `startable`/`unstartableReason` below
+   * (cto/AdaptaLabs#164). Asks the SAME `findPublishProblems` Review
+   * previews (`OpportunityForm.tsx`'s `publishProblemCodes`) rather than
+   * re-deriving a second "is this shareable" rule here, so the two pages
+   * cannot start disagreeing again about what a moderated study still needs.
+   *
+   * `[]` for every other type: `findPublishProblems` would also check a
+   * hand-off's link or an unmoderated study's task list, and this page's
+   * `startable` below still answers those the existing way
+   * (`firsthand_study_id || externalLinkIsUsable`) - only the moderated
+   * branch (slot + venue, independent of each other) is what this page was
+   * missing: this used to ignore venue entirely, so a published interview
+   * with an upcoming slot and no venue read Broken on the Create & Manage
+   * table and unshareable on Review, but still showed a live,
+   * ready-to-share link here.
+   */
+  const moderatedPublishProblems = MODERATED_CONSENT_TYPES.has(opportunity.type)
+    ? findPublishProblems({
+        willBePublished: true,
+        type: opportunity.type,
+        // Unused by the moderated branch of `findPublishProblems` (it only
+        // reads `hasMeetingLocation`/`hasBookableSlot` for these two types) -
+        // present only because `PublishReadinessInput` requires them.
+        deliveryMode: opportunity.delivery_mode ?? 'external',
+        hasLinkedStudy: false,
+        hasInlineStudy: false,
+        hasInlineSurvey: false,
+        hasBookableSlot: hasUpcomingSessions,
+        hasMeetingLocation: Boolean(
+          opportunity.meeting_location_optional &&
+            opportunity.meeting_location_optional.trim()
+        )
+      })
+    : [];
 
   return (
     <div className="container-fluid py-4 opportunity-detail-page mission-control">
@@ -1310,22 +1363,34 @@ const OpportunityDetail: React.FC = () => {
                 )}
 
                 {/* Admin-only, published-only. Renders null for everyone else,
-                    so the participant view of this page is unchanged.
-                    `startable` mirrors the CTA's own disabled rule below, so a
-                    published opportunity nobody can start says so here rather
-                    than being shared as if it works. */}
+                    so the participant view of this page is unchanged. `startable`
+                    is NOT the CTA's own disabled rule below (`hasStartablePath`) -
+                    that gate is for the native-survey/task-list button and does
+                    not cover test or interview at all - it is computed here the
+                    same way Review computes it: both ask `findPublishProblems`
+                    (`moderatedPublishProblems` above) for a live session or
+                    interview, so a published opportunity nobody can start says so
+                    here rather than being shared as if it works. */}
                 <ShareOpportunityLink
                   opportunityId={opportunity.id}
                   role={user?.role}
                   startable={Boolean(
-                    // Bookable types start by BOOKING A SLOT - they have neither a
-                    // task list nor an external link, so the old test called every
-                    // usability test and interview unstartable and told the
-                    // researcher to "link a task list before sharing" a study with
-                    // four open sessions.
+                    // Bookable types start by BOOKING A SLOT at a VENUE - they
+                    // have neither a task list nor an external link, so the old
+                    // test called every usability test and interview unstartable
+                    // and told the researcher to "link a task list before
+                    // sharing" a study with four open sessions. Both
+                    // requirements are independent (cto/AdaptaLabs#164):
+                    // a published interview with an upcoming slot and no venue
+                    // used to read Broken on the table and unshareable on Review
+                    // while this page still offered a live, ready-to-share link,
+                    // because this check used to ask only about the slot.
                     opportunity.type === 'test' || opportunity.type === 'interview'
-                      ? opportunity.sessions && opportunity.sessions.length > 0
+                      ? moderatedPublishProblems.length === 0
                       : opportunity.firsthand_study_id || externalLinkIsUsable
+                  )}
+                  unstartableReason={deriveShareLinkUnstartableReason(
+                    moderatedPublishProblems
                   )}
                   status={opportunity.status}
                 />

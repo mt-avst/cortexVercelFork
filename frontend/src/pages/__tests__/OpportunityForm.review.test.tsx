@@ -17,6 +17,25 @@ import {
 } from './helpers/error-summary';
 
 /**
+ * Fixture slot times for the `AdminSessionManager` stub below, relative to
+ * the real clock rather than pinned to a literal 2030 date - cto/AdaptaLabs
+ * #164 made the publish/Review gate read `end_time` against `now`, so a
+ * fixed-year date that once read comfortably in the future would silently
+ * flip to "already ended" the moment the calendar caught up with it. `vi.
+ * hoisted` because `vi.mock` factories below run before this module's own
+ * top-level code, and reference these values.
+ */
+const FUTURE_SESSION_TIMES = vi.hoisted(() => {
+  const tempStart = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const realStart = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+  const plus30Min = (d: Date) => new Date(d.getTime() + 30 * 60 * 1000).toISOString();
+  return {
+    temp: { start: tempStart.toISOString(), end: plus30Min(tempStart) },
+    real: { start: realStart.toISOString(), end: plus30Min(realStart) },
+  };
+});
+
+/**
  * The Review step, and the commit point that moved onto it.
  *
  * Two things are being defended here and they are not the same thing. The first
@@ -71,8 +90,8 @@ vi.mock('../../components/AdminSessionManager', () => ({
             {
               id: 'temp-session-1',
               opportunity_id: 'temp',
-              start_time: '2030-01-07T10:00:00.000Z',
-              end_time: '2030-01-07T10:30:00.000Z',
+              start_time: FUTURE_SESSION_TIMES.temp.start,
+              end_time: FUTURE_SESSION_TIMES.temp.end,
               capacity: 1,
               booked_count: 0,
               remaining: 1,
@@ -88,8 +107,8 @@ vi.mock('../../components/AdminSessionManager', () => ({
             {
               id: 'sess-already-real',
               opportunity_id: 'opp-1',
-              start_time: '2030-01-08T09:00:00.000Z',
-              end_time: '2030-01-08T09:30:00.000Z',
+              start_time: FUTURE_SESSION_TIMES.real.start,
+              end_time: FUTURE_SESSION_TIMES.real.end,
               capacity: 1,
               booked_count: 0,
               remaining: 1,
@@ -732,10 +751,12 @@ describe('publishing a live session or interview needs at least one slot (audit 
       fireEvent.click(commitControl() as HTMLElement);
 
       expect(vi.mocked(createOpportunity)).not.toHaveBeenCalled();
+      // The same wording the server refuses this write with
+      // (`PUBLISH_PROBLEM_MESSAGES.bookable_slot_required`, cto/AdaptaLabs
+      // #164): the two cannot drift apart since this reads the constant, not
+      // a restated copy of it.
       expect(
-        screen.getByText(
-          'Add at least one session slot before publishing a live session or interview'
-        )
+        screen.getByText(PUBLISH_PROBLEM_MESSAGES.bookable_slot_required)
       ).toBeInTheDocument();
     }
   );
@@ -866,7 +887,7 @@ describe('the time slots confirmed on the session step are written by the commit
     const sent = slots as ReadonlyArray<{ start_time: string }>;
     expect(sent).toHaveLength(1);
     expect(sent[0]).toEqual(
-      expect.objectContaining({ start_time: '2030-01-07T10:00:00.000Z' })
+      expect.objectContaining({ start_time: FUTURE_SESSION_TIMES.temp.start })
     );
   });
 

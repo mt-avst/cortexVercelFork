@@ -495,9 +495,9 @@ const Admin: React.FC = () => {
   const statusFilteredOpportunities = useMemo(
     () =>
       filteredOpportunities.filter(
-        (opp) => matchesStatusFilter(opp, statusFilter) && matchesTypeFilter(opp, typeFilter)
+        (opp) => matchesStatusFilter(opp, statusFilter, now) && matchesTypeFilter(opp, typeFilter)
       ),
-    [filteredOpportunities, statusFilter, typeFilter]
+    [filteredOpportunities, statusFilter, typeFilter, now]
   );
 
   // What each chip would show, over everything but the chips themselves - the
@@ -555,7 +555,7 @@ const Admin: React.FC = () => {
         snapshot.title.toLowerCase().includes(query) ||
         snapshot.purpose_one_liner.toLowerCase().includes(query) ||
         Boolean(snapshot.description_optional?.toLowerCase().includes(query))) &&
-      matchesStatusFilter(snapshot, statusFilter) &&
+      matchesStatusFilter(snapshot, statusFilter, now) &&
       matchesTypeFilter(snapshot, typeFilter) &&
       (!quickFilter || matchesQuickFilter(snapshot, quickFilter, now));
     const frozenLive = frozen !== null && quickFilteredOpportunities.some((opp) => opp.id === frozen.id);
@@ -592,7 +592,7 @@ const Admin: React.FC = () => {
   // "Needs attention" and "Sessions this week" derive from every loaded study
   // in scope, unfiltered: the panel is triage for the whole list, not a view
   // of the table.
-  const brokenStudies = useMemo(() => getBrokenStudies(opportunities), [opportunities]);
+  const brokenStudies = useMemo(() => getBrokenStudies(opportunities, now), [opportunities, now]);
   const studiesClosingSoon = useMemo(() => getStudiesClosingSoon(opportunities, now), [opportunities, now]);
   const sessionsThisWeek = useMemo(() => getSessionsThisWeek(opportunities, now), [opportunities, now]);
   // The panel is permanent: it shows action cards when there is something to do,
@@ -1575,7 +1575,7 @@ const Admin: React.FC = () => {
                             // One call per row: the status cell renders this and
                             // also carries it as the label's `title`, and the
                             // readiness check reads six fields.
-                            const notWorking = isStudyBroken(opportunity);
+                            const notWorking = isStudyBroken(opportunity, now);
                             const statusLabel = notWorking
                               ? PUBLISHED_NOT_WORKING_LABEL
                               : getDisplayStatus(opportunity.status);
@@ -1585,7 +1585,7 @@ const Admin: React.FC = () => {
                             // edit, the participant page for anyone else.
                             const rowPath = studyRowPath(opportunity, user);
                             const canManage = canManageStudy(opportunity, user);
-                            const primaryAction = getPrimaryStudyAction(opportunity, user);
+                            const primaryAction = getPrimaryStudyAction(opportunity, user, now);
                             const owner = opportunity.owner_name || opportunity.owner_email;
                             // whether the compact list's line 3
                             // (progress + Next) would show nothing but two empty
