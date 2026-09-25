@@ -99,6 +99,9 @@ describe("bookings: the owner's roster", () => {
     renderOverview();
 
     const bookingsHeading = await screen.findByRole('heading', { name: 'Bookings' });
+    // The roster loads after the page renders, so wait for it to replace the
+    // loading line before reading the list beside the heading.
+    await screen.findByText(/Sooner Participant/);
     const items = within(bookingsHeading.nextElementSibling as HTMLElement).getAllByRole('listitem');
     expect(items).toHaveLength(2);
     // Sorted ascending by session_start_time: "sooner" (day 1) before "later" (day 3).
