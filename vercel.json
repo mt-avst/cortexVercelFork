@@ -1,0 +1,22 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "npm ci --ignore-scripts --no-audit --no-fund && npm ci --prefix backend --no-audit --no-fund && npm ci --prefix frontend --no-audit --no-fund",
+  "buildCommand": "bash scripts/vercel-build.sh",
+  "outputDirectory": "frontend/dist",
+  "functions": {
+    "api/index.js": {
+      "maxDuration": 360
+    }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index" },
+    { "source": "/auth/(.*)", "destination": "/api/index" },
+    { "source": "/health", "destination": "/api/index" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "crons": [
+    { "path": "/api/cron/send-reminders", "schedule": "0 9 * * *" },
+    { "path": "/api/cron/firsthand-maintenance", "schedule": "0 3 * * *" }
+  ]
+}

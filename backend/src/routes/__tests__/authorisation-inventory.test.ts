@@ -446,6 +446,11 @@ const IN_HANDLER_GATES: Record<string, Verdict> = {
   // scheduler with no cookie can trigger the reminder job. Pinned by
   // `cron.constant-time-secret.test.ts`.
   'GET /api/cron/send-reminders': 'in-handler-secret',
+  // Same constant-time `Bearer CRON_SECRET` compare (the shared `bearerMatches`)
+  // for the 03:00 FirstHand maintenance, which Vercel Cron calls because there
+  // is no long-lived process there to host node-cron. Pinned by
+  // `cron.firsthand-maintenance.test.ts`.
+  'GET /api/cron/firsthand-maintenance': 'in-handler-secret',
   // Single-use, browser-bound OAuth `state` consumed in the handler, which
   // carries the initiating user's id server-side. It CANNOT use `requireAuth`:
   // the route is entered by a top-level navigation redirected from
@@ -667,6 +672,7 @@ const EXPECTED_AUTHORISATION: Record<string, Verdict> = {
 
   // cron.ts - mounted straight on the app
   'GET /api/cron/send-reminders': 'in-handler-secret',
+  'GET /api/cron/firsthand-maintenance': 'in-handler-secret',
 
   // auth.ts - mounted at /auth AND /api/auth
   'GET /auth/login': 'public',
@@ -687,7 +693,7 @@ const EXPECTED_AUTHORISATION: Record<string, Verdict> = {
  * guards cannot notice the table changing - which is the whole point of a
  * count here.
  */
-const EXPECTED_ROUTE_COUNT = 96;
+const EXPECTED_ROUTE_COUNT = 97;
 
 /** Every router file in `src/routes`, read off disk rather than listed. */
 const ROUTER_FILES = fs
