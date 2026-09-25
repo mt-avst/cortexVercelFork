@@ -21,4 +21,10 @@ if (!process.env.CORS_ORIGIN) {
   }
 }
 
+// The build's commit for /api/health `revision` (utils/buildInfo.ts), which the
+// Dockerfile's APP_COMMIT_SHA build arg supplied on Kubera.
+if (!process.env.APP_COMMIT_SHA && process.env.VERCEL_GIT_COMMIT_SHA) {
+  process.env.APP_COMMIT_SHA = process.env.VERCEL_GIT_COMMIT_SHA;
+}
+
 module.exports = require('../backend/dist/backend/src/index.js').default;

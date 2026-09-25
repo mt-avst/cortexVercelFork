@@ -8,6 +8,10 @@
 # the newer schema. Same chain the Kubera initContainer runs on every pod start.
 set -euo pipefail
 
+# The commit this build is from, for frontend/dist/version.json and the API's
+# /api/health `revision` - the Dockerfile's APP_COMMIT_SHA build arg on Kubera.
+export APP_COMMIT_SHA="${APP_COMMIT_SHA:-${VERCEL_GIT_COMMIT_SHA:-}}"
+
 npm --prefix backend run build
 npm --prefix frontend run build
 

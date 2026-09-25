@@ -23,8 +23,8 @@
  * settles whether one specific change is deployed. `git tag --contains <sha>`
  * recovers the version from it when that is what is wanted.
  *
- * Supplied by the Dockerfile's APP_COMMIT_SHA build argument (see
- * backend/Dockerfile and the DOCKER_BUILD_ARGS input in .gitlab-ci.yml).
+ * Supplied as APP_COMMIT_SHA, which api/index.js copies from Vercel's
+ * VERCEL_GIT_COMMIT_SHA (it was the Dockerfile build argument on Kubera).
  */
 
 /**

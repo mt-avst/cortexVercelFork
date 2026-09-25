@@ -56,22 +56,22 @@ path filter. A case-sensitive sweep missed a `/recorded study/i` regex and cost 
 132-second suite runs. State a sweep's actual scope beside any "no references" conclusion -
 an empty result from a too-narrow search is indistinguishable from a correct one.
 
-## CI waits
+## Hosting and CI (this fork)
 
-The `mutation-canary` job is sharded across four parallel jobs and runs only on MRs
-touching `backend/`, `frontend/`, `shared/`, `scripts/`, the root lockfile or
-`.gitlab-ci.yml`; only docs-only MRs skip it entirely. **`frontend/` joined that list
-on 2026-08-28** (!308), when the first frontend entries landed - a frontend-only MR
-can change a mutation outcome now, so it must not skip. That is a real cost on every
-frontend MR, taken deliberately. Measured on !276's pipeline (151 entries): slowest
-shard 5.6 minutes wall, whole MR pipeline 11.5 minutes to green, against ~24 minutes
-serial before. Poll to match the job's known duration rather than
-sleeping on a fixed long timer - ten minutes of dead air past a green result is the
-recorded cost of guessing. Prefer merging with auto-merge armed so nobody watches at all.
+This repository is the **Vercel fork** of Cortex. The live beta still runs from the
+GitLab original (`cto/AdaptaLabs`) on Kubera; nothing here deploys there, and the
+Kubera, Docker and GitLab CI files were deleted from this fork on purpose. Setup,
+environment variables and what is still missing: `docs/VERCEL.md`.
 
-Never scope the canary below the full manifest: a filtered run is structurally blind to a
-pre-existing entry the same diff broke (that reddened main once already). The path gate
-above is job-level and all-or-nothing, which is the only safe shape.
+There is **no CI in this fork yet**: nothing re-runs the suites on push. Before a push
+that changes `backend/`, `frontend/`, `shared/` or `scripts/`, run what the deleted
+pipeline ran - `npm run typecheck`, `npm run lint`, both backend suites, the frontend
+suite, `npm run test:scripts` - and quote the result lines. Vercel's build is not a test:
+a green deploy proves only that it compiled.
+
+The `mutation-canary` still guards the suites and is still run against the full
+manifest only: a filtered run is structurally blind to a pre-existing entry the same
+diff broke (that reddened main once already).
 
 Running it LOCALLY needs a real Postgres. Of the 233 entries (re-measured
 2026-09-02, post-#78), 19 are database-backed. By FILE PATH they split 209

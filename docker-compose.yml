@@ -1,6 +1,12 @@
+# Local development database only. The app itself runs with `npm run dev:all`
+# (backend :3001, frontend :3000) and deploys to Vercel - there are no app
+# images any more.
+#
+#   docker compose up -d
+#   DATABASE_URL=postgresql://postgres:password@localhost:5432/adaptalabs_dev
 services:
   postgres:
-    image: postgres:15
+    image: postgres:17
     environment:
       POSTGRES_DB: adaptalabs_dev
       POSTGRES_USER: postgres
@@ -14,67 +20,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-      - adaptalabs-network
-
-  backend:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
-    ports:
-      - "3001:3001"
-    environment:
-      - NODE_ENV=development
-      - DATABASE_URL=postgresql://postgres:password@postgres:5432/adaptalabs_dev
-      - PORT=3001
-      - SESSION_SECRET=your-session-secret
-      - GOOGLE_OAUTH_CLIENT_ID=your-client-id
-      - GOOGLE_OAUTH_CLIENT_SECRET=your-client-secret
-      - GOOGLE_OAUTH_REDIRECT_URI=http://localhost:3001/auth/google-callback
-    depends_on:
-      postgres:
-        condition: service_healthy
-    volumes:
-      - ./backend:/app/backend
-      - /app/backend/node_modules
-      - ./shared:/app/shared
-      - ./demo:/app/demo
-    networks:
-      - adaptalabs-network
-    restart: unless-stopped
-
-  frontend:
-    build:
-      context: .
-      dockerfile: frontend/Dockerfile
-    ports:
-      - "3000:3000"
-    environment:
-      - REACT_APP_API_URL=http://localhost:3001
-      - VITE_API_URL=http://localhost:3001
-    depends_on:
-      - backend
-    networks:
-      - adaptalabs-network
-    restart: unless-stopped
-
-  migrate:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
-    command: sh -c "cd /app/backend && npm run migrate && npm run seed"
-    environment:
-      - DATABASE_URL=postgresql://postgres:password@postgres:5432/adaptalabs_dev
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - adaptalabs-network
-    restart: "no" 
 
 volumes:
   postgres_data:
-
-networks:
-  adaptalabs-network:
-    driver: bridge
