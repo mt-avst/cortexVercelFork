@@ -34,7 +34,9 @@ import {
   findParticipantSessionForOpportunity,
   hasAnswerCarryingTerminalSession
 } from '../firsthand/runtime-repository-postgres';
+import { loadOpportunityResponseTotals } from '../firsthand/opportunity-response-totals';
 import { runSerializedForMintPair } from '../firsthand/runtime-database';
+import { RuntimeDatabaseBusyError } from '../firsthand/runtime-pool-admission';
 import {
   isAnsweredRuntimeStatus,
   isInFlightRuntimeSession,
@@ -1399,7 +1401,14 @@ const refusedRepeatedParameters = (
 // a signed-in caller on a native survey type, `completion`. ADMIN CALLERS ONLY
 // also receive `total_booked` and `total_capacity`: all-time, unwindowed
 // progress across every session (see utils/opportunityProgressTotals.ts),
-// ABSENT - not 0 - for a study with no sessions or when that read fails.
+// ABSENT - not 0 - for a study with no sessions or when that read fails; and
+// `responses_total` (cto/AdaptaLabs#162): all-time count of distinct
+// participants who have answered at least one question, PRESENT ONLY for a
+// native (`delivery_mode = 'native'`) poll, survey or question row (see
+// firsthand/opportunity-response-totals.ts) - 0 is a real value there, so
+// ABSENT means either the row is not one of those types, OR the batched
+// runtime-pool read for this request failed or was skipped as busy: never a
+// fabricated 0 for a row this could not actually count.
 // Non-admin responses pass through `toPublicOpportunity` and never carry the
 // totals. Errors: 400 repeated/over-long parameter, 413 over a ceiling, 503
 // database outage, 500 otherwise.
@@ -1727,6 +1736,50 @@ router.get('/', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req: Re
       }
     }
 
+    // Progress-cell response counts (admin only, cto/AdaptaLabs#162), over the
+    // SAME scoped id list as the totals batch above. Only a native poll,
+    // survey or question row can carry an answer at all, so the runtime-pool
+    // read is skipped entirely - not sent with an empty pair list - when this
+    // page has none. A row of that shape with no LINKED study
+    // (`firsthand_study_id` empty) is excluded from the pairs sent, not from
+    // the applicable set: `nativeSurveyOpportunityIds` still marks it
+    // applicable below, so it reads 0 rather than absent, matching "0 is a
+    // real value for a native study with no answers".
+    //
+    // A failed read (a real error, or `RuntimeDatabaseBusyError` from the
+    // pool's `whenBusy: 'skip'`) leaves `responseTotalsMap` `null`, not an
+    // empty map: an empty map is what "every applicable row has zero answers"
+    // looks like, and `?? 0` on it would report that same lie for every
+    // native row on this page. `null` instead makes every applicable row
+    // ABSENT below, matching how the caller-visible field behaves for a row
+    // this batch never runs for at all - never a fabricated 0.
+    const nativeSurveyOpportunities = isAdmin
+      ? result.rows.filter(opp => runsNativeSurvey(opp.type, opp.delivery_mode))
+      : [];
+    const nativeSurveyOpportunityIds = new Set(nativeSurveyOpportunities.map(opp => String(opp.id)));
+    let responseTotalsMap: Map<string, number> | null = new Map();
+    if (nativeSurveyOpportunities.length > 0) {
+      const responseTotalPairs = nativeSurveyOpportunities
+        .filter(opp => Boolean(opp.firsthand_study_id))
+        .map(opp => ({ opportunityId: String(opp.id), studyId: String(opp.firsthand_study_id) }));
+      if (responseTotalPairs.length > 0) {
+        try {
+          responseTotalsMap = await loadOpportunityResponseTotals(responseTotalPairs);
+        } catch (responsesError: unknown) {
+          if (responsesError instanceof RuntimeDatabaseBusyError) {
+            // Logged apart from a failed query on purpose, same reasoning as
+            // the advisory answer-count read this mirrors
+            // (survey-results-repository.ts): "the pool was busy" is a
+            // capacity fact, not a query going wrong.
+            logger.info('Skipped response totals batch: runtime pool busy');
+          } else {
+            logger.error('Error loading response totals batch:', { error: String(responsesError) });
+          }
+          responseTotalsMap = null;
+        }
+      }
+    }
+
     // The signed-in participant's completion trace for the native survey/poll/
     // one-question rows on this page, in one batched read (audit row 10). Only
     // those types carry a trace; a bookable study leaves its trace in bookings.
@@ -1752,6 +1805,18 @@ router.get('/', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req: Re
       // sessions.
       const progressTotals = progressTotalsMap.get(String(opportunity.id));
 
+      // Present only for a native poll/survey/question row (`nativeSurveyOpportunityIds`,
+      // built above from the SAME `runsNativeSurvey` predicate `completion`
+      // uses), never for any other type or a non-admin caller. `responseTotalsMap`
+      // `null` means the batch read above failed or was skipped, so an
+      // applicable row is left absent rather than reported as 0 - see the
+      // comment above that batch. Otherwise `?? 0` because an applicable row
+      // absent from a map that DID load has no stored answer yet, not an
+      // unset field - see opportunity-response-totals.ts.
+      const responses_total = nativeSurveyOpportunityIds.has(String(opportunity.id))
+        ? (responseTotalsMap ? (responseTotalsMap.get(String(opportunity.id)) ?? 0) : undefined)
+        : undefined;
+
       // Kept last before the return, immediately followed by it: a mutation-canary
       // entry pins `clicks_total ... : undefined;` directly against that `return {`
       // (clicks-total-is-withheld-not-zeroed). Insert nothing between the two.
@@ -1769,6 +1834,7 @@ router.get('/', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req: Re
         end_date: opportunity.end_date ? opportunity.end_date.toISOString() : null,
         sessions,
         clicks_total,
+        responses_total,
         ...(progressTotals ?? {}),
         ...(completion ? { completion } : {}),
       };

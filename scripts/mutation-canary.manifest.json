@@ -3062,7 +3062,7 @@
     "mutation": "",
     "runner": "jest",
     "spec": "src/utils/__tests__/publicOpportunity.test.ts",
-    "test": "removes the admin progress totals and auto_closed, non-zero totals, auto-closed"
+    "test": "removes the admin progress totals, auto_closed and responses_total, non-zero totals, auto-closed, answered"
   },
   {
     "id": "last-session-close-only-closes-a-published-study",
@@ -3096,5 +3096,69 @@
     "spec": "src/db/__tests__/migrate-auto-closed-backfill-postgres.test.ts",
     "test": "fails the migration by name when a tolerated 42701 leaves the column missing",
     "needsDatabase": true
+  },
+  {
+    "id": "response-totals-relink-study-scope",
+    "why": "cto/AdaptaLabs#162. loadOpportunityResponseTotals joins runtime_sessions on BOTH opportunity_id AND study_id, because an opportunity's firsthand_study_id can be repointed after answers exist - a session minted under the OLD link must not be counted against the new one. Dropping the study_id half of the join is valid SQL, compiles, and changes nothing for the common case where an opportunity has only ever had one linked study, which is every fixture the mocked-pool route suite carries. Only a real Postgres, with a session minted under a study id the pair no longer names, can show the relinked answers leaking back in.",
+    "file": "backend/src/firsthand/opportunity-response-totals.ts",
+    "anchor": "          AND s.study_id = pairs.study_id\n",
+    "mutation": "",
+    "runner": "vitest",
+    "spec": "src/firsthand/opportunity-response-totals-postgres.test.ts",
+    "test": "excludes a session minted under the study this opportunity used to link before a relink",
+    "needsDatabase": true
+  },
+  {
+    "id": "response-totals-count-distinct-respondents",
+    "why": "cto/AdaptaLabs#162. The Progress cell counts DISTINCT respondents, the same definition the analytics Results tab uses (respondentKey) - a person who comes back after their session token lapses and answers again must still be one response, not two. Every row the join produces here is one matching SESSION, so dropping DISTINCT turns the count into 'how many sessions carried an answer', which double-counts exactly that resumed-session case. A mocked pool hands the route the rows a test wrote itself and cannot see the difference; only a real join over two real sessions for one participant can.",
+    "file": "backend/src/firsthand/opportunity-response-totals.ts",
+    "anchor": "COUNT(DISTINCT COALESCE('p:' || NULLIF(s.participant_id, ''), 's:' || s.session_id))::int",
+    "mutation": "COUNT(COALESCE('p:' || NULLIF(s.participant_id, ''), 's:' || s.session_id))::int",
+    "runner": "vitest",
+    "spec": "src/firsthand/opportunity-response-totals-postgres.test.ts",
+    "test": "counts the same person once across two sessions, resumed or repeated",
+    "needsDatabase": true
+  },
+  {
+    "id": "public-view-strips-responses-total",
+    "why": "cto/AdaptaLabs#162, following the same reasoning as public-view-strips-progress-totals beside it: toPublicOpportunity is the redaction layer for participant payloads, and responses_total is an admin-only field the list route only attaches for an admin caller. Deleting the one destructure line compiles, changes no admin response and leaks nothing while the route's `if (isAdmin)` holds, so it reads as dead code - it is the layer that still holds when a refactor hoists the response-totals batch somewhere the `if` no longer guards.",
+    "file": "backend/src/utils/publicOpportunity.ts",
+    "anchor": "    responses_total: _responsesTotal,\n",
+    "mutation": "",
+    "runner": "jest",
+    "spec": "src/utils/__tests__/publicOpportunity.test.ts",
+    "test": "removes the admin progress totals, auto_closed and responses_total, non-zero totals, auto-closed, answered"
+  },
+  {
+    "id": "response-totals-failure-fallback-is-absent-not-zero",
+    "why": "cto/AdaptaLabs#162. A failed or busy-skipped response-totals read leaves responseTotalsMap null, and the route's ternary reads that as the field being ABSENT for every applicable row - never a fabricated 0, which a colleague would read as 'nobody answered yet' when the truth is 'Cortex could not check'. Folding the null branch to 0 instead of undefined compiles and changes nothing for the common case (a successful read, or no applicable rows at all), which is every fixture the rest of this file's tests carry outside the two that name a failure directly.",
+    "file": "backend/src/routes/opportunities.ts",
+    "anchor": "        ? (responseTotalsMap ? (responseTotalsMap.get(String(opportunity.id)) ?? 0) : undefined)",
+    "mutation": "        ? (responseTotalsMap ? (responseTotalsMap.get(String(opportunity.id)) ?? 0) : 0)",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/opportunities.list-response-totals.test.ts",
+    "test": "leaves responses_total ABSENT, not 0, when the reader throws"
+  },
+  {
+    "id": "admin-progress-native-never-falls-back-to-clicks",
+    "why": "cto/AdaptaLabs#162. The Progress cell's response count is a headcount of people who answered; its click count is page views including admin previews, a different and misleading unit, and a native question has no click total to fall back to at all. Dropping the `!nativeSurvey` guard makes `clicks` fall back to `clicks_total` whenever `responses_total` is absent - a failed response-totals batch on the server, say - so a researcher would see a page-view count presented as a response count on the dashboard they use to judge whether a study needs attention. Proven by mutation before entry: reverting this line to fall back on status alone compiles and leaves every other case in the file green; only the named test, whose fixture carries a real `clicks_total` specifically so the dash cannot be explained by having nothing to fall back to, fails.",
+    "file": "frontend/src/pages/Admin.tsx",
+    "anchor": "const clicks = opportunity.status !== 'draft' && !nativeSurvey ? opportunity.clicks_total : undefined;",
+    "mutation": "const clicks = opportunity.status !== 'draft' ? opportunity.clicks_total : undefined;",
+    "runner": "vitest",
+    "project": "frontend",
+    "spec": "src/pages/__tests__/Admin.dashboard-columns.test.tsx",
+    "test": "shows the dash for a native poll with no responses_total, never falling back to its click count"
+  },
+  {
+    "id": "admin-progress-line3-empty-checks-responses-undefined",
+    "why": "cto/AdaptaLabs#162. The compact card layout collapses the Progress-and-Next line via `data-line3-empty` when it would otherwise show two empty dashes; `line3Empty` names `responses === undefined` explicitly because a native question has no session ratio and no click count by type, so its response count is the only thing that can keep the line open. Dropping that clause makes a published question with a real response count report the line as empty and collapse it under 1024px, hiding the one number that page has to show. Proven by mutation before entry: dropping `responses === undefined &&` from the condition compiles and leaves the paired draft case, whose outcome does not depend on the clause, green; only the named test, asserting the published case carries no `data-line3-empty`, fails.",
+    "file": "frontend/src/pages/Admin.tsx",
+    "anchor": "!recruitment && responses === undefined && clicks === undefined && !milestone;",
+    "mutation": "!recruitment && clicks === undefined && !milestone;",
+    "runner": "vitest",
+    "project": "frontend",
+    "spec": "src/pages/__tests__/Admin.dashboard-columns.test.tsx",
+    "test": "has no data-line3-empty for a published native question with a real response count and no end date"
   }
 ]
