@@ -38,6 +38,7 @@ import SurveyQuestionsTab, {
   type InlineSurveyFormFields,
 } from '../components/OpportunityForm/SurveyQuestionsTab';
 import ReadOnlyStudyContent from '../components/OpportunityForm/ReadOnlyStudyContent';
+import StatusPods, { type StatusPodOption } from '../components/StatusPods';
 import {
   createStudyRequestSchema,
   updateStudyRequestSchema,
@@ -58,6 +59,30 @@ const STUDY_STATUS_BADGE: Record<StudyStatus, 'draft' | 'published' | 'closed'> 
   launched: 'published',
   archived: 'closed'
 };
+
+/**
+ * #167: the same pod group `ReviewStep.tsx` uses for the opportunity's own
+ * Draft/Published choice, extended with this page's third state.
+ *
+ * Pod NAMES use `STUDY_STATUS_BADGE`'s own word for draft and launched
+ * (Published, not "launched"), but deliberately NOT for the third: the badge
+ * renders `archived` as "Closed" (`StatusBadge`'s `StatusType`, `Badge.tsx`)
+ * while this pod says "Archived" - two different words for the same state,
+ * an implementation decision (#167) rather than made to agree; the badge's
+ * own wording is out of scope here.
+ *
+ * The MEANING line is StudyEditor's own, not "visible to users" (#167):
+ * a task list is never shown to a participant directly - it is picked into
+ * an opportunity's Study type step (`FirstHandStudyTab.tsx`/
+ * `SurveyQuestionsTab.tsx`, `opportunities.ts`), and only that opportunity's
+ * own status governs what a participant ever sees. These meanings say what
+ * task-list status actually gates: whether the list can be picked at all.
+ */
+const STUDY_STATUS_PODS: StatusPodOption<StudyStatus>[] = [
+  { value: 'draft', label: 'Draft', meaning: 'Not offered when setting up a study', tone: 'warning' },
+  { value: 'launched', label: 'Published', meaning: 'Can be added to a study', tone: 'success' },
+  { value: 'archived', label: 'Archived', meaning: 'Retired, cannot be added to a study', tone: 'neutral' }
+];
 
 /**
  * A study id of the same shape the server mints: `study_<uuid v4>`.
@@ -606,22 +631,24 @@ export function StudyEditorForm({
           />
         </div>
 
-        <div className="form-group mb-4" style={{ maxWidth: '16rem' }}>
-          <label className="form-label" htmlFor="study-status">
+        {/*
+          No `maxWidth` cap here (#167): these three pods need real room for
+          their meaning line to stay on one row - `.status-pods[data-count=
+          '3']` in `status-pods.css` sets its own, wider cap, sized for that.
+          A 30rem cap here fought it and squeezed all three pods back down
+          to the same wrap it was meant to fix.
+        */}
+        <div className="form-group mb-4">
+          <div className="form-label" id="study-status-heading">
             Status
-          </label>
-          <select
-            className="form-select"
-            id="study-status"
-            onChange={(event) =>
-              setStatus(event.target.value as StudyStatus)
-            }
+          </div>
+          <StatusPods
+            name="study-status"
+            legendId="study-status-heading"
+            options={STUDY_STATUS_PODS}
             value={status}
-          >
-            <option value="draft">draft</option>
-            <option value="launched">published</option>
-            <option value="archived">archived</option>
-          </select>
+            onChange={setStatus}
+          />
         </div>
 
         {/*

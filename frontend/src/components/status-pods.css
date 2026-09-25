@@ -1,0 +1,221 @@
+/*
+ * #167: the status control (StatusPods.tsx) - a radiogroup of pods rather
+ * than a native `<select>`, on Review (draft/published) and StudyEditor
+ * (draft/launched/archived).
+ *
+ * Selected colours mirror `.admin-study-status--*` in `_components.css` (the
+ * Admin table's own status pills) - the same `--status-success` /
+ * `--status-warning` tokens and fill anchor, including the light-theme text
+ * darkening the draft pill needed for AA (audit #121). Mirrored rather than
+ * shared as one class: a table pill and a pod are different boxes with a
+ * different a11y contract (this one wraps a native radio), so a shared class
+ * would couple two things that only need to agree on colour, not shape.
+ */
+
+.status-pods {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.75rem;
+  max-width: 30rem;
+}
+
+/*
+ * StudyEditor's three pods (#167): a fixed 3-column grid, never `auto-fit` -
+ * `auto-fit` can collapse to 2 columns and wrap the third pod onto its own
+ * row, which is the uneven-height bug this replaces: a plain `repeat(3,
+ * ...)` never splits rows, and CSS Grid stretches every item in a ROW to
+ * the tallest by default, so "equal height" now holds at every width,
+ * wrapped or not. `max-width` is generous, not exact - the real ceiling is
+ * the field's own container (a `<div className="form-group">` in
+ * `StudyEditor.tsx`, no longer capped at 30rem).
+ *
+ * #167 asked for no-wrap meaning lines on the three-pod layout; 768px was an
+ * internal review target, not something #167 itself specified. Measured (a
+ * real, isolated Playwright render of this exact CSS + Manrope, not an
+ * estimate): the longest meaning line ("Not offered when setting up a
+ * study") needs ~795px of width to sit on one line even at the tightened
+ * padding/gap below - StudyEditor's own container chain (the App shell's
+ * `.container`, 20px, plus this `Card`'s own `padding="lg"`, 24px, each
+ * side) leaves only ~680px at a 768px viewport. 768px is short of what
+ * three real, legible pods need by construction, not by an unturned knob -
+ * closing that gap needed either illegible type (~11px) or a mismatched
+ * icon size against Review's pods, both worse than wrapping. So: below 900px
+ * (a measured, padded breakpoint - real minimum ~888px) the meaning wraps to
+ * two lines, still equal-height and still readable; at/above 900px every pod
+ * is guaranteed one line, verified against this exact CSS, not inferred
+ * from it.
+ */
+.status-pods[data-count='3'] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.625rem;
+  max-width: 54rem;
+}
+
+.status-pods[data-count='3'] .status-pod {
+  padding: 0.6rem 0.7rem;
+}
+
+@media (min-width: 900px) {
+  .status-pods[data-count='3'] {
+    grid-template-columns: repeat(3, minmax(max-content, 1fr));
+  }
+
+  .status-pods[data-count='3'] .status-pod__meaning {
+    white-space: nowrap;
+  }
+}
+
+.status-pod {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  height: 100%;
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 0.65rem 0.85rem;
+  border-radius: var(--radius-card);
+  /* #167: the resting border was --border-subtle-current (~1.27:1 light /
+     ~1.15:1 dark against the card surface - barely there). --border-strong-
+     current is this app's own stronger border token (the same one every
+     card in the app uses for its border-on-hover), so the pod edge now
+     matches that existing convention rather than inventing a new one - see
+     the empty ring glyph below for the control's actual essential-indicator
+     contrast, which clears 3:1 by a wide margin in both themes. */
+  border: 1px solid var(--border-strong-current);
+  background: var(--surface-card-current);
+  cursor: pointer;
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+/* Only a real, enabled pod darkens on hover - see the disabled block below
+   for why this is now scoped rather than a bare `.status-pod:hover`. */
+.status-pod-input:not(:disabled) + .status-pod:hover {
+  border-color: color-mix(in srgb, var(--text-muted) 55%, transparent);
+}
+
+/* The radio is visually hidden (`.visually-hidden`, clip technique - stays
+   focusable, unlike `display: none`); its `:focus-visible` state draws the
+   ring on the label that carries it, since that is the whole visible pod. */
+.status-pod-input:focus-visible + .status-pod {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-outline-offset);
+}
+
+/* #167: a read-only StudyEditor wraps its whole form in `<fieldset disabled>`,
+   which natively disables every descendant input, including these radios.
+   The pod is still a `<label>`, so without this it kept its pointer cursor
+   and hover border regardless - both read as "you can still change this". */
+.status-pod-input:disabled + .status-pod {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Unselected: an empty ring (`<Circle>`), same slot and size as the filled
+   `<CheckCircle>` below - not blank space. Muted rather than the resting
+   border colour: measured 5.2:1 (light) / 7.4:1 (dark) against the card
+   surface, clearing the 3:1 non-text floor for what is the control's real
+   essential indicator. Lower specificity than every `.is-selected
+   .status-pod__check` colour rule below, so it only ever reaches an
+   unselected pod's ring. */
+.status-pod__check {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 0.15rem;
+  color: var(--text-muted);
+}
+
+.status-pod__text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.status-pod__name {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.status-pod__meaning {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* #167: the selected fill's own AA fix (below) already darkens the name to
+   #8a5a29/--status-success-text; the meaning line still sat in the generic
+   --text-muted (#5f6b7a) inherited above, which measured 4.47:1 on the
+   selected Draft fill and 4.33:1 on selected Published in light theme -
+   under the 4.5:1 floor for 12.8px/normal-weight text. --text-secondary
+   (#3d4a5c) measures ~7.2-7.4:1 on both. Dark theme already cleared AA on
+   --text-muted (~7:1+) and is unchanged. */
+body.theme-light .status-pod.is-selected .status-pod__meaning {
+  color: var(--text-secondary);
+}
+
+/* Selected: heavier weight plus the check glyph above - never colour alone. */
+.status-pod.is-selected .status-pod__name {
+  font-weight: 700;
+}
+
+/* Warning tone (Draft): the Admin table's draft-pill fill/border pairing. */
+.status-pod--warning.is-selected {
+  border-color: color-mix(in srgb, var(--status-warning) 45%, transparent);
+  background: color-mix(in srgb, var(--status-warning) 18%, var(--status-pill-fill-anchor-current));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--status-warning) 60%, transparent);
+}
+
+.status-pod--warning.is-selected .status-pod__check,
+.status-pod--warning.is-selected .status-pod__name {
+  color: color-mix(in srgb, var(--status-warning) 80%, var(--text-primary));
+}
+
+/* Audit #121: the same 80% warning/ink mix measures 3.84:1 in light theme,
+   below AA. Darkened the same way the Admin table's draft pill already is. */
+body.theme-light .status-pod--warning.is-selected .status-pod__check,
+body.theme-light .status-pod--warning.is-selected .status-pod__name {
+  color: #8a5a29;
+}
+
+/* Success tone (Published): the Admin table's published-pill pairing. */
+.status-pod--success.is-selected {
+  border-color: color-mix(in srgb, var(--status-success) 40%, transparent);
+  background: color-mix(in srgb, var(--status-success) 16%, var(--status-pill-fill-anchor-current));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--status-success) 55%, transparent);
+}
+
+.status-pod--success.is-selected .status-pod__check,
+.status-pod--success.is-selected .status-pod__name {
+  color: var(--status-success-text);
+}
+
+/* Neutral tone (Archived, StudyEditor only): the Admin table's closed pill -
+   a glass fill, no colour claim either way. */
+.status-pod--neutral.is-selected {
+  border-color: var(--border-strong-current);
+  background: var(--surface-glass-current);
+}
+
+.status-pod--neutral.is-selected .status-pod__check {
+  color: var(--text-muted);
+}
+
+/*
+ * #167: single column below Bootstrap's own 576px `sm` breakpoint, not
+ * 420px - three pods stayed a cramped 104px-wide 3-up grid from 421-575px,
+ * wrapping the longest meaning line ("Not offered when setting up a study")
+ * onto ~6 lines. The `[data-count='3']` selector above is more specific
+ * than a bare `.status-pods`, so it would otherwise still win here and keep
+ * three columns squeezed into a phone width - repeat it explicitly rather
+ * than relying on cascade order across a media query.
+ */
+@media (max-width: 575.98px) {
+  .status-pods,
+  .status-pods[data-count='3'] {
+    grid-template-columns: 1fr;
+  }
+}

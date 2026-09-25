@@ -7,6 +7,7 @@ import OpportunityForm from '../OpportunityForm';
 import { createOpportunity, createSessions, getOpportunity, updateOpportunity } from '../../api/client';
 import { PUBLISH_PROBLEM_MESSAGES } from '@shared/firsthand/publish-readiness';
 import { chooseStudyType } from './helpers/study-type-picker';
+import { setStatus as reviewSetStatus } from './helpers/review-status';
 import { EXTERNAL_LINK_PROTOCOL_MESSAGE } from '@shared/firsthand/url-safety';
 import { summaryLinkFor } from './helpers/error-summary';
 import {
@@ -235,20 +236,14 @@ const fillVenue = () => {
 
 /**
  * Choose Status, from wherever Review currently is (#111 moved the control
- * off Basic Information).
- *
- * Review has no `<label htmlFor="status">` any more - only an
- * `<h3>Status</h3>` heading (see `git show 1b744f5 -- BasicInfoTab.tsx` for
- * the label it used to carry) - so it is found by role rather than by name;
- * it is the only `<select>` Review renders. `formData.status` is a single
- * piece of state that survives navigating away from Review, so a caller only
- * has to be ON Review at the moment this runs - not still there afterwards.
+ * off Basic Information; #167 turned it from a `<select>` into two Draft/
+ * Published pods - see `helpers/review-status.ts`, which this re-exports
+ * under the name this file's own callers already use). `formData.status` is
+ * a single piece of state that survives navigating away from Review, so a
+ * caller only has to be ON Review at the moment this runs - not still there
+ * afterwards.
  */
-const setStatus = (status: 'draft' | 'published') => {
-  fireEvent.change(within(screen.getByTestId('review-step')).getByRole('combobox'), {
-    target: { value: status }
-  });
-};
+const setStatus = reviewSetStatus;
 
 /**
  * Walk forward, recording what was on every step on the way.

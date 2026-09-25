@@ -416,20 +416,22 @@ describe('ReviewStep - the publish problem checklist (row 4)', () => {
   });
 });
 
-describe('ReviewStep - Status (#111)', () => {
+describe('ReviewStep - Status (#111, pods since #167)', () => {
   /**
-   * Review's Status control has no `<label htmlFor="status">` - only an
-   * `<h3>Status</h3>` heading - so every query below finds it by role,
-   * scoped to this step, rather than by an accessible name. Pinned here as
-   * documentation of a real gap: the control used to be labelled on Basic
-   * Information (`git show 1b744f5 -- BasicInfoTab.tsx`), and the move
-   * dropped that association.
+   * Two pods, Draft and Published, in a `role="radiogroup"` labelled by the
+   * `<h3 id="status-heading">Status</h3>` heading. The old `<select>` already
+   * carried this same `aria-labelledby="status-heading"` - #167 did not fix a
+   * label gap, it replaced a dropdown with two always-visible pods so a
+   * sighted user sees both options and their meanings without opening it.
    */
-  const statusControl = () => screen.getByRole('combobox') as HTMLSelectElement;
+  const statusGroup = () => screen.getByRole('radiogroup', { name: 'Status' });
+  const draftRadio = () => screen.getByRole('radio', { name: /Draft/ }) as HTMLInputElement;
+  const publishedRadio = () => screen.getByRole('radio', { name: /Published/ }) as HTMLInputElement;
 
   it('defaults to draft and says so in a full sentence', () => {
     render(<ReviewStep {...baseProps} status="draft" />);
-    expect(statusControl().value).toBe('draft');
+    expect(draftRadio().checked).toBe(true);
+    expect(publishedRadio().checked).toBe(false);
     expect(screen.getByText(/DRAFT/)).toHaveTextContent(
       /Not visible to users\. Change to Published to make visible\./
     );
@@ -437,7 +439,8 @@ describe('ReviewStep - Status (#111)', () => {
 
   it('describes published in a full sentence too, once chosen', () => {
     render(<ReviewStep {...baseProps} status="published" />);
-    expect(statusControl().value).toBe('published');
+    expect(publishedRadio().checked).toBe(true);
+    expect(draftRadio().checked).toBe(false);
     expect(
       screen.getByText('Published studies are visible to all users')
     ).toBeInTheDocument();
@@ -449,21 +452,21 @@ describe('ReviewStep - Status (#111)', () => {
     const onStatusChange = vi.fn();
     render(<ReviewStep {...baseProps} onStatusChange={onStatusChange} />);
 
-    fireEvent.change(statusControl(), { target: { value: 'published' } });
+    fireEvent.click(publishedRadio());
 
     expect(onStatusChange).toHaveBeenCalledTimes(1);
     expect(onStatusChange).toHaveBeenCalledWith('published');
   });
 
-  it('shows a field error beside the control, and marks it invalid', () => {
+  it('shows a field error beside the control, and marks the group invalid', () => {
     render(<ReviewStep {...baseProps} statusError="Choose a status" />);
     expect(screen.getByText('Choose a status')).toBeInTheDocument();
-    expect(statusControl()).toHaveAttribute('aria-invalid', 'true');
+    expect(statusGroup()).toHaveAttribute('aria-invalid', 'true');
   });
 
   it('is not marked invalid when there is no error', () => {
     render(<ReviewStep {...baseProps} />);
-    expect(statusControl()).toHaveAttribute('aria-invalid', 'false');
+    expect(statusGroup()).toHaveAttribute('aria-invalid', 'false');
   });
 });
 

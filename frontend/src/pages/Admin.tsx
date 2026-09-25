@@ -820,7 +820,7 @@ const Admin: React.FC = () => {
               <div className="admin-header-section">
                 <div>
                   <h1 className="mb-1 cortex-page-title">{CREATE_AND_MANAGE}</h1>
-                  <p className="admin-subtitle">Manage research studies, bookings, and participant feedback</p>
+                  <p className="admin-subtitle">Run your research studies, bookings and participant feedback</p>
                 </div>
                 <div className="admin-table-actions">
                   <button
