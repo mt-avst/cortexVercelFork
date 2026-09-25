@@ -12,7 +12,8 @@ import { Link, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { getOpportunities, deleteOpportunity, duplicateOpportunity, getDashboardStats, DashboardStats, exportBookingsCsv, getPendingApprovals, getFeedback } from '../api/client';
 import { Opportunity } from '../api/types';
-import { getTypeBadgeClass, getTimeRemainingUntil } from '../utils/opportunityUtils';
+import { getTypeBadgeClass, getTimeRemainingUntil, baseTypeOf } from '../utils/opportunityUtils';
+import { runsNativeSurvey } from '@shared/firsthand/delivery';
 import {
   getStudyProgress,
   getSessionsThisWeek,
@@ -1552,13 +1553,21 @@ const Admin: React.FC = () => {
                             }
                             const recruitment = getStudyProgress(opportunity);
                             // Progress: booked / capacity when the study has sessions
-                            // (below); otherwise its click count - but only when the
-                            // server actually sent one. The list endpoint withholds
-                            // `clicks_total` (undefined, not 0) for every type it does
-                            // not count clicks for - today everything but poll, survey
-                            // and unmoderated - so a missing count is "nothing to
-                            // show", never "0 clicks". Drafts show nothing either.
-                            const clicks = opportunity.status !== 'draft' ? opportunity.clicks_total : undefined;
+                            // (below); otherwise its response count for a native
+                            // poll/survey/question, else its click count - but only
+                            // when the server actually sent one. The list endpoint
+                            // withholds `responses_total`/`clicks_total` (undefined,
+                            // not 0) for every row they do not apply to, so a missing
+                            // count is "nothing to show", never "0 responses" or
+                            // "0 clicks". Drafts show nothing either. A native
+                            // poll/survey/question never falls back to clicks even if
+                            // `responses_total` is absent (a failed batch, say) - its
+                            // click count is page views including admin previews, a
+                            // different and misleading unit, and question rows have
+                            // no click count to fall back to anyway.
+                            const nativeSurvey = runsNativeSurvey(baseTypeOf(opportunity.type), opportunity.delivery_mode);
+                            const responses = opportunity.status !== 'draft' ? opportunity.responses_total : undefined;
+                            const clicks = opportunity.status !== 'draft' && !nativeSurvey ? opportunity.clicks_total : undefined;
                             const milestone = getNextMilestone(opportunity, now);
                             const sessionDayLabel =
                               milestone?.kind === 'session' ? relativeDayLabel(milestone.date, now) : null;
@@ -1592,7 +1601,8 @@ const Admin: React.FC = () => {
                             // dashes - collapsed by CSS below (`[data-line3-empty]`)
                             // rather than kept as dead space. Computed for every
                             // width (cheap), read only under 1024px.
-                            const line3Empty = !recruitment && clicks === undefined && !milestone;
+                            const line3Empty =
+                              !recruitment && responses === undefined && clicks === undefined && !milestone;
                             return (
                             <React.Fragment key={opportunity.id}>
                             <tr
@@ -1799,10 +1809,13 @@ const Admin: React.FC = () => {
                               )}
                               {/* Progress: booked / capacity across the study's sessions, with
                                   the same progress bar and percentage the Recruitment cell drew.
-                                  A published or closed study the server counts clicks for shows
-                                  them instead (the old Clicks column). Anything else - a draft,
-                                  a study with no sessions and no click count - shows the muted
-                                  dash. */}
+                                  Failing that, a native poll/survey/question shows how many
+                                  people answered (cto/AdaptaLabs#162) - the same count the
+                                  analytics Results tab calls "N participants" - and any other
+                                  published or closed study the server counts clicks for shows
+                                  those instead (the old Clicks column). Anything else - a draft,
+                                  a study with no sessions and no response or click count - shows
+                                  the muted dash. */}
                               <td className="col-progress" data-label="Progress">
                                 {recruitment ? (
                                   <div className="admin-recruitment">
@@ -1814,8 +1827,12 @@ const Admin: React.FC = () => {
                                       <div className="progress-mini__fill" style={{ width: `${recruitment.pct}%` }} />
                                     </div>
                                   </div>
+                                ) : responses !== undefined ? (
+                                  <span className="admin-progress-count">
+                                    {responses} {responses === 1 ? 'response' : 'responses'}
+                                  </span>
                                 ) : clicks !== undefined ? (
-                                  <span className="admin-progress-clicks">
+                                  <span className="admin-progress-count">
                                     {clicks} {clicks === 1 ? 'click' : 'clicks'}
                                   </span>
                                 ) : (

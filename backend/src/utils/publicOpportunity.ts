@@ -12,11 +12,12 @@ import { logger } from './logger';
 // toPublicSession is exported separately. If you add a fourth, it comes
 // through here too.
 //
-// NINE fields are stripped outright. EIGHT of them are
+// TEN fields are stripped outright. NINE of them are
 // stripped by the destructure in toPublicOpportunity below: owner_user_id,
 // owner_name, owner_email (OWNER IDENTITY, below),
 // external_consent_confirmed, published_at, and total_booked /
-// total_capacity / auto_closed (the admin dashboard fields). The ninth,
+// total_capacity / auto_closed / responses_total (the admin dashboard
+// fields; responses_total per cto/AdaptaLabs#162). The tenth,
 // location_or_meet_link_optional (THE SESSION JOINING LINK, below), is session-level rather than opportunity-level, so it is stripped
 // separately, by toPublicSession. The screener is NOT on this list: it is
 // REDACTED, not stripped - see toParticipantScreenerField.
@@ -97,6 +98,7 @@ interface PublicSerialisable {
   total_capacity?: unknown;
   auto_closed?: unknown;
   published_at?: unknown;
+  responses_total?: unknown;
 }
 
 /**
@@ -148,6 +150,7 @@ type PublicView<T> = Omit<
   | 'total_capacity'
   | 'auto_closed'
   | 'published_at'
+  | 'responses_total'
 > &
   (T extends { sessions: infer S extends readonly unknown[] }
     ? { sessions: { [K in keyof S]: PublicSession<S[K]> } }
@@ -188,6 +191,11 @@ export function toPublicOpportunity<T extends PublicSerialisable>(opportunity: T
     // "New since your last visit" (cto/AdaptaLabs#168). See the module
     // comment above.
     published_at: _publishedAt,
+    // All-time response count for a native poll/survey/question row
+    // (cto/AdaptaLabs#162), same reasoning as total_booked/total_capacity
+    // above: the list route only attaches it for an admin caller, and this is
+    // the redaction layer, not that `if`.
+    responses_total: _responsesTotal,
     ...publicView
   } = opportunity;
 

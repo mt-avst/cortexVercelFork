@@ -504,7 +504,7 @@ for (const theme of THEMES) {
       expect(failures).toEqual([]);
     });
 
-    test(`Progress shows N / M for session studies, N clicks for clicked ones, a dash for drafts (${theme})`, async ({
+    test(`Progress shows N / M for session studies, N clicks for clicked ones, N responses for answered ones, a dash for drafts (${theme})`, async ({
       page,
       baseURL,
     }) => {
@@ -512,11 +512,21 @@ for (const theme of THEMES) {
       const studies = SEEDED_STUDIES;
       const withSessions = studies.filter((s) => (s.sessions ?? []).length > 0);
       const clicked = studies.filter((s) => (s.sessions ?? []).length === 0 && s.status !== 'draft' && (s.clicks_total ?? 0) > 0);
+      // A native poll/survey/question's real Progress count (cto/AdaptaLabs#162):
+      // who answered, never clicks_total - `responses_total` present and the
+      // study not otherwise counted in `clicked` or `withSessions`.
+      const responded = studies.filter(
+        (s) => (s.sessions ?? []).length === 0 && s.status !== 'draft' && s.responses_total != null
+      );
       const drafts = studies.filter((s) => s.status === 'draft');
       // Positive controls: the seed has every kind this test distinguishes.
       expect(withSessions.length).toBeGreaterThanOrEqual(1);
       expect(clicked.length).toBeGreaterThanOrEqual(1);
+      expect(responded.length).toBeGreaterThanOrEqual(1);
       expect(drafts.length).toBeGreaterThanOrEqual(1);
+      // THE CONTROL: no study is double-counted between the clicks arm and the
+      // responses arm - each seeded study proves exactly one branch of the cell.
+      expect(responded.some((s) => clicked.includes(s))).toBe(false);
 
       const progressText = (titles: string[]) =>
         page.evaluate((ts) => {
@@ -541,6 +551,12 @@ for (const theme of THEMES) {
       const clickTexts = await progressText(clicked.map((s) => s.title));
       clicked.forEach((s, i) => {
         if (clickTexts[i] !== `${s.clicks_total} clicks`) failures.push(`"${s.title}": ${clickTexts[i]}, want ${s.clicks_total} clicks`);
+      });
+      const responseTexts = await progressText(responded.map((s) => s.title));
+      responded.forEach((s, i) => {
+        const unit = s.responses_total === 1 ? 'response' : 'responses';
+        const want = `${s.responses_total} ${unit}`;
+        if (responseTexts[i] !== want) failures.push(`"${s.title}": ${responseTexts[i]}, want ${want}`);
       });
       const draftTexts = await progressText(drafts.map((s) => s.title));
       drafts.forEach((s, i) => {

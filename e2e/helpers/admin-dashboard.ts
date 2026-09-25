@@ -45,6 +45,9 @@ export interface SeededStudy {
   title: string;
   purpose_one_liner: string;
   clicks_total?: number | null;
+  // A native poll/survey/question's Progress count (cto/AdaptaLabs#162):
+  // who answered, not who clicked - see clicks_total above.
+  responses_total?: number | null;
   sessions?: Array<{ capacity: number; booked_count?: number | null }>;
 }
 
