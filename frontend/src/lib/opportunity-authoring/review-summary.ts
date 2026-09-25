@@ -133,6 +133,17 @@ export interface ReviewSummaryInput {
   linkedStudyId: string;
   /** Time slots the author has confirmed. */
   sessionCount: number;
+  /**
+   * Whether at least one of those slots has not yet ended (cto/AdaptaLabs
+   * #164) - `end_time` strictly after the caller's own `now`. A study can
+   * hold sessions that have all already ended, which `sessionCount` alone
+   * cannot distinguish from a bookable one: the caller computes this with
+   * `hasUpcomingSlot(sessions, now)` (`lib/opportunity-authoring/step-
+   * status.ts`), the same call the publish gate and `shareLinkStartable`
+   * make, rather than handing raw sessions to a module that has no clock of
+   * its own.
+   */
+  hasUpcomingSlot: boolean;
 }
 
 /**
@@ -481,13 +492,20 @@ const itemsForStep = (step: ReviewStepRef, input: ReviewSummaryInput): ReviewIte
       if (input.meetingLocation) {
         items.push({ label: 'Meeting Location', value: input.meetingLocation });
       }
+      // Zero slots and "slots exist but all already ended" (cto/AdaptaLabs
+      // #164) are both unbookable, and both flag this row the same way - a
+      // count on its own cannot tell the two apart, which is exactly why
+      // `hasUpcomingSlot` is a separate field rather than folded into
+      // `sessionCount`.
       items.push({
         label: 'Time slots',
         value: pluralise(input.sessionCount, 'slot'),
-        missing: input.sessionCount === 0,
+        missing: input.sessionCount === 0 || !input.hasUpcomingSlot,
         note:
           input.sessionCount === 0
             ? 'A participant cannot book anything until at least one slot is added.'
+            : !input.hasUpcomingSlot
+            ? 'A participant cannot book anything until at least one upcoming slot is added.'
             : undefined
       });
       return items;

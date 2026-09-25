@@ -59,6 +59,9 @@ const UNDO_MS = 8000;
 const BROKEN = [
   'Interview: admin automation workflows',
   'Test the new Jira board view',
+  // #164: no session with end_time after now (its close date, 8 Oct, is
+  // still ahead - Broken tracks the sessions, not the deadline).
+  'ScriptRunner for Jira: the new script editor',
   'Quick take: naming the new space',
 ];
 const DRAFT = 'Support escalation workflows';
@@ -69,7 +72,7 @@ const DRAFT = 'Support escalation workflows';
  * regard to case. A past closing time ("Completed") is not a NEXT milestone.
  */
 const STATUS_ASC_ORDER = [
-  // Broken, by deadline: 28 Sept, 6 Oct, 15 Nov.
+  // Broken, by deadline: 28 Sept, 6 Oct, 8 Oct, 15 Nov.
   ...BROKEN,
   DRAFT,
   // Published, soonest milestone first.
@@ -78,7 +81,6 @@ const STATUS_ASC_ORDER = [
   'Release notes: what do you read?', // closes Sat 26 Sept 09:00
   'Release cadence: monthly or quarterly?', // closes Sat 26 Sept 11:00
   'Which editor do you write Groovy in?', // 3 Oct
-  'ScriptRunner for Jira: the new script editor', // 8 Oct
   'What would you automate first with AI in Jira?', // 9 Oct
   'Triage a failing Bitbucket pipeline', // 11 Oct
   'accessibility audit follow-up', // 14 Oct 13:00 - same instant as the next;
@@ -122,7 +124,7 @@ const NEXT_ASC_GROUPS: string[][] = [
 
 /** Chip labels and counts over the 20 owner-scoped studies, in display order. */
 const CHIPS: Array<[string, number]> = [
-  ['Broken', 3],
+  ['Broken', 4],
   ['Needs recruitment', 3],
   ['Draft', 1],
   ['Closing soon', 3],
@@ -477,7 +479,7 @@ function expectGroupedOrder(actual: string[], groups: string[][], what: string):
 // ===========================================================================
 
 test.describe('Admin studies table triage: sort (AC11-AC14)', () => {
-  test('AC11 the default sort is Status ascending: the three broken studies, then the draft, lead', async ({
+  test('AC11 the default sort is Status ascending: the four broken studies, then the draft, lead', async ({
     page,
     baseURL,
   }) => {
@@ -490,7 +492,7 @@ test.describe('Admin studies table triage: sort (AC11-AC14)', () => {
       );
     }
     const order = await titles(page);
-    expect(order.slice(0, 4), 'the first four rows').toEqual([...BROKEN, DRAFT]);
+    expect(order.slice(0, 5), 'the first five rows').toEqual([...BROKEN, DRAFT]);
     for (const title of BROKEN) expect(await statusLabel(page, title), `"${title}" reads Broken`).toMatch(/^broken$/i);
 
     // The Sort by control (shown below 1280) reports the same default.
@@ -687,11 +689,11 @@ test.describe('Admin studies table triage: Broken, three ways (AC16)', () => {
     expect(failures, `chip boxes at rest: ${rest.join('; ')}`).toEqual([]);
   });
 
-  test('AC16 Needs attention shows "3 studies broken" and its link applies the Broken chip', async ({ page, baseURL }) => {
+  test('AC16 Needs attention shows "4 studies broken" and its link applies the Broken chip', async ({ page, baseURL }) => {
     await open(page, baseURL);
     const card = page.locator('.admin-attention button, .admin-attention a').filter({ hasText: /studies broken/ });
     await expect(card, 'the broken card').toHaveCount(1, { timeout: 3000 });
-    await expect(card).toContainText('3 studies broken');
+    await expect(card).toContainText('4 studies broken');
     await card.click({ timeout: 3000 });
     await expect(chip(page, 'Broken')).toHaveAttribute('aria-pressed', 'true', { timeout: 3000 });
     await expect(rows(page)).toHaveCount(BROKEN.length, { timeout: 3000 });
@@ -699,8 +701,8 @@ test.describe('Admin studies table triage: Broken, three ways (AC16)', () => {
   });
 
   test('AC16 one broken study reads "1 study broken" and opens that study', async ({ page, baseURL }) => {
-    // The seed with two of its three broken studies left out.
-    const oneBroken = OPPORTUNITIES.filter((s) => s.title !== BROKEN[0] && s.title !== BROKEN[1]);
+    // The seed with three of its four broken studies left out.
+    const oneBroken = OPPORTUNITIES.filter((s) => s.title !== BROKEN[0] && s.title !== BROKEN[1] && s.title !== BROKEN[2]);
     await open(page, baseURL, { api: makeApi(oneBroken), expectedRows: oneBroken.length });
     const card = page.locator('.admin-attention button, .admin-attention a').filter({ hasText: /broken/ });
     await expect(card).toHaveCount(1, { timeout: 3000 });
@@ -708,7 +710,7 @@ test.describe('Admin studies table triage: Broken, three ways (AC16)', () => {
     await expect(chip(page, 'Broken')).toHaveText(/^\s*Broken\s*1\s*$/);
     await sinkApiForNavigation(page);
     await card.click({ timeout: 3000 });
-    await expect(page).toHaveURL(new RegExp(`/admin/opportunities/${idOf(BROKEN[2])}/edit$`), { timeout: 5000 });
+    await expect(page).toHaveURL(new RegExp(`/admin/opportunities/${idOf(BROKEN[3])}/edit$`), { timeout: 5000 });
   });
 
   test('AC16 with nothing broken there is no broken card, and the Broken chip is 0 and disabled', async ({
@@ -736,7 +738,7 @@ test.describe('Admin studies table triage: Broken, three ways (AC16)', () => {
     await page.getByRole('button', { name: 'Clear filters' }).first().click({ timeout: 3000 });
     await expect(count, 'no count once cleared').toHaveCount(0, { timeout: 3000 });
     await chip(page, 'Broken').click({ timeout: 3000 });
-    await expect(count, 'count under the Broken chip').toHaveText('3 of 20 studies', { timeout: 3000 });
+    await expect(count, 'count under the Broken chip').toHaveText('4 of 20 studies', { timeout: 3000 });
   });
 });
 
@@ -1473,7 +1475,7 @@ test.describe('Admin studies table triage: fix round (REVIEW-STEP2B-visual)', ()
     await select.selectOption({ label: 'Draft' }, { timeout: 3000 });
     await expect(rows(page)).toHaveCount(1, { timeout: 5000 });
     await expect(count, 'Status: Draft').toHaveText('1 of 13 studies', { timeout: 3000 });
-    await expect(attention.getByText('3 studies broken'), 'the Broken card under Status: Draft').toBeVisible();
+    await expect(attention.getByText('4 studies broken'), 'the Broken card under Status: Draft').toBeVisible();
     // D1 (Step 2) ties "closing soon" to isClosingSoon's close-date-only,
     // floor(days) <= 3 rule: of the 13-seed OPPORTUNITIES only "Developer
     // experience pulse, Q3" (close +1d 14h) now qualifies - "Server to Cloud
@@ -1484,7 +1486,7 @@ test.describe('Admin studies table triage: fix round (REVIEW-STEP2B-visual)', ()
     await expect(rows(page)).toHaveCount(10, { timeout: 5000 });
     await expect(count, 'Status: Published').toHaveText('10 of 13 studies', { timeout: 3000 });
     await select.selectOption({ label: 'Broken' }, { timeout: 3000 });
-    await expect(count, 'Status: Broken').toHaveText('3 of 13 studies', { timeout: 3000 });
+    await expect(count, 'Status: Broken').toHaveText('4 of 13 studies', { timeout: 3000 });
   });
 
   for (const theme of THEMES) {
@@ -1519,7 +1521,7 @@ test.describe('Admin studies table triage: fix round (REVIEW-STEP2B-visual)', ()
         }
         return inks;
       });
-      expect(tagged.Fix.length, 'Fix actions on the three broken rows').toBe(3);
+      expect(tagged.Fix.length, 'Fix actions on the four broken rows').toBe(4);
       expect(new Set(tagged.Fix).size, 'every Fix shares one ink').toBe(1);
       expect(tagged.Analytics.length, 'Analytics actions to compare against').toBeGreaterThan(0);
       expect(tagged.Fix[0], 'Fix is not dressed like Analytics').not.toBe(tagged.Analytics[0]);
@@ -1619,7 +1621,9 @@ test.describe('Admin studies table triage: round 3', () => {
     }, title);
   };
   const scrollY = (page: Page) => page.evaluate(() => window.scrollY);
-  const FAIL_CLOSE_STUDY = 'ScriptRunner for Jira: the new script editor';
+  // #164 moved ScriptRunner (the old occupant of this slot) into Broken, so
+  // the row under PUBLISHED_MINE's notice is now this published study instead.
+  const FAIL_CLOSE_STUDY = 'What would you automate first with AI in Jira?';
 
   for (const [width, showAll] of [
     [1440, false],
@@ -1644,14 +1648,14 @@ test.describe('Admin studies table triage: round 3', () => {
       await expect(notice(page, PUBLISHED_MINE)).toBeVisible({ timeout: 3000 });
       await expect(notice(page, PUBLISHED_MINE).getByRole('button', { name: 'Undo' })).toBeFocused({ timeout: 3000 });
       const lapseNeighbours = await slotNeighbours(page, PUBLISHED_MINE);
-      expect(lapseNeighbours.next, 'the row under the notice').toBe('ScriptRunner for Jira: the new script editor');
+      expect(lapseNeighbours.next, 'the row under the notice').toBe(FAIL_CLOSE_STUDY);
       const beforeLapse = await scrollY(page);
       await expect(notice(page, PUBLISHED_MINE), 'the notice lapses').toHaveCount(0, { timeout: 12000 });
       const afterLapse = await scrollY(page);
       const lapse = await expectHandOff(page, PUBLISHED_MINE, lapseNeighbours, 'lapse');
       // The closed study re-sorts into the Closed group, off screen: this is
       // the neighbour case, not the study's own link.
-      expect(lapse, 'lapse hand-off').toEqual({ focused: 'ScriptRunner for Jira: the new script editor', ownInView: false });
+      expect(lapse, 'lapse hand-off').toEqual({ focused: FAIL_CLOSE_STUDY, ownInView: false });
 
       await centreRow(page, FAIL_CLOSE_STUDY);
       await closeFromMenu(page, FAIL_CLOSE_STUDY);
@@ -2124,7 +2128,7 @@ test.describe('Admin studies table triage: the 390px card view', () => {
     }) => {
       await open(page, baseURL, { width: 390, height: 844, theme });
       await chip(page, 'Broken').click({ timeout: 3000 });
-      await expect(page.getByText('3 of 20 studies')).toBeVisible({ timeout: 3000 });
+      await expect(page.getByText('4 of 20 studies')).toBeVisible({ timeout: 3000 });
       const overflow = await page.evaluate(() => ({
         scroll: document.scrollingElement!.scrollWidth,
         inner: window.innerWidth,

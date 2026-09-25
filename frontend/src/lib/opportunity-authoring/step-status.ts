@@ -1,4 +1,4 @@
-import { findPublishProblems } from '@shared/firsthand/publish-readiness';
+import { findPublishProblems, PublishProblem } from '@shared/firsthand/publish-readiness';
 
 /**
  * What the stepper says about one step of the opportunity form.
@@ -151,6 +151,88 @@ export const PUBLISHED_NOT_WORKING_PREFIX = 'Published, ';
 export const PUBLISHED_NOT_WORKING_DESCRIPTION = 'Published, not working';
 
 /**
+ * Whether at least one session has not yet ended: `end_time` strictly after
+ * `now`. This is the ONE rule "Broken" and its Review-step twin both use for
+ * slots (cto/AdaptaLabs#164) - it mirrors the server's own gates exactly, so
+ * the frontend can never show a verdict the server would contradict on the
+ * next write:
+ *  - the publish guard (`backend/src/routes/opportunities.ts` ~2832)
+ *  - the session-delete guard (`backend/src/routes/sessions.ts` ~743)
+ * Both read `end_time > NOW()`, strictly, regardless of capacity - a fully
+ * booked slot still counts as upcoming here. Fullness is a different
+ * question, answered elsewhere ("Fully booked" on the table).
+ *
+ * `now` is passed in, never read from the clock, so every caller controls
+ * its own freshness and a test can pin it.
+ *
+ * An `end_time` that fails to parse is treated as NOT upcoming - a date this
+ * function cannot understand cannot be counted as a live one, and leaning
+ * toward "not working" is the safer misread for a state that gates a
+ * "Broken" pill and a publish preview.
+ */
+export const hasUpcomingSlot = (
+  sessions: readonly { end_time: string }[],
+  now: Date
+): boolean =>
+  sessions.some((session) => {
+    const endMs = new Date(session.end_time).getTime();
+    return !isNaN(endMs) && endMs > now.getTime();
+  });
+
+/**
+ * WHY a bookable type's share link cannot be handed to a participant yet, for
+ * `ShareOpportunityLink`'s copy (cto/AdaptaLabs#164). A live
+ * session or interview can fail two INDEPENDENT publish gates at once - no
+ * upcoming slot, no meeting location, or both - and naming only one of them
+ * when both are missing tells the author a single fix will do when it will
+ * not.
+ *
+ * Not a boolean, for the same reason `ShareOpportunityLink`'s own prop of
+ * this name is not one (see that component's docblock): a caller that only
+ * ever asks "is it the slot" has no way to say "it is the venue" without a
+ * second boolean, and a third state (both) would need a third.
+ */
+export type ShareLinkUnstartableReason =
+  | 'no_upcoming_slot'
+  | 'no_meeting_location'
+  | 'no_upcoming_slot_and_no_meeting_location';
+
+/**
+ * Resolves `ShareLinkUnstartableReason` from a `findPublishProblems` result -
+ * the one place that mapping is written, so `OpportunityForm.tsx` (which
+ * already has the full plural list, for the Review checklist) and
+ * `OpportunityDetail.tsx` (which asks `findPublishProblems` itself for only
+ * the moderated-type problems it has data for) read exactly the same answer
+ * off exactly the same two codes, and cannot start naming a different
+ * blocker than each other.
+ *
+ * Any other publish problem in the list (a missing task list, a missing
+ * link) is not a `ShareOpportunityLink` reason at all - that component's
+ * fallback generic sentence already covers it - so this only ever looks for
+ * the two moderated-type codes and ignores the rest.
+ */
+export const deriveShareLinkUnstartableReason = (
+  problems: readonly PublishProblem[]
+): ShareLinkUnstartableReason | undefined => {
+  const missingLocation = problems.some(
+    (problem) => problem.code === 'meeting_location_required'
+  );
+  const missingSlot = problems.some(
+    (problem) => problem.code === 'bookable_slot_required'
+  );
+  if (missingLocation && missingSlot) {
+    return 'no_upcoming_slot_and_no_meeting_location';
+  }
+  if (missingLocation) {
+    return 'no_meeting_location';
+  }
+  if (missingSlot) {
+    return 'no_upcoming_slot';
+  }
+  return undefined;
+};
+
+/**
  * What `isPublishedButNotWorking` needs to know, kept deliberately narrower
  * than `PublishReadinessInput`: this is filled from whatever summary of the
  * opportunity the CALLER already has, which is not always the full authoring
@@ -161,8 +243,14 @@ export interface PublishedReadinessSignal {
   deliveryMode?: string | null;
   hasLinkedStudy: boolean;
   externalLink?: string | null;
-  /** Session slots, when the caller has them (the dashboard's list does). */
-  sessionCount?: number;
+  /**
+   * The answer to `hasUpcomingSlot`, when the caller has sessions to ask (the
+   * dashboard's list and the Review step both do). The caller computes this -
+   * `hasUpcomingSlot(sessions, now)` - rather than handing over raw sessions,
+   * so this module stays clock-free and every caller's `now` stays explicit
+   * at its own call site.
+   */
+  hasUpcomingSlot?: boolean;
   meetingLocation?: string | null;
 }
 
@@ -186,23 +274,21 @@ export interface PublishedReadinessSignal {
  *   -> worth a tracked issue if the dashboard blind spot is judged worth
  *      closing now rather than left to the per-study Review page.
  *
- * ponytail: `sessionCount` disagrees with the study's own Review page by
- * DESIGN, not by accident, and the two can genuinely give different
- * verdicts for the same study. The admin list route (`GET /opportunities`,
- * `backend/src/routes/opportunities.ts`) joins each opportunity's sessions
- * through `ADMIN_RECENT_SESSIONS_ONLY` - `end_time > NOW() - INTERVAL '14
- * days'` - so `Opportunity.sessions` here is a 14-DAY TAIL, not every
- * session the study has. Review loads the full set with no such window
- * (`getSessions(opportunityId)`) and counts all of it. A live session or
- * interview whose only slots ended more than 14 days ago is therefore
- * `hasBookableSlot: false` here (dashboard reads "Broken")
- * while Review, seeing the same old slots, reads `hasBookableSlot: true`
- * and shows no blocker at all - the opposite verdict on the SAME data, from
- * the SAME function, for the SAME study. Not re-architected here: the
- * window exists on purpose (cto/AdaptaLabs#103, see the comment above
- * `ADMIN_RECENT_SESSIONS_ONLY`) for reasons unrelated to this signal, and
- * changing it is a backend decision outside this file's reach.
- *   -> cto/AdaptaLabs#164
+ * `hasUpcomingSlot` (cto/AdaptaLabs#164) no longer disagrees with the study's
+ * own Review page: both ask the same question, `hasUpcomingSlot(sessions,
+ * now)`, of `end_time > now` - the exact clock the server's own publish and
+ * session-delete guards use. This used to run on `sessionCount > 0` from the
+ * admin list's own sessions, which is a 14-DAY TAIL
+ * (`ADMIN_RECENT_SESSIONS_ONLY`, `backend/src/routes/opportunities.ts`,
+ * `end_time > NOW() - INTERVAL '14 days'`) rather than every session the
+ * study has - the list's window exists for reasons unrelated to this signal
+ * (cto/AdaptaLabs#103) and stays exactly as it was. It just no longer
+ * matters here: any session that has NOT yet ended satisfies
+ * `end_time > NOW() - 14 days` by construction (a not-yet-ended session's
+ * `end_time` is after `NOW()`, which is itself after `NOW() - 14 days`), so
+ * the tail always contains every session the "is anything upcoming" question
+ * needs - the two surfaces can no longer see different data for the one
+ * thing this predicate asks about.
  */
 export const isPublishedButNotWorking = (
   opportunityStatus: string,
@@ -219,8 +305,7 @@ export const isPublishedButNotWorking = (
     hasInlineStudy: true,
     hasInlineSurvey: true,
     externalLink: signal.externalLink,
-    hasBookableSlot:
-      signal.sessionCount === undefined ? undefined : signal.sessionCount > 0,
+    hasBookableSlot: signal.hasUpcomingSlot,
     hasMeetingLocation:
       signal.meetingLocation === undefined
         ? undefined

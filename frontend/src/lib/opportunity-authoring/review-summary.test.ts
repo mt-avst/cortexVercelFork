@@ -54,6 +54,10 @@ const completeInput = (
   copiedFromStudyTitle: '',
   linkedStudyId: '',
   sessionCount: 0,
+  // The "complete" default: a slot exists and it is upcoming. Overridden
+  // explicitly by the fixtures below that are specifically about #164's
+  // ended-slots state.
+  hasUpcomingSlot: true,
   ...overrides
 });
 
@@ -553,6 +557,25 @@ describe('buildReviewSummary', () => {
       );
       expect(item?.missing).toBe(true);
       expect(item?.note).toMatch(/cannot book/i);
+    });
+
+    it('flags Time slots as missing when every slot has already ended (cto/AdaptaLabs#164)', () => {
+      // A non-zero count on its own used to read as satisfied - this is the
+      // count-but-not-bookable state the plain zero-count check above cannot
+      // see: slots exist, `hasUpcomingSlot` is false.
+      const item = findItem(
+        findSection(
+          buildReviewSummary(
+            completeInput({ steps: sessionSteps, sessionCount: 2, hasUpcomingSlot: false })
+          ),
+          'sessions'
+        ),
+        'Time slots'
+      );
+      expect(item?.value).toBe('2 slots');
+      expect(item?.missing).toBe(true);
+      expect(item?.note).toMatch(/cannot book/i);
+      expect(item?.note).toMatch(/upcoming/i);
     });
   });
 

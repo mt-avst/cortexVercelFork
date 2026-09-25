@@ -90,10 +90,69 @@ describe('the triage fixtures mean what they say', () => {
   it('a published test study with no session is broken, and one with a session is not', () => {
     // Control for every rank test below: if these states did not read as
     // intended, a rank assertion could pass for the wrong reason.
-    expect(isStudyBroken(broken())).toBe(true);
-    expect(isStudyBroken(published())).toBe(false);
-    expect(isStudyBroken(draft())).toBe(false);
-    expect(isStudyBroken(closed())).toBe(false);
+    expect(isStudyBroken(broken(), NOW)).toBe(true);
+    expect(isStudyBroken(published(), NOW)).toBe(false);
+    expect(isStudyBroken(draft(), NOW)).toBe(false);
+    expect(isStudyBroken(closed(), NOW)).toBe(false);
+  });
+});
+
+/**
+ * cto/AdaptaLabs#164: Broken tracks whether a slot has not yet ended
+ * (`end_time > now`), not merely whether `sessions` is non-empty. Before the
+ * fix `isStudyBroken` read `sessionCount > 0` from the admin list's own
+ * sessions - a 14-day tail (`ADMIN_RECENT_SESSIONS_ONLY`) - so a live session
+ * or interview whose only slot had already ended still carried that slot in
+ * `sessions` for up to 14 days and read as an ordinary working PUBLISHED
+ * study, not Broken. Every case here is pinned against `isStudyBroken`, the
+ * Broken quick-filter (`matchesQuickFilter` / `getQuickFilterCounts`) and,
+ * for the two "ended" cases, the rendered dashboard row
+ * (`Admin.readiness-state.test.tsx`).
+ */
+describe('#164: Broken means no upcoming slot, not merely having had one', () => {
+  // (a) ended 3 days ago: still inside the list's 14-day tail, so `sessions`
+  // carries it - the case the old `sessionCount > 0` rule got wrong.
+  const endedInsideTail = (type: 'test' | 'interview') =>
+    opp({ type, status: 'published', sessions: [session(-3)] });
+  // (b) ended 20 days ago: OUTSIDE the tail, so the admin list would never
+  // send it at all - `sessions: []`, same shape as never having had a slot.
+  // The old rule got this one right, by accident: an empty list read broken
+  // under `sessionCount > 0` too.
+  const endedOutsideTail = (type: 'test' | 'interview') => opp({ type, status: 'published', sessions: [] });
+
+  for (const type of ['test', 'interview'] as const) {
+    it(`a published ${type} whose only slot ended 3 days ago (inside the 14-day tail) is Broken`, () => {
+      const study = endedInsideTail(type);
+      expect(isStudyBroken(study, NOW)).toBe(true);
+      expect(matchesQuickFilter(study, 'broken', NOW)).toBe(true);
+      expect(getQuickFilterCounts([study], NOW).broken).toBe(1);
+    });
+
+    it(`a published ${type} whose only slot ended 20 days ago (outside the tail, sessions: []) is Broken`, () => {
+      const study = endedOutsideTail(type);
+      expect(isStudyBroken(study, NOW)).toBe(true);
+      expect(matchesQuickFilter(study, 'broken', NOW)).toBe(true);
+      expect(getQuickFilterCounts([study], NOW).broken).toBe(1);
+    });
+  }
+
+  it('a slot ending in the future is not Broken even when it is FULL (booked = capacity)', () => {
+    // Fullness is a separate question ("Fully booked" on the table) - it must
+    // never make a study read Broken.
+    const full = opp({ status: 'published', sessions: [session(3, { capacity: 2, booked_count: 2 })] });
+    expect(isStudyBroken(full, NOW)).toBe(false);
+    expect(matchesQuickFilter(full, 'broken', NOW)).toBe(false);
+    expect(matchesQuickFilter(full, 'fully-booked', NOW)).toBe(true);
+  });
+
+  it('a slot ending exactly at now is not upcoming: strictly greater than, not greater-or-equal', () => {
+    const study = opp({ status: 'published', sessions: [session(0, { end_time: NOW.toISOString() })] });
+    expect(isStudyBroken(study, NOW)).toBe(true);
+  });
+
+  it('an unparseable end_time is not upcoming', () => {
+    const study = opp({ status: 'published', sessions: [session(3, { end_time: 'not-a-date' })] });
+    expect(isStudyBroken(study, NOW)).toBe(true);
   });
 });
 
@@ -103,16 +162,16 @@ describe('status rank (Petra 3.2, AC11)', () => {
   });
 
   it('ranks each state by those literals', () => {
-    expect(getStatusRank(broken())).toBe(0);
-    expect(getStatusRank(draft())).toBe(1);
-    expect(getStatusRank(published())).toBe(2);
-    expect(getStatusRank(closed())).toBe(3);
+    expect(getStatusRank(broken(), NOW)).toBe(0);
+    expect(getStatusRank(draft(), NOW)).toBe(1);
+    expect(getStatusRank(published(), NOW)).toBe(2);
+    expect(getStatusRank(closed(), NOW)).toBe(3);
   });
 
   it('ranks Broken ahead of Draft, although both are "published or less"', () => {
     // Broken is not a stored status; it is a published study failing its own
     // readiness, and it outranks Draft because it is live and failing.
-    expect(getStatusRank(broken())).toBeLessThan(getStatusRank(draft()));
+    expect(getStatusRank(broken(), NOW)).toBeLessThan(getStatusRank(draft(), NOW));
   });
 });
 
@@ -204,7 +263,7 @@ describe('compareStudies / sortStudies (the one comparator)', () => {
       ];
       // Control: the no-milestone row is still Published rank, not Broken -
       // an unmoderated study is never broken by a missing slot.
-      expect(getStatusRank(list[1])).toBe(2);
+      expect(getStatusRank(list[1], NOW)).toBe(2);
       expect(getUpcomingMilestoneTime(list[1], NOW)).toBeNull();
 
       // soon-a and soon-b tie on milestone, so title decides, case-insensitive
@@ -349,12 +408,12 @@ describe('the Broken status filter (Petra 3.3)', () => {
   });
 
   it('narrows the published rows to the broken ones client-side', () => {
-    expect(matchesStatusFilter(broken(), 'broken')).toBe(true);
-    expect(matchesStatusFilter(published(), 'broken')).toBe(false);
-    expect(matchesStatusFilter(draft(), 'broken')).toBe(false);
+    expect(matchesStatusFilter(broken(), 'broken', NOW)).toBe(true);
+    expect(matchesStatusFilter(published(), 'broken', NOW)).toBe(false);
+    expect(matchesStatusFilter(draft(), 'broken', NOW)).toBe(false);
     // A broken study is still published for the Published option.
-    expect(matchesStatusFilter(broken(), 'published')).toBe(true);
-    expect(matchesStatusFilter(closed(), '')).toBe(true);
+    expect(matchesStatusFilter(broken(), 'published', NOW)).toBe(true);
+    expect(matchesStatusFilter(closed(), '', NOW)).toBe(true);
   });
 });
 
@@ -410,14 +469,14 @@ describe("the row's inline button (Petra 3.4)", () => {
   const SUPER = { id: 'super', role: 'superadmin' };
 
   it('offers Fix on a broken study, to its edit page', () => {
-    expect(getPrimaryStudyAction(broken({ id: 'x', owner_user_id: 'me' }), OWNER)).toEqual({
+    expect(getPrimaryStudyAction(broken({ id: 'x', owner_user_id: 'me' }), OWNER, NOW)).toEqual({
       label: 'Fix',
       to: '/admin/opportunities/x/edit',
     });
   });
 
   it('offers Edit on a draft, to its edit page', () => {
-    expect(getPrimaryStudyAction(draft({ id: 'x', owner_user_id: 'me' }), OWNER)).toEqual({
+    expect(getPrimaryStudyAction(draft({ id: 'x', owner_user_id: 'me' }), OWNER, NOW)).toEqual({
       label: 'Edit',
       to: '/admin/opportunities/x/edit',
     });
@@ -425,7 +484,7 @@ describe("the row's inline button (Petra 3.4)", () => {
 
   it('offers Analytics on your own published or closed study', () => {
     for (const study of [published({ id: 'x', owner_user_id: 'me' }), closed({ id: 'x', owner_user_id: 'me' })]) {
-      expect(getPrimaryStudyAction(study, OWNER)).toEqual({
+      expect(getPrimaryStudyAction(study, OWNER, NOW)).toEqual({
         label: 'Analytics',
         to: '/admin/opportunities/x/analytics',
       });
@@ -433,30 +492,30 @@ describe("the row's inline button (Petra 3.4)", () => {
   });
 
   it("offers Preview on someone else's published study, to the participant page", () => {
-    expect(getPrimaryStudyAction(published({ id: 'x', owner_user_id: 'me' }), COLLEAGUE_VIEWER)).toEqual({
+    expect(getPrimaryStudyAction(published({ id: 'x', owner_user_id: 'me' }), COLLEAGUE_VIEWER, NOW)).toEqual({
       label: 'Preview',
       to: '/opportunities/x',
     });
   });
 
   it("offers a superadmin Analytics on anyone's published study", () => {
-    expect(getPrimaryStudyAction(published({ id: 'x', owner_user_id: 'me' }), SUPER).label).toBe('Analytics');
+    expect(getPrimaryStudyAction(published({ id: 'x', owner_user_id: 'me' }), SUPER, NOW).label).toBe('Analytics');
   });
 
   it("offers Preview, not Fix or Edit, on someone else's broken study or draft (review P4)", () => {
     // The server refuses a non-owner's save, so Fix and Edit would lead to
     // an edit page that cannot save.
-    expect(getPrimaryStudyAction(broken({ id: 'x', owner_user_id: 'me' }), COLLEAGUE_VIEWER)).toEqual({
+    expect(getPrimaryStudyAction(broken({ id: 'x', owner_user_id: 'me' }), COLLEAGUE_VIEWER, NOW)).toEqual({
       label: 'Preview',
       to: '/opportunities/x',
     });
-    expect(getPrimaryStudyAction(draft({ id: 'x', owner_user_id: 'me' }), COLLEAGUE_VIEWER)).toEqual({
+    expect(getPrimaryStudyAction(draft({ id: 'x', owner_user_id: 'me' }), COLLEAGUE_VIEWER, NOW)).toEqual({
       label: 'Preview',
       to: '/opportunities/x',
     });
     // A superadmin still gets them.
-    expect(getPrimaryStudyAction(broken({ id: 'x', owner_user_id: 'me' }), SUPER).label).toBe('Fix');
-    expect(getPrimaryStudyAction(draft({ id: 'x', owner_user_id: 'me' }), SUPER).label).toBe('Edit');
+    expect(getPrimaryStudyAction(broken({ id: 'x', owner_user_id: 'me' }), SUPER, NOW).label).toBe('Fix');
+    expect(getPrimaryStudyAction(draft({ id: 'x', owner_user_id: 'me' }), SUPER, NOW).label).toBe('Edit');
   });
 
   it('never treats a missing viewer id as owning an ownerless study', () => {

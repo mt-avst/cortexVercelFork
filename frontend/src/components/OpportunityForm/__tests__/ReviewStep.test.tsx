@@ -525,6 +525,37 @@ describe('ReviewStep - the participant share link (#108)', () => {
     expect(screen.getByText(/Participants cannot start this yet/i)).toBeInTheDocument();
   });
 
+  it('names an upcoming session, not a task list or a link, when the missing slot is the reason (cto/AdaptaLabs#164)', () => {
+    render(
+      <ReviewStep
+        {...baseProps}
+        status="published"
+        role="researcher_admin"
+        shareLink={{ opportunityId: 'opp-1', startable: false, unstartableReason: 'no_upcoming_slot' }}
+      />
+    );
+
+    expect(screen.getByText(/Add an upcoming session before sharing/i)).toBeInTheDocument();
+    expect(screen.queryByText(/a task list or a link/i)).toBeNull();
+  });
+
+  it('keeps the generic wording for an unstartable live session when no reason is passed (cto/AdaptaLabs#164)', () => {
+    // A moderated study can be unstartable for its venue instead of its slot
+    // (`meeting_location_required`) - adding a session does not fix that, so
+    // naming the slot here would be wrong advice.
+    render(
+      <ReviewStep
+        {...baseProps}
+        status="published"
+        role="researcher_admin"
+        shareLink={{ opportunityId: 'opp-1', startable: false }}
+      />
+    );
+
+    expect(screen.queryByText(/Add an upcoming session before sharing/i)).toBeNull();
+    expect(screen.getByText(/a task list or a link/i)).toBeInTheDocument();
+  });
+
   it('does not render the live link for a non-admin role, even once published', () => {
     // ShareOpportunityLink's own admin gate - proven here to still apply
     // through ReviewStep's own pass-through rather than assumed.
