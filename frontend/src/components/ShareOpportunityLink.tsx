@@ -198,23 +198,13 @@ export function ShareOpportunityLink({
         ) : (
           <p className="validation-error mb-0" style={{ fontSize: '0.875rem' }}>
             {/*
-              `.validation-error` (cto/AdaptaLabs#164), not `.text-danger`:
-              `.validation-error` is the token `FieldError` already uses for
-              every other inline error sentence on this form - the SAME
-              class, so this sentence reads as a warning wherever it renders.
-              `.text-danger` is not a missing Bootstrap class - it is a real
-              utility of its own (`_utilities.css`) - but it resolves to the
-              same danger colour and would lose to the same page-scoped card
-              rules `.validation-error` did, so switching classes would not
-              have fixed anything on its own.
-
-              On `OpportunityDetail` a bare `.validation-error` (`_themes.css`)
-              used to lose to that page's own more specific `.card-body p` /
-              `.card p` rules and paint as body text instead of a warning.
-              Fixed with `.opportunity-detail-page .card-body
-              p.validation-error` overrides, one class more specific and in
-              the same themes layer, no `!important` - AA-checked: brand
-              orange in dark, `#DC2626` in light, on both pages.
+              `.validation-error` (cto/AdaptaLabs#164): the class `FieldError`
+              uses for every other inline error sentence, so this reads as a
+              warning. On `OpportunityDetail` the page's own card `p` rules
+              outrank the bare class; the `.opportunity-detail-page
+              .card-body p.validation-error` overrides in `_themes.css`
+              restore it (AA-checked: brand orange in dark, `#DC2626` in
+              light, on both pages).
 
               "So the button on this page is disabled" is dropped rather than
               kept: it is false on `ReviewStep` (the authoring form has no

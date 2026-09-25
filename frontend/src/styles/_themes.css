@@ -2669,10 +2669,10 @@ body.theme-light .opportunity-detail-page .card-body {
 }
 
 /* Without this, the unstartable-share sentence loses to the gamification
-   `.card-body p` rule below (0,2,2), one class ahead of `.validation-error`'s
+   `.card-body p` rule below (0,2,2), which outranks `.validation-error`'s
    own (0,2,1) - so it paints grey body text instead of a warning. Scoped
-   two classes deeper, still inside the themes layer, so it wins on
-   specificity with no `!important`. */
+   deeper, still inside the themes layer, so it wins on specificity with
+   no `!important`. */
 body.theme-light .opportunity-detail-page .card-body p.validation-error {
   color: #DC2626;
 }
