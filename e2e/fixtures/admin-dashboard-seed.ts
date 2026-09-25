@@ -77,12 +77,18 @@ export const OPPORTUNITIES = [
     end_date: '2026-10-26T22:54:57.257Z',
     created_at: '2026-09-16T22:54:57.257Z',
     updated_at: '2026-09-16T22:54:57.257Z',
-    firsthand_study_id: null,
+    // Linked to a study, as a native survey with answers always is: the
+    // server sends responses_total 0 for a native row with no linked study.
+    firsthand_study_id: 'fhs-developer-experience-pulse',
     delivery_mode: 'native',
     owner_name: 'Test Admin',
     owner_email: 'admin@test.com',
     default_duration_minutes: 5,
     clicks_total: 0,
+    // A native survey's real Progress count is who ANSWERED (cto/AdaptaLabs#162),
+    // not clicks_total above - non-zero and distinct from it so a mutation
+    // that swapped the two fields, or dropped this one, is visible on screen.
+    responses_total: 3,
     sessions: [],
   },
   {

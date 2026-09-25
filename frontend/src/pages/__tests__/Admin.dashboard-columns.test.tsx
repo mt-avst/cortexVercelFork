@@ -307,6 +307,54 @@ describe('Research Studies table: Progress folds Recruitment and Clicks together
     return row.querySelector('td.col-progress') as HTMLElement;
   };
 
+  it('shows responses for a native poll/survey/question (cto/AdaptaLabs#162)', async () => {
+    const client = await import('../../api/client');
+    vi.mocked(client.getOpportunities).mockResolvedValueOnce([
+      study({ id: 'opp-native-poll', type: 'poll', delivery_mode: 'native', title: 'Which colour', responses_total: 18 }),
+      study({ id: 'opp-native-survey', type: 'survey', delivery_mode: 'native', title: 'One-answer survey', responses_total: 1 }),
+      // 0 is a real value, not "nothing to show" - it must render, not fall to the dash.
+      study({ id: 'opp-native-question', type: 'question', delivery_mode: 'native', title: 'Name the new space', responses_total: 0 }),
+    ] as never);
+    renderAdmin();
+
+    expect((await progressCellFor('Which colour')).textContent).toBe('18 responses');
+    // Singular, not "1 responses".
+    expect((await progressCellFor('One-answer survey')).textContent).toBe('1 response');
+    expect((await progressCellFor('Name the new space')).textContent).toBe('0 responses');
+  });
+
+  it('shows responses rather than clicks when a native poll carries both counts', async () => {
+    // `clicks_total` applies to poll/survey/unmoderated regardless of delivery
+    // mode, so a native poll can arrive with both fields set. Responses win:
+    // they are the count Cortex actually recorded for a native study.
+    const client = await import('../../api/client');
+    vi.mocked(client.getOpportunities).mockResolvedValueOnce([
+      study({ id: 'opp-both', type: 'poll', delivery_mode: 'native', title: 'Native poll with clicks too', clicks_total: 40, responses_total: 3 }),
+    ] as never);
+    renderAdmin();
+
+    const cell = await progressCellFor('Native poll with clicks too');
+    expect(cell.textContent).toBe('3 responses');
+    expect(cell.textContent).not.toMatch(/click/);
+  });
+
+  it('shows the muted dash for a draft with a response count, and clicks when it is an external hand-off', async () => {
+    const client = await import('../../api/client');
+    vi.mocked(client.getOpportunities).mockResolvedValueOnce([
+      study({ id: 'opp-draft-native', type: 'poll', delivery_mode: 'native', status: 'draft', title: 'Draft native poll', responses_total: 9 }),
+      // External hand-off poll: Cortex records no responses, so the field is
+      // absent and the cell falls back to clicks, as it always has.
+      study({ id: 'opp-external', type: 'poll', title: 'External hand-off poll', clicks_total: 6 }),
+    ] as never);
+    renderAdmin();
+
+    const draftCell = await progressCellFor('Draft native poll');
+    expect(draftCell.textContent).toBe('–');
+    expect(draftCell.querySelector('.admin-cell-empty')).not.toBeNull();
+
+    expect((await progressCellFor('External hand-off poll')).textContent).toBe('6 clicks');
+  });
+
   it('shows clicks for a published study of a type that never has sessions', async () => {
     const client = await import('../../api/client');
     vi.mocked(client.getOpportunities).mockResolvedValueOnce([
@@ -379,6 +427,96 @@ describe('Research Studies table: Progress folds Recruitment and Clicks together
     expect(within(cell).getByText('3 / 4')).toBeInTheDocument();
     expect(within(cell).getByText('75%')).toBeInTheDocument();
     expect((await progressCellFor('Closed without totals')).textContent).toBe('–');
+  });
+
+  /**
+   * A native poll/survey/question never falls back to `clicks_total` when
+   * `responses_total` is absent (cto/AdaptaLabs#162) -
+   * a failed response-totals batch on the server must not silently show a
+   * page-view count instead. `clicks_total` is set here specifically so the
+   * dash cannot be explained by "there was nothing to fall back to": a native
+   * poll's click count is real (poll/survey/unmoderated always carry one) and
+   * this proves it is withheld on purpose.
+   */
+  it('shows the dash for a native poll with no responses_total, never falling back to its click count', async () => {
+    const client = await import('../../api/client');
+    vi.mocked(client.getOpportunities).mockResolvedValueOnce([
+      study({
+        id: 'opp-native-no-responses',
+        type: 'poll',
+        delivery_mode: 'native',
+        title: 'Native poll, responses batch failed',
+        clicks_total: 40,
+      }),
+    ] as never);
+    renderAdmin();
+
+    const cell = await progressCellFor('Native poll, responses batch failed');
+    expect(cell.textContent).toBe('–');
+    expect(cell.querySelector('.admin-cell-empty')).not.toBeNull();
+    expect(cell.textContent).not.toMatch(/click/);
+  });
+});
+
+/**
+ * The compact card layout (below 1024px) collapses line 3 (Progress + Next)
+ * via `tr[data-line3-empty] td.col-progress { display: none }` when it would
+ * otherwise show two empty dashes. jsdom cannot see that CSS, so this pins
+ * the STRUCTURAL property the rule depends on: the attribute's presence.
+ *
+ * `line3Empty`'s condition names `responses === undefined` explicitly rather
+ * than folding it into "no clicks either". This pair pins it: every other
+ * Progress test above either has no response count at all or has one
+ * alongside a session/click count that already keeps line3Empty false for a
+ * different reason. A native `question` has neither sessions nor clicks by
+ * type, so its response count is the ONLY thing that can keep line 3 from
+ * collapsing - which is exactly the shape a dropped clause would break.
+ */
+describe('Research Studies table: compact line 3 keeps a real response count visible', () => {
+  const study = (overrides: Record<string, unknown>) => ({
+    ...fixtures.opportunity,
+    sessions: [],
+    end_date: null,
+    type: 'question',
+    delivery_mode: 'native',
+    ...overrides,
+  });
+
+  const rowFor = async (title: string): Promise<HTMLElement> => {
+    const table = await findStudiesTable();
+    return (await within(table).findByText(title)).closest('tr') as HTMLElement;
+  };
+
+  it('has no data-line3-empty for a published native question with a real response count and no end date', async () => {
+    const client = await import('../../api/client');
+    vi.mocked(client.getOpportunities).mockResolvedValueOnce([
+      study({ id: 'opp-question-line3', title: 'Line 3 question', responses_total: 5 }),
+    ] as never);
+    renderAdmin();
+
+    const row = await rowFor('Line 3 question');
+    expect(row).not.toHaveAttribute('data-line3-empty');
+    // THE CONTROL: the response count really is what is keeping it open - the
+    // cell shows it, not a session ratio or a click count this shape has
+    // neither of.
+    const cell = row.querySelector('td.col-progress') as HTMLElement;
+    expect(cell.textContent).toBe('5 responses');
+  });
+
+  it('has data-line3-empty for the identical shape as a draft, where the response count is withheld', async () => {
+    const client = await import('../../api/client');
+    vi.mocked(client.getOpportunities).mockResolvedValueOnce([
+      study({
+        id: 'opp-question-line3-draft',
+        status: 'draft',
+        title: 'Line 3 draft question',
+        responses_total: 5,
+      }),
+    ] as never);
+    renderAdmin();
+
+    const row = await rowFor('Line 3 draft question');
+    expect(row).toHaveAttribute('data-line3-empty', 'true');
   });
 });
 

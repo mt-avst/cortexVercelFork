@@ -79,20 +79,32 @@ describe('toPublicOpportunity', () => {
    * only for an admin caller, but that `if` is not a redaction layer - this
    * serialiser is, so a refactor that hoists the totals batch still cannot
    * send lifetime booking counts to a participant. `auto_closed` is how a
-   * study closed, an admin concern.
+   * study closed, an admin concern. `responses_total` (cto/AdaptaLabs#162)
+   * joined this set the same way: the count of distinct participants who
+   * answered a native poll/survey/question is exactly as much an admin
+   * concern as the booking totals beside it.
    *
    * Zero and false included, because the redaction is about the KEY: a strip
-   * guarded on truthiness would pass a non-zero arm and publish every 0.
+   * guarded on truthiness would pass a non-zero arm and publish every 0 - and
+   * 0 is a real value for `responses_total` (a native study with no answers
+   * yet), not only for the totals it sits beside.
    */
   it.each([
-    ['non-zero totals, auto-closed', { total_booked: 3, total_capacity: 7, auto_closed: true }],
-    ['zero totals, closed by hand', { total_booked: 0, total_capacity: 0, auto_closed: false }],
-  ])('removes the admin progress totals and auto_closed, %s', (_label, adminFields) => {
+    [
+      'non-zero totals, auto-closed, answered',
+      { total_booked: 3, total_capacity: 7, auto_closed: true, responses_total: 5 },
+    ],
+    [
+      'zero totals, closed by hand, unanswered',
+      { total_booked: 0, total_capacity: 0, auto_closed: false, responses_total: 0 },
+    ],
+  ])('removes the admin progress totals, auto_closed and responses_total, %s', (_label, adminFields) => {
     const view = toPublicOpportunity({ ...opportunity, ...adminFields }) as Record<string, unknown>;
 
     expect(view).not.toHaveProperty('total_booked');
     expect(view).not.toHaveProperty('total_capacity');
     expect(view).not.toHaveProperty('auto_closed');
+    expect(view).not.toHaveProperty('responses_total');
     // THE CONTROL: the owner identity beside them is still stripped, so the
     // new names did not displace the old ones from the destructure.
     expect(view).not.toHaveProperty('owner_user_id');
