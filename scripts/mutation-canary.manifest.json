@@ -3062,7 +3062,7 @@
     "mutation": "",
     "runner": "jest",
     "spec": "src/utils/__tests__/publicOpportunity.test.ts",
-    "test": "removes the admin progress totals and auto_closed, non-zero totals, auto-closed"
+    "test": "removes the admin progress totals, auto_closed and responses_total, non-zero totals, auto-closed, answered"
   },
   {
     "id": "last-session-close-only-closes-a-published-study",
@@ -3121,7 +3121,7 @@
   },
   {
     "id": "public-view-strips-responses-total",
-    "why": "cto/AdaptaLabs#162, following the same reasoning as public-view-strips-progress-totals beside it: toPublicOpportunity is the redaction layer for participant payloads, and responses_total is an admin dashboard field the list route only attaches for an admin caller. Deleting the one destructure line compiles, changes no admin response and leaks nothing while the route's `if (isAdmin)` holds, so it reads as dead code - it is the layer that still holds when a refactor hoists the response-totals batch somewhere the `if` no longer guards.",
+    "why": "cto/AdaptaLabs#162, following the same reasoning as public-view-strips-progress-totals beside it: toPublicOpportunity is the redaction layer for participant payloads, and responses_total is an admin-only field the list route only attaches for an admin caller. Deleting the one destructure line compiles, changes no admin response and leaks nothing while the route's `if (isAdmin)` holds, so it reads as dead code - it is the layer that still holds when a refactor hoists the response-totals batch somewhere the `if` no longer guards.",
     "file": "backend/src/utils/publicOpportunity.ts",
     "anchor": "    responses_total: _responsesTotal,\n",
     "mutation": "",
