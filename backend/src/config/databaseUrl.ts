@@ -36,7 +36,38 @@ function buildUrl(host: string, env: DatabaseEnv): string {
  * checked before the generic POSTGRES_ and PG-prefixed fallbacks used by
  * other platforms - so on Kubera we always prefer what Kubera actually injects.
  */
+/**
+ * ON VERCEL THE DATABASE IS NEON, FROM ITS OWN VARIABLES, AND NOTHING ELSE.
+ *
+ * The chain below exists for every place Cortex has run - Kubera's DB_URL and
+ * DB_HOST family, generic PG* vars, and finally a localhost default for
+ * development. None of those belong on Vercel: a deployment with no Neon
+ * connection must fail loudly at boot, not quietly aim at localhost or at a
+ * stray PGHOST. So when VERCEL is set (the platform sets it in every build and
+ * function) only the two variables the Neon integration injects count:
+ * DATABASE_URL (pooled), then POSTGRES_URL.
+ */
+export const NEON_URL_KEYS = ['DATABASE_URL', 'POSTGRES_URL'] as const;
+
+export function resolveNeonDatabaseUrl(env: DatabaseEnv): string {
+  for (const key of NEON_URL_KEYS) {
+    const value = env[key];
+    if (value !== undefined && trimValue(value).length > 0) {
+      return trimValue(value);
+    }
+  }
+  throw new Error(
+    'No database: on Vercel Cortex connects only to Neon, via DATABASE_URL or ' +
+      'POSTGRES_URL, and neither is set for this environment. Connect Neon in the ' +
+      "project's Storage tab for this environment and redeploy."
+  );
+}
+
 export function resolveDatabaseUrl(env: DatabaseEnv): string {
+  if (env.VERCEL) {
+    return resolveNeonDatabaseUrl(env);
+  }
+
   const fullUrl =
     env.DATABASE_URL || env.POSTGRES_URL || env.POSTGRESQL_URL || env.DB_URL;
   if (fullUrl) {
@@ -60,6 +91,12 @@ export function resolveDatabaseUrl(env: DatabaseEnv): string {
  * pool connected fine via Kubera's injected DB_URL/DB_HOST.
  */
 export function hasDatabaseConfig(env: DatabaseEnv): boolean {
+  if (env.VERCEL) {
+    return NEON_URL_KEYS.some((key) => {
+      const value = env[key];
+      return value !== undefined && trimValue(value).length > 0;
+    });
+  }
   const candidates = [
     env.DATABASE_URL,
     env.POSTGRES_URL,
@@ -94,6 +131,10 @@ function describePasswordPresence(env: DatabaseEnv): string {
  * database. Never returns the connection string or password value itself.
  */
 export function describeDatabaseUrlSource(env: DatabaseEnv): string {
+  if (env.VERCEL) {
+    const key = NEON_URL_KEYS.find((k) => env[k] !== undefined && trimValue(env[k] as string).length > 0);
+    return key ? `${key} (Neon, Vercel)` : 'NONE - Neon is not connected for this Vercel environment';
+  }
   if (env.DATABASE_URL) return 'DATABASE_URL';
   if (env.POSTGRES_URL) return 'POSTGRES_URL';
   if (env.POSTGRESQL_URL) return 'POSTGRESQL_URL';

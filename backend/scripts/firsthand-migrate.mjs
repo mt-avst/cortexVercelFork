@@ -29,12 +29,20 @@ const migrationsDirectory = path.resolve(__dirname, "../db/firsthand-migrations"
 // were removed 2026-08-11 when the source RDS was decommissioned - FirstHand
 // repo MR !2. Note the runtime pool deliberately reads a narrower var set
 // than this runner: no POSTGRESQL_URL - see runtime-database.ts.)
-const CONNECTION_SOURCES = [
-  ["DATABASE_URL", "DATABASE_URL"],
-  ["POSTGRES_URL", "POSTGRES_URL"],
-  ["POSTGRESQL_URL", "POSTGRESQL_URL"],
-  ["DB_URL", "DB_URL (Kubera injected)"]
-];
+// On Vercel only the two variables the Neon integration injects count, the
+// same rule as backend/src/config/databaseUrl.ts (NEON_URL_KEYS), so migrations
+// can never land on a different database than the app reads.
+const CONNECTION_SOURCES = process.env.VERCEL
+  ? [
+      ["DATABASE_URL", "DATABASE_URL (Neon)"],
+      ["POSTGRES_URL", "POSTGRES_URL (Neon)"]
+    ]
+  : [
+      ["DATABASE_URL", "DATABASE_URL"],
+      ["POSTGRES_URL", "POSTGRES_URL"],
+      ["POSTGRESQL_URL", "POSTGRESQL_URL"],
+      ["DB_URL", "DB_URL (Kubera injected)"]
+    ];
 
 const resolvedConnection = CONNECTION_SOURCES.map(([envName, label]) => ({
   label,
@@ -43,7 +51,7 @@ const resolvedConnection = CONNECTION_SOURCES.map(([envName, label]) => ({
 
 if (!resolvedConnection) {
   console.error(
-    "[firsthand-migrate] FirstHand migrations require DATABASE_URL, POSTGRES_URL, POSTGRESQL_URL or DB_URL to be set."
+    `[firsthand-migrate] FirstHand migrations require one of ${CONNECTION_SOURCES.map(([name]) => name).join(", ")} to be set.`
   );
   process.exit(1);
 }

@@ -147,3 +147,45 @@ describe('describeDatabaseUrlSource', () => {
     );
   });
 });
+
+/**
+ * On Vercel the database is Neon, from the two variables its integration sets,
+ * and nothing else (owner, 2026-09-25): no localhost default, no Kubera DB_URL /
+ * DB_HOST, no generic PG* - a missing Neon connection fails loudly instead.
+ */
+describe('on Vercel, only Neon', () => {
+  const NEON = 'postgresql://u:p@ep-cool-name-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require';
+
+  it('uses DATABASE_URL, then POSTGRES_URL', () => {
+    expect(resolveDatabaseUrl({ VERCEL: '1', DATABASE_URL: NEON, POSTGRES_URL: 'postgresql://other/db' })).toBe(NEON);
+    expect(resolveDatabaseUrl({ VERCEL: '1', POSTGRES_URL: NEON })).toBe(NEON);
+  });
+
+  it('throws instead of falling back to localhost when neither is set', () => {
+    expect(() => resolveDatabaseUrl({ VERCEL: '1' })).toThrow(/only to Neon/);
+  });
+
+  it.each([
+    ['DB_URL', { DB_URL: 'postgresql://kubera-rds/db' }],
+    ['DB_HOST', { DB_HOST: 'kubera-rds', DB_PASSWORD: 'x' }],
+    ['PGHOST', { PGHOST: 'somewhere' }],
+    ['POSTGRESQL_URL', { POSTGRESQL_URL: 'postgresql://elsewhere/db' }],
+  ])('ignores %s', (_name, env) => {
+    expect(() => resolveDatabaseUrl({ VERCEL: '1', ...env })).toThrow(/only to Neon/);
+    expect(hasDatabaseConfig({ VERCEL: '1', ...env })).toBe(false);
+  });
+
+  it('treats a blank Neon variable as missing', () => {
+    expect(() => resolveDatabaseUrl({ VERCEL: '1', DATABASE_URL: '   ' })).toThrow(/only to Neon/);
+  });
+
+  it('names the source for the boot log without the value', () => {
+    expect(describeDatabaseUrlSource({ VERCEL: '1', DATABASE_URL: NEON })).toBe('DATABASE_URL (Neon, Vercel)');
+    expect(describeDatabaseUrlSource({ VERCEL: '1' })).toMatch(/^NONE/);
+  });
+
+  it('leaves off-Vercel resolution exactly as it was (control)', () => {
+    expect(resolveDatabaseUrl({ DB_URL: 'postgresql://kubera-rds/db' })).toBe('postgresql://kubera-rds/db');
+    expect(resolveDatabaseUrl({})).toBe('postgresql://localhost:5432/adaptalabs_dev');
+  });
+});

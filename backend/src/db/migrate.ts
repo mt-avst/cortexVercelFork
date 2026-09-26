@@ -1213,6 +1213,36 @@ export async function runMigrations() {
     `);
     console.log('✅ Created booking_artifacts tables');
 
+    // Login sessions for connect-pg-simple (config/sessionStore.ts). Only read
+    // when the Postgres session store is on (Vercel, or SESSION_STORE=postgres);
+    // on single-replica Kubera the table sits empty. `user_sessions`, not
+    // `sessions` - that name is the research-session domain table above.
+    // Schema is connect-pg-simple's own table.sql, created here rather than via
+    // its createTableIfMissing so the function bundle never has to read that file.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_sessions (
+        sid VARCHAR NOT NULL PRIMARY KEY,
+        sess JSON NOT NULL,
+        expire TIMESTAMP(6) NOT NULL
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_user_sessions_expire ON user_sessions(expire)
+    `);
+    console.log('✅ Created user_sessions table');
+
+    // Seeded password for the demo accounts on Vercel previews
+    // (services/demoCredentials.ts). Rows exist only while SEED_DEMO_PASSWORD
+    // is set; db/seed.ts deletes them all when it is not.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS demo_credentials (
+        user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        password_hash TEXT NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    console.log('✅ Created demo_credentials table');
+
     console.log('✅ Database migrations completed successfully');
   } catch (error) {
     console.error('❌ Migration failed:', error);

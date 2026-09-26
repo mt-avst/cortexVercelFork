@@ -7,6 +7,8 @@ import { logger } from '../utils/logger';
 import { createOAuthStateGuard, OAuthStateResult } from '../utils/oauthState';
 import { sessionCookieName, sessionCookieClearOptions } from '../utils/hostCookie';
 import { isGoogleOAuthDemoMode } from '../../../shared/utils/demoMode';
+import { isCredentialedDemoLoginEnabled } from '../services/demoCredentials';
+import demoSignInRoutes from './demoSignIn';
 import {
   parseBootstrapSuperadminEmails,
   shouldElevateToSuperadmin,
@@ -152,8 +154,9 @@ router.get('/login', async (req, res) => {
     // Check if OIDC client is available, retrying initialization if needed
     const oidcClient = await ensureClient();
     if (!oidcClient) {
-      if (process.env.NODE_ENV === 'development') {
-        // In development, redirect to demo login
+      if (process.env.NODE_ENV === 'development' || isCredentialedDemoLoginEnabled()) {
+        // In development, the open demo login; on an opted-in Vercel preview,
+        // the password sign-in form (routes/demoSignIn.ts) at the same path.
         return res.redirect('/auth/demo-login');
       } else {
         return res.status(500).json({ error: 'Authentication service unavailable' });
@@ -201,8 +204,9 @@ router.get('/callback', validateQuery(oauthCallbackQuerySchema), async (req, res
     // Check if OIDC client is available, retrying initialization if needed
     const oidcClient = await ensureClient();
     if (!oidcClient) {
-      if (process.env.NODE_ENV === 'development') {
-        // In development, redirect to demo login
+      if (process.env.NODE_ENV === 'development' || isCredentialedDemoLoginEnabled()) {
+        // In development, the open demo login; on an opted-in Vercel preview,
+        // the password sign-in form (routes/demoSignIn.ts) at the same path.
         return res.redirect('/auth/demo-login');
       } else {
         return res.status(500).json({ error: 'Authentication service unavailable' });
@@ -639,6 +643,13 @@ router.get('/google-callback', validateQuery(oauthCallbackQuerySchema), async (r
     res.redirect(`${corsOrigin}?error=google_auth_failed&details=${encodeURIComponent(err.message || 'Unknown error')}`);
   }
 });
+
+// Password sign-in for the seeded demo accounts on an opted-in Vercel preview
+// (services/demoCredentials.ts). Never alongside the open demo routes below:
+// those need NODE_ENV=development, which Vercel never sets.
+if (isCredentialedDemoLoginEnabled()) {
+  router.use(demoSignInRoutes);
+}
 
 // Demo routes for development
 if (process.env.NODE_ENV === 'development') {

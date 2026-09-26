@@ -44,36 +44,17 @@ why.
 - Node.js 16+ 
 - PostgreSQL 12+
 - OIDC provider (company SSO)
-- Docker and Docker Compose (for containerized development)
+- Docker (optional, only for the local Postgres in `docker-compose.yml`)
 
 ## Setup
 
-### Option 1: Docker Development (Recommended)
+Deployment is Vercel - see [docs/VERCEL.md](docs/VERCEL.md). This fork no longer has
+Docker images, Kubera manifests or GitLab CI; the live beta runs from the GitLab original.
 
-The easiest way to get started is using Docker Compose:
+For a local database, `docker compose up -d` starts Postgres alone on `localhost:5432`
+(`postgresql://postgres:password@localhost:5432/adaptalabs_dev`).
 
-```bash
-# Clone and navigate to the project
-cd adaptalabs-recruitment-app
-
-# Copy environment template
-cp docker.env.example .env
-# Edit .env with your configuration
-
-# Start all services
-docker-compose up --build
-
-# In another terminal, run database migrations
-docker-compose exec backend npm run migrate
-docker-compose exec backend npm run seed
-```
-
-This will start:
-- **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:3001  
-- **PostgreSQL**: localhost:5432
-
-### Option 2: Local Development
+### Local Development
 
 #### 1. Database Setup
 
@@ -130,33 +111,6 @@ REACT_APP_API_URL=http://localhost:3001
 
 ## Development
 
-### Docker Commands
-
-```bash
-# Start all services
-docker-compose up
-
-# Start in background
-docker-compose up -d
-
-# Rebuild and start
-docker-compose up --build
-
-# Stop all services
-docker-compose down
-
-# View logs
-docker-compose logs -f [service-name]
-
-# Execute commands in running containers
-docker-compose exec backend npm run migrate
-docker-compose exec backend npm run seed
-docker-compose exec frontend npm test
-
-# Clean up (removes volumes)
-docker-compose down -v
-```
-
 ### Backend Commands
 
 ```bash
@@ -165,11 +119,6 @@ npm run dev          # Start development server with hot reload
 npm run build        # Build for production
 npm run migrate      # Run database migrations
 npm run seed         # Seed admin users
-
-# Docker development
-docker-compose exec backend npm run dev
-docker-compose exec backend npm run migrate
-docker-compose exec backend npm run seed
 ```
 
 ### Frontend Commands
@@ -179,9 +128,6 @@ docker-compose exec backend npm run seed
 npm start            # Start development server
 npm run build        # Build for production
 npm test             # Run tests
-
-# Docker development
-docker-compose exec frontend npm test
 ```
 
 ### E2E Tests (Playwright)
@@ -218,12 +164,12 @@ Three specs (`superadmin-create-study`, `m6-poll-click-tracking`,
 m6 publishes one. Nothing cleans them up, so do not aim them at a shared
 environment casually, and do not read local row counts as seed data.
 
-### What CI runs
+### Checks before pushing
 
-`lint`, `typecheck`, `test-backend`, `test-frontend` and `test-scripts` all run
-in `.pre`, so a red suite stops the pipeline before the image build spends
-anything. The e2e suite is **not** in CI - it needs a database and a running
-stack, and three of its specs write data.
+This fork has no CI yet (see "Hosting and CI" in AGENTS.md), so run `npm run lint`,
+the typecheck below, both backend suites, the frontend suite and `npm run test:scripts`
+yourself. The e2e suite needs a database and a running stack, and three of its specs
+write data.
 
 ```bash
 npm run typecheck    # both apps, INCLUDING their test files
@@ -288,22 +234,7 @@ npm test
 
 ## Deployment
 
-### Docker Production Deployment
-
-For production deployment, you can use the same Docker setup with production environment variables:
-
-```bash
-# Set production environment
-export NODE_ENV=production
-
-# Update docker-compose.yml for production
-# - Remove volume mounts for source code
-# - Use production database URL
-# - Set proper environment variables
-
-# Deploy
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-```
+Vercel, from this repository: [docs/VERCEL.md](docs/VERCEL.md) has the setup, the environment variables and what is not wired yet.
 
 ### Production Environment Variables
 
@@ -347,7 +278,7 @@ Ensure these are set in production:
 
 **Version**: 7.56.9  
 **Status**: ✅ Production Ready - Alpha Testing Phase  
-**Deployment**: Kubera (Adaptavist internal Kubernetes) — https://adaptalabs.kubera-playground.adaptavist.net
+**Deployment**: this fork deploys to Vercel ([docs/VERCEL.md](docs/VERCEL.md)). The live beta runs from the GitLab original on Kubera — https://adaptalabs.kubera-playground.adaptavist.net
 
 ### Milestones Completed
 - ✅ **M1**: Auth and Roles
@@ -371,39 +302,21 @@ Ensure these are set in production:
    # Check if ports are already in use
    lsof -i :3000 -i :3001 -i :5432
    
-   # Rebuild containers
-   docker-compose down
-   docker-compose up --build
+   # Restart the database container
+   docker compose down
+   docker compose up -d
    ```
 
 2. **Database connection issues**
    ```bash
    # Check if postgres container is healthy
-   docker-compose ps
+   docker compose ps
    
    # View postgres logs
-   docker-compose logs postgres
+   docker compose logs postgres
    
    # Connect to database directly
-   docker-compose exec postgres psql -U postgres -d adaptalabs_dev
-   ```
-
-3. **Frontend build fails**
-   ```bash
-   # Check frontend logs
-   docker-compose logs frontend
-   
-   # Rebuild frontend only
-   docker-compose build frontend
-   ```
-
-4. **Backend build fails**
-   ```bash
-   # Check backend logs
-   docker-compose logs backend
-   
-   # Rebuild backend only
-   docker-compose build backend
+   docker compose exec postgres psql -U postgres -d adaptalabs_dev
    ```
 
 ### Common Issues

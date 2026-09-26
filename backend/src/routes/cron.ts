@@ -3,6 +3,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { Router, Request, Response } from 'express';
 
 import { sendDueReminders } from '../services/reminders';
+import { runFirstHandMaintenance } from '../firsthand/maintenance';
 import { asyncHandler } from '../utils/errorHandler';
 import { logger } from '../utils/logger';
 
@@ -58,6 +59,27 @@ router.get(
     }
 
     const summary = await sendDueReminders();
+    return res.status(200).json({ ok: true, ...summary });
+  })
+);
+
+/**
+ * GET /api/cron/firsthand-maintenance
+ * The 03:00 UTC FirstHand maintenance (transcript backstop + stale-upload
+ * reaper) as an HTTP trigger, for platforms with no long-lived process to host
+ * the in-process scheduler in index.ts - Vercel Cron calls this, sending
+ * Authorization: Bearer <CRON_SECRET> itself. runFirstHandMaintenance is
+ * best-effort and never throws.
+ */
+router.get(
+  '/firsthand-maintenance',
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!bearerMatches(req.headers.authorization, process.env.CRON_SECRET)) {
+      logger.warn('Cron firsthand-maintenance: unauthorized or missing CRON_SECRET');
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const summary = await runFirstHandMaintenance();
     return res.status(200).json({ ok: true, ...summary });
   })
 );

@@ -69,13 +69,13 @@ start_docker() {
         exit 1
     fi
     
-    # Use development compose file
-    docker-compose -f docker-compose.dev.yml up -d
-    
-    print_success "Docker services started!"
-    print_status "Frontend: http://localhost:3003"
-    print_status "Backend: http://localhost:3002"
-    print_status "Database: localhost:5433"
+    # Only the database runs in Docker now (docker-compose.yml); the app runs
+    # on the host exactly as in npm mode.
+    docker compose up -d postgres
+
+    print_success "Database started on localhost:5432 (adaptalabs_dev)"
+    print_status "Set DATABASE_URL=postgresql://postgres:password@localhost:5432/adaptalabs_dev"
+    start_npm
 }
 
 # Function to start with npm (development mode)
@@ -134,8 +134,7 @@ stop_services() {
     print_status "Stopping all services..."
     
     # Stop Docker services
-    docker-compose -f docker-compose.dev.yml down 2>/dev/null || true
-    docker-compose down 2>/dev/null || true
+    docker compose down 2>/dev/null || true
     
     # Kill npm processes
     pkill -f "npm run dev:all" 2>/dev/null || true
@@ -159,9 +158,9 @@ show_status() {
     echo ""
     
     # Check Docker services
-    if docker-compose -f docker-compose.dev.yml ps | grep -q "Up"; then
+    if docker compose ps 2>/dev/null | grep -q "Up"; then
         print_success "Docker services are running"
-        docker-compose -f docker-compose.dev.yml ps
+        docker compose ps
     else
         print_warning "No Docker services running"
     fi
@@ -189,7 +188,7 @@ show_help() {
     echo "Usage: $0 [COMMAND]"
     echo ""
     echo "Commands:"
-    echo "  docker    Start services using Docker Compose"
+    echo "  docker    Start the database in Docker, then the app with npm"
     echo "  npm       Start services using npm (development mode)"
     echo "  stop      Stop all running services"
     echo "  status    Show status of all services"

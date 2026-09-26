@@ -1,4 +1,5 @@
 import { pool, config } from '../config';
+import { seedDemoCredentials } from '../services/demoCredentials';
 
 export async function seedDatabase() {
   console.log('⏳ Connecting to database...');
@@ -118,6 +119,11 @@ export async function seedDatabase() {
     `);
 
     // Test opportunities seeding removed - user will create their own test data
+
+    // Password sign-in for the demo accounts on Vercel previews: seeded from
+    // SEED_DEMO_PASSWORD, or every demo credential revoked when it is unset.
+    const demoCredentials = await seedDemoCredentials(client);
+    console.log(`✅ Demo credentials ${demoCredentials}`);
 
     console.log('✅ Database seeding completed successfully');
   } catch (error) {

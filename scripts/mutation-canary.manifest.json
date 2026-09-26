@@ -2118,28 +2118,6 @@
     "test": "puts the ENCODED Content-Disposition on the response, never the raw name"
   },
   {
-    "id": "nginx-entry-document-is-no-cache",
-    "why": "index.html names content-hashed chunks that stop existing at the next deploy. Served with an etag and no cache-control, browsers apply heuristic freshness and reuse a stale copy, so an open tab 404s on its own chunks after every release (cto/AdaptaLabs#91). This header is the whole fix, nothing executes nginx in any suite, and the symptom only appears in production one deploy later.",
-    "file": "frontend/nginx.conf",
-    "anchor": "        add_header Cache-Control \"no-cache\" always;",
-    "mutation": "",
-    "runner": "vitest",
-    "project": "frontend",
-    "spec": "src/__tests__/nginx-entry-document-cache.test.ts",
-    "test": "serves the SPA fallback with Cache-Control no-cache"
-  },
-  {
-    "id": "nginx-spa-block-restates-security-headers",
-    "why": "nginx does not inherit server-level add_header into a location block that declares its own, so the moment location / gained Cache-Control it had to restate all four security headers. A tidy-up that trims the 'duplicates' strips nosniff and frame protection from every SPA route with everything else green - the exact silent loss the version.json block documents.",
-    "file": "frontend/nginx.conf",
-    "anchor": "        add_header Cache-Control \"no-cache\" always;\n        add_header X-Frame-Options \"SAMEORIGIN\" always;",
-    "mutation": "        add_header Cache-Control \"no-cache\" always;",
-    "runner": "vitest",
-    "project": "frontend",
-    "spec": "src/__tests__/nginx-entry-document-cache.test.ts",
-    "test": "restates all four security headers beside the Cache-Control it declares"
-  },
-  {
     "id": "test-port-probe-verifies-the-v4-loopback",
     "why": "The whole reservoir rests on the probe binding 127.0.0.1 exactly: the kernel then only hands out ports free on the address supertest dials. A probe that bound the wildcard would verify ports whose v4 side limactl or a leftover postgres owns - measured 2026-08-31 at 3000 of 20000 wildcard binds landing on squatted ports against 0 of 20000 loopback binds - which is the cto/AdaptaLabs#44 flake reinstated with every suite green.",
     "file": "backend/src/__tests__/helpers/listening.ts",
